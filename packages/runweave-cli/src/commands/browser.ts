@@ -1,4 +1,6 @@
 import { runBrowserHeadersCommand } from "./browser-headers.js";
+import { runBrowserProxyCommand } from "./browser-proxy.js";
+import { runBrowserDownloadsCommand } from "./browser-downloads.js";
 import { CliError } from "../errors.js";
 import { runBrowserAssistCommand } from "./browser-assist.js";
 import { runBrowserToolsCommand } from "./browser-tools.js";
@@ -8,13 +10,21 @@ import {
 } from "./browser-profile.js";
 
 const USAGE =
-  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser headers <list|set|remove> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
+  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser proxy <status|set> [options] | rw browser headers <list|set|remove> [options] | rw browser downloads <capture|release|list|fetch> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
 
 export async function runBrowserCommand(
   subcommand: string | undefined,
   args: string[],
   io: BrowserCommandIo,
 ): Promise<void> {
+  if (subcommand === "proxy") {
+    await runBrowserProxyCommand(args, io);
+    return;
+  }
+  if (subcommand === "downloads") {
+    await runBrowserDownloadsCommand(args, io);
+    return;
+  }
   if (subcommand === "headers") {
     await runBrowserHeadersCommand(args, io);
     return;

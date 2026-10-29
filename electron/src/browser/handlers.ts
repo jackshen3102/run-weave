@@ -1,3 +1,4 @@
+import { registerBrowserAssistanceTargetHandler } from "./assistance.js";
 import { registerBookmarkHandlers } from "./bookmarks/handlers.js";
 import { registerBrowserPluginHandlers } from "./plugins/ipc.js";
 import { startBrowserPlugins } from "./plugins/host.js";
@@ -7,8 +8,6 @@ import type { DesktopLocalBrowserSource } from "@runweave/shared/browser-local-t
 import { navigateWithLocalPreview } from "./local-preview/navigation.js";
 import { registerTerminalBrowserPresentationHandler } from "./view/presentation.js";
 import { BrowserWindow, ipcMain } from "electron";
-import type { BrowserAssistanceTarget } from "@runweave/shared/terminal-browser-assistance";
-import { getTerminalBrowserCdpTargets } from "./proxy/api.js";
 import {
   createTerminalBrowserDeviceState,
   normalizeTerminalBrowserDevicePresetId,
@@ -101,14 +100,7 @@ export async function registerTerminalBrowserHandlers(): Promise<void> {
   registerBookmarkHandlers();
   registerTerminalBrowserFindHandlers();
   registerTerminalBrowserPresentationHandler();
-  ipcMain.handle("terminal-browser:resolve-assistance-target", (event, binding: BrowserAssistanceTarget) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const target = win && binding && getTerminalBrowserCdpTargets().find((candidate) =>
-      candidate.windowId === win.id && candidate.targetId === binding.targetId &&
-      candidate.profileId === binding.profileId && candidate.browserGroupId === binding.browserGroupId);
-    if (!target) throw new Error("协助页面已关闭、移动或不属于当前窗口；请取消请求并让 Agent 重新观察");
-    return target.tabId;
-  });
+  registerBrowserAssistanceTargetHandler();
   for (const profileId of TERMINAL_BROWSER_PROFILE_IDS) {
     ensureTerminalBrowserHeaderDispatcher(profileId);
     ensureTerminalBrowserCookiePersistence(

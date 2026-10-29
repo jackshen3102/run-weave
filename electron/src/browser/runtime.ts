@@ -3,8 +3,10 @@ import {
   type WebContents,
   type WebContentsView,
   type View,
+  type BrowserWindow,
 } from "electron";
 import { randomUUID } from "node:crypto";
+import { trackBrowserDownload } from "./downloads.js";
 import type { DesktopLocalPreview } from "./local-preview/session.js";
 import { EventEmitter } from "node:events";
 import type {
@@ -112,9 +114,21 @@ export interface TerminalBrowserCdpTarget {
   faviconDataUrl: string | null;
   loading: boolean;
   webContents: WebContents;
+  openerId?: string;
+}
+
+export interface TerminalBrowserPopup {
+  window: BrowserWindow;
+  ownerWindowId: number;
+  profileId: TerminalBrowserProfileId;
+  browserGroupId: string;
+  targetId: string;
+  openerId: string;
+  activeDownloads: number;
 }
 
 export const terminalBrowserRuntime = {
+  popups: new Map<string, TerminalBrowserPopup>(),
   entries: new Map<string, TerminalBrowserEntry>(),
   dormantTabs: new Map<string, TerminalBrowserDormantTab>(),
   attachedByWorkspaceKey: new Map<string, string>(),
@@ -144,12 +158,16 @@ export function getTerminalBrowserSession(
     session.on("will-download", (_event, item, source) => {
       const entry = [...terminalBrowserRuntime.entries.values()].find(
         (entry) => entry.view.webContents === source,
+      ) ?? [...terminalBrowserRuntime.popups.values()].find(
+        (popup) => !popup.window.isDestroyed() && popup.window.webContents === source,
       );
       if (!entry) return;
       entry.activeDownloads += 1;
       item.once("done", () => {
         entry.activeDownloads -= 1;
       });
+      try { trackBrowserDownload(item, entry); }
+      catch { item.cancel(); }
     });
   }
   return session;

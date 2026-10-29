@@ -2,6 +2,7 @@ import { BrowserWindow, shell } from "electron";
 import { normalizeTerminalBrowserUrlForStorage } from "./tabs/state.js";
 import { attachBrowserPlugins } from "./plugins/host.js";
 import { randomUUID } from "node:crypto";
+import { terminalBrowserRuntime, terminalBrowserEvents } from "./runtime.js";
 import {
   getTerminalBrowserProfileConfig,
   type TerminalBrowserProfileId,
@@ -40,12 +41,29 @@ export function configureTerminalBrowserPopupWindow(
   popupWindow: BrowserWindow,
   profileId: TerminalBrowserProfileId,
   groupId: () => string,
+  openerId: string,
+  openerContents: Electron.WebContents,
 ): void {
+  const targetId = `browser-popup-${randomUUID()}`;
+  const popup = {
+    window: popupWindow, ownerWindowId: parentWindow.id, profileId,
+    browserGroupId: groupId(), targetId, openerId, activeDownloads: 0,
+  };
+  terminalBrowserRuntime.popups.set(targetId, popup);
+  const closeWithOpener = () => {
+    if (!popupWindow.isDestroyed()) popupWindow.destroy();
+  };
+  openerContents.once("destroyed", closeWithOpener);
+  popupWindow.once("closed", () => {
+    openerContents.removeListener("destroyed", closeWithOpener);
+    terminalBrowserRuntime.popups.delete(targetId);
+    terminalBrowserEvents.emit("tab-closed", popup);
+  });
   attachBrowserPlugins({
     contents: popupWindow.webContents,
     profileId,
-    pageId: `browser-popup-${randomUUID()}`,
-    groupId,
+    pageId: targetId,
+    groupId: () => popup.browserGroupId,
     kind: "popup",
     restoring: false,
     displayUrl: (url) => url,
@@ -74,8 +92,14 @@ export function configureTerminalBrowserPopupWindow(
       parentWindow,
       childWindow,
       profileId,
-      groupId,
+      () => popup.browserGroupId,
+      targetId,
+      popupWindow.webContents,
     );
+  });
+  terminalBrowserEvents.emit("tab-awakened", {
+    targetId, profileId, browserGroupId: popup.browserGroupId, openerId,
+    url: popupWindow.webContents.getURL() || "about:blank", title: popupWindow.webContents.getTitle(),
   });
 }
 

@@ -65,6 +65,7 @@ export function getCurrentTargetInfos(
       title: t.title,
       browserContextId: t.browserGroupId,
       attached: sessionManager.isTargetAttached(t.targetId),
+      openerId: t.openerId,
     }),
   );
 }
@@ -103,6 +104,7 @@ export function broadcastTargetCreated(
     browserGroupId: string;
     url: string;
     title: string;
+    openerId?: string;
   },
 ): void {
   for (const conn of connections) {
@@ -126,18 +128,11 @@ export function broadcastTargetCreated(
           title: target.title,
           browserContextId: target.browserGroupId,
           attached: false,
+          openerId: target.openerId,
         }),
       },
     });
   }
-}
-
-export function isSafeNoopCommand(method: string): boolean {
-  return (
-    method === "Network.clearBrowserCache" ||
-    method === "Network.clearBrowserCookies" ||
-    method === "Storage.clearDataForOrigin"
-  );
 }
 
 /** Restoring a renderer must satisfy both discovery and auto-attach clients. */

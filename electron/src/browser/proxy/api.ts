@@ -45,6 +45,17 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
       webContents: wc,
     });
   }
+  for (const popup of terminalBrowserRuntime.popups.values()) {
+    if (popup.window.isDestroyed() || popup.window.webContents.isDestroyed()) continue;
+    const wc = popup.window.webContents;
+    targets.push({
+      key: popup.targetId, tabId: popup.targetId, targetId: popup.targetId,
+      profileId: popup.profileId, browserGroupId: popup.browserGroupId,
+      windowId: popup.ownerWindowId, active: popup.window.isFocused(),
+      lastActiveAt: 0, url: wc.getURL() || "about:blank", title: wc.getTitle(),
+      faviconDataUrl: null, loading: wc.isLoading(), webContents: wc, openerId: popup.openerId,
+    });
+  }
   return targets.sort((left, right) => {
     if (left.active !== right.active) {
       return left.active ? -1 : 1;
@@ -122,6 +133,8 @@ export async function createTerminalBrowserTabFromProxy(
 }
 
 export function closeTerminalBrowserTabFromProxy(targetId: string): boolean {
+  const popup = terminalBrowserRuntime.popups.get(targetId);
+  if (popup && !popup.window.isDestroyed()) { popup.window.destroy(); return true; }
   const found = getTerminalBrowserEntryByTargetId(targetId);
   if (!found) {
     return false;
@@ -137,6 +150,10 @@ export function closeTerminalBrowserTabFromProxy(targetId: string): boolean {
 }
 
 export function activateTerminalBrowserTabFromProxy(targetId: string): boolean {
+  const popup = terminalBrowserRuntime.popups.get(targetId);
+  if (popup && !popup.window.isDestroyed()) {
+    popup.window.show(); popup.window.focus(); return true;
+  }
   const found = getTerminalBrowserEntryByTargetId(targetId);
   if (!found) {
     return false;

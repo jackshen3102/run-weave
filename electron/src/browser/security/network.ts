@@ -51,12 +51,16 @@ async function verifyTerminalBrowserProfileProxy(
       { profileId, proxyMode, localRoute },
     );
   }
-  let externalRoute: string | null = null;
+  const externalRoute = await browserSession.resolveProxy(EXTERNAL_PROXY_PROBE_URL);
+  if (proxyMode === "direct" && externalRoute.trim() !== "DIRECT") {
+    throw new TerminalBrowserError(
+      "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
+      "External traffic is not configured for direct access",
+      { profileId, proxyMode, externalRoute },
+    );
+  }
   if (proxyMode === "whistle") {
     const whistlePort = getRuntimeBrowserProfileConfig(profileId).whistlePort;
-    externalRoute = await browserSession.resolveProxy(
-      EXTERNAL_PROXY_PROBE_URL,
-    );
     if (!externalRoute.includes(`127.0.0.1:${whistlePort}`)) {
       throw new TerminalBrowserError(
         "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",
@@ -234,6 +238,7 @@ export async function configureTerminalBrowserProfileProxy(
 
 export async function reloadTerminalBrowserProfileAfterProxyChange(
   profileId: TerminalBrowserProfileId,
+  reloadPages = true,
 ): Promise<void> {
   await getTerminalBrowserSession(profileId).closeAllConnections();
   for (const entry of terminalBrowserRuntime.entries.values()) {
@@ -246,7 +251,7 @@ export async function reloadTerminalBrowserProfileAfterProxyChange(
       continue;
     }
     const url = entry.view.webContents.getURL();
-    if (url && url !== "about:blank") {
+    if (reloadPages && url && url !== "about:blank") {
       entry.view.webContents.reload();
     }
   }

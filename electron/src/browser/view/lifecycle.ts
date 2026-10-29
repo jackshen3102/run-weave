@@ -138,7 +138,7 @@ export function getOrCreateTerminalBrowserView(
     popupWindow.once("closed", () => {
       entry.popupCount -= 1;
     });
-    configureTerminalBrowserPopupWindow(win, popupWindow, profileId, () => entry.browserGroupId);
+    configureTerminalBrowserPopupWindow(win, popupWindow, profileId, () => entry.browserGroupId, entry.targetId, view.webContents);
   });
   view.setVisible(true);
 

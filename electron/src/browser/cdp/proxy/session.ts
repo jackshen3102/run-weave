@@ -398,6 +398,12 @@ export class CdpSessionManager {
     clearSharedDebugger(targetId);
 
     if (this.messageRelay) {
+      // A native popup can destroy its debugger before the window's closed
+      // event. Notify the parent CDP connection while the session ID is known.
+      this.messageRelay({
+        method: "Target.detachedFromTarget",
+        params: { sessionId: target.proxySessionId, targetId },
+      });
       this.messageRelay({
         method: "Inspector.detached",
         params: { reason: "target_closed" },

@@ -17,17 +17,22 @@ import {
 import { resolveAuthContext } from "../client/auth-context.js";
 import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
+import { runScheduledTaskRunCommand } from "./scheduled-task-run.js";
 
 type Io = { stdout: Pick<NodeJS.WriteStream, "write">; env: NodeJS.ProcessEnv };
 
 const USAGE =
-  "Usage: rw scheduled-task <projects|capabilities|list|get|validate-create|create|validate-update|update> [task-id] [--file path] [--sha256 digest] [--expected-backend url] [--idempotency-key key] [--profile name|--backend-port port] [--json]";
+  "Usage: rw scheduled-task <projects|capabilities|list|get|validate-create|create|validate-update|update|run> [task-id] [--file path] [--sha256 digest] [--expected-backend url] [--idempotency-key key] [--profile name|--backend-port port] [--json]";
 
 export async function runScheduledTaskCommand(
   command: string | undefined,
   args: string[],
   io: Io,
 ): Promise<void> {
+  if (command === "run") {
+    await runScheduledTaskRunCommand(args, io);
+    return;
+  }
   if (
     !command ||
     ![
@@ -112,6 +117,8 @@ export async function runScheduledTaskCommand(
         "parent-project-id",
         "q",
         "archived",
+        "cursor",
+        "limit",
       ] as const) {
         const value = getStringOption(options, name);
         if (value)

@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import { stopBrowserDownloads } from "../../downloads.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
@@ -546,6 +547,7 @@ export async function startCdpProxy(
     host,
     stop: async () => {
       stopping = true;
+      stopBrowserDownloads();
       clearInterval(heartbeatTimer);
       terminalBrowserEvents.off("tab-closed", onTabClosed);
       terminalBrowserEvents.off("tab-awakened", onTabAwakened);

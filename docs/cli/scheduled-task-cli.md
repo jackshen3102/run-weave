@@ -22,7 +22,7 @@ rw scheduled-task create --file /private/draft.json --sha256 <验证响应的 sh
 rw scheduled-task update <task-id> --file /private/patch.json --sha256 <验证响应的 sha256> --expected-backend <验证响应的 backend> --json
 ```
 
-创建文件是 `CreateScheduledTaskRequest`：`name`、`projectId`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy`、`continuationPolicy` 可选。`executionPolicy` 可为 `sandbox`、`auto-review` 或 `full-access`，省略时仍为 sandbox；可用值以当前 Backend capabilities 为准，不支持的值会被 `validate-*` 明确拒绝而不会降级。`full-access` 无沙箱且不等待交互审批，可联网并访问 Browser、模拟器和本机文件，只应使用可信提示词。Browser、模拟器、网络或 Git 不是额外配置字段，是否使用由完整提示词和对应 Skill 决定。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。默认不开启任何额外运行或删除操作。
+创建文件是 `CreateScheduledTaskRequest`：`name`、`projectId`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy`、`continuationPolicy` 可选。`executionPolicy` 可为 `sandbox`、`auto-review` 或 `full-access`，省略时仍为 sandbox；可用值以当前 Backend capabilities 为准，不支持的值会被 `validate-*` 明确拒绝而不会降级。`full-access` 无沙箱且不等待交互审批，可联网并访问 Browser、模拟器和本机文件，只应使用可信提示词。Browser、模拟器、网络或 Git 不是额外配置字段，是否使用由完整提示词和对应 Skill 决定。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。创建和更新本身不额外启动运行。
 
 创建时保留本次 UUID 与原文件。若请求结果未知，只能用**相同文件、摘要、Backend 和 Idempotency-Key**核对或重试；新键会创建第二个任务。编辑没有幂等键：结果未知时先 `get`，核对 revision 和字段，不能盲目重复 `update`。旧 revision 返回冲突，应重新读取、整理并请用户再次确认。认证失效时沿用 `rw auth` 的 profile 刷新机制，不把 token 写入草稿或命令参数。
 
@@ -56,3 +56,38 @@ CLI 创建与编辑任务不等于已发送运行回复，也不自动启动一�
 接口与策略以 [Backend 路由](../../backend/src/routes/scheduled-tasks.ts)、
 [续接规则](../../backend/src/scheduled-tasks/continuation.ts) 和
 [共享合同](../../packages/shared/src/scheduled-tasks/index.ts) 为准；文档检查不代表实际恢复或跨端验收通过。
+
+## 按需运行与输出
+
+以下命令操作已有定义或运行，沿用 Backend 的队列、预算、revision 和幂等语义，不另建执行器：
+
+```bash
+rw scheduled-task list --cursor <cursor> --limit 50 --json
+rw scheduled-task run start <task-id> --idempotency-key <本次唯一 UUID> --json
+rw scheduled-task run list --task-id <task-id> --limit 50 --json
+rw scheduled-task run list --source quick-input --project-id <project-id> --json
+rw scheduled-task run get <run-id> --json
+rw scheduled-task run output <run-id> --cursor <cursor> --json
+rw scheduled-task run stop <run-id> --json
+rw scheduled-task run continue <run-id> --revision <get 返回的 revision> --reply-file /private/reply.txt --idempotency-key <本次唯一 UUID> --json
+rw scheduled-task run open-terminal <run-id> --json
+rw scheduled-task run archive <run-id> --json
+```
+
+列表和输出按响应游标续读；`run list` 必须指定 `--task-id` 或 `--source quick-input`，
+两者不能同时提供。`--project-id`、`--finished-since` 只用于快捷指令运行列表。
+`start` 返回已接受的 run，不代表执行完成；`stop` 返回停止请求，不代表子进程已退出。
+`continue` 的 `--reply-file` 可省略，提供时保持文件原文，Backend 继续执行原会话；
+不得将 Agent 自拟文字冒充用户回复或授权。结果未知先读取同一 run，禁止换新幂等键盲目重放。
+`open-terminal` 只准备或恢复终端，检查 `attachmentState`，不承诺切换桌面当前页面；
+不会覆盖已改作其他用途的终端绑定。`archive` 仅支持已结束的快捷指令运行。
+
+已保存的快捷指令通过以下命令发现并执行：
+
+```bash
+rw quick-input list --project-id <project-id> --kind pinned --limit 50 --json
+rw quick-input run <input-id> --project-id <project-id> --expected-updated-at <list 返回的 updatedAt> --idempotency-key <本次唯一 UUID> --json
+```
+
+`quick-input run` 要求原指令版本和精确项目身份，模型与权限沿用当前 Backend 已配置的
+后台运行策略；CLI 不隐式修改指令或任务定义。运行结果继续用上面的 `scheduled-task run` 命令读取。
