@@ -131,28 +131,42 @@ export async function createRemoteBrowserGateway(input: {
       return;
     }
     wss.handleUpgrade(req, socket, head, (downstream) => {
-      const upstream = new WebSocket(ticket.endpoint, { maxPayload: MAX_FRAME_BYTES });
+      const upstream = new WebSocket(ticket.endpoint, { maxPayload: MAX_FRAME_BYTES, handshakeTimeout: 5_000 });
+      const pending: Array<{ data: Buffer; isBinary: boolean }> = [];
+      let pendingBytes = 0;
       sockets.add(downstream);
       sockets.add(upstream);
       const closeBoth = () => {
+        pending.length = 0;
+        pendingBytes = 0;
         downstream.close();
         upstream.close();
         sockets.delete(downstream);
         sockets.delete(upstream);
       };
-      upstream.on("open", () => {
-        downstream.on("message", (data, isBinary) => {
-          if (upstream.readyState !== WebSocket.OPEN || upstream.bufferedAmount > MAX_BUFFERED_BYTES) {
-            closeBoth(); return;
-          }
+      downstream.on("message", (data, isBinary) => {
+        if (upstream.readyState === WebSocket.CONNECTING) {
+          const bytes = Buffer.isBuffer(data) ? data : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
+          if (pending.length >= 256 || pendingBytes + bytes.length > MAX_BUFFERED_BYTES) { closeBoth(); return; }
+          pending.push({ data: bytes, isBinary });
+          pendingBytes += bytes.length;
+        } else if (upstream.readyState === WebSocket.OPEN && upstream.bufferedAmount <= MAX_BUFFERED_BYTES) {
           upstream.send(data, { binary: isBinary });
-        });
-        upstream.on("message", (data, isBinary) => {
-          if (downstream.readyState !== WebSocket.OPEN || downstream.bufferedAmount > MAX_BUFFERED_BYTES) {
-            closeBoth(); return;
-          }
-          downstream.send(data, { binary: isBinary });
-        });
+        } else closeBoth();
+      });
+      upstream.on("open", () => {
+        for (const frame of pending) {
+          if (upstream.bufferedAmount > MAX_BUFFERED_BYTES) { closeBoth(); return; }
+          upstream.send(frame.data, { binary: frame.isBinary });
+        }
+        pending.length = 0;
+        pendingBytes = 0;
+      });
+      upstream.on("message", (data, isBinary) => {
+        if (downstream.readyState !== WebSocket.OPEN || downstream.bufferedAmount > MAX_BUFFERED_BYTES) {
+          closeBoth(); return;
+        }
+        downstream.send(data, { binary: isBinary });
       });
       upstream.on("error", closeBoth);
       downstream.on("error", closeBoth);

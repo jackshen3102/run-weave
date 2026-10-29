@@ -106,9 +106,10 @@ export function TerminalBrowserAssistance({
             throw new Error("当前桌面版本不支持浏览器协助");
           }
           const tabId =
-            await bridge.terminalBrowserResolveAssistanceTarget(request);
+            await bridge.terminalBrowserResolveAssistanceTarget(request, action === "open");
           if (request.terminalSessionId !== currentSession.current) return;
           if (action === "open") {
+            if (tabId === null) return;
             await bridge.terminalBrowserShow(tabId);
             useTerminalPreviewStore
               .getState()

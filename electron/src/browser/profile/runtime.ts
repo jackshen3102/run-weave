@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import type { BrowserProxyState } from "@runweave/shared/browser-proxy-control";
 import {
   assertAutomationProfileAvailable,
   deriveAutomationBrowserGroupId,
@@ -32,7 +33,7 @@ import {
   saveTerminalBrowserProfileProxyMode,
   updateTerminalBrowserProfilePreferences,
 } from "./preferences.js";
-import { terminalBrowserRuntime } from "../runtime.js";
+import { terminalBrowserRuntime, getTerminalBrowserSession } from "../runtime.js";
 import {
   configureTerminalBrowserProfileProxy,
   reloadTerminalBrowserProfileAfterProxyChange,
@@ -118,6 +119,20 @@ export function getTerminalBrowserProfileRuntimeStates(): TerminalBrowserProfile
   return TERMINAL_BROWSER_PROFILE_IDS.map(
     getTerminalBrowserProfileRuntimeState,
   );
+}
+
+/** Serialize the actual Session probe with Profile mutations. */
+export function inspectTerminalBrowserProfileProxy(profileId: TerminalBrowserProfileId): Promise<BrowserProxyState> {
+  const record = getProfileRecord(profileId);
+  const inspection = record.mutationQueue.then(async () => {
+    const effectiveProxy = await getTerminalBrowserSession(profileId).resolveProxy("https://example.com");
+    return {
+      ...getTerminalBrowserProfileRuntimeState(profileId), effectiveProxy,
+      scope: "profile", appliesTo: "future-requests", pagesReloaded: false,
+    } satisfies BrowserProxyState;
+  });
+  record.mutationQueue = inspection.then(() => undefined, () => undefined);
+  return inspection;
 }
 
 function notifyRuntimeChanged(profileId: TerminalBrowserProfileId): void {
@@ -292,9 +307,12 @@ export async function resolveTerminalBrowserProfile(
 export async function setTerminalBrowserProfileProxyMode(
   profileId: TerminalBrowserProfileId,
   proxyMode: TerminalBrowserProfileProxyMode,
+  options: { expectedMode?: TerminalBrowserProfileProxyMode; reloadPages?: boolean } = {},
 ): Promise<TerminalBrowserProfileRuntimeState> {
   const record = getProfileRecord(profileId);
   const mutation = record.mutationQueue.then(async () => {
+    if (options.expectedMode !== undefined && options.expectedMode !== record.proxyMode)
+      throw new Error("PROXY_MODE_CONFLICT: read the desktop proxy state again before changing it");
     saveTerminalBrowserProfileProxyMode(profileId, proxyMode);
     record.proxyMode = proxyMode;
     record.route = desiredRoute(profileId);
@@ -317,11 +335,12 @@ export async function setTerminalBrowserProfileProxyMode(
 
     record.proxyMode = proxyMode;
     record.applyError = null;
-    await reloadTerminalBrowserProfileAfterProxyChange(profileId);
+    await reloadTerminalBrowserProfileAfterProxyChange(profileId, options.reloadPages);
     notifyRuntimeChanged(profileId);
     return getTerminalBrowserProfileRuntimeState(profileId);
   });
   record.mutationQueue = mutation.catch((error) => {
+    if (error instanceof Error && error.message.startsWith("PROXY_MODE_CONFLICT:")) return;
     record.applyError = toTerminalBrowserErrorPayload(
       error,
       "BROWSER_PROFILE_PROXY_CONFIGURATION_FAILED",

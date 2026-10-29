@@ -210,3 +210,67 @@ Backend 从保存的结果读取目标，校验 source、终端绑定、panel �
 同一结果在同一 Backend 运行期重复导入返回同一请求。全屏管理页仍从左上角进入已准备会话。
 用户打开原页面、完成操作并交还后，Agent 重新观察再继续；这不会将原后台 blocked 结果改为 succeeded。
 旧结果没有 browser 字段时按原恢复流程处理。页面关闭、终端改作其他会话时不能冒认恢复成功。
+
+## 浏览器下载取回
+
+下载仍发生在桌面。Agent 先为当前解析出的 Profile/Group 开启捕获，再操作网页下载：
+
+```bash
+rw browser downloads capture --json
+rw browser downloads list --json
+rw browser downloads fetch <download-id> --output /absolute/path/on/agent/report.csv --json
+rw browser downloads release --json
+```
+
+支持与 resolver 相同的 `--profile 1|2|3`、`--group-id`。必须有 Group scope；SSH Agent
+沿用已有一次性 CDP 票据与桌面绑定，不向 Agent 暴露桌面文件路径，也不接受任意桌面文件路径。
+`capture` 有效 30 分钟，只接管该组后续普通 Browser 页面及 popup 的下载；其他组和未开启捕获的
+下载保持原行为。`release` 停止接管后续下载，不取消已开始的下载。
+
+列表包含 `id`、`targetId`、文件名、MIME、状态、收取字节和总字节；只有 `completed`
+可以取回。每个文件限 512 MiB，最多保留 128 条记录、64 个捕获组；超限下载取消。
+文件位于本次桌面进程的私有临时目录，完成记录在创建一小时后的下一次操作时清理，
+关闭 CDP 服务时取消未结束的受管下载并删除文件；不跨桌面重启恢复。
+
+`fetch` 每次读取至多 256 KiB，先写 Agent 所在机器上的私有临时文件，全部读取并同步后
+发布到 `--output`；目标已存在则失败，不覆盖。成功输出字节数和本地 SHA-256。
+传输中断不会重新触发网页下载；先核对列表，再决定是否重试取回。
+
+CDP 扩展为 `Runweave.captureDownloads { enabled }`、`Runweave.listDownloads {}` 和
+`Runweave.readDownload { id, offset }`。Profile/Group 来自连接，参数不能越过 scope。
+原生 `Browser.setDownloadBehavior` 仅接受不带其他控制选项的 `default`；其他策略或
+下载路径明确报错，不能依靠空成功判断设置已生效。使用 `noDefaults: true` 附着现有 Browser。
+
+## 登录弹窗与协议结果
+
+普通新标签页与带窗口特征的登录 popup 都作为原 Profile/Group 的 CDP page target 暴露。
+popup 保留真实窗口、opener 和 postMessage 回调，后代窗口继承同组；关闭 opener 会关闭其
+后代窗口。Agent 可通过现有 Playwright 列表、附着、交互及关闭操作处理弹窗，不需要转成普通 Tab。
+人工协助绑定 popup target 时打开原窗口；窗口关闭后旧 target 失效。下载捕获同时覆盖普通页面与
+同组 popup；popup 不作为普通 Tab 持久化或休眠恢复。
+
+未实现的 Browser 操作返回协议错误，不再以空对象表示成功。例如 grantPermissions、
+resetPermissions 不会伪装已应用。Page session 中的 Target.setAutoAttach / setDiscoverTargets
+只保留初始化兼容，实际 target 发现与自动附着由根连接管理；不提供独立的子 target 策略。
+其余不支持的 page-session Browser/Target 操作明确报错。Cookie、Headers、下载和代理的
+具名操作沿用各自真实实现；已有危险命令仍拒绝。不要用成功附着推断全部原生 CDP 能力受支持。
+
+## 桌面浏览器代理控制
+
+```bash
+rw browser proxy status --json
+rw browser proxy set --mode direct --json
+rw browser proxy set --mode whistle --json
+```
+
+支持与 resolver 相同的 --profile 1|2|3、--group-id。SSH Agent 经原有桌面绑定和 CDP 票据
+修改桌面 Electron Session，不修改 DVBoss 本机代理。作用于整个 Profile，包括其余 Group 和 popup。
+set 先读取当前模式，再以 expectedMode 在桌面串行校验；冲突需重新核对，不自动重试。
+状态返回 proxyMode、applyError、Whistle 状态和固定外部 HTTPS 地址的实际 effectiveProxy 解析结果；
+该解析结果不证明某个业务请求已发出或命中代理规则。
+
+远端 set 不自动刷新页面或重放表单，返回 scope=profile、appliesTo=future-requests、
+pagesReloaded=false；切换会关闭旧网络连接，后续请求采用新出口，进行中的请求可能中断。
+GUI 原有切换仍沿用原刷新行为。失败或连接中断先 status 核对，不把超时当成未发生。
+CDP 扩展为 Runweave.getProxyState {} 和 Runweave.setProxyMode {mode, expectedMode}；
+Profile 来自连接，不能通过参数指定另一 Profile。旧桌面不支持时明确失败。

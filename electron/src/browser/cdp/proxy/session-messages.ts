@@ -17,13 +17,12 @@ import {
   setTerminalBrowserDisplayScaleForTarget,
 } from "../../view/index.js";
 import type { CdpProxyConnectionState } from "./types.js";
-import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
 import { handleBrowserToolCommand } from "../../webmcp/handler.js";
+import { attachProxyTarget, detachProxyTarget } from "./target-attachment.js";
 import {
   getCurrentTargetInfos,
   getTargetInfoForRequest,
   canUseTarget,
-  isSafeNoopCommand,
   sendJson,
 } from "./utils.js";
 
@@ -36,11 +35,15 @@ export async function handleBrowserSessionMessage(
 ): Promise<void> {
   const { ws } = conn;
 
-  if (method === "Target.detachFromTarget") {
-    const detachSessionId =
-      typeof params.sessionId === "string" ? params.sessionId : sessionId;
-    conn.browserSessionIds.delete(detachSessionId);
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+  if (method === "Target.attachToTarget" || method === "Target.detachFromTarget") {
+    try {
+      const result = method === "Target.attachToTarget" ? attachProxyTarget(conn, params)
+        : (detachProxyTarget(conn, params, sessionId), {});
+      sendJson(ws, buildCdpSessionResult(id, sessionId, result));
+    } catch (error) {
+      sendJson(ws, buildCdpSessionError(id, sessionId, -32602,
+        error instanceof Error ? error.message : "Invalid target attachment"));
+    }
     return;
   }
 
@@ -107,14 +110,10 @@ export async function handleBrowserSessionMessage(
     return;
   }
 
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
-    return;
-  }
-
   const cls = classifyCdpCommand(method);
   if (cls === "browser" || cls === "target") {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    sendJson(ws, buildCdpSessionError(id, sessionId, -32601,
+      `${method} is unsupported on a Browser session; use the root connection for Target operations`));
     return;
   }
 
@@ -128,24 +127,6 @@ export async function handleBrowserSessionMessage(
     ),
   );
 }
-
-/**
- * Session-level Target.* commands that must NOT be forwarded to Electron's
- * internal CDP. Forwarding Target.createTarget would create a new Electron
- * BrowserWindow; forwarding Target.setAutoAttach would expose non-terminal-
- * browser targets. We handle these locally with stub/no-op responses.
- */
-const SESSION_TARGET_INTERCEPTS = new Set([
-  "Target.setAutoAttach",
-  "Target.getTargets",
-  "Target.setDiscoverTargets",
-  "Target.getTargetInfo",
-  "Target.createTarget",
-  "Target.closeTarget",
-  "Target.activateTarget",
-  "Target.attachToTarget",
-  "Target.detachFromTarget",
-]);
 
 export async function handleSessionMessage(
   conn: CdpProxyConnectionState,
@@ -171,11 +152,6 @@ export async function handleSessionMessage(
         `${method} is blocked by CDP proxy`,
       ),
     );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
     return;
   }
 
@@ -285,15 +261,21 @@ export async function handleSessionMessage(
     return;
   }
 
-  if (SESSION_TARGET_INTERCEPTS.has(method)) {
-    if (CDP_PROXY_TRACE_ENABLED) {
-      console.info("[cdp-proxy] intercepted session-level Target command", {
-        id,
-        method,
-        sessionId,
-      });
-    }
+  // Playwright configures child-target discovery during page initialization.
+  // This proxy owns discovery at the root; never forward it to the host browser.
+  if (method === "Target.setAutoAttach" || method === "Target.setDiscoverTargets") {
     sendJson(ws, buildCdpSessionResult(id, sessionId, {}));
+    return;
+  }
+  if (method === "Target.getTargets") {
+    sendJson(ws, buildCdpSessionResult(id, sessionId, {
+      targetInfos: getCurrentTargetInfos(sessionManager, conn.scopedProfileId, conn.scopedGroupId),
+    }));
+    return;
+  }
+  if (method.startsWith("Target.") || method.startsWith("Browser.")) {
+    sendJson(ws, buildCdpSessionError(id, sessionId, -32601,
+      `${method} is unsupported on a page session; use the root connection for supported Browser/Target operations`));
     return;
   }
 

@@ -225,7 +225,8 @@ export interface RunweaveElectronBridge {
   terminalBrowserShow: (tabId: string) => Promise<void>;
   terminalBrowserResolveAssistanceTarget: (
     target: BrowserAssistanceTarget,
-  ) => Promise<string>;
+    revealPopup?: boolean,
+  ) => Promise<string | null>;
   terminalBrowserHide: (tabId: string) => Promise<void>;
   terminalBrowserGetDeviceState: (
     tabId: string,

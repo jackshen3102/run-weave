@@ -30,6 +30,7 @@ export interface CdpTargetInfo {
   url: string;
   attached: boolean;
   browserContextId: string;
+  openerId?: string;
 }
 
 export interface CdpTargetWindowInfo {
@@ -91,6 +92,7 @@ export function buildTargetInfo(target: {
   title: string;
   browserContextId?: string;
   attached?: boolean;
+  openerId?: string;
 }): CdpTargetInfo {
   return {
     targetId: target.targetId,
@@ -99,6 +101,7 @@ export function buildTargetInfo(target: {
     url: target.url,
     attached: target.attached ?? false,
     browserContextId: target.browserContextId ?? "runweave-terminal-browser",
+    ...(target.openerId ? { openerId: target.openerId, canAccessOpener: true } : {}),
   };
 }
 

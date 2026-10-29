@@ -1,4 +1,7 @@
 import { handleHeaderCommand } from "./headers.js";
+import { handleProxyControlCommand } from "./proxy-control.js";
+import { attachProxyTarget, detachProxyTarget } from "./target-attachment.js";
+import { handleDownloadCommand } from "./downloads.js";
 import { randomUUID } from "node:crypto";
 import { handleCookieCommand } from "./cookies.js";
 import {
@@ -15,10 +18,8 @@ import {
   closeTerminalBrowserTabFromProxy,
   createTerminalBrowserTabFromProxy,
   getTerminalBrowserCdpTargets,
-  getTerminalBrowserEntryByTargetId,
 } from "../../view/index.js";
 import type { CdpProxyConnectionState } from "./types.js";
-import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
 import {
   broadcastTargetCreated,
   canUseTarget,
@@ -26,7 +27,6 @@ import {
   getTerminalBrowserOwnerWindowId,
   getScopedTargets,
   getTargetInfoForRequest,
-  isSafeNoopCommand,
   sendJson,
 } from "./utils.js";
 import {
@@ -45,6 +45,8 @@ export async function handleMessage(
   sessionId: string | undefined,
 ): Promise<void> {
   const { ws, sessionManager } = conn;
+  if (await handleProxyControlCommand(conn, id, method, params, sessionId)) return;
+  if (await handleDownloadCommand(conn, id, method, params, sessionId)) return;
 
   if (method === "Storage.getCookies" || method === "Storage.setCookies") {
     await handleCookieCommand(conn, id, method, params, sessionId);
@@ -67,11 +69,6 @@ export async function handleMessage(
       ws,
       buildCdpError(id, -32601, `${method} is blocked by CDP proxy`),
     );
-    return;
-  }
-
-  if (isSafeNoopCommand(method)) {
-    sendJson(ws, buildCdpResult(id, {}));
     return;
   }
 
@@ -165,6 +162,7 @@ export async function handleMessage(
                 title: t.title,
                 browserContextId: t.browserGroupId,
                 attached: true,
+                openerId: t.openerId,
               });
               sendJson(ws, {
                 method: "Target.attachedToTarget",
@@ -192,70 +190,13 @@ export async function handleMessage(
         return;
       }
 
-      case "Target.attachToTarget": {
-        const targetId = params.targetId as string;
-        if (!targetId) {
-          sendJson(ws, buildCdpError(id, -32602, "targetId required"));
-          return;
-        }
-        const found = getTerminalBrowserEntryByTargetId(targetId);
-        if (!found) {
-          sendJson(
-            ws,
-            buildCdpError(id, -32602, `Unknown target: ${targetId}`),
-          );
-          return;
-        }
-        try {
-          const target = getTerminalBrowserCdpTargets().find(
-            (t) =>
-              t.targetId === targetId &&
-              t.profileId === conn.scopedProfileId &&
-              (!conn.scopedGroupId || t.browserGroupId === conn.scopedGroupId),
-          );
-          if (!target) {
-            sendJson(
-              ws,
-              buildCdpError(id, -32602, `Target not found: ${targetId}`),
-            );
-            return;
-          }
-          const { proxySessionId } = sessionManager.attachDebugger(
-            targetId,
-            target.webContents,
-          );
-          sendJson(ws, buildCdpResult(id, { sessionId: proxySessionId }));
-        } catch (error) {
-          sendJson(
-            ws,
-            buildCdpError(
-              id,
-              -32000,
-              error instanceof Error ? error.message : String(error),
-            ),
-          );
-        }
+      case "Target.attachToTarget":
+        sendJson(ws, buildCdpResult(id, attachProxyTarget(conn, params)));
         return;
-      }
-
-      case "Target.detachFromTarget": {
-        const detachSessionId =
-          typeof params.sessionId === "string" ? params.sessionId : null;
-        if (detachSessionId && conn.browserSessionIds.delete(detachSessionId)) {
-          sendJson(ws, buildCdpResult(id, {}));
-          return;
-        }
-        const targetId =
-          (typeof params.targetId === "string" ? params.targetId : null) ??
-          (detachSessionId
-            ? sessionManager.getTargetIdForSession(detachSessionId)
-            : null);
-        if (targetId && canUseTarget(conn, targetId)) {
-          sessionManager.detachDebugger(targetId);
-        }
+      case "Target.detachFromTarget":
+        detachProxyTarget(conn, params);
         sendJson(ws, buildCdpResult(id, {}));
         return;
-      }
 
       case "Target.activateTarget": {
         const targetId = params.targetId as string;
@@ -399,15 +340,8 @@ export async function handleMessage(
             buildCdpError(id, -32601, `${method} requires a sessionId`),
           );
         } else {
-          // For unhandled browser-level commands (e.g. Browser.setDownloadBehavior),
-          // return an empty success so Playwright's init sequence doesn't break.
-          if (CDP_PROXY_TRACE_ENABLED) {
-            console.info("[cdp-proxy] stub OK for unhandled browser command", {
-              id,
-              method,
-            });
-          }
-          sendJson(ws, buildCdpResult(id, {}));
+          sendJson(ws, buildCdpError(id, -32601,
+            `${method} is unsupported by this Browser proxy; no operation was applied`));
         }
         return;
     }

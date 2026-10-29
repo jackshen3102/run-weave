@@ -287,8 +287,8 @@ const electronApi = {
     ipcRenderer.invoke("terminal-browser:set-presentation", state),
   terminalBrowserShow: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:show", tabId),
-  terminalBrowserResolveAssistanceTarget: (target) =>
-    ipcRenderer.invoke("terminal-browser:resolve-assistance-target", target),
+  terminalBrowserResolveAssistanceTarget: (target, revealPopup) =>
+    ipcRenderer.invoke("terminal-browser:resolve-assistance-target", target, revealPopup),
   terminalBrowserHide: (tabId: string) =>
     ipcRenderer.invoke("terminal-browser:hide", tabId),
   terminalBrowserGetDeviceState: (tabId: string) =>
