@@ -140,7 +140,7 @@ main() {
   local event
   event="$(json_get '.hook_event_name // .hookEventName // .event')"
   case "$event" in
-    "" | "Stop" | "stop" | "SubagentStop" | "subagent_stop") ;;
+    "" | "Stop" | "stop") ;;
     *) return 0 ;;
   esac
 

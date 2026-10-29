@@ -295,6 +295,13 @@ async function main() {
   const payload = parsePayload(await readStdin());
   const rawEvent = readHookEvent(payload);
   const normalizedEvent = normalizeEventName(rawEvent);
+  // Subagents inherit the parent pane/thread identity, but do not end its turn.
+  if (normalizedEvent === "subagent_stop" || normalizedEvent === "subagentstop") {
+    appendDebugLog("hook bridge skipped subagent stop", {
+      threadId: readThreadId(payload),
+    });
+    return;
+  }
   const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv();
   const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
   if (tmuxPaneContext.panelId) {

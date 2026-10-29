@@ -11,9 +11,9 @@ import {
   verifyPreToolHook,
   verifyToolOutcomeHooks,
   verifyTmuxPaneContextFailure,
-  verifyTraexNotificationCompletion,
   writeAppServerDiscoveryFiles,
 } from "./helpers.mjs";
+import { verifyCompletionHookIsolation } from "./completion-isolation.mjs";
 import { createToolkitHookFixture } from "./fixture.mjs";
 import { verifyToolkitHookProviderGuards } from "./provider-guards.mjs";
 
@@ -575,8 +575,8 @@ try {
       "launcher without Runweave identity must not post app-server events",
     );
 
-    await verifyTraexNotificationCompletion({
-      command: getToolkitHookCommand(toolkitHooksConfig, "Notification"),
+    await verifyCompletionHookIsolation({
+      toolkitHooksConfig,
       homeDir,
       appServerUrl: `http://127.0.0.1:${appServerPort}`,
       endpoint,
