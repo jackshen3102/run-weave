@@ -69,6 +69,7 @@ final class AppSession: ObservableObject {
   @Published var metadataWrites = Set<String>()
   // Mutated by the attention extension; scoped to this connection generation.
   @Published var acknowledgementWrites = Set<String>()
+  @Published var openingNextCompletion = false
   @Published var bellMarkers = Set<String>()
   var bellTasks: [String: Task<Void, Never>] = [:]
   private(set) var overviewRevision = 0
@@ -122,6 +123,7 @@ final class AppSession: ObservableObject {
     deviceStatus.reset()
     self.connection = connection
     reconnectingTerminal = false
+    openingNextCompletion = false
     authenticated = false
     overview = nil
     attentionRetention.activate(scope: connection?.scope)
@@ -332,7 +334,7 @@ final class AppSession: ObservableObject {
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
   }
 
-  func openTerminal(_ id: String) async {
+  func openTerminal(_ id: String, requireUnreadCompletion: Bool = false) async {
     // A tap during recovery must use the transport delivered by that recovery.
     let computerID = connection?.id
     routeRequest += 1
@@ -350,6 +352,9 @@ final class AppSession: ObservableObject {
       let details = try await api.details(id: id)
       guard epoch == generation, !Task.isCancelled else { return }
       guard routeRequest == route else { return }
+      if requireUnreadCompletion {
+        guard nextCompletionTerminals.contains(where: { $0.id == id }) else { return }
+      }
       closeTerminal()
       let controller = SessionController(api: api, terminalID: id)
       terminalController = controller

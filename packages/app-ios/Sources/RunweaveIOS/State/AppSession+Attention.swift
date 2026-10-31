@@ -1,6 +1,23 @@
 import Foundation
 
 extension AppSession {
+  var nextCompletionTerminals: [HomeTerminal] {
+    let candidates = (overview?.sessions ?? []).filter {
+      $0.id != terminal?.id && $0.hasUnreadCompletion && !$0.isAgentActive
+    }
+    let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+    return attentionRetention.orderedIDs.compactMap { byID[$0] }
+  }
+
+  func openNextCompletion() async {
+    guard canWrite, terminal != nil, !openingNextCompletion,
+      let next = nextCompletionTerminals.first else { return }
+    let epoch = generation
+    openingNextCompletion = true
+    defer { if generation == epoch { openingNextCompletion = false } }
+    await openTerminal(next.id, requireUnreadCompletion: true)
+  }
+
   /// Only acknowledges the revision the user actually chose to open/read.
   func acknowledgeTerminal(_ id: String, revision: Int? = nil) async {
     guard canWrite, let api, !acknowledgementWrites.contains(id),
