@@ -54,14 +54,14 @@ final class RecordStore {
     }
     func event(_ state: String, _ reason: String, affected: Int = 0, at: Date = Date()) throws {
         let now = at.timeIntervalSince1970
-        let last = try rows("SELECT * FROM state_events ORDER BY id DESC LIMIT 1").first
+        let last = try rows("SELECT * FROM state_events WHERE state!='sourceRetired' ORDER BY id DESC LIMIT 1").first
         if let last, last["state"] == state, last["reason"] == reason {
             try execute("UPDATE state_events SET ended=?, affected=affected+? WHERE id=?", [now, affected, last["id"]])
         } else {
             if let last, let id = last["id"] { try execute("UPDATE state_events SET ended=? WHERE id=?", [now, id]) }
             try execute("INSERT INTO state_events(started,ended,state,reason,affected) VALUES (?,?,?,?,?)", [now, now, state, reason, affected])
         }
-        try execute("DELETE FROM state_events WHERE id NOT IN (SELECT id FROM state_events ORDER BY id DESC LIMIT 10000)")
+        try execute("DELETE FROM state_events WHERE state!='sourceRetired' AND id NOT IN (SELECT id FROM state_events WHERE state!='sourceRetired' ORDER BY id DESC LIMIT 10000)")
     }
     func segments() throws -> [SegmentRecord] {
         try rows("SELECT * FROM segments ORDER BY started,id").map { row in

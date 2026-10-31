@@ -63,6 +63,12 @@ import type {
 } from "@runweave/shared/attention";
 
 const electronApi = {
+  onScreenConversationOpen: (listener: (target: import("@runweave/shared/screen-recording").ScreenConversationLink) => void) => {
+    let alive = true;
+    const take = () => { void ipcRenderer.invoke("screen-conversation:take").then(value => { if (alive && value) listener(value); }).catch(() => {}); };
+    ipcRenderer.on("screen-conversation:available", take); take();
+    return () => { alive = false; ipcRenderer.off("screen-conversation:available", take); };
+  },
   terminalBrowserGetPlugins: (profileId: TerminalBrowserProfileId) => ipcRenderer.invoke("terminal-browser:plugins-list", profileId),
   terminalBrowserRunPluginCommand: (request: import("@runweave/shared/browser-plugins").BrowserPluginCommand) => ipcRenderer.invoke("terminal-browser:plugin-command", request),
   platform: process.platform,

@@ -15,6 +15,9 @@ extension APIClient {
         if status == 404 { return ScreenRecordingReadError("UPDATE_REQUIRED") }
         return nil
     }
+    func screenAnalysisConversation(provider: String, threadID: String) async throws -> TerminalConversation.Target? {
+        try await authorized("/api/screen-recording/analysis/conversations/\(Self.pathComponent(threadID))?provider=\(Self.pathComponent(provider))", requestTimeout: 5, decodeError: screenError)
+    }
     func screenAnalysisStatus() async throws -> ScreenAnalysisStatus {
         try await authorized("/api/screen-recording/analysis/status", requestTimeout: 5, decodeError: screenError)
     }

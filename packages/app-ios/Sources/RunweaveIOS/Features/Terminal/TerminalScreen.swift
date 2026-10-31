@@ -17,6 +17,7 @@ struct TerminalScreen: View {
   @State private var showingBranchUpdates = false
   @State private var showingHistory = false
   @State private var showingConversation = false
+  @State private var expectedConversation: TerminalConversation.Target?
   @State private var showingInfo = false
   @State private var showingSupervision = false
   @StateObject private var sideChat: SideChatModel
@@ -145,7 +146,14 @@ struct TerminalScreen: View {
     .background(TerminalAppearance.background.ignoresSafeArea())
     .tint(TerminalAppearance.accent)
     .modifier(TerminalNavigationBackground())
+    .onChange(of: session.requestedConversation) { target in
+      guard let target, target.terminalSessionId == details.id else { return }
+      expectedConversation = target; session.requestedConversation = nil; showingConversation = true
+    }
     .onAppear {
+      if let target = session.requestedConversation, target.terminalSessionId == details.id {
+        expectedConversation = target; session.requestedConversation = nil; showingConversation = true
+      }
       controller.surface.applyTheme(dark: theme != "light")
       connectBrowserIntents()
       controller.openFileRequested = { tap in
@@ -231,7 +239,7 @@ struct TerminalScreen: View {
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
     .fullScreenCover(isPresented: $showingConversation, onDismiss: connectBrowserIntents) {
-      ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title)
+      ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title, expectedTarget: expectedConversation)
         .mobileAnalyticsScreen(.conversationReader)
     }
     .sheet(item: $replyContext) { context in
@@ -576,7 +584,7 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
-        readConversation: { showingConversation = true },
+        readConversation: { expectedConversation = nil; showingConversation = true },
         canReply: currentTerminal?.terminalState.agent == "codex", reply: openReplyAssistant,
         openDesktop: { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) },
         supervisionEnabled: supervision.watch?.enabled == true,

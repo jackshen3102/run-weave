@@ -1,3 +1,4 @@
+import { resolveAnalysisConversation } from "../screen-recording-analysis/conversation";
 import type { ActivityFactsPage } from "@runweave/shared/activity";
 import type {
   AppServerThreadDetailResponse,
@@ -39,6 +40,10 @@ export class WorkHistoryService {
     private readonly activityQueryService: ActivityQueryService,
     private readonly appServerGateway: AppServerHistoryGateway,
   ) {}
+
+  async analysisConversation(provider: string, threadID: string) {
+    return resolveAnalysisConversation(this.terminalSessionManager, this.appServerGateway, provider, threadID);
+  }
 
   async analysisEvidencePage(threadID: string, cursor?: string, signal?: AbortSignal) {
     return this.appServerGateway.getAnalysisEvidence(threadID,cursor,signal);

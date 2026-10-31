@@ -15,10 +15,10 @@ struct ConversationReaderView: View {
   @State private var browserPresentationID = UUID()
   @State private var visible = false
 
-  init(session: AppSession, controller: SessionController, terminalID: String, title: String) {
+  init(session: AppSession, controller: SessionController, terminalID: String, title: String, expectedTarget: TerminalConversation.Target? = nil) {
     self.session = session; self.controller = controller; self.terminalID = terminalID; self.title = title
     self.browser = session.browser
-    _model = StateObject(wrappedValue: ConversationReaderModel(session: session, controller: controller, terminalID: terminalID))
+    _model = StateObject(wrappedValue: ConversationReaderModel(session: session, controller: controller, terminalID: terminalID, expectedTarget: expectedTarget))
   }
   var body: some View {
     NavigationView {

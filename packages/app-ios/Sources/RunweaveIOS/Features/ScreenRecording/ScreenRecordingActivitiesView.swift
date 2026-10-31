@@ -5,6 +5,7 @@ import Clarity
 struct ScreenRecordingActivitiesView: View {
     @ObservedObject var session: AppSession
     let day: String
+    var openConversation: (TerminalConversation.Target) -> Void
     @State private var snapshot: ScreenAnalysisExport?
     @State private var message = "正在读取事项…"
     @State private var reload = 0
@@ -31,7 +32,7 @@ struct ScreenRecordingActivitiesView: View {
             }
             ForEach(snapshot?.cards ?? []) { card in
                 NavigationLink {
-                    ScreenRecordingActivityDetail(session: session,card: card,evidence: snapshot?.evidence ?? [])
+                    ScreenRecordingActivityDetail(session: session,card: card,evidence: snapshot?.evidence ?? [], openConversation: openConversation)
                         .id("\(session.generation):\(card.cardID):\(card.revision)")
                 } label: {
                     VStack(alignment: .leading,spacing: 6) {
@@ -61,6 +62,8 @@ private struct ScreenRecordingActivityDetail: View {
     @ObservedObject var session: AppSession
     let card: ScreenAnalysisCard
     let evidence: [ScreenAnalysisEvidence]
+    var openConversation: (TerminalConversation.Target) -> Void
+    @State private var openingConversation = false
     @State private var playback: ScreenRecordingView?
     @State private var revision = ""
     @State private var captureID: String?
@@ -78,6 +81,10 @@ private struct ScreenRecordingActivityDetail: View {
                 ForEach(evidence.filter { card.evidenceIDs.contains($0.id) },id: \.id) { item in
                     if let capture = item.captureID {
                         Button("查看 \(time(item.occurredAtMs)) 的画面证据") { Task { await resolve(capture) } }
+                    } else if item.source == "agent", let provider = item.provider, let thread = item.threadID {
+                        Button("打开 \(time(item.occurredAtMs)) 的 Agent 会话") {
+                            Task { await resolveConversation(provider: provider, thread: thread) }
+                        }.disabled(openingConversation)
                     }
                 }
                 if let playback, let api = session.api {
@@ -89,6 +96,25 @@ private struct ScreenRecordingActivityDetail: View {
             } else { Text("当前连接不可用") }
         }.navigationTitle("事项详情").clarityMask()
         .onChange(of: online) { _, available in if !available { playback = nil; captureID = nil } }
+    }
+    private func resolveConversation(provider: String, thread: String) async {
+        guard online, !openingConversation, let api = session.api else { return }
+        openingConversation = true
+        defer { openingConversation = false }
+        let generation = session.generation
+        do {
+            guard let target = try await api.screenAnalysisConversation(provider: provider, threadID: thread),
+                  target.provider == provider, target.threadId == thread else { throw APIError.invalidResponse }
+            guard !Task.isCancelled, generation == session.generation, online else { return }
+            // Read the exact panel/thread before opening; the reader repeats this fence on every refresh.
+            let source = try await api.terminalConversation(id: target.terminalSessionId,
+                panelID: target.panelId, expectedThreadID: target.threadId)
+            guard source.target == target, source.availability == "available" else { throw APIError.invalidResponse }
+            guard !Task.isCancelled, generation == session.generation, online else { return }
+            openConversation(target)
+        } catch {
+            if generation == session.generation { message = "会话来源已变化或不可用，文字事项保留" }
+        }
     }
     private func time(_ ms: Int64) -> String {
         let f = DateFormatter(); f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "HH:mm:ss"

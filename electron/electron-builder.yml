@@ -73,3 +73,7 @@ mac:
     - target: zip
       arch:
         - arm64
+
+protocols:
+  - name: ScreenJournal conversation
+    schemes: [runweave]
