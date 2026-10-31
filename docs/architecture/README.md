@@ -45,6 +45,8 @@ scripts/dev-session    开发会话与 Beta 生命周期
 该 macOS 工具采集不依赖 Backend、Electron 或 RemoteDesk；原生 Mac 回放直接读取同进程服务，
 iOS 经当前 Backend 鉴权连接该 Mac 同用户的 Unix socket。关闭 Backend 不停止采集。
 二期读取／回放的实现与验收边界见包入口；不提供 Web 回放或额外 TCP 服务。
+独立 NPM 服务端由 `packages/runweave-server/` 分发同源 Backend、App Server 和网页；独立 `@runweave/cli` 唯一提供 rw；
+两个服务进程保持独立，生命周期由 `rw server` 管理，当前合同见 [服务端管理](../cli/server-cli.md)。
 
 ## 依赖方向
 

@@ -1,0 +1,51 @@
+name: Build standalone NPM server
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+      - name: Check native target
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: node -e 'if (`${process.platform}-${process.arch}` !== process.env.EXPECTED_TARGET) process.exit(1)'
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build distributable
+        run: pnpm server:build
+      - name: Verify installed tarballs and self-update
+        run: pnpm server:verify-installed
+      - name: Pack independent CLI
+        run: npm pack ./.runtime-artifacts/server/cli-package --pack-destination .runtime-artifacts/server
+      - name: Pack platform package
+        env:
+          SERVER_TARGET: ${{ matrix.target }}
+        run: npm pack "./.runtime-artifacts/server/$SERVER_TARGET" --pack-destination .runtime-artifacts/server
+      - name: Pack public entry package
+        run: npm pack ./.runtime-artifacts/server/package --pack-destination .runtime-artifacts/server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-server-${{ matrix.target }}
+          path: .runtime-artifacts/server/*.tgz
+          if-no-files-found: error

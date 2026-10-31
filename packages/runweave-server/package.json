@@ -1,0 +1,29 @@
+{
+  "name": "@runweave/server",
+  "version": "0.1.0",
+  "description": "Standalone Runweave Backend, App Server and web resources",
+  "license": "MIT",
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.ts\" \"bin/*.cjs\""
+  },
+  "main": "bin/runtime.cjs",
+  "devDependencies": {
+    "@runweave/config-node": "workspace:*",
+    "@runweave/shared": "workspace:*",
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.0"
+  }
+}

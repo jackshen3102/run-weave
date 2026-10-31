@@ -4,6 +4,8 @@
 独立发布包由目标 Linux 系统、架构、libc 与 Node 22 环境构建；桌面包由 Electron
 版本和 macOS 架构构建。运行中的安装流程不调用 npm，也不读取全局 npm 包。
 
+NPM 统一服务端发行入口见 [服务端管理](../cli/server-cli.md)。本文保留独立 Backend 组件构建方式。
+
 ## 构建与安装
 
 在与目标机器匹配的构建环境中：

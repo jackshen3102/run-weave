@@ -75,6 +75,7 @@ export interface ActivityDatabaseOptions {
   databasePath: string;
   contentKeyBase64: string | null;
   maxDatabaseBytes?: number;
+  keyStorage?: "system" | "file";
   activityKeyEnvironment?: {
     testMode: boolean;
     testKey: string | null;
@@ -134,6 +135,7 @@ export class ActivityDatabase {
               UNION ALL SELECT 1 FROM external_refs
               UNION ALL SELECT 1 FROM activity_access_audit
               UNION ALL SELECT 1 FROM activity_delete_jobs LIMIT 1`).get(),
+            options.keyStorage,
           );
           // Refuse a replaced key before accepting any new encrypted content.
           const encrypted = this.database.prepare(`SELECT ciphertext, nonce, auth_tag AS authTag

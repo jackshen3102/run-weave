@@ -20,6 +20,7 @@ import {
 } from "../../../backend/src/scheduled-tasks/schedule";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
+import { verifyMaintenance } from "./maintenance";
 import { verifyContinuation } from "./continuation";
 import { verifyMigrations } from "./migrations";
 import { verifyArchive, verifyConcurrent } from "./concurrent";
@@ -31,6 +32,7 @@ const cases: Record<string, () => Promise<void>> = {
       verifyContinuation(store, directory, taskFixture),
     ),
   migrations: verifyMigrations,
+  maintenance: () => withStore(store => verifyMaintenance(store, taskFixture, runFixture)),
   time: verifyTime,
   dedupe: verifyDedupe,
   restart: verifyRestart,

@@ -16,7 +16,7 @@ const releaseId =
   process.argv.find((arg) => arg.startsWith("--release-id="))?.slice(13) ??
   createReleaseId();
 const homeArg = process.argv.find((arg) => arg.startsWith("--home="))?.slice(7);
-const artifactDir = path.join(
+const artifactDir = process.argv.find(arg => arg.startsWith("--output-dir="))?.slice(13) ?? path.join(
   repoRoot,
   ".runtime-artifacts",
   "app-server",
@@ -54,6 +54,7 @@ await publishComponentArtifact({
   entries: [entry],
 });
 
+if (!process.argv.includes("--build-only")) {
 const isolatedCliEntry = process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim();
 const cliEntry = isolatedCliEntry
   ? path.resolve(isolatedCliEntry)
@@ -77,6 +78,8 @@ run("node", [
   ...(homeArg ? ["--home", homeArg] : []),
   ...explicitConfigurationArguments(),
 ]);
+
+}
 
 function createReleaseId() {
   const now = new Date();

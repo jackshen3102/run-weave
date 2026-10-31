@@ -37,8 +37,8 @@ import {
 import { attachEventStreamWebSocketServer } from "./server/websocket.js";
 import { createAppServerRuntimeStatusReport } from "./runtime-status.js";
 
-async function main(): Promise<void> {
-  const config = resolveAppServerConfig();
+export async function startAppServer(prepareRuntime?: () => void): Promise<void> {
+  let config = resolveAppServerConfig();
   const owner = acquireConfigurationOwner(configuration().context, "app-server");
   process.once("exit", () => owner.release());
   const serviceInstanceId =
@@ -54,6 +54,11 @@ async function main(): Promise<void> {
     owner.release();
     return;
   }
+
+  // Standalone Server may activate its release only while this process owns
+  // the instance. Keep that ownership through activation and service startup.
+  prepareRuntime?.();
+  config = resolveAppServerConfig();
 
   const token = await loadOrCreateToken(config.tokenPath);
   const store = new AppServerEventStore(config.eventLogPath);
@@ -304,7 +309,11 @@ function serializeError(error: unknown): Record<string, unknown> {
   };
 }
 
-main().catch((error: unknown) => {
-  logError("Runweave app-server failed", serializeError(error));
-  process.exitCode = 1;
-});
+// Source ESM starts directly; the bundled CJS entry can also be bootstrapped by
+// Standalone Server, which supplies release activation after ownership checks.
+if (typeof require === "undefined" || require.main === module) {
+  void startAppServer().catch((error: unknown) => {
+    logError("Runweave app-server failed", serializeError(error));
+    process.exitCode = 1;
+  });
+}

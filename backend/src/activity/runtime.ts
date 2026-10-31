@@ -33,6 +33,7 @@ export class ActivityRuntime {
     env: NodeJS.ProcessEnv;
     browserProfileDir: string;
     runtimeChannel: "stable" | "beta" | "dev";
+    keyStorage?: "system" | "file";
   }): Promise<ActivityRuntime> {
     const { env, browserProfileDir, runtimeChannel } = input;
     const instanceId =
@@ -56,6 +57,7 @@ export class ActivityRuntime {
     try {
       store = await ActivityStore.create({
         databasePath: resolveActivityStoragePaths().activityDatabaseFile,
+        keyStorage: input.keyStorage,
         env,
       });
     } catch (error) {

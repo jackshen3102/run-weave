@@ -2,6 +2,7 @@
 import { runScreenRecordingCommand } from "./commands/screen-recording.js";
 import { withConfigurationArguments } from "@runweave/config-node";
 import { stdin, stdout, stderr } from "node:process";
+import { runServerCommand } from "./commands/server.js";
 import { runAppServerCommand } from "./commands/app-server.js";
 import { runAppCommand } from "./commands/app.js";
 import { runActivityCommand } from "./commands/activity.js";
@@ -46,6 +47,10 @@ export async function runCli(
     const args = [...tail, ...contextArgs];
     if (group === "screen-recording") {
       await runScreenRecordingCommand(subcommand, args, io);
+      return 0;
+    }
+    if (group === "server") {
+      await runServerCommand(subcommand, args, io);
       return 0;
     }
     if (group === "config") {
@@ -135,7 +140,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <config|activity|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|quick-input|scheduled-task|screen-recording|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <server|config|activity|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|quick-input|scheduled-task|screen-recording|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

@@ -10,7 +10,7 @@ const SECURITY_ITEM_NOT_FOUND_STATUS = 44;
 
 // The database initialization transaction serializes users of this key file.
 // Publish a complete key atomically so a crash cannot leave a partial key.
-function loadLinuxKey(activityHome: string, allowCreate: boolean): Buffer {
+function loadFileKey(activityHome: string, allowCreate: boolean): Buffer {
   const keyPath = path.join(activityHome, ".activity-content-key");
   const read = (): Buffer => {
     const fd = openSync(keyPath, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -140,6 +140,7 @@ export function loadActivityContentKey(
   env: NodeJS.ProcessEnv,
   activityHome?: string,
   allowCreate = true,
+  keyStorage: "system" | "file" = "system",
 ): Buffer | null {
   if (env.RUNWEAVE_ACTIVITY_TEST_MODE === "true") {
     const configured = env.RUNWEAVE_ACTIVITY_TEST_KEY?.trim();
@@ -164,9 +165,9 @@ export function loadActivityContentKey(
       }
     }
   }
-  if (process.platform === "linux") {
+  if (process.platform === "linux" || keyStorage === "file") {
     if (!activityHome) throw new Error("activity_home_required");
-    return loadLinuxKey(activityHome, allowCreate);
+    return loadFileKey(activityHome, allowCreate);
   }
   if (process.platform !== "darwin") {
     return null;

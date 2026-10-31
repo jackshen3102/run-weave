@@ -11423,5 +11423,597 @@
     "count": 1,
     "category": "test",
     "reason": "在独立临时目录生成合成屏幕导出器，验证真实 HTTP/MCP 来源迁移与发布恢复，不读取个人录屏。"
+  },
+  {
+    "file": "backend/src/routes/server-management.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取当前实例私有的本机管理令牌用于维护鉴权，不引入另一份实例业务配置或远程安装权限。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写本机服务管理令牌、稳定入口和运行日志；业务配置仍由 ConfigurationStore 及已有初始化合同管理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写本机服务管理令牌、稳定入口和运行日志；业务配置仍由 ConfigurationStore 及已有初始化合同管理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写本机服务管理令牌、稳定入口和运行日志；业务配置仍由 ConfigurationStore 及已有初始化合同管理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(ctx.home, \"rw\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写本机服务管理令牌、稳定入口和运行日志；业务配置仍由 ConfigurationStore 及已有初始化合同管理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(shim)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写本机服务管理令牌、稳定入口和运行日志；业务配置仍由 ConfigurationStore 及已有初始化合同管理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/context.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写已确认归属的服务运行记录、更新回执与发行校验清单，不将运行文件作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/context.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(root, file.path))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写已确认归属的服务运行记录、更新回执与发行校验清单，不将运行文件作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/context.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读写已确认归属的服务运行记录、更新回执与发行校验清单，不将运行文件作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/processes.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(ctx.home, \"management-token\"))",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "组件启动清除父终端的连接凭据并绑定当前不可变发行资源路径；服务业务配置仍从同一显式实例配置加载。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/services.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 2,
+    "category": "system",
+    "reason": "使用当前用户的系统执行环境生成并核对专属 systemd 或 launchd 服务定义，不在定义中持久化模型或登录凭据。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/services.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "system",
+    "reason": "使用当前用户的系统执行环境生成并核对专属 systemd 或 launchd 服务定义，不在定义中持久化模型或登录凭据。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/services.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(target)",
+    "count": 1,
+    "category": "system",
+    "reason": "使用当前用户的系统执行环境生成并核对专属 systemd 或 launchd 服务定义，不在定义中持久化模型或登录凭据。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/services.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "system",
+    "reason": "使用当前用户的系统执行环境生成并核对专属 systemd 或 launchd 服务定义，不在定义中持久化模型或登录凭据。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/update.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(ctx.home, \"management-token\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取当前实例私有管理令牌用于维护租约，更新阶段和版本状态写入专属回执，不作为业务配置来源。"
+  },
+  {
+    "file": "packages/runweave-server/bin/runtime.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(native, \"manifest.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取所选 NPM 平台发行清单并校验物化资源的字节与哈希，不读取另一份业务配置或执行安装生命周期脚本。"
+  },
+  {
+    "file": "packages/runweave-server/bin/runtime.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(stage, file.path))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取所选 NPM 平台发行清单并校验物化资源的字节与哈希，不读取另一份业务配置或执行安装生命周期脚本。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repo, \"packages/runweave-server/package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(start)",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(start)",
+    "count": 1,
+    "category": "build",
+    "reason": "构建阶段读取产品版本、资源字节和启动入口并生成平台包及校验清单；环境仅用于执行现有构建工具。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment",
+    "expression": "env.npm_config_registry",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(manifestFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(directory, \"package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(fixture, \"foreground.log\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(fixture, packed.filename))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(home, \".runweave/server/management-token\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(auth)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(manifestFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(fixture, \"verification.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(preloader)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(ctx.home, \"management-token\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "使用当前实例私有管理令牌读取本机运行状态，不建立网页登录会话，不引入额外业务配置或远程维护权限。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/installation.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "定位明确安装的 Server 包、校验身份并写入当前实例的安装记录和版本指针，不按 cwd 猜测仓库或建立另一份业务配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/installation.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(packageRoot, \"package.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "定位明确安装的 Server 包、校验身份并写入当前实例的安装记录和版本指针，不按 cwd 猜测仓库或建立另一份业务配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/installation.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(release, \"server-manifest.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "定位明确安装的 Server 包、校验身份并写入当前实例的安装记录和版本指针，不按 cwd 猜测仓库或建立另一份业务配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/installation.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(staged)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "定位明确安装的 Server 包、校验身份并写入当前实例的安装记录和版本指针，不按 cwd 猜测仓库或建立另一份业务配置。"
+  },
+  {
+    "file": "packages/runweave-server/bin/runtime.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(installed, \"package.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取所选 NPM 平台发行清单并校验物化资源的字节与哈希，不读取另一份业务配置或执行安装生命周期脚本。"
+  },
+  {
+    "file": "packages/runweave-server/bin/runtime.cjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(native, \"package.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取所选 NPM 平台发行清单并校验物化资源的字节与哈希，不读取另一份业务配置或执行安装生命周期脚本。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.FRONTEND_DIST_DIR",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_APP_SERVER_ENTRY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_APP_SERVER_RELEASE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_APP_SERVER_RUNTIME_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_APP_SERVER_TOKEN",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_APP_SERVER_URL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_CLI_BIN",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_DEBUG_LOG",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_NODE_PTY_DIR",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_RELEASE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "packages/runweave-server/src/runtime.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "独立 Server 入口绑定本次发行资源和组件身份，清除父终端的连接上下文；业务配置仍来自显式 config-node 实例。"
+  },
+  {
+    "file": "scripts/release/build-cli.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "distribution",
+    "reason": "构建独立 CLI 分发目录、生产依赖和 NPM 元数据，不包含 Server 资源，不修改全局安装或用户配置。"
+  },
+  {
+    "file": "scripts/release/build-cli.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repo, \"packages/runweave-cli/package.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "构建独立 CLI 分发目录、生产依赖和 NPM 元数据，不包含 Server 资源，不修改全局安装或用户配置。"
+  },
+  {
+    "file": "scripts/release/build-cli.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(output, \"package.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "构建独立 CLI 分发目录、生产依赖和 NPM 元数据，不包含 Server 资源，不修改全局安装或用户配置。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment",
+    "expression": "env.npm_config_prefix",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(cliEntry)",
+    "count": 3,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(dir, \"manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(dir, \"package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(prefix, \"lib/node_modules/@runweave/server/package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(source, \"cli-package/package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(dir, \"manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(dir, \"package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(appHome, \"app-server.lock.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实进程验证：读取临时 App Server 发现记录与发布目录，确认拒绝共存时原发布字节和进程保持不变。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(directory, entry.name))",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实进程验证：读取临时 App Server 发现记录与发布目录，确认拒绝共存时原发布字节和进程保持不变。"
   }
 ]

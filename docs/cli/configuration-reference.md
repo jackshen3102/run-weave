@@ -153,6 +153,20 @@
 | 约束              | 绝对路径，必须属于所选实例                            |
 | 显式迁移来源      | TERMINAL_SESSION_STORE_FILE                           |
 
+### storage.activityKeyStorage
+
+Activity 密钥保管方式；system 使用平台默认，file 使用存储目录中仅服务用户可读的密钥，独立无界面服务显式选择 file
+
+| 属性              | 合同                       |
+| ----------------- | -------------------------- |
+| 类型              | string；允许 null 恢复默认 |
+| 默认              | "system"                   |
+| 所属模块          | backend/activity           |
+| 生效              | 所属进程重启               |
+| 敏感 / 远端可修改 | 否 / 否                    |
+| 约束              | 枚举：system、file         |
+| 显式迁移来源      | new-server-installation    |
+
 ### storage.activityDirectory
 
 Activity 存储根；旧环境仅测试使用
