@@ -5,8 +5,8 @@ import CoreGraphics
 struct AnalysisVerify {
     static func main() async throws {
         let args = CommandLine.arguments
-        guard (2...3).contains(args.count), args.count == 2 || ["--boundaries", "--bad-analysis", "--queue-faults", "--queue-reopen", "--revisions", "--retirement"].contains(args[2]) else {
-            throw journalError("usage: ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT [--boundaries|--bad-analysis|--queue-faults|--queue-reopen|--revisions|--retirement]")
+        guard (2...3).contains(args.count), args.count == 2 || ["--search", "--search-fixture", "--boundaries", "--bad-analysis", "--queue-faults", "--queue-reopen", "--revisions", "--retirement"].contains(args[2]) else {
+            throw journalError("usage: ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT [--search|--search-fixture|--boundaries|--bad-analysis|--queue-faults|--queue-reopen|--revisions|--retirement]")
         }
         let paths = try StorePaths(root: URL(fileURLWithPath: args[1]),validation: true)
         let engine = try StorageEngine(paths: paths)
@@ -17,6 +17,12 @@ struct AnalysisVerify {
             let data = try JSONSerialization.data(withJSONObject: value,options: [.sortedKeys])
             let (body,_) = try await service.analysisRequest(method,input: String(decoding: data,as: UTF8.self))
             return try JSONDecoder().decode(T.self,from: body)
+        }
+        if args.count == 3, ["--search", "--search-fixture"].contains(args[2]) {
+            try seedSearch(paths: paths)
+            if args[2] == "--search" { try await verifySearch(paths: paths, service: service) }
+            print(try analysisJSON(["searchFixture": paths.root.path, "synthetic": "true"]))
+            await service.shutdown(); return
         }
         if args.count == 3, args[2] == "--queue-reopen" {
             let db = try AnalysisStore(paths: paths)
@@ -87,6 +93,95 @@ struct AnalysisVerify {
         }
         print(try analysisJSON(["singleClaim":true,"renewal":true,"staleGenerationRejected":true,"atomicCommit":true,"idempotentReplay":true,"receiptQuery":true,"operationConflict":true,"snapshotConflict":true,"dateRevisionIsolation":true]))
         await service.shutdown()
+    }
+    static func seedSearch(paths: StorePaths) throws {
+        let db = try AnalysisStore(paths: paths)
+        guard try db.scalar("SELECT COUNT(*) FROM cards") == "0" else { throw journalError("empty_search_fixture_required") }
+        let now = journalNowMs()
+        func insert(_ id: String, _ title: String, _ summary: String, _ offset: Int, expired: Bool = false, spans: Int = 1) throws {
+            let start = now-Int64(offset)*86400000-60000
+            let card = AnalysisCard(cardID: id, matterID: "matter-"+id, revision: 2, title: title, summary: summary,
+                detail: "DETAIL_ONLY_NEVER_MATCH", actor: "person", state: "documented", projectID: nil,
+                spans: (0..<spans).map { AnalysisSpan(startMs: start+Int64($0)*1000, endMs: start+Int64($0)*1000+500, actor: "person") },
+                evidenceIDs: ["expired-frame"], updatedAt: now)
+            try db.execute("INSERT INTO cards VALUES (?,?,?,?,?,?)", [id,card.matterID,analysisDay(start),2,try analysisJSON(card),expired ? now-31*86400000 : now])
+        }
+        try db.transaction {
+            for index in 0..<10000 { try insert(String(format: "bulk-%05d",index), "RunWeave 隔离搜索样本 \(index)", "登录检查 刷新结果", index % 30) }
+            try insert("symbol", "100% TOKEN_EXPIRED a/b c+d 'quote' \\path", "登录 刷新", 0, spans: 2)
+            try insert("symbol-decoy", "100abc TOKENXEXPIRED", "普通内容", 0)
+            try insert("cross", "跨字段 登录", "刷新", 1)
+            try insert("missing-word", "登录", "没有第二个词", 0)
+            try insert("expired", "过期文字唯一词", "不应命中", 1, expired: true)
+            try db.execute("INSERT INTO card_revisions VALUES (?,?,?,?)", ["cross",1,"{\"title\":\"OLD_REVISION_ONLY\"}",now])
+            let evidence = AnalysisEvidence(id: "expired-frame",source: "screen",occurredAtMs: now,captureID: "expired-frame")
+            try db.execute("INSERT INTO evidence_refs VALUES (?,?)", [evidence.id,try analysisJSON(evidence)])
+        }
+    }
+    static func verifySearch(paths: StorePaths, service: JournalReadService) async throws {
+        let now = journalNowMs(), today = analysisDay(now), earliest = analysisDay(now-29*86400000)
+        var responseBytes = 0
+        func search(_ q: String, from: String? = nil, to: String? = nil, limit: Int? = nil) async throws -> AnalysisSearchResponse {
+            let request = AnalysisSearchRequest(q: q,from: from ?? earliest,to: to ?? today,limit: limit)
+            let (data,_) = try await service.analysisRequest("analysisSearch",input: analysisJSON(request))
+            responseBytes = data.count
+            guard data.count <= 1024*1024 else { throw journalError("search_response_unbounded") }
+            return try JSONDecoder().decode(AnalysisSearchResponse.self,from: data)
+        }
+        for word in ["100%", "TOKEN_EXPIRED", "a/b", "c+d", "'quote'", "\\path"] {
+            guard try await search(word).items.map(\.cardID) == ["symbol"] else { throw journalError("literal_search_failed") }
+        }
+        let cross = try await search("跨字段 刷新")
+        guard cross.items.map(\.cardID) == ["cross"], cross.items.first?.matchedFields == ["title","summary"] else { throw journalError("cross_field_AND_failed") }
+        let normalized = try await search("  RUNWEAVE\t runweave  ")
+        guard normalized.q == "RUNWEAVE", normalized.items.count == 100, normalized.hasMore else { throw journalError("normalization_or_limit_failed") }
+        for word in ["DETAIL_ONLY_NEVER_MATCH","OLD_REVISION_ONLY","过期文字唯一词","DOES_NOT_EXIST"] {
+            let value = try await search(word)
+            guard value.items.isEmpty, !value.hasMore else { throw journalError("search_wrong_source") }
+        }
+        let limited = try await search("Runweave",limit: 3)
+        guard limited.items.count == 3, limited.hasMore else { throw journalError("search_limit_failed") }
+        for pair in zip(normalized.items,normalized.items.dropFirst()) {
+            guard pair.0.lastEndMs > pair.1.lastEndMs || (pair.0.lastEndMs == pair.1.lastEndMs && pair.0.cardID > pair.1.cardID) else { throw journalError("search_order_failed") }
+        }
+        let spans = try await search("100%")
+        guard let item = spans.items.first, item.spanCount == 2, item.lastEndMs-item.firstStartMs == 1500 else { throw journalError("search_span_projection_failed") }
+        let invalid = [AnalysisSearchRequest(q:" ",from:earliest,to:today), AnalysisSearchRequest(q:String(repeating:"字",count:101),from:earliest,to:today),
+            AnalysisSearchRequest(q:"a b c d e f g h i",from:earliest,to:today), AnalysisSearchRequest(q:"a\0b",from:earliest,to:today),
+            AnalysisSearchRequest(q:"a\u{1}b",from:earliest,to:today), AnalysisSearchRequest(q:"a",from:today,to:earliest),
+            AnalysisSearchRequest(q:"a",from:"2026-02-30",to:today), AnalysisSearchRequest(q:"a",from:analysisDay(now-30*86400000),to:today),
+            AnalysisSearchRequest(q:"a",from:earliest,to:analysisDay(now+86400000)), AnalysisSearchRequest(q:"a",from:earliest,to:today,limit:0)]
+        for request in invalid {
+            do { _ = try await service.analysisRequest("analysisSearch",input: analysisJSON(request)); throw journalError("invalid_search_accepted") }
+            catch let error as JournalReadError { guard error.code == "INVALID_ARGUMENT" else { throw error } }
+        }
+        for query in ["100%","DOES_NOT_EXIST","Runweave 登录","Runweave"] {
+            var timings: [Double] = []
+            for _ in 0..<20 {
+                let start = ContinuousClock.now
+                _ = try await search(query)
+                let elapsed = start.duration(to: .now).components
+                timings.append(Double(elapsed.seconds)*1000+Double(elapsed.attoseconds)/1e15)
+            }
+            let ordered = timings.sorted(), p95 = ordered[18]
+            print(String(decoding: try JSONSerialization.data(withJSONObject: ["scenario":query,"samples":20,"cards":10005,"p95Ms":p95,"maxMs":ordered.last!,"responseBytes":responseBytes],options: [.sortedKeys]),as: UTF8.self))
+            guard p95 <= 300 else { throw journalError("search_p95_exceeds_300ms") }
+        }
+        await service.shutdown()
+        let db = try AnalysisStore(paths: paths)
+        guard try db.scalar("SELECT COUNT(*) FROM export_snapshots") == "0" else { throw journalError("search_created_snapshot") }
+        let start = ContinuousClock.now
+        do {
+            _ = try db.withQueryBudget { try db.scalar("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n) SELECT SUM(x) FROM n") }
+            throw journalError("search_budget_not_enforced")
+        } catch let error as JournalReadError { guard error.code == "BUSY" else { throw error } }
+        guard start.duration(to: .now) < .seconds(3), try db.scalar("SELECT 1") == "1" else { throw journalError("search_budget_not_released") }
+        try db.execute("UPDATE cards SET body='broken' WHERE id='symbol'")
+        do {
+            _ = try db.search(AnalysisSearchQuery(AnalysisSearchRequest(q:"absent",from:earliest,to:today),now:now),cutoff:now-30*86400000)
+            throw journalError("corruption_silently_ignored")
+        } catch let error as JournalReadError { guard error.code == "ANALYSIS_UNAVAILABLE" else { throw error } }
+        print("literal_AND_scope_retention_order_validation_budget_corruption: passed")
     }
     static func verifyBoundaries(paths: StorePaths, engine: StorageEngine, deviceID: String) async throws {
         let settings = RecordingSettings()

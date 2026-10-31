@@ -12,7 +12,7 @@ struct JournalActivitiesView: View {
     @State private var snapshot: AnalysisExport?
     @State private var message = "正在读取事项…"
     @State private var selected: AnalysisCard?
-    @State private var playback: JournalView?
+    @State private var searching = false
     @State private var retryKeys: [String:String] = [:]
     @State private var retryRevisions: [String:Int] = [:]
     var body: some View {
@@ -24,6 +24,7 @@ struct JournalActivitiesView: View {
                     Picker("日期", selection: $day) { ForEach(days, id: \.self) { Text($0).tag($0) } }
                 }
                 Button(rawCount.map { $0 > 0 ? "查看当天 \($0) 段录屏" : "查看录屏记录" } ?? "查看录屏记录", systemImage: "play.rectangle", action: openRecordings)
+                Button("搜索事项", systemImage: "magnifyingglass") { searching = true }
                 Button("刷新事项") { Task { await refresh() } }
                 Text(message).font(.caption).foregroundStyle(.secondary)
                 ForEach(Array((snapshot?.missingIntervals ?? []).enumerated()), id: \.offset) { _, gap in
@@ -31,7 +32,7 @@ struct JournalActivitiesView: View {
                         Button("重试分析缺失区间") { Task { await retry(batch) } }
                     }
                 }
-                List(snapshot?.cards ?? [], selection: Binding(get: { selected?.cardID }, set: { id in selected = snapshot?.cards.first { $0.cardID == id }; playback = nil })) { card in
+                List(snapshot?.cards ?? [], selection: Binding(get: { selected?.cardID }, set: { id in selected = snapshot?.cards.first { $0.cardID == id } })) { card in
                     VStack(alignment: .leading) {
                         Text(card.title).font(.headline)
                         Text(card.summary).lineLimit(3)
@@ -40,26 +41,9 @@ struct JournalActivitiesView: View {
                 }
             }.padding().frame(minWidth: 250)
         } detail: {
-            if let playback { JournalPlaybackView(service: service, range: playback.range, revision: playbackRevision, initialCaptureID: captureID).id(playback.viewID) }
-            else if let selected {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(selected.title).font(.title2)
-                        Text(selected.summary); Text(selected.detail)
-                        Text("事实状态：\(selected.state)").font(.caption)
-                        ForEach(Array(selected.spans.enumerated()), id: \.offset) { _, span in
-                            Text("\(time(span.startMs))–\(time(span.endMs))" + (span.actor == "agent" ? " · 后台执行" : ""))
-                        }
-                        ForEach(snapshot?.evidence.filter { selected.evidenceIDs.contains($0.id) } ?? [], id: \.id) { evidence in
-                            if let capture = evidence.captureID {
-                                Button("查看 \(time(evidence.occurredAtMs)) 的画面证据") { Task { await open(capture) } }
-                            } else if evidence.source == "agent", evidence.provider == "codex", let thread = evidence.threadID {
-                                Button("打开 Agent 会话") { openConversation(thread) }
-                            }
-                        }
-                        Text(message).font(.caption).foregroundStyle(.secondary)
-                    }.padding().frame(maxWidth: .infinity, alignment: .leading)
-                }
+            if let selected, let snapshot {
+                JournalActivityDetail(service: service, selected: selected, evidence: snapshot.evidence, deviceID: snapshot.deviceID)
+                    .id("\(selected.cardID):\(selected.revision)")
             } else if loading {
                 ProgressView("正在读取事项…")
             } else {
@@ -73,17 +57,12 @@ struct JournalActivitiesView: View {
             }
         }
         .task(id: day) {
-            snapshot = nil; selected = nil; rawCount = nil; loading = true; playback = nil; captureID = nil
+            snapshot = nil; selected = nil; rawCount = nil; loading = true
             await refresh()
         }
+        .sheet(isPresented: $searching) { JournalActivitySearchView(service: service) }
     }
-    @State private var playbackRevision = ""
-    @State private var captureID: String?
     @State private var refreshGeneration = 0
-    private func time(_ ms: Int64) -> String {
-        let f = DateFormatter(); f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "HH:mm:ss"
-        return f.string(from: Date(timeIntervalSince1970: Double(ms)/1000))
-    }
     private func refresh() async {
         refreshGeneration += 1
         let generation = refreshGeneration
@@ -106,13 +85,12 @@ struct JournalActivitiesView: View {
             loading = false
             snapshot = try JSONDecoder().decode(AnalysisExport.self, from: data)
             selected = snapshot?.cards.first { $0.cardID == selected?.cardID }
-            playback = nil; captureID = nil
             message = snapshot?.cards.isEmpty == true ? "当天尚未生成事项，无需等待即可回看录屏。" : "仅已记录范围 · 上海时间"
             if snapshot?.coverage != "complete" { message += " · 覆盖不完整" }
             if let summary = snapshot?.summary { message += "\n" + summary }
         } catch {
             guard generation == refreshGeneration, !Task.isCancelled else { return }
-            snapshot = nil; selected = nil; loading = false; failed = true; playback = nil; captureID = nil
+            snapshot = nil; selected = nil; loading = false; failed = true
             message = "事项读取失败，不影响查看录屏。请刷新重试。"
         }
     }
@@ -136,8 +114,50 @@ struct JournalActivitiesView: View {
             await refresh()
         } catch { message = "重试请求未确认，请刷新后重试" }
     }
+}
+
+struct JournalActivityDetail: View {
+    let service: JournalReadService
+    let selected: AnalysisCard
+    let evidence: [AnalysisEvidence]
+    let deviceID: String
+    @State private var playback: JournalView?
+    @State private var playbackRevision = ""
+    @State private var captureID: String?
+    @State private var message = ""
+    var body: some View {
+        VStack(alignment: .leading) {
+            if playback != nil { Button("返回事项详情") { playback = nil; captureID = nil } }
+            if let playback { JournalPlaybackView(service: service, range: playback.range, revision: playbackRevision, initialCaptureID: captureID).id(playback.viewID) }
+            else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(selected.title).font(.title2)
+                        Text(selected.summary); Text(selected.detail)
+                        Text("事实状态：\(selected.state)").font(.caption)
+                        ForEach(Array(selected.spans.enumerated()), id: \.offset) { _, span in
+                            Text("\(time(span.startMs))–\(time(span.endMs))" + (span.actor == "agent" ? " · 后台执行" : ""))
+                        }
+                        ForEach(evidence.filter { selected.evidenceIDs.contains($0.id) }, id: \.id) { evidence in
+                            if let capture = evidence.captureID {
+                                Button("查看 \(time(evidence.occurredAtMs)) 的画面证据") { Task { await open(capture) } }
+                            } else if evidence.source == "agent", evidence.provider == "codex", let thread = evidence.threadID {
+                                Button("打开 Agent 会话") { openConversation(thread) }
+                            }
+                        }
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }.padding().frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+            }
+        }
+    }
+    private func time(_ ms: Int64) -> String {
+        let f = DateFormatter(); f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "HH:mm:ss"
+        return f.string(from: Date(timeIntervalSince1970: Double(ms)/1000))
+    }
     private func openConversation(_ thread: String) {
-        guard let device = snapshot?.deviceID else { return }
+        let device = deviceID
         var link = URLComponents(); link.scheme = "runweave"; link.host = "screen-conversation"
         link.queryItems = [URLQueryItem(name: "deviceID", value: device), URLQueryItem(name: "provider", value: "codex"), URLQueryItem(name: "threadID", value: thread)]
         #if DEBUG

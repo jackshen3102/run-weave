@@ -48,6 +48,21 @@ final class AnalysisStore {
         try execute("BEGIN IMMEDIATE")
         do { try body(); try execute("COMMIT") } catch { try? execute("ROLLBACK"); throw error }
     }
+    // Scoped to the synchronous owner query; never installed across an await.
+    func withQueryBudget<T>(_ body: () throws -> T) throws -> T {
+        let deadline = UnsafeMutablePointer<ContinuousClock.Instant>.allocate(capacity: 1)
+        deadline.initialize(to: .now.advanced(by: .seconds(2)))
+        sqlite3_progress_handler(db, 1000, { context in
+            guard let context else { return 1 }
+            return ContinuousClock.now >= context.assumingMemoryBound(to: ContinuousClock.Instant.self).pointee ? 1 : 0
+        }, deadline)
+        defer { sqlite3_progress_handler(db, 0, nil, nil); deadline.deinitialize(count: 1); deadline.deallocate() }
+        do { return try body() }
+        catch {
+            if sqlite3_errcode(db) == SQLITE_INTERRUPT { throw JournalReadError("BUSY", retryable: true) }
+            throw error
+        }
+    }
     private func prepare(_ sql: String, _ arguments: [Any?]) throws -> OpaquePointer {
         var pointer: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &pointer, nil) == SQLITE_OK, let statement = pointer else { throw error() }

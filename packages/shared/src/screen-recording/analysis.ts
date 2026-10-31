@@ -37,6 +37,7 @@ export interface AnalysisResult {
 }
 export interface AnalysisReceipt { operationID: string; batchID: string; revision: number; cardIDs: string[] }
 export interface AnalysisStatus {
+  keywordSearchVersion?: 1;
   analysisVersion: 1; deviceID: string; state: 'ready' | 'unavailable'; revision: number;
   queueCount: number; failedCount: number; days?: string[]; latestSuccessMs?: number; processedThroughMs?: number;
   agentCoverage: 'unknown' | 'partial' | 'complete';
@@ -48,6 +49,21 @@ export interface AnalysisExport {
   cards: AnalysisCard[]; evidence: AnalysisEvidence[]; summary: string; contentHash: string;
   nextCursor?: string;
 }
-export type AnalysisMethod = 'analysisStatus' | 'analysisCards' | 'analysisCard' | 'analysisExport' |
+export type AnalysisMethod = 'analysisSearch' | 'analysisStatus' | 'analysisCards' | 'analysisCard' | 'analysisExport' |
   'claimAnalysis' | 'renewAnalysis' | 'commitAnalysis' | 'analysisReceipt' | 'retryAnalysis' |
   'analysisAgentCursor' | 'ingestAnalysisEvents' | 'failAnalysis' | 'analysisFrame' | 'resolveAnalysisCapture';
+
+export interface AnalysisSearchRequest {
+  q: string; from: string; to: string; limit?: number;
+}
+export interface AnalysisSearchItem {
+  day: string; cardID: string; matterID: string; revision: number;
+  title: string; summary: string; actor: AnalysisActor; state: AnalysisFactState;
+  firstStartMs: number; lastEndMs: number; spanCount: number;
+  matchedFields: Array<'title' | 'summary'>;
+}
+export interface AnalysisSearchResponse {
+  schemaVersion: 1; deviceID: string; serverEpoch: string; revision: number;
+  timeZone: 'Asia/Shanghai'; q: string; from: string; to: string;
+  items: AnalysisSearchItem[]; hasMore: boolean;
+}
