@@ -2,6 +2,7 @@ import Foundation
 
 actor JournalReadService {
     let serverEpoch = UUID().uuidString
+    private var analysisCoordinator: AnalysisCoordinator?
     private let engine: StorageEngine
     private var settings: RecordingSettings
     private var captureState = "stopped"
@@ -66,6 +67,88 @@ actor JournalReadService {
     private func catalog() async throws -> JournalCatalog {
         guard !closed else { throw JournalReadError("NOT_RUNNING") }
         return try await engine.catalog(settings: settings)
+    }
+    private func analysis() async throws -> AnalysisCoordinator {
+        if let analysisCoordinator { return analysisCoordinator }
+        let c = try await catalog()
+        // Initialization failures stay in this domain and never tear down capture.
+        let value = try AnalysisCoordinator(paths: engine.paths, engine: engine, deviceID: c.deviceID)
+        analysisCoordinator = value
+        await engine.registerAnalysis(value)
+        return value
+    }
+    func analysisRequest(_ method: String, input: String) async throws -> (Data, String) {
+        guard input.utf8.count <= 48000 else { throw JournalReadError("INVALID_ARGUMENT") }
+        let r = try JSONDecoder().decode(AnalysisRequest.self, from: Data(input.utf8))
+        func required(_ text: String?) throws -> String {
+            guard let text, !text.isEmpty, text.utf8.count <= 256, !text.contains("\0") else { throw JournalReadError("INVALID_ARGUMENT") }; return text
+        }
+        func json<T: Encodable>(_ value: T) throws -> (Data, String) { (try JSONEncoder().encode(value), "application/json") }
+        let owner = try await analysis()
+        switch method {
+        case "analysisAgentCursor": return try json(await owner.agentCursor(deviceID: required(r.expectedDeviceID),threadID: required(r.threadID)))
+        case "ingestAnalysisEvents":
+            guard let cursor = r.cursor, let expected = r.expectedCursor, let coverage = r.coverage, let events = r.events else { throw JournalReadError("INVALID_ARGUMENT") }
+            try await owner.ingest(deviceID: required(r.expectedDeviceID),threadID: required(r.threadID),expected: expected,cursor: cursor,coverage: coverage,events: events)
+            return try json(["accepted":true])
+        case "analysisStatus": return try json(await owner.status())
+        case "claimAnalysis":
+            guard let from = r.effectiveFrom else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try json(await owner.claim(workerID: required(r.workerID), expectedDeviceID: required(r.expectedDeviceID), effectiveFrom: from, settings: settings, captureState: captureState))
+        case "renewAnalysis":
+            guard let gen = r.generation else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try json(["expiresAt": await owner.renew(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen)])
+        case "analysisFrame":
+            guard let gen = r.generation else { throw JournalReadError("INVALID_ARGUMENT") }
+            let c = try await owner.frame(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen,captureID: required(r.captureID))
+            let frame = try await engine.analysisCapture(c.id, settings: settings)
+            let data = try await image(frame, variant: .full, viewID: nil)
+            _ = try await owner.frame(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen,captureID: c.id)
+            return (data,"image/jpeg")
+        case "commitAnalysis":
+            guard let gen = r.generation, let result = r.result else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try json(await owner.commit(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen,operationID: required(r.operationID),inputHash: required(r.inputHash),result: result))
+        case "failAnalysis":
+            guard let gen = r.generation else { throw JournalReadError("INVALID_ARGUMENT") }
+            let code = try required(r.code)
+            guard code.range(of: "^[A-Z_]{1,80}$", options: .regularExpression) != nil else { throw JournalReadError("INVALID_ARGUMENT") }
+            try await owner.fail(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen,code: code); return try json(["released":true])
+        case "analysisReceipt": return try json(await owner.receipt(required(r.operationID)))
+        case "retryAnalysis":
+            guard let rev = r.expectedRevision else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try json(await owner.retry(batchID: required(r.batchID),expectedRevision: rev,operationID: required(r.operationID)))
+        case "analysisCard": return try json(await owner.card(required(r.cardID)))
+        case "analysisExport", "analysisCards":
+            let c = try await catalog()
+            let day = try required(r.day)
+            let raw = try await engine.analysisDayCaptures(day, settings: settings)
+            let pending = try await engine.analysisDayPending(day) || (c.hasPending && day == analysisDay(journalNowMs()))
+            let expiredDay = day < analysisDay(journalNowMs()-Int64(settings.retentionDays)*86400000)
+            let fingerprint = analysisHash(raw.map { $0.0+":"+String($0.1) }.sorted().joined(separator: "|") + String(pending) + String(expiredDay))
+            try await owner.observeSource(fingerprint, day: day)
+            let value = try await owner.export(day: day, snapshotRevision: r.snapshotRevision, hasPending: pending, raw: raw, retentionDays: settings.retentionDays)
+            if method == "analysisExport" { return try json(value) }
+            let limit = r.limit ?? 100
+            guard (1...100).contains(limit) else { throw JournalReadError("INVALID_ARGUMENT") }
+            var offset = 0
+            if let cursor = r.cursor {
+                let parts = cursor.split(separator: ":")
+                guard parts.count == 2, let rev = Int(parts[0]), let n = Int(parts[1]), n >= 0, n <= value.cards.count else { throw JournalReadError("INVALID_ARGUMENT") }
+                guard rev == value.revision else { throw JournalReadError("CONFLICT") }; offset = n
+            }
+            let end = min(value.cards.count, offset+limit)
+            return try json(AnalysisCardsPage(items: Array(value.cards[offset..<end]),revision: value.revision,nextCursor: end < value.cards.count ? "\(value.revision):\(end)" : nil))
+        case "resolveAnalysisCapture":
+            let id = try required(r.captureID), c = try await catalog()
+            _ = try await engine.analysisCapture(id, settings: settings)
+            for range in c.ranges {
+                guard let bounds = c.members[range.rangeID] else { continue }
+                let frames = try await engine.rangeFrames(bounds, settings: settings)
+                if frames.contains(where: { $0.capture.id == id }) { return try json(["rangeID": range.rangeID,"catalogRevision":c.revision]) }
+            }
+            throw JournalReadError("FRAME_GONE")
+        default: throw JournalReadError("INVALID_ARGUMENT")
+        }
     }
     func invalidations() async -> AsyncStream<Int> { await engine.readChanges() }
     func status() async throws -> JournalStatus {

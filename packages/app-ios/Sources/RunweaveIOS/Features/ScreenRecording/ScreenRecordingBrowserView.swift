@@ -5,11 +5,14 @@ import SwiftUI
 struct ScreenRecordingBrowserView: View {
     @ObservedObject var session: AppSession
     @Environment(\.dismiss) private var dismiss
+    @State private var tab = "activities"
     @State private var reload = 0
     @State private var lastConfirmed: ContinuousClock.Instant?
     @State private var status: ScreenRecordingStatus?
     @State private var days: [ScreenRecordingDay] = []
     @State private var day = ""
+    @State private var analysisDays: [String] = []
+    private var selectableDays: [String] { tab == "activities" ? Array(Set(days.map(\.day) + analysisDays)).sorted(by: >) : days.map(\.day) }
     @State private var ranges: [ScreenRecordingRange] = []
     @State private var revision = ""
     @State private var message = "正在连接记录服务…"
@@ -17,11 +20,15 @@ struct ScreenRecordingBrowserView: View {
     var body: some View {
         NavigationStack {
             List {
+                Picker("查看内容", selection: $tab) {
+                    Text("事项").tag("activities"); Text("原始记录").tag("raw")
+                }.pickerStyle(.segmented)
                 if let status, status.availability == "ready" {
                     Text(status.timeZone).font(.caption)
-                    Picker("日期", selection: $day) { ForEach(days) { Text($0.day).tag($0.day) } }
+                    Picker("日期", selection: $day) { ForEach(selectableDays, id: \.self) { Text($0).tag($0) } }
                     if status.hasPending { Text("最近记录整理中").foregroundStyle(.secondary) }
-                    if let api = session.api {
+                    if tab == "activities" { ScreenRecordingActivitiesView(session: session, day: day) }
+                    else if let api = session.api {
                         ForEach(ranges) { range in
                             NavigationLink {
                                 ScreenRecordingPlaybackView(session: session, api: api, range: range, revision: revision, timeZone: status.timeZone)
@@ -44,7 +51,7 @@ struct ScreenRecordingBrowserView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
             .refreshable { reload += 1 }
             .task(id: scope + ":\(reload)") {
-                status = nil; ranges = []; days = []; lastConfirmed = nil
+                status = nil; ranges = []; days = []; analysisDays = []; lastConfirmed = nil
                 guard session.authenticated, session.foreground, session.health.status == .online else { message = "当前连接不可用"; return }
                 await refresh()
                 while !Task.isCancelled, let api = session.api {
@@ -88,7 +95,10 @@ struct ScreenRecordingBrowserView: View {
             var cursor: String?; var items: [ScreenRecordingDay] = []
             repeat { let page = try await api.screenDays(cursor: cursor); items += page.items; cursor = page.nextCursor } while cursor != nil
             guard !Task.isCancelled, generation == session.generation else { return }
-            days = items; if !items.contains(where: { $0.day == day }) { day = items.first?.day ?? "" }
+            let analysis = try? await api.screenAnalysisStatus()
+            guard !Task.isCancelled, generation == session.generation else { return }
+            days = items; analysisDays = analysis?.days ?? []
+            if !selectableDays.contains(day) { day = selectableDays.first ?? "" }
             await loadRanges()
         } catch { guard !Task.isCancelled else { return }; message = (error as? ScreenRecordingReadError)?.code == "UPDATE_REQUIRED" ? "请更新当前连接的 Runweave Backend" : "记录服务不可用"; status = nil }
     }

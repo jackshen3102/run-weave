@@ -2,6 +2,19 @@ import SwiftUI
 
 struct JournalBrowserView: View {
     @ObservedObject var recorder: CaptureCoordinator
+    @State private var tab = "activities"
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("查看内容", selection: $tab) {
+                Text("事项").tag("activities"); Text("原始记录").tag("raw")
+            }.pickerStyle(.segmented).padding()
+            if tab == "activities", let service = recorder.readService { JournalActivitiesView(service: service) }
+            else { JournalRawBrowserView(recorder: recorder) }
+        }.frame(minWidth: 980,minHeight: 650)
+    }
+}
+struct JournalRawBrowserView: View {
+    @ObservedObject var recorder: CaptureCoordinator
     @State private var status: JournalStatus?
     @State private var days: [JournalDay] = []
     @State private var selectedDay = ""

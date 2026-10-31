@@ -9,7 +9,7 @@ struct JournalReadError: Error, LocalizedError, Codable {
         switch code {
         case "INVALID_ARGUMENT": return 400
         case "NOT_FOUND": return 404
-        case "CATALOG_CHANGED", "VIEW_EXPIRED", "INCOMPATIBLE": return 409
+        case "CONFLICT", "LEASE_LOST", "CATALOG_CHANGED", "VIEW_EXPIRED", "INCOMPATIBLE": return 409
         case "FRAME_GONE": return 410
         case "PRIVATE_FRAME": return 422
         case "BUSY": return 429
@@ -32,6 +32,7 @@ struct JournalCapture: Codable, Identifiable, Equatable {
     let frontmostApplication: JournalApplication?
     let privacyPlaceholder: Bool
     let availableUntilMs: Int64
+    var idleSeconds: Double? = nil
 }
 struct JournalInterval: Codable, Equatable {
     let startMs: Int64
@@ -76,6 +77,7 @@ struct JournalAvailability: Codable {
     let viewState: String
 }
 struct JournalStatus: Codable {
+    let analysisVersion = 1
     let version: Int
     let availability: String
     let deviceID: String

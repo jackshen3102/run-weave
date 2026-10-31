@@ -130,3 +130,22 @@ Debug 隔离实例的本地 `diagnostics` 方法只返回资源计数，不经�
 验收合同见 [读取服务](../../docs/testing/screen-recording/read-service.testplan.yaml) 与
 [原生回放](../../docs/testing/screen-recording/playback.testplan.yaml)。构建和合成集成通过不代表
 全合同通过；真实 Mac、模拟器、资源压力与故障用例须分别取证。二期实施验收尚在进行。
+
+## 事项分析（开发中，默认关闭）
+
+分析不属于采集依赖。唯一 App owner 管理独立 `analysis.sqlite`；Backend 通过同用户 socket
+领取有代际和期限的批次、续租并提交结果。HTTP 只公开鉴权后的事项、日期快照、证据解析和
+有界重试，不公开 claim/commit。原始采集与回放在分析不可用时继续工作。
+
+配置入口为 `screenRecording.analysis.*`，需显式绑定设备、生效时间、视觉模型与 effort。
+Backend 每分钟检查，最多四批，常规最多十五帧；模型子进程受超时、输出和图片到期约束。
+临时图片在子进程退出后清理，Backend 崩溃时独立 watchdog 回收自己创建的进程组。
+屏幕来源只能形成 documented/discussed，Agent 自述不能独立升级为 verified。
+
+Mac/iOS 默认显示事项，并保留原始记录切换。证据通过 captureID 在线重新解析，未保存 viewID
+或媒体路径。日期导出冻结内容及哈希，修订按日期维护；文字与修订本地保留三十天，媒体仍按
+原保留策略。Daily Record 的可选接入合同见 [CLI](../../docs/cli/README.md#屏幕事项冻结导出)。
+
+分析验收工具只可操作独立 fixture 根目录：`ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT`。
+完整需求与未完成项见 [三期计划](../../docs/plans/2026-10-31-screen-recording-phase-3.md)；工具通过
+不等于真实来源启用、原任务定时运行、随记发布或手机通知已验收。

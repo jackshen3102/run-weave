@@ -179,6 +179,11 @@ final class JournalReadSocketServer: @unchecked Sendable {
             guard let value = r.params[key]?.text, !value.isEmpty, value.utf8.count <= 1024, !value.contains("/"), !value.contains("\\"), !value.contains("\0") else { throw JournalReadError("INVALID_ARGUMENT") }; return value
         }
         func json<T: Encodable>(_ value: T) throws -> (Data, String) { (try JSONEncoder().encode(value), "application/json") }
+        let analysisMethods: Set<String> = ["analysisAgentCursor","ingestAnalysisEvents","analysisStatus","analysisCards","analysisCard","analysisExport","claimAnalysis","renewAnalysis","commitAnalysis","analysisReceipt","retryAnalysis","failAnalysis","analysisFrame","resolveAnalysisCapture"]
+        if analysisMethods.contains(r.method) {
+            guard Set(r.params.keys).isSubset(of: ["input"]), let input = r.params["input"]?.text else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try await service.analysisRequest(r.method, input: input)
+        }
         let allowed: [String: Set<String>] = ["status": [], "days": ["cursor", "limit"], "ranges": ["day", "cursor", "limit"],
             "thumbnail": ["rangeID", "catalogRevision"], "openView": ["rangeID", "catalogRevision"], "availability": ["viewID"],
             "frame": ["viewID", "captureID", "variant"], "closeView": ["viewID"]]

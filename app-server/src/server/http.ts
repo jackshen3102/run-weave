@@ -301,6 +301,16 @@ export function createHttpApp(options: {
     }
   });
 
+  app.get("/threads/:threadId/analysis-evidence", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const query = z.object({ cursor: z.string().max(1024).optional() }).strict().safeParse(req.query);
+    if (!query.success) { res.status(400).json({ code: "INVALID_REQUEST" }); return; }
+    const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
+    if (!thread || !options.conversations) { res.status(404).json({ code: "THREAD_NOT_FOUND" }); return; }
+    try { res.json(await options.conversations.readAnalysis(thread, query.data.cursor)); }
+    catch (error) { res.status(error instanceof ConversationReadError ? error.status : 503).json({ code: error instanceof ConversationReadError ? error.code : "SOURCE_UNAVAILABLE" }); }
+  });
+
   app.get("/threads/:threadId/conversation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const query = z.object({

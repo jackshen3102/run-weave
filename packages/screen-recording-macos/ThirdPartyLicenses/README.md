@@ -23,3 +23,13 @@
 `ScreenRecordingPlaybackModel` 为本项目独立实现；未复制上游 SwiftUI 或新增其第三方依赖。
 本项目额外实现 owner 读取许可、在线认证、快照、保留清理和失效代际；不采用后台延时视频生成。
 现有 `SegmentWriter` 的代码改写来源与 MIT 文本保持随 Mac App 分发。
+
+## 三期事项分析参考
+
+同一固定提交的 `Core/Analysis/AnalysisManager.swift`、`Core/AI/LLMTypes.swift`、
+`ClaudeTimelinePrompt.swift`、`CodexProvider+Timeline.swift`、`OneStepTimelineSupport.swift`
+及 `Core/Analysis/IdleBatchClassifier.swift` 用于核对 60 秒检查、15 分钟批次、2 分钟缺口、
+45 分钟上下文、代表帧和输入空闲语义。`AnalysisCoordinator`、Backend analysis worker、
+专属 provider 与验证器为本项目独立实现，未引入上游运行时或依赖。
+本项目保留不足五分钟短尾，使用上海自然日、owner 租约和原子修订；不采用最短活动门槛、
+凌晨四点日界或每日解锁限制。Daily Recap 的分层思路接入既有 Daily Record，未移植调度器。

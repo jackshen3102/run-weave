@@ -67,7 +67,7 @@ export function createMcpRouter(
           const schema = await pool.query("SELECT count(*)::int AS version FROM suiji_migrations");
           return { ownerId: owner, serverId: identity.rows[0].server_id,
             protocolVersion: SUIJI_PROTOCOL_VERSION, appVersion: config.SUIJI_APP_VERSION,
-            schemaVersion: schema.rows[0].version, limits: SUIJI_LIMITS, features: { followups: true, changes: true, workRecords: true, workSources: true, workBrowserHistory: true } };
+            schemaVersion: schema.rows[0].version, limits: SUIJI_LIMITS, features: { followups: true, changes: true, workRecords: true, workSources: true, workBrowserHistory: true, workScreenTimeline: true } };
         },
         workRecords,
       );

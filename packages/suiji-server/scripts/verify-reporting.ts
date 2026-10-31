@@ -121,6 +121,7 @@ try {
     for (const d of facts.days) d.items = evidence.filter((m:{day:string})=>m.day===d.date).map((m:{id:string;project:null})=>({ title:"工作讨论",statement:"讨论每日记录"+suffix,status:"discussed",project:m.project,sourceIds:[m.id] }));
     const file = join(b.batch,"facts"+suffix+".json");await save(file,facts); return file;
   }
+  if (!process.argv.includes("--screen-only")) {
   const f = await fixture("mac");
   const probeBin=join(f.dir,"probe-bin"), probeLog=join(f.dir,"unexpected-lark-call");
   await mkdir(probeBin,{mode:0o700});
@@ -381,6 +382,64 @@ sys.exit(99)
     assert.equal(replayFact.id, browserFact.id);
     assert.equal((await load(join(browserJob.c.stateDir, "state.json"))).days[day].complete, true);
     console.log("PASS Mac browser effective-date migration, 142 visits merged into one theme/reference, concise-output guards, real source verification, HTTP import/recovery and stable replay");
+  }
+
+  }
+  if (process.platform === "darwin") {
+    const screen = await fixture("screen");
+    let batch = await prepare(screen);
+    let candidate = await factFile(screen,batch);
+    await run(screen,"validate",[...own(batch),"--facts",candidate]);
+    await run(screen,"publish",own(batch));
+    const before = await load(join(screen.c.stateDir,"state.json"));
+    const identity = Object.values(before.identities)[0] as {eventKey:string};
+    const deviceID = randomUUID(), cardID = randomUUID(), matterID = randomUUID();
+    const scope = `screen:screen:${deviceID}:observed`;
+    const exporter = join(screen.dir,"exporter.py"), snapshotFile = join(screen.dir,"snapshot.json");
+    const at = Date.parse(day+"T12:00:00+08:00");
+    const snapshot = {schemaVersion:1,deviceID,day,timeZone:"Asia/Shanghai",snapshotID:deviceID+":"+day+":1",revision:1,generatedAt:Date.now(),sourceReadAt:Date.now(),coverage:"complete",missingIntervals:[],cards:[{cardID,matterID,revision:1,title:"工作讨论",summary:"查看隔离讨论材料",detail:"非个人屏幕样本",actor:"person",state:"documented",spans:[{startMs:at,endMs:at,actor:"person"}],evidenceIDs:["capture"],updatedAt:Date.now()}],evidence:[{id:"capture",source:"screen",captureID:"capture",occurredAtMs:at}],summary:"仅已记录范围",contentHash:""};
+    await save(snapshotFile,snapshot);
+    await writeFile(exporter,`#!/usr/bin/env python3
+import sys,json,pathlib,hashlib,os
+root=pathlib.Path(__file__).parent
+v=json.loads((root/'snapshot.json').read_text())
+v['contentHash']=hashlib.sha256(json.dumps(dict(v,contentHash=''),ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+raw=json.dumps(v,ensure_ascii=False).encode()
+if '--out' in sys.argv:
+ out=pathlib.Path(sys.argv[sys.argv.index('--out')+1]);out.mkdir(mode=0o700)
+ (out/'export.json').write_bytes(raw);os.chmod(out/'export.json',0o600)
+ (out/'manifest.json').write_text(json.dumps({'sha256':hashlib.sha256(raw).hexdigest(),'revision':v['revision'],'snapshotID':v['snapshotID']}));os.chmod(out/'manifest.json',0o600)
+print(json.dumps(v))
+`,{mode:0o700});
+    const next = structuredClone(screen.c) as typeof screen.c & {sources:{screen:unknown}};
+    next.sources.screen = {enabled:true,effectiveFrom:day,expectedDeviceID:deviceID,exporterArgv:[exporter,"screen-recording","analysis","export","--instance","stable"]};
+    const nextFile = join(screen.dir,"next.json");await save(nextFile,next);
+    await run(screen,"migrate-sources",["--next-config",nextFile,"--dry-run"]);
+    await run(screen,"migrate-sources",["--next-config",nextFile]);
+    await registerSource(pool!,ownerId,{sourceScope:scope,producerId:"screen",sourceNamespace:screen.c.sourceNamespace,name:"屏幕事项隔离样本",effectiveFrom:day,effectiveTo:null});
+    batch = await prepare(screen);
+    const materials = await load(join(batch.batch,"evidence.json"));
+    assert(materials.some((m:{ref:{channel:string}})=>m.ref.channel==="screen-timeline"));
+    for(const m of materials)await run(screen,"read",[...own(batch),"--id",m.id]);
+    const facts = await load(batch.template);
+    facts.days[0].items = [{eventKey:identity.eventKey,title:"工作讨论",statement:"讨论每日记录并查看材料",status:"documented",project:null,sourceIds:materials.map((m:{id:string})=>m.id)}];
+    candidate = join(batch.batch,"merged-screen.json");await save(candidate,facts);
+    await run(screen,"validate",[...own(batch),"--facts",candidate]);
+    dropResponse = true;await run(screen,"publish",own(batch));
+    const after = await load(join(screen.c.stateDir,"state.json"));
+    assert.equal(after.days[day].screenRevision,1);
+    assert.equal(Object.keys(after.identities).length,Object.keys(before.identities).length);
+    assert.equal((await prepare(screen)).complete,true);
+    snapshot.revision=2;snapshot.snapshotID=deviceID+":"+day+":2";snapshot.cards[0]!.revision=2;await save(snapshotFile,snapshot);
+    const replay = await prepare(screen);assert(replay.batch);
+    const newMaterials = await load(join(replay.batch,"evidence.json"));
+    for(const m of newMaterials)await run(screen,"read",[...own(replay),"--id",m.id]);
+    const revised = await load(replay.template);revised.days[0].items=structuredClone(facts.days[0].items);revised.days[0].items[0].sourceIds=newMaterials.map((m:{id:string})=>m.id);
+    const revisedFile=join(replay.batch,"revised-screen.json");await save(revisedFile,revised);
+    await run(screen,"validate",[...own(replay),"--facts",revisedFile]);await run(screen,"publish",own(replay));
+    assert.equal((await load(join(screen.c.stateDir,"state.json"))).days[day].screenRevision,2);
+    assert.equal((await prepare(screen)).complete,true);
+    console.log("PASS screen source additive migration, merged stable identity, frozen hash, HTTP response loss recovery, revision backfill and independent readback (isolated service only)");
   }
 
   const old = new RecordService(pool);const baseline=await old.create(context(ownerId),{kind:"task",body:"unrelated baseline"});

@@ -5,8 +5,10 @@ struct JournalPlaybackView: View {
     let service: JournalReadService
     let range: JournalRange
     let revision: String
+    let initialCaptureID: String?
     @State private var zoom: CGFloat = 1
-    init(service: JournalReadService, range: JournalRange, revision: String) {
+    init(service: JournalReadService, range: JournalRange, revision: String, initialCaptureID: String? = nil) {
+        self.initialCaptureID = initialCaptureID
         self.service = service
         _model = StateObject(wrappedValue: JournalPlaybackModel(service: service)); self.range = range; self.revision = revision
     }
@@ -47,7 +49,10 @@ struct JournalPlaybackView: View {
                 }
             }.frame(height: 80)
         }.padding()
-        .task { await model.open(range, revision: revision) }
+        .task {
+            await model.open(range, revision: revision)
+            if let id = initialCaptureID, let capture = model.view?.captures.first(where: { $0.id == id }) { model.select(capture) }
+        }
         .onChange(of: model.state) { _, value in if value == "playing" { zoom = 1 } }
         .onDisappear { model.close() }
     }

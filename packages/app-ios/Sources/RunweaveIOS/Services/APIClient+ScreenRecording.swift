@@ -15,6 +15,18 @@ extension APIClient {
         if status == 404 { return ScreenRecordingReadError("UPDATE_REQUIRED") }
         return nil
     }
+    func screenAnalysisStatus() async throws -> ScreenAnalysisStatus {
+        try await authorized("/api/screen-recording/analysis/status", requestTimeout: 5, decodeError: screenError)
+    }
+    func screenAnalysisExport(day: String) async throws -> ScreenAnalysisExport {
+        try await authorized("/api/screen-recording/analysis/export?day=\(Self.pathComponent(day))", requestTimeout: 5, decodeError: screenError)
+    }
+    func screenAnalysisRetry(batchID: String, revision: Int, operationID: String) async throws -> ScreenAnalysisReceipt {
+        return try await authorized("/api/screen-recording/analysis/retry", method: "POST", body: ["batchID": batchID, "expectedRevision": revision, "operationID": operationID], requestTimeout: 5, decodeError: screenError)
+    }
+    func screenAnalysisResolve(captureID: String) async throws -> [String:String] {
+        try await authorized("/api/screen-recording/analysis/captures/\(Self.pathComponent(captureID))", requestTimeout: 5, decodeError: screenError)
+    }
     func screenStatus() async throws -> ScreenRecordingStatus {
         try await authorized("/api/screen-recording/status", requestTimeout: 5, decodeError: screenError)
     }

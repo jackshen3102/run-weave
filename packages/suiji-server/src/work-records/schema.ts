@@ -153,6 +153,7 @@ const sourceRef = z
       "feishu-message",
       "feishu-document",
       "browser-visit",
+      "screen-timeline",
     ]),
     sourceScope: scope,
     nativeId,
@@ -232,6 +233,7 @@ export const workImport = z
         collected = Math.max(collected, Date.parse(r.collectedAt));
       }
       for (const f of d.facts) {
+        if (f.sourceRefs.every(ref => ref.channel === "screen-timeline") && !["documented", "discussed"].includes(f.status)) issue("纯屏幕来源不能独立证明执行结果");
         if (keys.has(f.externalKey)) issue("externalKey 不得重复");
         keys.add(f.externalKey);
         if (

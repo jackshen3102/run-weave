@@ -91,6 +91,9 @@ struct JournalReadCatalog {
             ORDER BY c.sequence LIMIT 901
             """, [bounds.sessionID, bounds.firstSequence, bounds.lastSequence, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
         guard rows.count <= 900 else { throw JournalReadError("CATALOG_CHANGED") }
+        return try indexed(rows, settings: settings)
+    }
+    static func indexed(_ rows: [[String: String]], settings: RecordingSettings) throws -> [JournalIndexedCapture] {
         var names: [String: String] = [:]
         return try rows.map { row in
             guard let id = row["id"], let sequence = Int(row["sequence"] ?? ""), let ms = Int64(row["captured_ms"] ?? ""),
@@ -103,10 +106,11 @@ struct JournalReadCatalog {
                     FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "")
                 } ?? "未知应用"
             }
-            let capture = JournalCapture(id: id, sessionID: bounds.sessionID, sequence: sequence, capturedAtMs: ms,
+            var capture = JournalCapture(id: id, sessionID: row["session_id"] ?? "", sequence: sequence, capturedAtMs: ms,
                 timezoneOffsetSeconds: Int(row["timezone_offset"] ?? "") ?? 0, displayID: display,
                 frontmostApplication: privateFrame ? nil : JournalApplication(id: appID, name: appID.flatMap { names[$0] } ?? "未知应用"),
                 privacyPlaceholder: privateFrame, availableUntilMs: Int64((started + Double(settings.retentionDays) * 86400) * 1000))
+            capture.idleSeconds = row["idle_seconds"].flatMap(Double.init)
             return JournalIndexedCapture(capture: capture, segmentID: segment, frameIndex: index,
                 width: Int(row["width"] ?? "") ?? 0, height: Int(row["height"] ?? "") ?? 0, path: path)
         }

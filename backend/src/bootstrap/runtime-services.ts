@@ -1,3 +1,4 @@
+import { ScreenRecordingAnalysisRuntime } from "../screen-recording-analysis/runtime";
 import { ScreenRecordingService } from "../screen-recording/service";
 import { SideChatService } from "../side-chat/service";
 import { SideChatStore } from "../side-chat/store";
@@ -504,9 +505,13 @@ async function assembleRuntimeServices(
   resources.defer("local-browser", () => localBrowserService.dispose());
   const screenRecording = new ScreenRecordingService();
   resources.defer("screen-recording", () => screenRecording.dispose());
+  const screenRecordingAnalysis = new ScreenRecordingAnalysisRuntime(workHistoryService);
+  resources.defer("screen-recording-analysis", () => screenRecordingAnalysis.dispose());
+  screenRecordingAnalysis.start();
   let disposed = false;
   const services: RuntimeServices = {
     screenRecording,
+    screenRecordingAnalysis,
     ...deviceMonitoring,
     terminalBadges,
     desktopBadgeAccess,

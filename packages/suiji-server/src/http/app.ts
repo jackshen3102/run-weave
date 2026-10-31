@@ -140,7 +140,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { workRecords: true, workSources: true, workBrowserHistory: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
+        features: { workRecords: true, workSources: true, workBrowserHistory: true, workScreenTimeline: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );

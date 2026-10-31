@@ -8,6 +8,13 @@ import type { AppServerThreadPreviewsResponse } from "@runweave/shared/app-serve
 export class AppServerClient {
   constructor(private readonly connection: AppServerConnectionInfo) {}
 
+  async getAnalysisEvidence(threadID: string, cursor?: string, signal?: AbortSignal): Promise<import("@runweave/shared/screen-recording").ScreenAgentEventPage> {
+    const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadID)}/analysis-evidence`);
+    if (cursor) url.searchParams.set("cursor",cursor);
+    const response = await fetch(url,{ headers: this.headers(),signal,cache: "no-store" });
+    if (!response.ok) throw new AppServerConversationError(response.status);
+    return await response.json() as import("@runweave/shared/screen-recording").ScreenAgentEventPage;
+  }
   async getConversation(threadId: string, signal?: AbortSignal, query: AppServerConversationQuery = {}): Promise<AppServerConversationResponse> {
     const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/conversation`);
     if (query.provider) url.searchParams.set("provider", query.provider);

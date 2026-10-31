@@ -97,6 +97,8 @@ def validate(path, meta, candidate_path, state, work_records):
                     require(item["status"] == "documented" and item["project"] is None, "BROWSER_ONLY_IS_OBSERVATION")
                     require(isinstance(item["statement"], str) and len(item["statement"]) <= job_browser.MAX_THEME_CHARS, "BROWSER_THEME_TOO_VERBOSE: use at most 160 characters")
                     require(item["title"].startswith("浏览概览"), "BROWSER_OVERVIEW_TITLE_REQUIRED")
+            if all(m["ref"]["channel"] == "screen-timeline" for m in sources):
+                require(item["status"] in ("documented", "discussed"), "SCREEN_ONLY_IS_OBSERVATION")
             if item["status"] == "verified":
                 require(any(m["role"] == "tool" and m["ref"]["channel"] == "local-agent" for m in sources), "VERIFIED_REQUIRES_TOOL_RECEIPT")
             projects = {m["project"] for m in sources if m["ref"]["channel"] == "local-agent"}

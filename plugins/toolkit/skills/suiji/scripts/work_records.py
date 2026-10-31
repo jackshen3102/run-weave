@@ -76,9 +76,11 @@ def validate(payload, fail, enforce_limits=True):
                     text(fact["project"], 80)
                     require(not any(c in fact["project"] for c in "\n\r\t"), "INVALID_PROJECT")
             require(isinstance(fact["sourceRefs"], list) and 1 <= len(fact["sourceRefs"]) <= 100, "SOURCE_REQUIRED")
+            if all(ref["channel"] == "screen-timeline" for ref in fact["sourceRefs"]):
+                require(fact["status"] in {"documented", "discussed"}, "SCREEN_ONLY_IS_OBSERVATION")
             for ref in fact["sourceRefs"]:
                 exact(ref, {"channel", "sourceScope", "nativeId"}, {"revision", "hash"})
-                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document", "browser-visit"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
+                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document", "browser-visit", "screen-timeline"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
                 for field in ("nativeId", "revision"):
                     if field in ref:
                         identity(ref[field])
@@ -266,10 +268,13 @@ def recovery_intent(args, config, fail, private_read):
     if job["sources"]["feishu"]["enabled"]:
         allowed.add("feishu:" + job["sources"]["feishu"]["accountScope"] + ":messages")
     browser = job["sources"].get("browser", {})
+    screen = job["sources"].get("screen", {})
     for day in payload["days"]:
         expected = set(allowed)
         if browser.get("enabled") and day["date"] >= browser["effectiveFrom"]:
             expected.add("browser:" + job["producerId"] + ":observed")
+        if screen.get("enabled") and day["date"] >= screen["effectiveFrom"]:
+            expected.add("screen:" + job["producerId"] + ":" + screen["expectedDeviceID"] + ":observed")
         if set(day["requestedScopes"]) != expected:
             raise fail("JOB_SCOPE_MISMATCH")
     return intent

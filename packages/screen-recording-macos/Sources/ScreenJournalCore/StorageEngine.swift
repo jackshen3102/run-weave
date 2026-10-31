@@ -7,6 +7,8 @@ actor StorageEngine {
     private let lock: InstanceLock
     private let database: RecordStore
     private let frames: FrameStore
+    private weak var analysisOwner: AnalysisCoordinator?
+    func registerAnalysis(_ owner: AnalysisCoordinator) { analysisOwner = owner }
     private var catalogCache: (key: String, value: JournalCatalog)?
     let sessionID = UUID().uuidString
     init(paths: StorePaths) throws {
@@ -29,6 +31,33 @@ actor StorageEngine {
     }
     func rangeFrames(_ bounds: JournalRangeBounds, settings: RecordingSettings) throws -> [JournalIndexedCapture] {
         try JournalReadCatalog.frames(bounds, database: database, settings: settings)
+    }
+    func analysisPage(after: Int64, settings: RecordingSettings) throws -> (frames: [JournalIndexedCapture], cursor: Int64) {
+        let rows = try database.rows("""
+            SELECT c.*,c.rowid AS row_id,s.width,s.height,s.path,s.started AS segment_started
+            FROM captures c JOIN segments s ON s.id=c.segment_id
+            WHERE c.rowid>? AND s.state='ready' AND s.started>=? ORDER BY c.rowid LIMIT 900
+            """, [after, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
+        return (try JournalReadCatalog.indexed(rows, settings: settings), Int64(rows.last?["row_id"] ?? "0") ?? 0)
+    }
+    func analysisDayCaptures(_ day: String, settings: RecordingSettings) throws -> [(String, Int64)] {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "yyyy-MM-dd"; f.isLenient = false
+        guard let date = f.date(from: day), f.string(from: date) == day else { throw JournalReadError("INVALID_ARGUMENT") }
+        let start = Int64(date.timeIntervalSince1970*1000)
+        return try database.rows("SELECT c.id,c.captured_ms FROM captures c JOIN segments s ON s.id=c.segment_id WHERE c.captured_ms>=? AND c.captured_ms<? AND s.state='ready' AND s.started>=?", [start,start+86400000,Date().timeIntervalSince1970-Double(settings.retentionDays)*86400]).compactMap { row in
+            guard let id = row["id"], let ms = Int64(row["captured_ms"] ?? "") else { return nil }; return (id,ms)
+        }
+    }
+    func analysisDayPending(_ day: String) throws -> Bool {
+        try database.scalar("SELECT 1 FROM captures c JOIN segments s ON s.id=c.segment_id WHERE s.state='writing' AND strftime('%Y-%m-%d',c.captured_ms/1000,'unixepoch','+8 hours')=? LIMIT 1", [day]) != nil
+    }
+    func analysisCapture(_ id: String, settings: RecordingSettings) throws -> JournalIndexedCapture {
+        let rows = try database.rows("""
+            SELECT c.*,s.width,s.height,s.path,s.started AS segment_started FROM captures c JOIN segments s ON s.id=c.segment_id
+            WHERE c.id=? AND s.state='ready' AND s.started>=?
+            """, [id, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
+        guard let value = try JournalReadCatalog.indexed(rows, settings: settings).first else { throw JournalReadError("FRAME_GONE") }
+        return value
     }
     func permit(_ frame: JournalIndexedCapture, settings: RecordingSettings) throws -> JournalFramePermit {
         guard frame.capture.availableUntilMs > journalNowMs() else { throw JournalReadError("FRAME_GONE") }
@@ -79,6 +108,8 @@ actor StorageEngine {
     func finalize() async throws { try await frames.finalize() }
     func needsRotation() -> Bool { frames.needsRotation }
     func maintain(settings: RecordingSettings) async throws -> Int64 {
+        // Analysis cleanup is best effort; corruption cannot fail capture.
+        try? await analysisOwner?.maintain()
         let budget = paths.maxBytesOverride ?? Int64(settings.maxGiB) * gib
         var bytes = try RetentionCoordinator.enforce(database, settings: settings)
         if bytes > budget {

@@ -8,10 +8,12 @@ struct ScreenRecordingPlaybackView: View {
     let api: APIClient
     let range: ScreenRecordingRange
     let revision: String
+    let initialCaptureID: String?
     let timeZone: String
     @State private var zoom: CGFloat = 1
     @Environment(\.scenePhase) private var scenePhase
-    init(session: AppSession, api: APIClient, range: ScreenRecordingRange, revision: String, timeZone: String) {
+    init(session: AppSession, api: APIClient, range: ScreenRecordingRange, revision: String, timeZone: String, initialCaptureID: String? = nil) {
+        self.initialCaptureID = initialCaptureID
         self.session = session; self.api = api
         _model = StateObject(wrappedValue: ScreenRecordingPlaybackModel(service: ScreenRecordingSource(api: api))); self.range = range; self.revision = revision; self.timeZone = timeZone
     }
@@ -45,7 +47,9 @@ struct ScreenRecordingPlaybackView: View {
             }
         }.padding().clarityMask()
         .task(id: lifecycle) {
-            if scenePhase == .active, session.foreground, session.authenticated, session.health.status == .online { await model.activate(range, revision: revision) }
+            if scenePhase == .active, session.foreground, session.authenticated, session.health.status == .online { await model.activate(range, revision: revision)
+                if let id = initialCaptureID, let capture = model.view?.captures.first(where: { $0.id == id }) { model.select(capture) }
+            }
             else { model.close() }
         }
         .onChange(of: model.state) { _, value in if value == "playing" { zoom = 1 } }

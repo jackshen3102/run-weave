@@ -1,3 +1,4 @@
+import { AnalysisEvidenceReader } from "./agents/analysis-evidence-reader.js";
 import path from "node:path";
 import { SupervisionConversationReader } from "./agents/supervision-reader.js";
 import { ConversationReader } from "./agents/conversation-reader.js";
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
   const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader);
-  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")));
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader));
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,

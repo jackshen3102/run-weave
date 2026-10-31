@@ -45,6 +45,7 @@ import type { BackendRuntimeStatusService } from "../runtime-status/service";
 import type { TerminalQuestionsService } from "../terminal/questions/service";
 
 export interface RuntimeServices extends DeviceMonitoringRuntime {
+  screenRecordingAnalysis: import("../screen-recording-analysis/runtime").ScreenRecordingAnalysisRuntime;
   screenRecording: import("../screen-recording/service").ScreenRecordingService;
   terminalBadges: import("../device-monitor/terminal-badges").TerminalBadges | null;
   desktopBadgeAccess: import("../device-monitor/desktop-badge-access").DesktopBadgeAccess | null;

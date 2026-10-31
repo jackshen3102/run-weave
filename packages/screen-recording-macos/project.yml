@@ -51,6 +51,15 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  ScreenJournalAnalysisVerify:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/ScreenJournalCore
+      - tools/verify-analysis.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   ScreenJournal:
     build:
@@ -65,3 +74,7 @@ schemes:
     build:
       targets:
         ScreenJournalReadVerify: all
+  ScreenJournalAnalysisVerify:
+    build:
+      targets:
+        ScreenJournalAnalysisVerify: all
