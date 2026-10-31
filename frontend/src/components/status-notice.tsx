@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useMemoizedFn } from "ahooks";
+import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useOverlayRef } from "../features/overlay/use-overlay-ref";
 
@@ -18,17 +20,32 @@ export function StatusNoticeProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function StatusNotice({ children, className, kind }: {
+export function StatusNotice({ children, className, kind, onDismiss, noticeKey, duration = 8_000, role = "status" }: {
   children: ReactNode;
   className: string;
   kind: string;
+  onDismiss: () => void;
+  noticeKey?: unknown;
+  /** Set to zero when the notice contains information the user needs to copy. */
+  duration?: number;
+  role?: "status" | "alert";
 }) {
   const viewport = useContext(NoticeViewport);
   const ref = useOverlayRef<HTMLDivElement>();
+  const dismiss = useMemoizedFn(onDismiss);
+  useEffect(() => {
+    if (!viewport || duration <= 0) return;
+    const timer = window.setTimeout(dismiss, duration);
+    return () => window.clearTimeout(timer);
+  }, [viewport, duration, noticeKey, dismiss]);
   return viewport ? createPortal(
-    <div ref={ref} role="status" aria-live="polite" data-status-notice={kind}
-      className={`pointer-events-auto shrink-0 break-words ${className}`}>
+    <div ref={ref} role={role} aria-live={role === "alert" ? "assertive" : "polite"} data-status-notice={kind}
+      className={`pointer-events-auto relative shrink-0 break-words ${className} pr-10`}>
       {children}
+      <button type="button" aria-label="关闭通知" onClick={dismiss}
+        className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+        <X className="h-4 w-4" />
+      </button>
     </div>,
     viewport,
   ) : null;

@@ -25,6 +25,13 @@ return open ? (
 
 公共组件导入有 ESLint 门禁；手写 Portal/fixed 浮层仍须在评审中检查接入。
 
+应用内浮动通知统一使用 `components/status-notice.tsx` 的 `StatusNotice`，由根
+`StatusNoticeProvider` 放入左下角堆叠区域。业务不得自行设置通知的 fixed/right/bottom
+定位。必须提供 `onDismiss`；组件统一提供独立关闭按钮及默认 8 秒自动关闭。
+同一入口替换通知内容时传入 `noticeKey` 重置计时，普通重渲染不延长停留时间。
+包含需要手动复制的快照链接时使用 `duration={0}` 保留到手动关闭；关闭只隐藏提示，
+不删除任务结果或改变任务状态。正文操作与关闭按钮必须分开，避免关闭触发跳转。
+
 ## 运行时合同
 
 `features/overlay/registry.ts` 保存窗口内的浮层集合，观察登记元素、Popper 父容器和视口变化；同一帧内的登记、释放和观察回调合并到绘制前测量，避免 React ref 重新绑定时按不完整集合恢复原生网页。仅有限动画期间逐帧测量，没有有效遮挡时不做持续轮询。Browser bounds 来自同一套 CSS 视口坐标。

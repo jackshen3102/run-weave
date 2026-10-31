@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import { StatusNotice } from "../../components/status-notice";
 import { Button } from "../../components/ui/button";
 import { useResources } from "./resource-monitor-provider";
 export function ResourceNotice({
@@ -12,9 +13,8 @@ export function ResourceNotice({
   if (!alert || location.pathname === "/system-monitor" || !resource.token)
     return null;
   return (
-    <aside
-      role="status"
-      className="fixed bottom-4 right-4 z-40 max-w-sm rounded-lg border border-amber-500/40 bg-card p-4 shadow-lg"
+    <StatusNotice kind="resource" noticeKey={alert} onDismiss={resource.dismissNotice}
+      className="rounded-lg border border-amber-500/40 bg-card p-4 shadow-lg"
     >
       <strong className="text-sm">
         {alert.appName}{" "}
@@ -37,13 +37,6 @@ export function ResourceNotice({
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => resource.dismissNotice()}
-        >
-          关闭
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
           onClick={() => {
             void resource
               .snooze(alert.alertId)
@@ -54,6 +47,6 @@ export function ResourceNotice({
           忽略 1 小时
         </Button>
       </div>
-    </aside>
+    </StatusNotice>
   );
 }

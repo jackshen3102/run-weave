@@ -523,19 +523,21 @@ function RunweaveApp() {
   );
   return <>
     <ClarityNavigationObserver routes={routeElements} pendingElement={authPendingView} />
-    {screenConversation.notice ? <StatusNotice kind="screen-conversation" className="rounded bg-slate-900 p-4 text-white"><button type="button" onClick={screenConversation.dismiss}>{screenConversation.notice} · 点击关闭</button></StatusNotice> : null}
-    {scheduledRunOpenError ? <button type="button" role="alert"
-      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-700 bg-card p-3 text-left text-sm shadow-lg"
-      onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}
-    {quickInputNotice ? <button type="button" role="status"
-      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border bg-card p-3 text-left shadow-lg"
+    {screenConversation.notice ? <StatusNotice kind="screen-conversation" noticeKey={screenConversation.notice} onDismiss={screenConversation.dismiss} className="rounded bg-slate-900 p-4 text-white">{screenConversation.notice}</StatusNotice> : null}
+    {scheduledRunOpenError ? <StatusNotice kind="scheduled-run-error" role="alert" noticeKey={scheduledRunOpenError}
+      className="rounded-lg border border-rose-700 bg-card p-3 text-sm shadow-lg"
+      onDismiss={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError}</StatusNotice> : null}
+    {quickInputNotice ? <StatusNotice kind="quick-input" noticeKey={quickInputNotice} onDismiss={dismissQuickInputNotice}
+      className="rounded-lg border bg-card p-3 shadow-lg">
+      <button type="button" className="block w-full text-left"
       onClick={() => {
         dismissQuickInputNotice();
         navigate(backgroundRunPath(quickInputNotice.runId));
       }}>
       <strong className="block text-sm">{quickInputNotice.title}</strong>
       <span className="text-xs">{quickInputNotice.body}</span>
-    </button> : null}
+      </button>
+    </StatusNotice> : null}
     {isElectron && <ConnectionWorkspaceObservers connections={connections} activeConnectionId={activeConnectionId} activeToken={token} activeAuthStatus={authStatus} onActiveAuthExpired={clearToken} observeActive={location.pathname === "/connections"} />}
     {isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
       ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>
