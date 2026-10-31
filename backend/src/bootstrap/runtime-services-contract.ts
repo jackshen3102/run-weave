@@ -103,5 +103,6 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   knowledgeInboxService: KnowledgeInboxService;
   experienceService: ExperienceService;
   experienceLearning: ExperienceLearningRuntime;
+  scheduledTaskRuntime?: import("../scheduled-tasks/runtime").ScheduledTaskRuntime | null;
   scheduledTaskService: ScheduledTaskService;
 }

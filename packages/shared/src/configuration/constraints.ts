@@ -2,6 +2,7 @@
 export const CONFIGURATION_ENUMS: Readonly<Record<string, readonly string[]>> = {
   "backend.taskSupervision.effort": ["low", "medium", "high", "xhigh", "max", "ultra"],
   "backend.tunnelAuth.scope": ["all", "forwarded"],
+  "storage.activityKeyStorage": ["system", "file"],
   "appServer.discovery": ["auto", "explicit", "disabled"],
   "logging.level": ["error", "warn", "info", "http", "verbose", "debug", "silly"],
   "terminal.tmux.shutdownPolicy": ["preserve", "cleanup"],
@@ -23,7 +24,7 @@ export function configurationNumberRange(key: string): { min?: number; max?: num
   return {};
 }
 export function configurationOwnedPath(key: string): boolean {
-  return key.startsWith("storage.") || key === "logging.backendDirectory" || ["appServer.stateDirectory", "appServer.cloudSyncDirectory", "services.snapshotHost.directory", "services.pushGateway.directory", "services.suiji.storageDirectory"].includes(key);
+  return (key.startsWith("storage.") && key !== "storage.activityKeyStorage") || key === "logging.backendDirectory" || ["appServer.stateDirectory", "appServer.cloudSyncDirectory", "services.snapshotHost.directory", "services.pushGateway.directory", "services.suiji.storageDirectory"].includes(key);
 }
 export function configurationServiceOrigin(key: string): boolean {
   return ["services.snapshotPublisher.url", "services.pushSender.gatewayURL", "services.feishu.node.url"].includes(key);

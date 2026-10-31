@@ -22,10 +22,10 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
-const requireFromElectron = createRequire(
-  path.join(repoRoot, "electron", "package.json"),
+const requireFromBuild = createRequire(
+  path.join(repoRoot, "packages", "runweave-cli", "package.json"),
 );
-const { build } = requireFromElectron("esbuild");
+const { build } = requireFromBuild("esbuild");
 const backendPackage = JSON.parse(
   readFileSync(path.join(repoRoot, "backend", "package.json"), "utf8"),
 );
@@ -40,7 +40,7 @@ const artifactsRoot = path.join(
   ".runtime-artifacts",
   "backend-standalone",
 );
-const releaseDir = path.join(artifactsRoot, releaseId);
+const releaseDir = process.argv.find(arg => arg.startsWith("--output-dir="))?.slice(13) ?? path.join(artifactsRoot, releaseId);
 const backendDir = path.join(releaseDir, "backend");
 const prebuildPlatform =
   process.platform === "linux" &&
@@ -206,6 +206,7 @@ writeFileSync(
     2,
   )}\n`,
 );
+if (!process.argv.includes("--build-only")) {
 run("node", [
   path.join(releaseDir, "install.mjs"),
   `--home=${path.join(artifactsRoot, ".verify")}`,
@@ -216,3 +217,5 @@ console.log(`[backend-release] built ${releaseDir}`);
 console.log(
   `[backend-release] archive ${path.join(artifactsRoot, `${releaseId}.tar.gz`)}`,
 );
+
+}

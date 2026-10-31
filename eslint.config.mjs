@@ -27,6 +27,8 @@ export default tseslint.config(
       "packages/suiji-server/**/*.ts",
       "packages/suiji-server/**/*.cjs",
       "packages/runweave-cli/src/**/*.ts",
+      "packages/runweave-server/**/*.cjs",
+      "packages/runweave-server/src/**/*.ts",
       "packages/runweave-mcp/src/**/*.ts",
       "packages/daily-record/src/**/*.ts",
       "packages/browser-history/src/**/*.ts",

@@ -1,5 +1,6 @@
 import { createScreenRecordingAnalysisRouter } from "./routes/screen-recording-analysis";
 import { createScreenRecordingRouter } from "./routes/screen-recording";
+import { createServerManagementRouter } from "./routes/server-management";
 import { createSideChatRouter } from "./routes/side-chat";
 import { createVideoPreviewRouter } from "./routes/terminal/preview/video";
 import { createFeishuRouter } from "./routes/feishu";
@@ -142,6 +143,7 @@ function createHttpApp(
   app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
   app.use("/api/screen-recording/analysis", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); }, requireTunnelAuth, requireAuth, createScreenRecordingAnalysisRouter(services.screenRecording, services.authService, services.workHistoryService));
   app.use("/api/screen-recording", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); }, requireTunnelAuth, requireAuth, createScreenRecordingRouter(services.screenRecording, services.authService));
+  app.use("/api/server", createServerManagementRouter(services.scheduledTaskRuntime, services.runtimeStatus.registry));
   app.use("/api/configuration", requireTunnelAuth, requireAuth, createConfigurationRouter());
 
   app.use("/prototype-preview", requireTunnelAuth, createPrototypePreviewRouter(

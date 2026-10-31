@@ -116,6 +116,7 @@ async function assembleRuntimeServices(
   const tmuxShutdownPolicy = resolveTmuxShutdownPolicy(runtimeChannel);
   const activity = await ActivityRuntime.create({
     env: process.env,
+    keyStorage: settingText("storage.activityKeyStorage") === "file" ? "file" : "system",
     browserProfileDir: storagePaths.browserProfileDir,
     runtimeChannel,
   });
@@ -582,6 +583,7 @@ async function assembleRuntimeServices(
     knowledgeInboxService,
     experienceService,
     experienceLearning,
+    scheduledTaskRuntime: scheduledTasks.runtime,
     scheduledTaskService: scheduledTasks.service,
   };
   return services;

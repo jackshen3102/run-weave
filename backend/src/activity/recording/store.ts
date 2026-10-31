@@ -71,11 +71,13 @@ export class ActivityStore {
   private constructor(params: {
     databasePath: string;
     env: NodeJS.ProcessEnv;
+    keyStorage?: "system" | "file";
   }) {
     this.workerEntry = resolveWorkerEntry(params.env);
     this.workerData = {
       databasePath: params.databasePath,
       contentKeyBase64: null,
+      keyStorage: params.keyStorage,
       activityKeyEnvironment: {
         testMode: params.env.RUNWEAVE_ACTIVITY_TEST_MODE === "true",
         testKey: params.env.RUNWEAVE_ACTIVITY_TEST_KEY?.trim() || null,
@@ -128,10 +130,12 @@ export class ActivityStore {
   static async create(params: {
     databasePath: string;
     env?: NodeJS.ProcessEnv;
+    keyStorage?: "system" | "file";
   }): Promise<ActivityStore> {
     const env = params.env ?? process.env;
     const store = new ActivityStore({
       databasePath: params.databasePath,
+      keyStorage: params.keyStorage,
       env,
     });
     try {

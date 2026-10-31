@@ -1,3 +1,4 @@
+import { ServerMaintenance } from "./server-maintenance";
 import { stat } from "node:fs/promises";
 import { continuationPrompt } from "./continuation";
 import { randomUUID } from "node:crypto";
@@ -25,6 +26,11 @@ export class ScheduledTaskRuntime {
   private timer: NodeJS.Timeout | null = null;
   private pass: Promise<void> | null = null;
   private disposed = false;
+  readonly maintenance = new ServerMaintenance(
+    async () => { await this.pass; },
+    () => [...this.executions.keys()].map(runId => ({ runId, reason: "service-owned execution" })),
+    () => this.wake(),
+  );
 
   constructor(
     private readonly store: ScheduledTaskStore,
@@ -71,6 +77,7 @@ export class ScheduledTaskRuntime {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.maintenance.dispose();
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     await this.pass;
@@ -79,7 +86,7 @@ export class ScheduledTaskRuntime {
   }
 
   private async runPass(): Promise<void> {
-    if (!this.enabled) return;
+    if (!this.enabled || this.maintenance.paused) return;
     await this.recoverAbandonedRuns();
     // A competing Backend or terminal takeover can persist a stop request.
     for (const [runId, controller] of this.active) {
@@ -89,7 +96,7 @@ export class ScheduledTaskRuntime {
     await this.store.advanceContinuations(new Date().toISOString());
     await this.materializeDue(new Date());
     const limit = this.limits.maxConcurrentRuns ?? 4;
-    while (!this.disposed && this.executions.size < limit) {
+    while (!this.disposed && !this.maintenance.paused && this.executions.size < limit) {
       const run = await this.store.claimNextRun(
         this.ownerId,
         new Date().toISOString(),

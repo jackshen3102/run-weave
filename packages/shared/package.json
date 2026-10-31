@@ -9,6 +9,7 @@
   "exports": {
     "./browser-proxy-control": "./src/browser/proxy-control.ts",
     "./browser-downloads": "./src/browser/downloads.ts",
+    "./server-management": "./src/server-management.ts",
     "./side-chat": "./src/side-chat.ts",
     "./scheduled-tasks": "./src/scheduled-tasks/index.ts",
     "./connection-identity": "./src/auth/connection-identity.ts",
