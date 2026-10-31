@@ -43,17 +43,18 @@ struct ScreenRecordingActivitiesView: View {
                 }
             }
         }.clarityMask().task(id: scope) {
-            snapshot = nil
+            snapshot = nil; message = "正在读取事项…"
             guard session.authenticated, session.foreground, session.health.status == .online, let api = session.api else { message = "当前连接不可用"; return }
+            guard !day.isEmpty else { message = "尚未生成事项。录屏可在“录屏记录”中直接回看。"; return }
             let generation = session.generation
             do {
                 let value = try await api.screenAnalysisExport(day: day)
                 guard !Task.isCancelled, generation == session.generation else { return }
                 snapshot = value
-                message = value.cards.isEmpty ? "尚未整理出事项，可切换原始记录" : "仅已记录范围 · 上海时间"
+                message = value.cards.isEmpty ? "当天尚未生成事项。录屏可直接回看，无需等待事项整理。" : "仅已记录范围 · 上海时间"
                 if value.coverage != "complete" { message += " · 覆盖不完整" }
                 message += "\n" + value.summary
-            } catch { if !Task.isCancelled { message = "事项暂不可用，原始记录仍可查看" } }
+            } catch { if !Task.isCancelled { message = "事项读取失败，不影响查看录屏。请重试或查看上方录屏记录。" } }
         }
     }
 }

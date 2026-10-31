@@ -11,10 +11,8 @@ import AppKit
         }
         Window("屏幕记录", id: "journal") {
             JournalBrowserRoot(model: delegate.model)
-        }.defaultLaunchBehavior(.suppressed)
-        Window("ScreenJournal 设置", id: "settings") {
-            JournalSettings(model: delegate.model).frame(minWidth: 540, minHeight: 570)
         }.defaultLaunchBehavior(.presented)
+        .commands { JournalCommands(model: delegate.model) }
     }
 }
 @MainActor final class JournalDelegate: NSObject, NSApplicationDelegate {
@@ -32,6 +30,10 @@ import AppKit
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         sender.setActivationPolicy(.accessory); return false
+    }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        model.reopenMainWindow?()
+        return false
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if didSaveForExit { return .terminateNow }
@@ -70,8 +72,9 @@ private struct JournalMenu: View {
     @Environment(\.openWindow) var openWindow
     var body: some View {
         if let recorder = model.coordinator { RecorderMenu(recorder: recorder) }
-        Button("查看记录…") { NSApp.setActivationPolicy(.regular); openWindow(id: "journal"); NSApp.activate(ignoringOtherApps: true) }
-        Button("设置…") { NSApp.setActivationPolicy(.regular); openWindow(id: "settings"); NSApp.activate(ignoringOtherApps: true) }
+        Button("打开 ScreenJournal") { showJournal(openWindow, model: model) }
+        Button("设置…") { showJournal(openWindow, model: model, settings: true) }
+            .disabled(model.coordinator == nil)
         Divider()
         Button("退出 ScreenJournal") { NSApp.terminate(nil) }
     }
@@ -85,18 +88,53 @@ private struct RecorderMenu: View {
     }
 }
 
-private struct JournalSettings: View {
+private struct JournalCommands: Commands {
     @ObservedObject var model: RecorderModel
-    var body: some View {
-        if let recorder = model.coordinator { SettingsView(recorder: recorder) }
-        else { Text(model.startupError.isEmpty ? "正在检查记录…" : model.startupError).padding() }
+    @Environment(\.openWindow) private var openWindow
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("设置…") { showJournal(openWindow, model: model, settings: true) }
+                .keyboardShortcut(",", modifiers: .command)
+                .disabled(model.coordinator == nil)
+        }
+    }
+}
+
+@MainActor private func showJournal(_ openWindow: OpenWindowAction, model: RecorderModel, settings: Bool = false) {
+    NSApp.setActivationPolicy(.regular)
+    openWindow(id: "journal")
+    model.showingSettings = settings
+    NSApp.activate(ignoringOtherApps: true)
+}
+
+private struct JournalSettingsPresentedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+extension EnvironmentValues {
+    var journalSettingsPresented: Bool {
+        get { self[JournalSettingsPresentedKey.self] }
+        set { self[JournalSettingsPresentedKey.self] = newValue }
     }
 }
 
 private struct JournalBrowserRoot: View {
     @ObservedObject var model: RecorderModel
+    @Environment(\.openWindow) private var openWindow
     var body: some View {
-        if let recorder = model.coordinator { JournalBrowserView(recorder: recorder) }
-        else { Text(model.startupError.isEmpty ? "正在检查记录…" : model.startupError).padding() }
+        Group {
+            if let recorder = model.coordinator {
+                JournalBrowserView(recorder: recorder) { model.showingSettings = true }
+            } else { Text(model.startupError.isEmpty ? "正在检查记录…" : model.startupError).padding() }
+        }
+        .environment(\.journalSettingsPresented, model.showingSettings)
+        .sheet(isPresented: $model.showingSettings) {
+            if let recorder = model.coordinator { SettingsView(recorder: recorder) }
+        }
+        .onAppear {
+            model.reopenMainWindow = { [weak model] in
+                guard let model else { return }
+                showJournal(openWindow, model: model)
+            }
+        }
     }
 }

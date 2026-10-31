@@ -12,6 +12,7 @@ import AppKit
     private let service: JournalReadService
     private var generation = 0
     private var request: Task<Void, Never>?
+    private var pendingCapture: JournalCapture?
     private var clock: Task<Void, Never>?
     private var validity: Task<Void, Never>?
     private var invalidations: Task<Void, Never>?
@@ -98,7 +99,7 @@ import AppKit
     func beginScrub() {
         guard !closed, state != "unavailable" else { return }
         wasPlaying = state == "playing" || (state == "buffering" && resumeAfterLoad)
-        isScrubbing = true; pause(); generation += 1; request?.cancel()
+        isScrubbing = true; pause(); generation += 1; request?.cancel(); pendingCapture = nil
         state = "scrubbing"
     }
     func scrub(_ value: Double) {
@@ -126,7 +127,7 @@ import AppKit
     }
     func step(_ direction: Int) {
         guard let view, !view.captures.isEmpty else { return }
-        pause(); let index = current.flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
+        pause(); let index = (pendingCapture ?? current).flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
         let target = view.captures[max(0, min(view.captures.count - 1, index + direction))]
         seek(Double(target.capturedAtMs), resume: false, exact: target)
     }
@@ -138,18 +139,25 @@ import AppKit
         let gap = view.intervals.first { $0.kind != "privacy" && $0.kind != "unknown" && ms >= $0.startMs && ms < $0.endMs }
             ?? view.intervals.first { $0.kind == "unknown" && ms >= $0.startMs && ms < $0.endMs }
         if let gap, exact == nil {
-            generation += 1; request?.cancel(); image = nil; current = nil
+            generation += 1; request?.cancel(); pendingCapture = nil; image = nil; current = nil
             message = gap.kind == "unknown" ? "此区间无采样" : "此区间暂停或不可记录"
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
         }
         guard let target = exact ?? view.captures.last(where: { $0.capturedAtMs <= ms }) else { return }
         if target.availableUntilMs <= journalNowMs() { invalidate("记录已过期"); return }
         if current?.id == target.id, image != nil || target.privacyPlaceholder {
+            generation += 1; request?.cancel(); pendingCapture = nil
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
         }
-        generation += 1; let token = generation; request?.cancel(); current = target; image = nil
+        generation += 1; let token = generation; request?.cancel(); pendingCapture = nil
         message = target.privacyPlaceholder ? "隐私保护 · 未记录应用内容" : "加载画面…"
-        if target.privacyPlaceholder { state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return }
+        if target.privacyPlaceholder {
+            image = nil; current = target
+            state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
+        }
+        // Keep the displayed frame and its metadata together until the replacement
+        // is ready. Privacy, gaps and invalidation still clear the image immediately.
+        pendingCapture = target
         state = scrubbing ? "scrubbing" : "buffering"; resumeAfterLoad = resume
         let presentationStart = ContinuousClock.now
         request = Task {
@@ -165,7 +173,8 @@ import AppKit
                 }
                 guard let data else { return }
                 guard !Task.isCancelled, !closed, generation == token else { return }
-                image = NSImage(data: data); message = image == nil ? "画面不可用" : ""
+                guard let nextImage = NSImage(data: data) else { throw JournalReadError("MEDIA_UNAVAILABLE") }
+                image = nextImage; current = target; pendingCapture = nil; message = ""
                 if resumeAfterLoad && !scrubbing { position = Double(target.capturedAtMs) }
                 state = scrubbing ? "scrubbing" : resumeAfterLoad ? "playing" : "paused"; lastTick = .now
                 #if DEBUG
@@ -174,16 +183,16 @@ import AppKit
                 #endif
             } catch {
                 guard !Task.isCancelled, !closed, generation == token else { return }
-                state = "unavailable"; image = nil; message = "画面暂不可用"
+                state = "unavailable"; pendingCapture = nil; image = nil; message = "画面暂不可用"
             }
         }
     }
     private func invalidate(_ reason: String) {
-        generation += 1; request?.cancel(); scrubDispatch?.cancel(); scrubDispatch = nil
+        generation += 1; request?.cancel(); pendingCapture = nil; scrubDispatch?.cancel(); scrubDispatch = nil
         pause(); image = nil; current = nil; state = "unavailable"; message = reason
     }
     func close() {
-        closed = true; state = "unavailable"; generation += 1; request?.cancel(); clock?.cancel(); validity?.cancel(); invalidations?.cancel(); scrubDispatch?.cancel(); image = nil
+        closed = true; state = "unavailable"; generation += 1; request?.cancel(); pendingCapture = nil; clock?.cancel(); validity?.cancel(); invalidations?.cancel(); scrubDispatch?.cancel(); image = nil
         if let view { Task { await service.close(viewID: view.viewID) } }; view = nil
     }
 }
