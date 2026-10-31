@@ -22,6 +22,9 @@ struct RetentionCoordinator {
         for segment in try db.segments() where segment.state == "ready" || segment.state == "unavailable" {
             if try db.paths.usage() <= limit { break }
             try remove(db, segment: segment)
+            // Deletion creates WAL pages. Reclaim those temporary bytes before
+            // deciding whether another retained segment must be removed.
+            try db.checkpoint()
         }
         try db.checkpoint()
         return try db.paths.usage()

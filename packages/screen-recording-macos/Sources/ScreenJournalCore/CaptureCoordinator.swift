@@ -81,7 +81,7 @@ import Combine
             try paths.write(settings, to: "settings.json")
             if worker != nil { await withCheckedContinuation { stoppedWaiters.append($0) } }
             await flushEvents()
-            try await timed("finalize_timeout") { try await engine.shutdown() }
+            status.diskBytes = try await timed("finalize_timeout") { try await engine.shutdown(settings: self.settings) }
             transition("stopped", "normal_exit")
             try snapshot()
             return true

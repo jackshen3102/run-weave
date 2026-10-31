@@ -42,9 +42,11 @@ actor StorageEngine {
         return bytes
     }
     func event(_ state: String, _ reason: String, affected: Int = 0, at: Date = Date()) throws { try database.event(state, reason, affected: affected, at: at) }
-    func shutdown() async throws {
+    func shutdown(settings: RecordingSettings) async throws -> Int64 {
         try await frames.finalize()
         try database.execute("UPDATE sessions SET ended=?,clean=1 WHERE id=?", [Date().timeIntervalSince1970, sessionID])
-        try database.checkpoint()
+        // The final segment is now eligible for the same retention and quota
+        // rules as a segment finalized during recording.
+        return try RetentionCoordinator.enforce(database, settings: settings)
     }
 }
