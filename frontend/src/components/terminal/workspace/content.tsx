@@ -80,6 +80,7 @@ export function TerminalWorkspaceContent({
     setHistoryTerminalPanelId,
     selectActiveSession,
     resetWorkspaceForConnection,
+    reconcileProjectNavigationHistory,
   } = useTerminalWorkspaceStore(
     useShallow((state) => ({
       activeParentProjectId: state.activeParentProjectId,
@@ -100,6 +101,7 @@ export function TerminalWorkspaceContent({
       setHistoryTerminalPanelId: state.setHistoryTerminalPanelId,
       selectActiveSession: state.selectActiveSession,
       resetWorkspaceForConnection: state.resetForConnection,
+      reconcileProjectNavigationHistory: state.reconcileProjectNavigationHistory,
     })),
   );
   const contextsQuery = useTerminalProjectContextsQuery(activeParentProjectId);
@@ -197,6 +199,11 @@ export function TerminalWorkspaceContent({
   useEffect(() => {
     applyPendingTerminalNavigation(scope, initialTerminalSessionId);
   }, [initialTerminalSessionId, scope]);
+  useEffect(() => {
+    if (projectsQuery.isFetched && !projectsQuery.error) {
+      reconcileProjectNavigationHistory(projects.map((project) => project.projectId));
+    }
+  }, [projects, projectsQuery.isFetched, projectsQuery.error, reconcileProjectNavigationHistory]);
   useEffect(() => {
     if (!requestError || loading) {
       return;
@@ -398,6 +405,11 @@ export function TerminalWorkspaceContent({
     !requestError &&
     activeProjectLoaded &&
     (visibleSessions.length === 0 || activeSession !== null);
+  useEffect(() => {
+    if (initialTerminalSessionId && canPersistRecentSelection && visibleSessions.length === 0) {
+      onActiveSessionChange?.(null);
+    }
+  }, [canPersistRecentSelection, initialTerminalSessionId, onActiveSessionChange, visibleSessions.length]);
   const acknowledgeCompletion = useTerminalCompletionRead({
     apiBase, token, scope, initialTerminalSessionId, activeSession,
     ready: hasLoadedSessions && activeProjectLoaded && !requestError,

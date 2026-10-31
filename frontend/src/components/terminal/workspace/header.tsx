@@ -7,6 +7,8 @@ import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/sourc
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
   Activity,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   CalendarClock,
   ClipboardList,
@@ -105,6 +107,9 @@ export function TerminalWorkspaceHeader({
     activeParentProjectId,
     activeSessionId,
     activePanelIdBySessionId,
+    projectNavigationHistory,
+    projectNavigationIndex,
+    navigateProjectHistory,
     setHistoryDrawerOpen,
     setHistoryTerminalSessionId,
     setHistoryTerminalPanelId,
@@ -118,6 +123,9 @@ export function TerminalWorkspaceHeader({
       activeParentProjectId: state.activeParentProjectId,
       activeSessionId: state.activeSessionId,
       activePanelIdBySessionId: state.activePanelIdBySessionId,
+      projectNavigationHistory: state.projectNavigationHistory,
+      projectNavigationIndex: state.projectNavigationIndex,
+      navigateProjectHistory: state.navigateProjectHistory,
       setHistoryDrawerOpen: state.setHistoryDrawerOpen,
       setHistoryTerminalSessionId: state.setHistoryTerminalSessionId,
       setHistoryTerminalPanelId: state.setHistoryTerminalPanelId,
@@ -157,6 +165,10 @@ export function TerminalWorkspaceHeader({
     ? (activePanelIdBySessionId[activeSession.terminalSessionId] ??
       activeSession.activePanelId)
     : null;
+  const previousProject = projectNavigationHistory[projectNavigationIndex - 1];
+  const nextProject = projectNavigationHistory[projectNavigationIndex + 1];
+  const projectHistoryLabel = (projectId: string): string =>
+    projects.find((project) => project.projectId === projectId)?.name ?? "项目";
   const shareActivePanel = useMemoizedFn(async (): Promise<void> => {
     if (!activeSession || !activePanelId) return;
     await createShare(
@@ -222,6 +234,32 @@ export function TerminalWorkspaceHeader({
           onOpenConnectionManager={onOpenConnectionManager}
           className="h-6 shrink-0 rounded-full border border-slate-800 bg-slate-900 px-2 text-[11px] text-slate-300 hover:bg-slate-800 hover:text-slate-100"
         />
+      ) : null}
+      {!isMobileMonitor ? (
+        <div className="flex shrink-0 items-center gap-0.5" aria-label="项目访问历史">
+          <Tooltip content={previousProject ? `返回 ${projectHistoryLabel(previousProject.parentProjectId)}` : "没有上一项"}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="返回上一个项目"
+              disabled={loading || !previousProject}
+              className="h-6 w-6 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+              onClick={() => navigateProjectHistory(-1)}
+            ><ArrowLeft className="h-3.5 w-3.5" /></Button>
+          </Tooltip>
+          <Tooltip content={nextProject ? `前进 ${projectHistoryLabel(nextProject.parentProjectId)}` : "没有下一项"}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="前进下一个项目"
+              disabled={loading || !nextProject}
+              className="h-6 w-6 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+              onClick={() => navigateProjectHistory(1)}
+            ><ArrowRight className="h-3.5 w-3.5" /></Button>
+          </Tooltip>
+        </div>
       ) : null}
       <TerminalProjectTabBar
         isMobileMonitor={isMobileMonitor}
