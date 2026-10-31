@@ -11,7 +11,7 @@ struct TerminalStopButton: View {
         if stopping { ProgressView().tint(.red) }
         else { Image(systemName: "stop.fill") }
       }
-      .frame(width: 64, height: 48).foregroundColor(.red).contentShape(Rectangle())
+      .frame(width: 44, height: 48).foregroundColor(.red).contentShape(Rectangle())
     }
     .accessibilityLabel(stopping ? "停止中…" : "停止执行")
     .accessibilityIdentifier("terminal-floating-stop")

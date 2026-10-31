@@ -8,11 +8,11 @@ struct TerminalComposerButton: View {
     Button(action: open) {
       Image(systemName: "square.and.pencil")
         .font(.system(size: 26, weight: .medium))
-        .frame(width: 64, height: 48).contentShape(Rectangle())
+        .frame(width: 44, height: 48).contentShape(Rectangle())
         .overlay(alignment: .topTrailing) {
           if hasDraft {
             Circle().fill(Color.orange).frame(width: 7, height: 7)
-              .padding(.top, 6).padding(.trailing, 10)
+              .padding(.top, 6).padding(.trailing, 2)
           }
         }
     }

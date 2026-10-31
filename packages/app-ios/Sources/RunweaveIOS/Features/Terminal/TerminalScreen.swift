@@ -421,6 +421,7 @@ struct TerminalScreen: View {
         }
         TerminalComposerButton(hasDraft: hasComposerDraft, open: openComposer)
           .accessibilityFocused($composerTriggerFocused)
+        TerminalNextCompletionButton(session: session)
       }
       .font(.system(size: 20, weight: .medium))
       .foregroundColor(TerminalAppearance.accent)
