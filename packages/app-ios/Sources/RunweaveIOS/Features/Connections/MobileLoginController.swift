@@ -44,7 +44,9 @@ final class MobileLoginController: ObservableObject {
       let qr = try MobileLoginQR.parse(text)
       let prepared = try store.prepareMobileLogin(base: qr.baseUrl, name: qr.connectionName)
       let active = session.connection?.scope == prepared.connection.scope && session.api?.baseURL.absoluteString == qr.baseUrl ? session.api : nil
-      let credentials = try active ?? prepared.connection.loginClient(url: qr.baseUrl)
+      let credentials = try active ?? APIClient(base: qr.baseUrl,
+        connectionID: prepared.connection.id, credentialAccount: prepared.connection.credentialAccount,
+        loginBase: prepared.connection.bootstrapURL)
       attempt = Attempt(qr: qr, claimantToken: try MobileLoginClient.claimantToken(), prepared: prepared,
         client: MobileLoginClient(base: try MobileLoginQR.validatedBase(qr.baseUrl)),
         credentialClient: credentials, ownsCredentialClient: active == nil)
@@ -93,7 +95,7 @@ final class MobileLoginController: ObservableObject {
             : "正在连接 \(value.prepared.connection.name)…"
           try await value.client.claim(value.qr, claimantToken: value.claimantToken,
             deviceName: UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone",
-            connectionID: value.credentialClient.connectionID)
+            connectionID: value.credentialClient.authenticationConnectionID)
           try check(epoch)
           value.claimed = true
           attempt = value

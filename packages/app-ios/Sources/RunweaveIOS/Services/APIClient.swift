@@ -5,6 +5,8 @@ import Foundation
 public actor APIClient {
   public nonisolated let baseURL: URL
   public nonisolated let connectionID: String
+  /// Session binding stays on the approved login URL when a verified route changes.
+  public nonisolated let authenticationConnectionID: String
   let credentials: ComputerCredentialSession
   private let session: URLSession
   private var closed = false
@@ -35,9 +37,11 @@ public actor APIClient {
     return url
   }
 
-  public init(base: String, connectionID: String, credentialAccount: String? = nil) throws {
+  public init(base: String, connectionID: String, credentialAccount: String? = nil, loginBase: String? = nil) throws {
     baseURL = try Self.normalize(base)
     self.connectionID = Self.diagnosticConnectionID(base: baseURL, id: connectionID)
+    let loginURL = try loginBase.map(Self.normalize) ?? baseURL
+    authenticationConnectionID = Self.diagnosticConnectionID(base: loginURL, id: connectionID)
     credentials = try ComputerCredentialSession.shared(account: credentialAccount ?? self.connectionID)
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 20
@@ -72,7 +76,8 @@ public actor APIClient {
     previewCache.clear()
     do {
       var next: AuthTokens = try await request(
-        "/api/auth/login", method: "POST", body: ["username": username, "password": password])
+        "/api/auth/login", method: "POST", body: ["username": username, "password": password],
+        connectionIDOverride: connectionID)
       guard !closed, !Task.isCancelled else { throw CancellationError() }
       next.expiresAt = Date().addingTimeInterval(next.expiresIn)
       try await credentials.replace(next)
@@ -302,7 +307,7 @@ public actor APIClient {
   nonisolated func connectionSocketRequest(_ url: URL, attemptID: String) -> URLRequest {
     var request = URLRequest(url: url)
     request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
-    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+    request.setValue(authenticationConnectionID, forHTTPHeaderField: "X-Connection-ID")
     request.setValue(attemptID, forHTTPHeaderField: "X-Connection-Attempt-ID")
     return request
   }
@@ -315,7 +320,7 @@ public actor APIClient {
     var request = URLRequest(url: try socketURL(path: "/ws/browser-local", query: []))
     request.setValue("Bearer \(current.accessToken)", forHTTPHeaderField: "Authorization")
     request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
-    request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+    request.setValue(authenticationConnectionID, forHTTPHeaderField: "X-Connection-ID")
     return request
   }
 
@@ -384,6 +389,7 @@ public actor APIClient {
   private func request<T: Decodable>(
     _ path: String, method: String, body: [String: Any]? = nil, bearer: String? = nil,
     idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
+    connectionIDOverride: String? = nil,
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil
   ) async throws -> T {
@@ -411,7 +417,7 @@ public actor APIClient {
       var request = URLRequest(url: url)
       request.httpMethod = method
       request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
-      request.setValue(connectionID, forHTTPHeaderField: "X-Connection-ID")
+      request.setValue(connectionIDOverride ?? authenticationConnectionID, forHTTPHeaderField: "X-Connection-ID")
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")
       if let idempotencyKey { request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key") }
       if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
