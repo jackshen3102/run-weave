@@ -51,9 +51,10 @@ final class ConnectionRouteResolver: ObservableObject {
     let activeChanged = client.map { api in
       !next.routes.contains(where: { $0.id == activeRouteID && $0.url == api.baseURL.absoluteString })
     } ?? false
+    let loginChanged = old.bootstrapURL != next.bootstrapURL
     let modeChanged = old.automatic != next.automatic || old.fixedRouteID != next.fixedRouteID
     let fixesCurrent = !next.automatic && next.fixedRouteID == activeRouteID && !activeChanged
-    if selection != nil || activeChanged || (modeChanged && !fixesCurrent) {
+    if selection != nil || activeChanged || loginChanged || (modeChanged && !fixesCurrent) {
       client?.suspendTransport()
       cancel()
       onInvalidated?()
@@ -68,7 +69,8 @@ final class ConnectionRouteResolver: ObservableObject {
     guard Self.foreground else { throw APIError.offline }
     if !force, let selection { return try await selection.value }
     if !force, let client, let route = currentRoute, route.url == client.baseURL.absoluteString,
-      computer.automatic || computer.fixedRouteID == route.id {
+      (computer.automatic || computer.fixedRouteID == route.id),
+      client.authenticationConnectionID == (try? APIClient.diagnosticConnectionID(base: APIClient.normalize(computer.bootstrapURL), id: computer.id)) {
       let cachedRevision = revision
       if !(await client.isClosed()) {
         try check(cachedRevision)
@@ -117,7 +119,7 @@ final class ConnectionRouteResolver: ObservableObject {
           }
           try check(epoch)
           lastVerifiedURL = route.url
-          let api = try APIClient(base: route.url, connectionID: snapshot.id, credentialAccount: snapshot.credentialAccount)
+          let api = try APIClient(base: route.url, connectionID: snapshot.id, credentialAccount: snapshot.credentialAccount, loginBase: snapshot.bootstrapURL)
           candidate = api
           if await api.hasCredentials() {
             try await api.verify()

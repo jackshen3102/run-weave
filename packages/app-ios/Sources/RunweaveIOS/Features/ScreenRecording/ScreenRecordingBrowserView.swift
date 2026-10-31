@@ -19,6 +19,8 @@ struct ScreenRecordingBrowserView: View {
     @State private var loadingRanges = false
     @State private var connecting = true
     @State private var connectionMessage = ""
+    @State private var accessDenied = false
+    @State private var retryAutomatically = true
     @State private var rangeError = ""
     private var selectableDays: [String] {
         Array(Set((status?.days.map(\.day) ?? []) + analysisDays)).sorted(by: >)
@@ -66,9 +68,9 @@ struct ScreenRecordingBrowserView: View {
                     ProgressView("正在连接记录服务…")
                 } else {
                     ContentUnavailableView {
-                        Label("暂时无法读取录屏", systemImage: "wifi.exclamationmark")
+                        Label(accessDenied ? "录屏访问被拒绝" : "暂时无法读取录屏", systemImage: accessDenied ? "lock.shield" : "wifi.exclamationmark")
                     } description: { Text(connectionMessage) } actions: {
-                        Button("重新连接") { reload += 1 }.buttonStyle(.bordered)
+                        Button(retryAutomatically ? "重新连接" : "重新检查") { reload += 1 }.buttonStyle(.bordered)
                     }
                 }
             }
@@ -79,13 +81,14 @@ struct ScreenRecordingBrowserView: View {
             }
             .refreshable { reload += 1 }
             .task(id: scope + ":\(reload)") {
-                invalidate(); analysisDays = []; connecting = true
+                invalidate(); analysisDays = []; connecting = true; accessDenied = false; retryAutomatically = true
                 guard session.authenticated, session.foreground, session.health.status == .online else {
                     connecting = false; connectionMessage = "当前电脑未连接。请回到首页检查连接后重试。"; return
                 }
                 // A restart or transient failure must recover without reopening the page.
                 while !Task.isCancelled {
                     await refresh()
+                    guard retryAutomatically else { return }
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                 }
             }
@@ -173,9 +176,24 @@ struct ScreenRecordingBrowserView: View {
         } catch {
             guard !Task.isCancelled, generation == session.generation else { return }
             invalidate(); connecting = false
-            connectionMessage = (error as? ScreenRecordingReadError)?.code == "UPDATE_REQUIRED"
-                ? "当前连接的电脑需要更新 Runweave Backend 才能查看录屏。"
-                : "无法连接这台 Mac 的记录服务，正在自动重连。已有录屏不会因此删除。"
+            switch error {
+            case APIError.http(403):
+                accessDenied = true; retryAutomatically = false
+                connectionMessage = "当前登录的连接身份与记录服务不一致。请返回首页，重新登录这台 Mac 后重试。"
+            case APIError.credentialsUnavailable, APIError.http(401):
+                accessDenied = true; retryAutomatically = false
+                connectionMessage = "登录已失效，请返回首页重新登录这台 Mac。"
+            case APIError.invalidResponse:
+                retryAutomatically = false
+                connectionMessage = "记录服务返回的数据无法读取，请更新手机和 Mac 应用后重试。"
+            default:
+                if (error as? ScreenRecordingReadError)?.code == "UPDATE_REQUIRED" {
+                    retryAutomatically = false
+                    connectionMessage = "当前连接的电脑需要更新 Runweave Backend 才能查看录屏。"
+                } else {
+                    connectionMessage = "无法连接这台 Mac 的记录服务，正在自动重连。已有录屏不会因此删除。"
+                }
+            }
         }
     }
     private func loadRanges() async {
