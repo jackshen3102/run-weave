@@ -1,6 +1,5 @@
-import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
+import { StatusNotice } from "../../status-notice";
 import { useMemoizedFn } from "ahooks";
-import { X } from "lucide-react";
 import { useState } from "react";
 import { useSnapshotShareStore } from "../../../features/terminal/state/snapshot-share-store";
 
@@ -23,19 +22,18 @@ export function TerminalSnapshotShareNotification() {
       setFailedUrl(result.url);
     }
   });
-  const overlayRef = useOverlayRef<HTMLDivElement>(undefined, "intersection");
   if (!result && !error) return null;
   return (
-    <div ref={overlayRef} role="status" className="fixed bottom-4 right-4 z-50 flex w-[min(26rem,calc(100vw-2rem))] flex-col gap-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 shadow-lg">
+    <StatusNotice kind="snapshot-share" noticeKey={result ?? error} onDismiss={dismiss} duration={result ? 0 : 8_000}
+      className="flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <span>{error ?? (result?.copied ? "快照链接已复制，24 小时后失效。" : "快照已创建，24 小时后失效。复制失败，请手动复制链接。")}</span>
-        <button type="button" aria-label="关闭分享通知" onClick={dismiss}><X className="h-4 w-4" /></button>
       </div>
       {result ? <>
         <input aria-label="终端快照链接" readOnly value={result.url} onFocus={(event) => event.currentTarget.select()} className="w-full rounded border border-slate-700 bg-slate-950 p-1 text-xs" />
         <button type="button" className="self-start text-sky-400 underline" onClick={() => { void openSnapshot(); }}>打开快照</button>
         {failedUrl === result.url ? <span>无法打开快照，请手动复制链接。</span> : null}
       </> : null}
-    </div>
+    </StatusNotice>
   );
 }

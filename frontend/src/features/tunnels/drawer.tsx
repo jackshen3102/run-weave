@@ -46,11 +46,6 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   const [editing, setEditing] = useState<TunnelHostConfig | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (!notice || open || embedded) return;
-    const timer = window.setTimeout(() => setNotice(null), 8_000);
-    return () => window.clearTimeout(timer);
-  }, [notice, open, embedded, setNotice]);
-  useEffect(() => {
     const api = window.electronAPI as RunweaveElectronBridge | undefined;
     if (!api?.isElectron || embedded) return;
     let disposed = false;
@@ -335,7 +330,7 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
   return (
     <>
       {notice && !open && (
-        <StatusNotice kind="tunnel" className="rounded-lg border border-border bg-background p-3 text-sm text-foreground shadow-lg">
+        <StatusNotice kind="tunnel" noticeKey={notice} onDismiss={() => setNotice(null)} className="rounded-lg border border-border bg-background p-3 text-sm text-foreground shadow-lg">
           <p>{notice}</p>
           <Button
             size="sm"
@@ -346,9 +341,6 @@ export function TunnelDrawer({ embedded = false }: { embedded?: boolean }) {
             }}
           >
             查看端口与隧道
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>
-            关闭
           </Button>
         </StatusNotice>
       )}
