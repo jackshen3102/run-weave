@@ -419,20 +419,8 @@ struct TerminalScreen: View {
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
-        Button(action: openComposer) {
-          Image(systemName: "square.and.pencil")
-            .font(.system(size: 26, weight: .medium))
-            .frame(width: 64, height: 48).contentShape(Rectangle())
-            .overlay(alignment: .topTrailing) {
-              if hasComposerDraft {
-                Circle().fill(Color.orange).frame(width: 7, height: 7)
-                  .padding(.top, 6).padding(.trailing, 10)
-              }
-            }
-        }
-        .accessibilityLabel("打开终端输入")
-        .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
-        .accessibilityIdentifier("terminal-composer-open").accessibilityFocused($composerTriggerFocused)
+        TerminalComposerButton(hasDraft: hasComposerDraft, open: openComposer)
+          .accessibilityFocused($composerTriggerFocused)
       }
       .font(.system(size: 20, weight: .medium))
       .foregroundColor(TerminalAppearance.accent)
