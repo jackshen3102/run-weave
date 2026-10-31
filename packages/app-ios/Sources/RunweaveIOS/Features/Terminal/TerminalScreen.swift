@@ -393,7 +393,11 @@ struct TerminalScreen: View {
         .padding(.horizontal, 12).padding(.top, 8)
         .ignoresSafeArea(.container, edges: .bottom)
     }
-    .overlay(alignment: .bottom) { terminalDock }
+    .overlay(alignment: .bottom) {
+      terminalDock
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(.container, edges: showingInstantReplies ? .bottom : [])
+    }
   }
 
   private var hasComposerDraft: Bool {
@@ -403,16 +407,10 @@ struct TerminalScreen: View {
   }
 
   private var terminalDock: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: showingInstantReplies ? 0 : 8) {
       if let failure = sideChat.failure, !sideChat.visible {
         Text(failure).font(.caption).foregroundColor(.red).frame(maxWidth: .infinity, alignment: .leading)
-      }
-      if showingInstantReplies {
-        TerminalInstantReplyBar(
-          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
-          sending: sendingInstantReply,
-          send: sendInstantReply, close: { showingInstantReplies = false })
-          .fixedSize(horizontal: true, vertical: false)
+          .padding(.horizontal, 16)
       }
       HStack(spacing: 0) {
         if sideChat.capabilities != nil {
@@ -421,20 +419,8 @@ struct TerminalScreen: View {
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
-        Button(action: openComposer) {
-          Image(systemName: "square.and.pencil")
-            .font(.system(size: 26, weight: .medium))
-            .frame(width: 64, height: 48).contentShape(Rectangle())
-            .overlay(alignment: .topTrailing) {
-              if hasComposerDraft {
-                Circle().fill(Color.orange).frame(width: 7, height: 7)
-                  .padding(.top, 6).padding(.trailing, 10)
-              }
-            }
-        }
-        .accessibilityLabel("打开终端输入")
-        .accessibilityValue(hasComposerDraft ? "有未发送草稿" : "无草稿")
-        .accessibilityIdentifier("terminal-composer-open").accessibilityFocused($composerTriggerFocused)
+        TerminalComposerButton(hasDraft: hasComposerDraft, open: openComposer)
+          .accessibilityFocused($composerTriggerFocused)
       }
       .font(.system(size: 20, weight: .medium))
       .foregroundColor(TerminalAppearance.accent)
@@ -450,9 +436,20 @@ struct TerminalScreen: View {
           .disabled(!session.canWrite || !controller.canSend)
         }
       }
+      .padding(.horizontal, 16)
+      if showingInstantReplies {
+        TerminalInstantReplyBar(
+          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
+          sending: sendingInstantReply,
+          send: sendInstantReply, close: { showingInstantReplies = false })
+          .fixedSize(horizontal: true, vertical: false)
+          .frame(maxWidth: .infinity)
+          .background(TerminalAppearance.background)
+      }
     }
     .frame(maxWidth: .infinity)
-    .buttonStyle(.plain).padding(.horizontal, 16).padding(.vertical, 8)
+    .buttonStyle(.plain)
+    .padding(.vertical, showingInstantReplies ? 0 : 8)
   }
 
   private func openComposer() {
