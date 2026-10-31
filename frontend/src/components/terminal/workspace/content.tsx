@@ -81,6 +81,7 @@ export function TerminalWorkspaceContent({
     selectActiveSession,
     resetWorkspaceForConnection,
     reconcileProjectNavigationHistory,
+    recordProjectNavigationSelection,
   } = useTerminalWorkspaceStore(
     useShallow((state) => ({
       activeParentProjectId: state.activeParentProjectId,
@@ -102,6 +103,7 @@ export function TerminalWorkspaceContent({
       selectActiveSession: state.selectActiveSession,
       resetWorkspaceForConnection: state.resetForConnection,
       reconcileProjectNavigationHistory: state.reconcileProjectNavigationHistory,
+      recordProjectNavigationSelection: state.recordProjectNavigationSelection,
     })),
   );
   const contextsQuery = useTerminalProjectContextsQuery(activeParentProjectId);
@@ -200,10 +202,10 @@ export function TerminalWorkspaceContent({
     applyPendingTerminalNavigation(scope, initialTerminalSessionId);
   }, [initialTerminalSessionId, scope]);
   useEffect(() => {
-    if (projectsQuery.isFetched && !projectsQuery.error) {
-      reconcileProjectNavigationHistory(projects.map((project) => project.projectId));
+    if (hasLoadedSessions && !projectsQuery.error && !sessionsQuery.error) {
+      reconcileProjectNavigationHistory(projects.map((project) => project.projectId), sessions);
     }
-  }, [projects, projectsQuery.isFetched, projectsQuery.error, reconcileProjectNavigationHistory]);
+  }, [projects, sessions, hasLoadedSessions, projectsQuery.error, sessionsQuery.error, reconcileProjectNavigationHistory]);
   useEffect(() => {
     if (!requestError || loading) {
       return;
@@ -405,6 +407,14 @@ export function TerminalWorkspaceContent({
     !requestError &&
     activeProjectLoaded &&
     (visibleSessions.length === 0 || activeSession !== null);
+  useEffect(() => {
+    // Record only the resolved destination. Incoming routes can temporarily pair
+    // the new terminal with the previous project while selection effects run.
+    if (canPersistRecentSelection &&
+        isCurrentSelection(activeParentProjectId, activeProjectId, activeSessionId)) {
+      recordProjectNavigationSelection();
+    }
+  }, [activeParentProjectId, activeProjectId, activeSessionId, canPersistRecentSelection, recordProjectNavigationSelection]);
   useEffect(() => {
     if (initialTerminalSessionId && canPersistRecentSelection && visibleSessions.length === 0) {
       onActiveSessionChange?.(null);

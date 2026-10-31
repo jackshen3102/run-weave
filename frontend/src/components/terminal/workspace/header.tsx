@@ -5,6 +5,7 @@ import { useSuijiDrawer } from "../../../features/suiji/drawer-state";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
 import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/source-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
+import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
 import {
   Activity,
   ArrowLeft,
@@ -26,7 +27,8 @@ import { useSnapshotShareStore } from "../../../features/terminal/state/snapshot
 import type { ConnectionConfig } from "../../../features/connection/types";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useShallow } from "zustand/react/shallow";
-import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
+import { useTerminalWorkspaceStore, type ProjectNavigationEntry } from "../../../features/terminal/state/workspace-store";
+import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
 import {
   EMPTY_TERMINAL_PROJECTS,
   EMPTY_TERMINAL_PROJECT_CONTEXTS,
@@ -167,8 +169,12 @@ export function TerminalWorkspaceHeader({
     : null;
   const previousProject = projectNavigationHistory[projectNavigationIndex - 1];
   const nextProject = projectNavigationHistory[projectNavigationIndex + 1];
-  const projectHistoryLabel = (projectId: string): string =>
-    projects.find((project) => project.projectId === projectId)?.name ?? "项目";
+  const projectHistoryLabel = (entry: ProjectNavigationEntry): string => {
+    const projectName = projects.find((project) => project.projectId === entry.parentProjectId)?.name ?? "项目";
+    const worktreeName = parseTerminalChildProjectId(entry.projectId)?.worktreeName;
+    const session = sessions.find((item) => item.terminalSessionId === entry.terminalSessionId);
+    return [projectName, worktreeName, session ? formatTerminalSessionName(session) : null].filter(Boolean).join(" / ");
+  };
   const shareActivePanel = useMemoizedFn(async (): Promise<void> => {
     if (!activeSession || !activePanelId) return;
     await createShare(
@@ -236,24 +242,24 @@ export function TerminalWorkspaceHeader({
         />
       ) : null}
       {!isMobileMonitor ? (
-        <div className="flex shrink-0 items-center gap-0.5" aria-label="项目访问历史">
-          <Tooltip content={previousProject ? `返回 ${projectHistoryLabel(previousProject.parentProjectId)}` : "没有上一项"}>
+        <div className="flex shrink-0 items-center gap-0.5" aria-label="访问历史">
+          <Tooltip content={previousProject ? `返回 ${projectHistoryLabel(previousProject)}` : "没有上一项"}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              aria-label="返回上一个项目"
+              aria-label="返回上一个位置"
               disabled={loading || !previousProject}
               className="h-6 w-6 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
               onClick={() => navigateProjectHistory(-1)}
             ><ArrowLeft className="h-3.5 w-3.5" /></Button>
           </Tooltip>
-          <Tooltip content={nextProject ? `前进 ${projectHistoryLabel(nextProject.parentProjectId)}` : "没有下一项"}>
+          <Tooltip content={nextProject ? `前进 ${projectHistoryLabel(nextProject)}` : "没有下一项"}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              aria-label="前进下一个项目"
+              aria-label="前进下一个位置"
               disabled={loading || !nextProject}
               className="h-6 w-6 rounded-md px-0 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
               onClick={() => navigateProjectHistory(1)}

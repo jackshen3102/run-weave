@@ -52,8 +52,10 @@ interface TerminalWorkspaceActions {
     terminalSessionId: string | null,
   ) => void;
   navigateProjectHistory: (delta: -1 | 1) => void;
+  recordProjectNavigationSelection: () => void;
   reconcileProjectNavigationHistory: (
     projectIds: string[],
+    sessions: TerminalSessionListItem[],
   ) => void;
   setActiveSessionId: (next: StateUpdater<string | null>) => void;
   setHasLoadedSessions: (next: StateUpdater<boolean>) => void;
@@ -145,7 +147,7 @@ function resolveNext<T>(next: StateUpdater<T>, current: T): T {
     : next;
 }
 
-function updateCurrentNavigationEntry(
+function recordNavigationEntry(
   state: TerminalWorkspaceState,
   selection: ProjectNavigationEntry,
 ): Pick<TerminalWorkspaceState, "projectNavigationHistory" | "projectNavigationIndex"> {
@@ -154,20 +156,13 @@ function updateCurrentNavigationEntry(
     return { projectNavigationHistory: [selection], projectNavigationIndex: 0 };
   }
   const current = history[index];
-  if (current?.parentProjectId !== selection.parentProjectId) {
-    const next = [...history.slice(0, index + 1), selection].slice(-MAX_PROJECT_NAVIGATION_ENTRIES);
-    return {
-      projectNavigationHistory: next,
-      projectNavigationIndex: next.length - 1,
-    };
-  }
-  if (current.projectId === selection.projectId &&
+  if (current?.parentProjectId === selection.parentProjectId &&
+      current.projectId === selection.projectId &&
       current.terminalSessionId === selection.terminalSessionId) {
     return { projectNavigationHistory: history, projectNavigationIndex: index };
   }
-  const next = [...history];
-  next[index] = selection;
-  return { projectNavigationHistory: next, projectNavigationIndex: index };
+  const next = [...history.slice(0, index + 1), selection].slice(-MAX_PROJECT_NAVIGATION_ENTRIES);
+  return { projectNavigationHistory: next, projectNavigationIndex: next.length - 1 };
 }
 
 const initialState: TerminalWorkspaceState = {
@@ -213,14 +208,21 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
       projectId,
       terminalSessionId,
     ) =>
-      set((state) => ({
+      set({
         activeParentProjectId: parentProjectId,
         activeProjectId: projectId,
         activeSessionId: terminalSessionId,
-        ...(parentProjectId && projectId
-          ? updateCurrentNavigationEntry(state, { parentProjectId, projectId, terminalSessionId })
-          : {}),
-      })),
+      }),
+    recordProjectNavigationSelection: () =>
+      set((state) => {
+        const { activeParentProjectId, activeProjectId, activeSessionId } = state;
+        if (!activeParentProjectId || !activeProjectId) return state;
+        return recordNavigationEntry(state, {
+          parentProjectId: activeParentProjectId,
+          projectId: activeProjectId,
+          terminalSessionId: activeSessionId,
+        });
+      }),
     navigateProjectHistory: (delta) =>
       set((state) => {
         const index = state.projectNavigationIndex + delta;
@@ -233,14 +235,22 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
           activeSessionId: entry.terminalSessionId,
         };
       }),
-    reconcileProjectNavigationHistory: (projectIds) =>
+    reconcileProjectNavigationHistory: (projectIds, sessions) =>
       set((state) => {
         const availableProjects = new Set(projectIds);
+        const sessionProjects = new Map(sessions.map((session) => [session.terminalSessionId, session.projectId]));
+        const projectsWithSessions = new Set(sessions.map((session) => session.projectId));
         const history: ProjectNavigationEntry[] = [];
         let index = -1;
         state.projectNavigationHistory.forEach((entry, position) => {
           if (!availableProjects.has(entry.parentProjectId)) return;
-          history.push(entry);
+          // Closed/moved terminals and formerly empty contexts are no longer destinations.
+          if (entry.terminalSessionId
+            ? sessionProjects.get(entry.terminalSessionId) !== entry.projectId
+            : projectsWithSessions.has(entry.projectId)) return;
+          const previous = history[history.length - 1];
+          if (previous?.projectId !== entry.projectId ||
+              previous.terminalSessionId !== entry.terminalSessionId) history.push(entry);
           if (position <= state.projectNavigationIndex) index = history.length - 1;
         });
         if (history.length === state.projectNavigationHistory.length &&
@@ -248,20 +258,9 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
         return { projectNavigationHistory: history, projectNavigationIndex: index };
       }),
     setActiveSessionId: (next) =>
-      set((state) => {
-        const terminalSessionId = resolveNext(next, state.activeSessionId);
-        return {
-          activeSessionId: terminalSessionId,
-          ...(state.activeParentProjectId && state.activeProjectId &&
-            resolveTerminalParentProjectId(state.activeProjectId) === state.activeParentProjectId
-            ? updateCurrentNavigationEntry(state, {
-                parentProjectId: state.activeParentProjectId,
-                projectId: state.activeProjectId,
-                terminalSessionId,
-              })
-            : {}),
-        };
-      }),
+      set((state) => ({
+        activeSessionId: resolveNext(next, state.activeSessionId),
+      })),
     setHasLoadedSessions: (next) =>
       set((state) => ({
         hasLoadedSessions: resolveNext(next, state.hasLoadedSessions),
@@ -356,17 +355,9 @@ export const useTerminalWorkspaceStore = create<TerminalWorkspaceStore>(
         statusLookupOpen: resolveNext(next, state.statusLookupOpen),
       })),
     selectActiveSession: (terminalSessionId) =>
-      set((state) => ({
+      set({
         activeSessionId: terminalSessionId,
-        ...(state.activeParentProjectId && state.activeProjectId &&
-          resolveTerminalParentProjectId(state.activeProjectId) === state.activeParentProjectId
-          ? updateCurrentNavigationEntry(state, {
-              parentProjectId: state.activeParentProjectId,
-              projectId: state.activeProjectId,
-              terminalSessionId,
-            })
-          : {}),
-      })),
+      }),
     resetForConnection: (initialTerminalSessionId) =>
       set({
         ...initialState,
