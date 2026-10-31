@@ -3,22 +3,22 @@
 当前命令实现位于 `packages/runweave-cli/`，修改 CLI 前先读
 `../../packages/runweave-cli/AGENTS.md`。
 
-| 任务                                                  | 文档                                                                                                                                                     |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 配置字段含义、约束与服务诊断                          | [字段参考](./configuration-reference.md)、[服务管理](./service-management.md)                                                                            |
-| 实例配置查询、迁移和显式加载                          | [configuration.md](./configuration.md)                                                                                                                   |
-| Terminal、Project、输入投递与 Agent 控制              | [terminal-cli.md](./terminal-cli.md)                                                                                                                     |
-| Terminal 快照分享、匿名读取与有效期                   | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                                                                                               |
-| iOS 两台模拟器跨 worktree 复用                        | [ios-simulators.md](./ios-simulators.md)                                                                                                                 |
-| 普通会话经验检索与结果回执                            | [experience-cli.md](./experience-cli.md)                                                                                                                 |
-| 本机 Codex 历史用量与执行疑点报告                     | [token-report.md](./token-report.md)                                                                                                                     |
-| 本机 Codex Skill 加载与候选使用统计                   | [skill-report.md](./skill-report.md)                                                                                                                     |
-| 按天整理本机 Agent 对话与事实记录、配置多机器定时上报 | [每日事实记录](../../packages/daily-record/README.md)、[定时上报配置与恢复](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md) |
-| Agent Self-Evolution 操作                             | [evolution-cli.md](./evolution-cli.md)                                                                                                                   |
-| 成果引用与 Agent 复查                                 | [knowledge-cli.md](./knowledge-cli.md)                                                                                                                   |
-| 定时任务创建与编辑、按需运行、输出及快捷指令执行      | [scheduled-task-cli.md](./scheduled-task-cli.md)                                                                                                         |
+| 任务                                                    | 文档                                                                                                                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 配置字段含义、约束与服务诊断                            | [字段参考](./configuration-reference.md)、[服务管理](./service-management.md)                                                                            |
+| 实例配置查询、迁移和显式加载                            | [configuration.md](./configuration.md)                                                                                                                   |
+| Terminal、Project、输入投递与 Agent 控制                | [terminal-cli.md](./terminal-cli.md)                                                                                                                     |
+| Terminal 快照分享、匿名读取与有效期                     | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                                                                                               |
+| iOS 两台模拟器跨 worktree 复用                          | [ios-simulators.md](./ios-simulators.md)                                                                                                                 |
+| 普通会话经验检索与结果回执                              | [experience-cli.md](./experience-cli.md)                                                                                                                 |
+| 本机 Codex 历史用量与执行疑点报告                       | [token-report.md](./token-report.md)                                                                                                                     |
+| 本机 Codex Skill 加载与候选使用统计                     | [skill-report.md](./skill-report.md)                                                                                                                     |
+| 按天整理本机 Agent 对话与事实记录、配置多机器定时上报   | [每日事实记录](../../packages/daily-record/README.md)、[定时上报配置与恢复](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md) |
+| Agent Self-Evolution 操作                               | [evolution-cli.md](./evolution-cli.md)                                                                                                                   |
+| 成果引用与 Agent 复查                                   | [knowledge-cli.md](./knowledge-cli.md)                                                                                                                   |
+| 定时任务创建与编辑、按需运行、输出及快捷指令执行        | [scheduled-task-cli.md](./scheduled-task-cli.md)                                                                                                         |
 | Browser Profile、网页工具、人工协助、下载取回与代理控制 | [browser-profile.md](./browser-profile.md)                                                                                                               |
-| 个人调查 MCP 常驻安装、停用与运行状态                 | [Research MCP 部署](../deployment/runweave-research-mcp.md)                                                                                              |
+| 个人调查 MCP 常驻安装、停用与运行状态                   | [Research MCP 部署](../deployment/runweave-research-mcp.md)                                                                                              |
 
 命令、参数、JSON 输出或退出码变化时，同一改动内更新对应文档。
 
@@ -33,3 +33,16 @@ Dots 等主 Agent 的专用终端派发、观察、验收和接手见[终端任�
 单实例和状态写入锁由操作系统持有，崩溃/重启后自动释放，不根据持久化 PID 判断存活。
 升级旧锁协议及安装依赖的要求见 [飞书部署](../deployment/feishu-app-integration.md)。
 详细合同见 [桌面与飞书完成通知](../architecture/terminal-completion-notifications.md)。
+
+### 屏幕事项冻结导出
+
+```bash
+rw screen-recording analysis export --instance stable --day 2026-10-31 --out /absolute/new-directory --json
+```
+
+必须显式指定实例和上海自然日；通过该实例现有鉴权访问在线 ScreenJournal owner。
+`--out` 必须是尚不存在的绝对目录，且父目录不得是符号链接。成功后写入权限为 0600 的
+`export.json` 与 `manifest.json`，目录权限 0700；manifest 记录快照身份、日期版本和文件 SHA256。
+不带 `--out` 时标准输出为冻结快照 JSON。导出不包含图片、视频、本地媒体路径或易失 viewID。
+`revision` 按日期维护，`coverage=complete` 仅表示已记录范围结算完成，不能证明全天工作完整。
+来源不可达返回失败；待处理或过期未处理材料保留缺口，不能解释成当天没有工作。

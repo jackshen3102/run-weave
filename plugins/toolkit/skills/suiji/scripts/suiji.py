@@ -256,6 +256,8 @@ def main():
         browser_payload = browser_value.get("payload", browser_value)
     if browser_payload and any(s.startswith("browser:") for day in browser_payload.get("days", []) for s in day.get("requestedScopes", [])) and not info.get("features", {}).get("workBrowserHistory"):
         raise Failure("BROWSER_HISTORY_UNAVAILABLE")
+    if browser_payload and any(s.startswith("screen:") for day in browser_payload.get("days", []) for s in day.get("requestedScopes", [])) and not info.get("features", {}).get("workScreenTimeline"):
+        raise Failure("SCREEN_TIMELINE_UNAVAILABLE")
     if args.command == "work-reconcile":
         return work_records.reconcile(client, args.request, recovery, Failure, run_intent)
     if args.command == "work-sources":

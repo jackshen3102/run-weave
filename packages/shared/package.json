@@ -100,7 +100,8 @@
     "./agent-model-catalog": "./src/agent-model-catalog.ts",
     "./daily-record": "./src/daily-record.ts",
     "./browser-history": "./src/browser/history.ts",
-    "./browser-plugins": "./src/browser/plugins.ts"
+    "./browser-plugins": "./src/browser/plugins.ts",
+    "./screen-recording": "./src/screen-recording/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

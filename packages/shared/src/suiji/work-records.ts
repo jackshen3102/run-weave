@@ -59,7 +59,8 @@ export type WorkSourceRef = {
     | "local-agent"
     | "feishu-message"
     | "feishu-document"
-    | "browser-visit";
+    | "browser-visit"
+    | "screen-timeline";
   sourceScope: string;
   nativeId: string;
   revision?: string;

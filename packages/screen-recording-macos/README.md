@@ -1,0 +1,151 @@
+# ScreenJournal
+
+独立 macOS 15+ 菜单栏屏幕记录工具，使用 ScreenCaptureKit、AVFoundation HEVC 和系统 SQLite。
+提供独立采集、本地存储、Mac 原生回放与同用户 Unix socket 只读服务；Runweave iOS 经现有 Backend 认证在线查看。没有模型调用、额外 TCP 监听或登录项。
+
+## 构建与使用
+
+需要 Xcode、XcodeGen。当前验证平台为 Apple Silicon；构建成功不代表权限或全天采集通过。
+
+```bash
+packages/screen-recording-macos/build.sh --configuration Debug --derived-data-path .runweave/screen-recording/build
+```
+
+产物在指定 DerivedData 的 `Build/Products/Debug/`，包含 `ScreenJournal.app` 与
+`ScreenJournalInspect`。脚本只构建，不自动安装或启动。真实屏幕权限验收必须传 `--team TEAM_ID` 使用稳定开发者签名；省略时为临时签名，
+每次重建的代码哈希可能使既有屏幕权限不匹配，只适合编译和合成材料验证。
+正式安装及固定路径授权独立执行，重签或移动后需核对 macOS 屏幕权限。
+
+打开 App 后先保持停止。通过设置窗口授权屏幕录制，再点击“开始／恢复记录”。关闭窗口后
+菜单栏继续运行；手动暂停不会因解锁或唤醒恢复。明确退出会保存停止状态并等待封段；
+封段失败会提示，不声明已保存。异常退出后手动重新启动会恢复原先启用意图。
+
+设置包含采样间隔、高度、保留期限、容量与应用排除。首次按
+[固定 Dayflow 来源](ThirdPartyLicenses/README.md)生成敏感应用名单，后续以保存的实际名单为准。
+前台排除应用使用通用锁形占位；背景排除应用窗口在截图前过滤。网页内容和系统通知不属于
+应用级排除保证。无输入不停止采集，保存可得的 HID 输入空闲秒数。
+
+## 存储与恢复合同
+
+### 压缩与体积验收
+
+体积是核心约束。MP4 是封装，实际使用 HEVC/H.265 帧间压缩；不把每次采样保存成独立 PNG。
+默认 10 秒采样、1080 高度、质量 0.55、每 30 帧关键帧，结合分段内相邻画面压缩。
+PNG 仅用于显式诊断导出。7 天期限与 10 GiB 容量预算共同限制保留量；先达到容量预算时，
+实际保留时间可能短于 7 天。
+
+压缩验收同时记录媒体字节数、整个目录字节数、采样数和真实采集时长，并实际抽帧检查文字可读性。
+分别覆盖静态阅读、网页滚动、应用切换和动态画面，不能用静态画面的小文件推算全天用量。
+优化质量、码率或尺寸时使用同一批画面对比，保留帧索引、真实时间及可读性，不能只追求最小文件。
+当前固定场景短跑（1662×1080、69 帧、680.207 秒）媒体为 300830 字节，
+目录为 408010 字节；这只是静态为主场景的实测，不是全天容量承诺。
+
+目录为 `~/Library/Application Support/ScreenJournal/`，0700；敏感文件 0600。
+独占系统文件锁保证一个写入者。SQLite v1 使用 WAL、FULL 同步和外键，版本高于 v1 拒绝写入。
+`settings.json`、`records.sqlite`、`media/`、`pending/`、`runtime/status.json` 均在该目录下。
+
+每段最多 600 帧或 600 秒；显示器、尺寸、配置变化、暂停或退出也会封段。媒体第 N 帧的
+PTS 为 N 秒，仅用于定位；真实时间来自 captures 的 UTC 毫秒与时区偏移，会话内序号不依赖时钟。
+writer 接受后索引处于 writing。结束编码、逐帧解码核对、文件 fsync、同卷移动与 SQLite
+提交后才变为 ready。异常退出可能损失当前最多约 10 分钟的未封口段，已提交段独立保留。
+
+启动先恢复 writing／deleting 与缺失文件，未恢复的段标为 unavailable 并记缺口。
+只处理本目录自有 UUID 媒体，路径和符号链接检查禁止越界操作。每分钟、封段后、配置变更和
+启动后清理。最早一帧过期即删整段，边界可能提前清理最多一个段内的新帧。配额包含数据库、
+临时文件、状态等全部目录内容，默认 10 GiB；剩余卷空间少于 1 GiB 停止新采集。
+状态事件最多 10000 条并随保留期限清理；不落截图内容或应用名称日志。
+
+暂停、配置变化与系统状态会使旧采集代际失效。单条采集／编码链路不积压截图；超时 30 秒
+显示错误，但保持在途任务所有权，直到平台实际返回才释放，绝不并发创建替代 writer。
+系统恢复等待 5 秒；错误采样按 60／120／300／600 秒退避，连续 10 分钟失败等待人工恢复。
+
+## 只读诊断
+
+```bash
+INSPECT=.runweave/screen-recording/build/Build/Products/Debug/ScreenJournalInspect
+"$INSPECT" status --data-dir "$HOME/Library/Application Support/ScreenJournal" --json
+"$INSPECT" verify --data-dir "$HOME/Library/Application Support/ScreenJournal" --json
+"$INSPECT" extract --data-dir "$HOME/Library/Application Support/ScreenJournal" --capture-id UUID --output /tmp/new-frame.png
+```
+
+`status` 给出 PID／快照时刻／锁状态、段计数、最近 100 条采样 ID 和状态事件；陈旧快照或无锁
+不能证明当前正在采集。`verify`／`extract` 必须先退出写入者，获取共享锁后只读打开数据库。
+verify 解码全部段并比对帧索引，有 unavailable／writing 等未提交段会非零返回。
+extract 区分不存在、未提交、过期、媒体缺失与已有输出，不覆盖文件，也不允许输出到数据目录。
+提取的图片是用户主动导出副本，后续由用户管理，不参与原始目录自动清理。
+
+## 隔离验收
+
+[验收合同](../../docs/testing/screen-recording/capture-storage.testplan.yaml)是行为验收依据。
+Debug 可显式传 `--validation-data-dir ABSOLUTE_PATH`。仅在隔离目录允许
+`--validation-max-bytes N`／`--validation-free-bytes N`，状态会标注注入；Release 拒绝这些参数。
+首个实例启动时不自动采集，仍通过原生控件启停。不得用正式目录做破坏性验证。
+
+```bash
+xcodebuild -project packages/screen-recording-macos/ScreenJournal.xcodeproj \
+  -scheme ScreenJournalFixture -configuration Debug \
+  -derivedDataPath .runweave/screen-recording/build CODE_SIGN_IDENTITY=- build
+.runweave/screen-recording/build/Build/Products/Debug/ScreenJournalFixture \
+  --data-dir "$PWD/.runweave/screen-recording/new-fixture" --scenario retention
+```
+
+fixture 只接受新的空白隔离目录，生成可解码的合成色块／移动白条和清单；支持 retention、quota、
+recovery、deleting、availability、newer-schema。它不是单元测试，不自动判定业务通过，不能
+替代真实采集。manifest 保存原 ID 与注入前媒体 SHA-256，便于人工核查恢复前后变化。
+
+八小时验收使用默认参数和真实授权会话，每分钟记录 CPU 累计时间、RSS、实际目录增长与状态。
+单核 CPU 百分比为累计 CPU 秒数增量／墙钟秒数 × 100，目标 ≤5%；RSS 峰值 ≤300 MiB。
+有效启用时段成功采样／应有 tick ≥99%，忙碌、错误、编码失败均计缺失；系统暂停与手动暂停另记。
+不足八小时或无权限时必须报告未完成，构建、fixture 与短跑都不能替代。
+
+## 原生回放与在线读取
+
+设置／菜单的“查看记录”按采集 Mac 时区列出日期和时间范围。范围最多 15 分钟，按会话、
+显示器和时钟回拨拆分；只包含 ready 段。打开默认暂停，20×／40×／60× 使用真实采集时间；
+逐帧保持暂停，末尾停止。关闭查看不停止采集，暂停采集不关闭读服务。
+
+读服务由唯一 writer 持有，路径为 `runtime/read.sock`（0600，父目录 0700），仅接受同 UID。
+清理先使读取失效、取消解码，实际读取许可归零后才删除。视图最多 8 个，空闲 60 秒、
+绝对 30 分钟；单视图最多 900 帧，索引合计 8 MiB。最多 2 个解码任务，预取后续 2 帧；
+图像缓存最多 16 帧／128 MiB，缩略图 16 MiB。JPEG 仅按需在内存生成，不另存回放视频。
+
+Backend 路由 `/api/screen-recording` 复用现有 Bearer、隧道认证和服务端会话作用域。
+Backend 只按需连接本机 socket，不管理采集生命周期。隔离验证可在 Backend 启动环境中指定
+`RUNWEAVE_SCREEN_JOURNAL_SOCKET`，HTTP 不接受路径覆盖。iOS 入口在首页更多菜单，当前 UI
+需要 iOS 17+；只在线查看，前后台及连接作用域变化清除画面，断线确认或超过 5 秒未确认后隐藏。
+索引和媒体均经现有 APIClient，HTTP 不缓存；图像内存缓存最多 16 帧／64 MiB，缩略图 8 MiB。
+
+集成工具 scheme 为 `ScreenJournalReadVerify`，仅接受显式隔离 socket 与合成 manifest：
+
+```bash
+ScreenJournalReadVerify --socket ABSOLUTE_SOCKET --fixture-manifest ABSOLUTE_MANIFEST
+ScreenJournalFixture --data-dir NEW_EMPTY_ABSOLUTE_DIRECTORY --scenario playback
+```
+
+`playback` 生成可视帧号、重复时间、回拨、隐私和间隔样本，不能替代真实采集证据。
+Debug 隔离实例的本地 `diagnostics` 方法只返回资源计数，不经过 HTTP 暴露。显式创建隔离目录
+`runtime/hold-read` 可使一个已启动的 reader 最长停留 30 秒；`held-read.json` 标记实际持有许可。
+移除 gate 后 reader 退出。该入口仅用于验证取消不提前释放文件；Release 不执行该行为。
+
+验收合同见 [读取服务](../../docs/testing/screen-recording/read-service.testplan.yaml) 与
+[原生回放](../../docs/testing/screen-recording/playback.testplan.yaml)。构建和合成集成通过不代表
+全合同通过；真实 Mac、模拟器、资源压力与故障用例须分别取证。二期实施验收尚在进行。
+
+## 事项分析（开发中，默认关闭）
+
+分析不属于采集依赖。唯一 App owner 管理独立 `analysis.sqlite`；Backend 通过同用户 socket
+领取有代际和期限的批次、续租并提交结果。HTTP 只公开鉴权后的事项、日期快照、证据解析和
+有界重试，不公开 claim/commit。原始采集与回放在分析不可用时继续工作。
+
+配置入口为 `screenRecording.analysis.*`，需显式绑定设备、生效时间、视觉模型与 effort。
+Backend 每分钟检查，最多四批，常规最多十五帧；模型子进程受超时、输出和图片到期约束。
+临时图片在子进程退出后清理，Backend 崩溃时独立 watchdog 回收自己创建的进程组。
+屏幕来源只能形成 documented/discussed，Agent 自述不能独立升级为 verified。
+
+Mac/iOS 默认显示事项，并保留原始记录切换。证据通过 captureID 在线重新解析，未保存 viewID
+或媒体路径。日期导出冻结内容及哈希，修订按日期维护；文字与修订本地保留三十天，媒体仍按
+原保留策略。Daily Record 的可选接入合同见 [CLI](../../docs/cli/README.md#屏幕事项冻结导出)。
+
+分析验收工具只可操作独立 fixture 根目录：`ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT`。
+完整需求与未完成项见 [三期计划](../../docs/plans/2026-10-31-screen-recording-phase-3.md)；工具通过
+不等于真实来源启用、原任务定时运行、随记发布或手机通知已验收。

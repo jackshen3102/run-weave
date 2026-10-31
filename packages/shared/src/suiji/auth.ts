@@ -13,6 +13,7 @@ export type SuijiInfo = SuijiIdentity & {
     workRecords?: boolean;
     workSources?: boolean;
     workBrowserHistory?: boolean;
+    workScreenTimeline?: boolean;
     correction?: boolean;
     correctionHistory?: boolean;
   };

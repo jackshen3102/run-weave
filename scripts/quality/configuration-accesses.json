@@ -11295,5 +11295,133 @@
     "count": 2,
     "category": "test",
     "reason": "读取本例临时浏览上报状态快照，核对来源迁移 dry-run 无副作用；仅访问隔离 fixture，不读取真实用户配置。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/provider.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "向独立 Codex 子进程提供现有鉴权与可执行路径环境；模型参数通过配置目录显式读取。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/provider.ts",
+    "kind": "file-io",
+    "expression": "readFile(output)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "屏幕分析运行时材料及结构化结果，非配置输入；临时文件使用私有目录并在进程退出后清理。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/provider.ts",
+    "kind": "file-io",
+    "expression": "writeFile(schema)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "屏幕分析运行时材料及结构化结果，非配置输入；临时文件使用私有目录并在进程退出后清理。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/runtime.ts",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "屏幕分析运行时材料及结构化结果，非配置输入；临时文件使用私有目录并在进程退出后清理。"
+  },
+  {
+    "file": "backend/src/screen-recording/client.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_SCREEN_JOURNAL_SOCKET",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "二期已有隔离验证 socket 覆盖入口；正式路径保持 ScreenJournal 标准目录。"
+  },
+  {
+    "file": "packages/app-ios/Sources/RunweaveIOS/Features/ScreenRecording/ScreenRecordingPlaybackModel.swift",
+    "kind": "native-or-shell",
+    "expression": "let saved = UserDefaults.standard.integer(forKey: \"journalPlaybackSpeed\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原生回放速度的设备本地 UI 偏好，不作为 Backend 配置。"
+  },
+  {
+    "file": "packages/app-ios/Sources/RunweaveIOS/Features/ScreenRecording/ScreenRecordingPlaybackModel.swift",
+    "kind": "native-or-shell",
+    "expression": "speed = value; UserDefaults.standard.set(value, forKey: \"journalPlaybackSpeed\"); lastTick = .now",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原生回放速度的设备本地 UI 偏好，不作为 Backend 配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/screen-recording.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(output,'export.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "屏幕分析运行时材料及结构化结果，非配置输入；临时文件使用私有目录并在进程退出后清理。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/screen-recording.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(output,'manifest.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "屏幕分析运行时材料及结构化结果，非配置输入；临时文件使用私有目录并在进程退出后清理。"
+  },
+  {
+    "file": "packages/screen-recording-macos/Sources/ScreenJournalApp/JournalPlaybackModel.swift",
+    "kind": "native-or-shell",
+    "expression": "let saved = UserDefaults.standard.integer(forKey: \"journalPlaybackSpeed\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原生回放速度的设备本地 UI 偏好，不作为 Backend 配置。"
+  },
+  {
+    "file": "packages/screen-recording-macos/Sources/ScreenJournalApp/JournalPlaybackModel.swift",
+    "kind": "native-or-shell",
+    "expression": "speed = value; UserDefaults.standard.set(value, forKey: \"journalPlaybackSpeed\"); lastTick = .now",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "原生回放速度的设备本地 UI 偏好，不作为 Backend 配置。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/provider.ts",
+    "kind": "environment",
+    "expression": "environment[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "构造模型子进程最小运行环境，不继承 Backend 凭据。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/provider.ts",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "读取明确白名单中的系统路径、代理与 Codex 登录上下文供隔离子进程使用。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/temporary.ts",
+    "kind": "file-io",
+    "expression": "readFile(owner)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取私有临时作业 owner 标记，仅清理已退出作业，不向标记 PID 发送信号。"
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/temporary.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(directory,'owner.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "记录自有模型临时目录的进程 owner，供崩溃残留回收。"
+  },
+  {
+    "file": "packages/suiji-server/scripts/verify-reporting.ts",
+    "kind": "file-io",
+    "expression": "writeFile(exporter)",
+    "count": 1,
+    "category": "test",
+    "reason": "在独立临时目录生成合成屏幕导出器，验证真实 HTTP/MCP 来源迁移与发布恢复，不读取个人录屏。"
   }
 ]

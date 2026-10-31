@@ -17,6 +17,7 @@ struct HomeView: View {
   @State private var newProject = false
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
+  @State private var showingScreenRecording = false
   @State private var renaming: HomeTerminal?
   @State private var moving: HomeTerminal?
   @State private var initializedGeneration: Int?
@@ -185,6 +186,7 @@ struct HomeView: View {
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
+          Button("屏幕记录") { showingScreenRecording = true }.accessibilityIdentifier("screen-recording-entry")
           Button("Mac 桌面") { remoteDesktop.managingHosts = true }
             .accessibilityIdentifier("remote-desktop-hosts")
           Button("开发资源") { session.showingDevelopmentResources = true }
@@ -218,6 +220,10 @@ struct HomeView: View {
         expanded.insert(id)
         query = ""
       }
+    }
+    .sheet(isPresented: $showingScreenRecording) {
+      if #available(iOS 17.0, *) { ScreenRecordingBrowserView(session: session) }
+      else { Text("屏幕记录回放需要 iOS 17 或更新版本").padding() }
     }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
     .confirmationDialog(

@@ -1,3 +1,4 @@
+import type { AnalysisEvidenceReader } from "./analysis-evidence-reader.js";
 import type { SupervisionConversationReader } from "./supervision-reader.js";
 import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import type { AppServerConversationResponse, ConversationTurn } from "@runweave/shared/terminal/conversation";
@@ -7,7 +8,12 @@ import type { TraeConversationReader } from "../trae/conversation-reader.js";
 import { ConversationReadError } from "./conversation-source.js";
 
 export class ConversationReader {
-  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly trae: TraeConversationReader, private readonly supervision?: SupervisionConversationReader) {}
+  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly trae: TraeConversationReader, private readonly supervision?: SupervisionConversationReader, private readonly analysis?: AnalysisEvidenceReader) {}
+
+  async readAnalysis(thread: AppServerThreadRef, cursor?: string) {
+    if (thread.agent !== "codex" || !this.analysis) return { events: [],nextCursor: cursor ?? "",coverage: "unavailable" as const,bytes: 0 };
+    return this.analysis.read(thread.threadId,thread.projectId,cursor);
+  }
 
   async readSupervision(thread: AppServerThreadRef | { agent: "codex"; threadId: string }, requiredIds: string[]) {
     if (thread.agent !== "codex") return { ...await this.read(thread), indexing: false };

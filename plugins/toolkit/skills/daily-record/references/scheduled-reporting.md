@@ -138,3 +138,18 @@ Mac 飞书另登记 `feishu:<accountScope>:messages`，producerId/sourceNamespac
 [上报验收合同](../../../../../docs/testing/skills/daily-record-reporting.testplan.yaml) 与 [随记导入合同](suiji-work-records.md) 分别验证采集和写入。集成验证入口为 `pnpm --filter @runweave/suiji-server exec tsx scripts/verify-reporting.ts <隔离PostgreSQL18端口>`，只创建并清理随机临时数据库，不读取真实聊天。
 
 停用仅禁用已有两个任务，保留本地状态/outbox/成功事实；必要时按生效日期停用来源。不删除用户原始对话、不重置机器或事项身份、不执行破坏性数据库回退。
+
+## 屏幕事项来源（可选，默认关闭）
+
+仅 Mac 配置可增加 `sources.screen`：`enabled`、`effectiveFrom`（上海日期）、
+`expectedDeviceID` 和 `exporterArgv`。后者固定为已部署 CLI 的绝对可执行文件路径加
+`screen-recording analysis export --instance stable`；job adapter 附加日期和私有新输出目录。
+使用原 `migrate-sources --next-config ... --dry-run` 核对，再用同入口应用；存在未结束批次
+时先恢复，不手动删 ledger/outbox。producerId、namespace、任务身份、旧来源及 03:00 调度不变。
+
+服务须声明 `workScreenTimeline=true`，注册 scope
+`screen:<producerId>:<deviceID>:observed`。生效日前不要求该来源；冻结导出校验设备、日期、
+快照版本、内容哈希与文件哈希，跨页未读完或缺口不能标完整。只发布稳定 card/matter 引用与
+摘要。确认独立回读后保存已消费 revision；prepare 补查最近七天的日期修订，同事实沿旧键更新。
+安装态 CLI、Skill 和 collector 需分别部署；源码修改不表示线上任务已升级。本期隔离实现验证
+不授权更改用户实际任务、迁移个人来源或发布真实随记。

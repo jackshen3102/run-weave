@@ -1,0 +1,154 @@
+version: 1
+name: 屏幕记录二期读取与服务边界
+description: >
+  二期待实现验收合同，不代表现有功能已通过。覆盖单 writer 下的并发读取、清理、协议与鉴权。
+  每例独立建立归属明确的 Debug 隔离目录、fixture 和服务；不得操作正式库、其他任务进程或个人记录。
+  合成数据与真实采集分别报告，完成后只释放本例资源。使用实现后的 ScreenJournalReadVerify 和真实 Backend 请求取证。
+cases:
+  - id: SRR-001
+    name: 采集运行时只读已提交记录
+    required: true
+    description: 保持唯一 writer 运行时 ready 可读取，writing 内容不能作为已保存画面返回。
+    preconditions:
+      - 本例独立 Debug App 已授权并在隔离目录采集无敏感内容，存在一个 ready 段和当前 writing 段。
+      - 本例读服务及验证工具由相同源码构建，记录进程和 socket 身份。
+    steps:
+      - 不停止 writer，通过读服务查询并取 ready 首中尾帧，核对采集标记和帧时间。
+      - 查询当前 writing 区间，确认只显示整理中，媒体请求不能得到未封口文件。
+      - 读取后等待至少两个采样周期，确认同一 writer 继续记录，随后正常停止本例 App。
+  - id: SRR-002
+    name: 清理不删除仍被解码使用的文件
+    required: true
+    description: 同一段进入 deleting 后拒绝新读并取消旧读，实际 reader 退出后才删除，迟到画面不返回。
+    preconditions:
+      - 本例 playback fixture 的 ready 段可解码，Debug 验证入口能延迟一个实际读取任务并记录许可状态。
+      - 本例隔离配置可触发过期清理，不改变正式配置或系统时间。
+    steps:
+      - 发起受控读取，在实际解码持有许可期间触发该段清理，确认新媒体请求被拒绝。
+      - 暂不释放受控任务，确认文件仍在且没有将取消回执当作实际退出，也没有返回旧画面。
+      - 释放并等待 reader 退出，确认文件与索引被清理、引用归零，清理后的快照帧返回 410。
+  - id: SRR-003
+    name: 无法释放读取时仍遵守存储预算
+    required: true
+    description: 未退出 reader 不能让清理无限绕过容量预算，剩余空间不足时明确停止新采集。
+    preconditions:
+      - 本例独立隔离 App 使用可控的容量上限，存在受控未退出 reader 和可清理的其他段。
+    steps:
+      - 触发容量清理，确认先清理其他候选并报告 read_cleanup_pending，不删除在读文件。
+      - 保持读取受控且可用空间仍不满足预算，确认新采集明确停止，不继续增长或假报清理成功。
+      - 释放本例 reader，确认正常完成清理并可由用户恢复采集，记录前后目录字节数。
+  - id: SRR-004
+    name: 时间目录和分页保持确定顺序
+    required: true
+    description: 日期边界、回拨、重复时间戳和 catalog 更新不能造成重复或静默漏页。
+    preconditions:
+      - 本例 playback fixture 含跨日、夏令时、跨显示器、会话内回拨、同毫秒不同 sequence 及超过一页的范围，manifest 给出预期分组。
+    steps:
+      - 查询各日期和所有分页，逐项与 manifest 比对实际 UTC 边界、范围拆分、capture ID 与稳定顺序。
+      - 在分页过程中提交新 ready 段，再使用旧 cursor，确认返回 409 并要求刷新，而非静默拼接不同版本。
+      - 重新从第一页查询，确认得到新版本完整目录，不把前台应用当作分组主键。
+  - id: SRR-005
+    name: 精确取帧与随机定位不误用视频时间
+    required: true
+    description: 顺序、跨段、反向和远跳解码均命中指定 capture ID，保留真实采集时间。
+    preconditions:
+      - 本例 fixture 有至少两个可解码段，每帧含唯一帧号，采样时间不等于 MP4 PTS。
+    steps:
+      - 用验证工具依次请求相邻帧、下一段首帧、上一段中间帧和远端帧，打开返回图核对帧号。
+      - 比对每个 capture 的真实毫秒时间与 manifest，确认未以视频播放秒数计算实际时刻。
+      - 连续快定位多个目标，确认最终返回对应最后目标，旧代际结果不能覆盖。
+  - id: SRR-006
+    name: 期限与媒体故障返回不同状态
+    required: true
+    description: 未知、已清理、隐私和损坏资源按合同区分，缓存不能绕过本机状态核验。
+    preconditions:
+      - 本例隔离 fixture 分别包含正常帧、隐私帧、可清理帧和损坏媒体，且已为这些帧建立 view。
+    steps:
+      - 请求不存在的 capture ID，确认 404；请求隐私帧，确认 PRIVATE_FRAME 且无真实画面和应用名。
+      - 先读可清理帧使其进入缓存，再清理并重复请求，确认 410 而不是缓存命中。
+      - 请求损坏帧，确认 MEDIA_UNAVAILABLE，不显示成过期、空数组或永久加载。
+  - id: SRR-007
+    name: 本地 socket 不暴露额外网络入口
+    required: true
+    description: 服务只接受已校验的同用户 Unix socket，非法报文不会影响采集。
+    preconditions:
+      - 本例独立 App 在隔离目录监听，验证工具可以发送分片及异常协议报文并检查文件权限。
+    steps:
+      - 核对 socket 父目录为 0700、socket 为 0600、owner 正确且无 TCP 监听。
+      - 分片发送合法报文，确认能正确组装；发送超限头、错误版本和路径型参数，确认拒绝且不打开额外文件。
+  - id: SRR-008
+    name: 第二实例不能抢占读服务
+    required: true
+    description: writer 锁拥有者保持唯一，第二实例不能删除或替换其 socket。
+    preconditions:
+      - 本例第一个隔离实例已持锁并能读取 fixture，已记录 PID 和 socket inode。
+    steps:
+      - 对同一隔离目录启动第二实例，确认被 writer 锁拒绝，未创建第二 writer。
+      - 再向第一实例读帧，确认成功且 socket 身份未被替换；只关闭本例进程。
+  - id: SRR-009
+    name: 索引和媒体同样受到 Runweave 鉴权保护
+    required: true
+    description: 所有新路由要求现有访问凭据，view ID 本身不能授予媒体访问权。
+    preconditions:
+      - 本例独立 Backend 连到隔离读服务，拥有有效和无效的测试访问令牌，并能取得一个 view ID。
+    steps:
+      - 分别对 status、ranges、views 和 frame 发送无令牌、无效令牌和有效令牌请求，确认只有有效凭据可以读取。
+      - 去掉媒体请求的令牌但保留 view ID，确认仍被拒绝，响应没有媒体字节或本地绝对路径。
+      - 检查成功响应为 no-store，媒体 Content-Type 与实际字节一致，Backend 不产生媒体副本。
+  - id: SRR-010
+    name: 隧道认证不会被媒体路由绕过
+    required: true
+    description: 通过已配置隧道访问时先通过隧道边界，再通过 App 鉴权，两者互不替代。
+    preconditions:
+      - 本例有归属明确、启用隧道认证的 Backend 测试入口和隔离记录；不能提供该条件时单独报告本例阻塞。
+    steps:
+      - 使用有效 App 令牌但不带入口要求的隧道凭据查询列表和媒体，确认被隧道边界拒绝。
+      - 同时满足两层认证后重复请求，确认可读取隔离记录且 App 未收到手机 Bearer。
+  - id: SRR-011
+    name: 重启读服务使旧视图失效
+    required: true
+    description: serverEpoch 改变后旧 view 不可复用，新服务能读取原 ready 数据且不自动启用采集。
+    preconditions:
+      - 本例隔离 App 暂停采集但读服务运行，已建立 view 并记录 serverEpoch 与媒体摘要。
+    steps:
+      - 正常退出本例 App 并重新启动，重新取得 PID 和 socket，确认新 serverEpoch 不同且采集仍暂停。
+      - 请求旧 view，确认明确失效；新建 view 并读取，确认原 ready 数据和媒体摘要未改变。
+  - id: SRR-012
+    name: Backend 生命周期不接管采集
+    required: true
+    description: 适配层按需连接，Backend 不启动或停止 ScreenJournal，也不因它缺席而启动失败。
+    preconditions:
+      - 本例有独立 Backend 和独立 ScreenJournal 目录，全部进程归属可确认。
+    steps:
+      - 在 ScreenJournal 未启动时启动 Backend，确认其他能力正常且记录 status 为 notRunning。
+      - 启动本例 ScreenJournal 并通过原生控件开始采集，确认读服务随后可用。
+      - 正常停止本例 Backend，确认 App 继续采样、只丢失本例手机访问通道，再正常停止 App。
+  - id: SRR-013
+    name: 有界资源在取消和页面释放后归还
+    required: true
+    description: 视图、解码任务、socket 和缓存不随重复请求无限增长。
+    preconditions:
+      - 本例隔离读服务具备资源计数与任务完成诊断，验证工具可创建和释放多个 view。
+    steps:
+      - 超过 8 个 view 或 4 条 socket 请求，确认按合同返回 busy，未抢占既有合法 view。
+      - 对同一 view 连续发送并取消拖动目标，确认实际解码并发不超过 2、预取不超过 2 帧且队列只保留最新目标。
+      - 释放 view 并等待在途任务实际退出，确认计数归零、缓存不超字节预算、没有未归属后台任务。
+  - id: SRR-014
+    name: 不安全或过长的本地路径拒绝启动读服务
+    required: true
+    description: 路径验证失败不能跟随符号链接、截断地址或回退公共网络。
+    preconditions:
+      - 本例拥有可删除的空白隔离目录，可分别建立符号链接路径与超过 sockaddr_un 容量的路径，不接触正式目录。
+    steps:
+      - 分别以两种非法路径启动本例读服务，确认明确报错且没有监听其他地址。
+      - 检查链接目标及相邻目录，确认未写入或删除不属于本例服务的文件。
+  - id: SRR-015
+    name: 视图绑定服务端认证会话
+    required: true
+    description: 另一个有效认证会话不能借 view ID 或伪造连接头读取其他会话视图。
+    preconditions:
+      - 本例独立 Backend 有两个不同 sessionId 的有效 App 会话及各自服务端 connectionId，第一会话已创建 view。
+    steps:
+      - 第二会话携带第一会话的 view ID 请求媒体，确认拒绝且不返回图像。
+      - 第二会话再伪造第一会话的 X-Connection-ID，确认仍拒绝，权限依据不是请求头。
+      - 第一会话正常刷新令牌后重试自己 view，确认 sessionId 保持且可以读取。

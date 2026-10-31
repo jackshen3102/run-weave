@@ -1,0 +1,108 @@
+version: 1
+name: 既有每日事实任务接入屏幕事项
+description: >
+  三期待实现合同。前七例使用独立配置、stateDir、发布目标及来源 fixture，不修改真实任务或个人记录。
+  部署后的真实来源、定时运行及手机到达分开验收，需已完成对应部署且在授权范围内执行。
+  格式校验不代表任务运行或随记发布通过。
+cases:
+  - id: DRS-001
+    name: 增加来源保留原有任务身份
+    required: true
+    description: 来源迁移只增加 screen，保持 producer、namespace、已有来源和历史状态，不重建日报任务。
+    preconditions:
+      - 本例独立旧版 mac-job 配置及状态包含已有来源、confirmed 回执和人工修改，无未结束发布请求。
+      - 新服务能力、CLI 和迁移入口已安装到本例固定路径。
+    steps:
+      - 保存配置与状态摘要，执行来源迁移 dry-run，确认仅增加指定设备及生效日的 screen 来源。
+      - 执行迁移并读取结果，确认原身份、来源、日期、目标、人工字段和回执保持，备份与迁移记录可读。
+      - 再执行同一迁移，确认幂等且没有创建新任务或重复 scope。
+  - id: DRS-002
+    name: 待恢复发布请求阻止来源迁移
+    required: true
+    description: pending 请求必须按原冻结内容恢复，不能借新增来源丢弃旧请求或更换幂等键。
+    preconditions:
+      - 本例独立旧配置有发布结果未知的冻结请求及可查询隔离随记服务，已记录请求摘要和键。
+    steps:
+      - 尝试增加 screen 来源，确认迁移拒绝且 pending 内容、键和旧配置不变。
+      - 按原请求 reconcile 并独立回读，确认不重复创建事实，完成后再迁移可成功。
+  - id: DRS-003
+    name: 来源能力与冻结材料校验
+    required: true
+    description: 旧服务、设备不匹配或版本混合不能被伪装成可发布的完整屏幕来源。
+    preconditions:
+      - 本例 exporter 与隔离随记可分别提供缺 feature、错误 deviceID、错误 hash 及冲突 revision 响应。
+    steps:
+      - 逐项读取异常响应，确认能力不足明确阻塞接入，材料身份及摘要错误被拒绝。
+      - 提供合法完整快照，完成 prepare 和阅读，确认 receipt 绑定原快照且来源名称限定为已记录范围。
+  - id: DRS-004
+    name: 屏幕不可用不阻塞其他每日事实
+    required: true
+    description: pending 只有限等待，缺失来源被标注，其他已读来源仍可整理与发布。
+    preconditions:
+      - 本例每日 job 有可读的 Agent 和飞书材料，screen exporter 可控制为持续 pending 或 unavailable。
+    steps:
+      - 执行本例 prepare，确认 pending 等待不超过一百二十秒，unavailable 不无限重试。
+      - 整理并发布可用事实至隔离目标，确认 coverage 为 partial 或 unavailable，没有宣称全天完整或没有工作。
+      - 确认没有启动第二个屏幕分析器、修改采集开关或创建第二个日报任务。
+  - id: DRS-005
+    name: 同一事项跨来源合并且不拔高事实
+    required: true
+    description: 屏幕、Agent、飞书和浏览的同一目标只形成一个事实，完成状态由可核查证据决定。
+    preconditions:
+      - 本例四来源 fixture 包含同一事项、仅有截图成功提示的事项及有真实工具成功回执的事项，人工标注给出预期键和状态。
+      - 已有事实含人工标题及稳定 eventKey，隔离目标支持 screen-timeline。
+    steps:
+      - 完成全文阅读与合并，运行 validate，核对同目标多来源落在同一事实，人工标题及旧 eventKey 保持。
+      - 确认截图提示或 Agent 自述没有升级为 verified，纯屏幕仅 documented 或 discussed；verified 引用当天独立工具回执。
+      - 发布后独立回读，确认没有按十五分钟批次制造重复记录，sourceRefs 不含图片、路径或完整会话。
+  - id: DRS-006
+    name: 迟到分析修订更新已发布日
+    required: true
+    description: 七天窗口内的 dayRevision 变化触发补核对，稳定事实身份及人工字段保留。
+    preconditions:
+      - 本例状态含七天内 confirmed 日及窗口外 confirmed 日，两者均保存已消费 revision 和人工字段。
+      - 本例 exporter 可发布更高 revision，原键仍可对应同一事实。
+    steps:
+      - 提升两个日期的 revision 并运行 prepare，确认仅窗口内已发布日进入补核对。
+      - 完成核对和发布，确认更新原事实且人工字段不变，消费 revision 前进，没有重复新增。
+      - 再次运行，确认无新 revision 时不重复发布；窗口外日期仅在显式日期重整时处理。
+  - id: DRS-007
+    name: 日报输出成功以前必须独立回读
+    required: true
+    description: 服务写入成功但响应丢失时恢复原请求，回读确认之前不得输出已保存。
+    preconditions:
+      - 本例隔离服务可在提交成功后丢弃响应，日报配置和冻结 export 均归本例所有。
+    steps:
+      - 发布并丢弃响应，确认 job 保持 unknown 或 pending，不报告 succeeded 或已保存。
+      - 使用原幂等键恢复并独立回读，确认恰好一份事实且内容匹配后进入 confirmed。
+      - 检查最终任务 outcome，仅在确认后报告已保存，通知重试不调用再次发布。
+  - id: DRS-008
+    name: 原任务真实接入后的手动运行
+    required: true
+    description: 固定部署与真实来源迁移后，原任务手动运行完成可追溯随记写入，不把隔离结果当上线成功。
+    preconditions:
+      - 本机部署与来源迁移已在授权范围完成，原 stable 任务及 pending 状态已重新读取。
+      - 本次真实来源使用已允许分析的记录，随记目标与既有自动发布策略保持。
+    steps:
+      - 记录原 taskId、schedule、timezone、目标和来源身份，确认仍为既有任务且每日北京时间三点执行。
+      - 在授权范围内手动运行原任务，读取其来源 receipt，确认真实 screen 与原有来源被消费。
+      - 独立回读随记并核对稳定键、来源、日期和状态；分别报告运行与回读证据，不宣称已验证到点触发。
+  - id: DRS-009
+    name: 原三点任务实际到点运行
+    required: true
+    description: 真实 scheduledFor 为北京时间三点的原任务运行成功，不能用手动运行代替。
+    preconditions:
+      - 原任务已接入 screen 且保持 enabled，每日三点和 Asia/Shanghai 未更改，可只读查询运行与随记记录。
+    steps:
+      - 观察下一次实际到点运行，读取 scheduledFor、trigger 和 taskId，确认不是手动 run 或另一任务。
+      - 查看来源 coverage 与最终 outcome，再独立回读对应工作日记录；缺来源按实际状态报告，不将 partial 说成完整。
+  - id: DRS-010
+    name: 手机收到已有任务完成通知
+    required: true
+    description: 既有 scheduled-run 推送在真实手机到达，点击沿用任务入口；APNs 接受不等于手机已收到。
+    preconditions:
+      - 本例有已确认保存的日报运行、用户已开启的既有任务订阅及可观察的真实手机，不更改通知偏好。
+    steps:
+      - 读取该 run 的通知投递状态并在手机实际观察通知，分别记录投递接受与设备到达证据。
+      - 点击通知，确认进入对应 scheduled-run 且保存状态和日期准确，未生成第二条日报或另发重复完成通知。
+      - 手机不可观察或无既有订阅时单独报告本例阻塞，不用模拟器、代码检查或网关响应替代。

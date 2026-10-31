@@ -49,3 +49,14 @@ description: 从本机 Agent 记录、飞书本人事项及 Mac 浏览记录整�
 - 跨日只记录新增进展；旧文档转发、日报或周报复述不能把历史产出改记为编辑当天完成。保存本次生成文档的 token 与内容覆盖日期，供后续识别派生报告，防止反复采入自身。
 - 保留主体和状态。申请、部署触发、Agent 报告、独立验证、合并及上线分别表述；浏览器标签或界面中出现某项目不等于在该项目做了工作。团队文档只取本人相关部分，不把整组成果归给本人。
 - 飞书及合并报告按[飞书采集与合并](references/feishu.md)保存内部事实索引及结论 Markdown。现有 `pnpm daily-record validate/render` 只支持本地材料，不把飞书伪装成 Codex 或混入其 collectionId。
+
+## 可选屏幕事项来源
+
+仅在既有 Mac job 配置已迁移启用 `sources.screen` 时读取。使用固定 stable CLI 的鉴权冻结导出，
+不直接打开录屏数据库，不上传截图、视频或会话全文。屏幕事项与 Agent、飞书及浏览材料按同日
+同目标合并；不能逐卡发布重复日报。纯屏幕依据只支持 documented/discussed，截图中的成功文字
+不能证明 verified。缺口、来源离线和未处理尾部必须保留为 partial/unavailable。
+
+遵循原 prepare/read/validate/publish/独立回读链路。pending 请求先原样恢复，再比较最近七天
+已消费的屏幕日期版本；修订沿用稳定 eventKey 和人工字段保护。配置迁移和部署规则见
+[定时报送](references/scheduled-reporting.md)，不自行新建任务或更改通知偏好。

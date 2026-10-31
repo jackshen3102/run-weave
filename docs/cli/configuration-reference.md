@@ -19,6 +19,224 @@
 - services.feishu.legacyWebhook.url：HTTPS，无用户信息和 fragment。
 - 敏感字段拒绝把脱敏占位符当成实际凭据。初始化、迁移和消费者检查见 [配置 CLI](./configuration.md)。
 
+## screenRecording.analysis
+
+配置域：`screenRecording.analysis`。
+
+### screenRecording.analysis.enabled
+
+启用本机屏幕事项分析，默认关闭
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | boolean；允许 null 恢复默认       |
+| 默认              | false                             |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属消费者重载                    |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 按字段类型校验                    |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+### screenRecording.analysis.deviceID
+
+绑定 ScreenJournal 设备身份
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | null                              |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属消费者重载                    |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 按字段类型校验                    |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+### screenRecording.analysis.effectiveFrom
+
+屏幕分析生效日期时间 ISO8601
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | null                              |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属消费者重载                    |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 按字段类型校验                    |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+### screenRecording.analysis.model
+
+已验证图片能力的 Codex 模型
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | null                              |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属消费者重载                    |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 按字段类型校验                    |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+### screenRecording.analysis.effort
+
+显式模型推理强度
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | null                              |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属消费者重载                    |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 按字段类型校验                    |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+## 数据存储
+
+配置域：`storage`。
+
+### storage.screenAnalysisDirectory
+
+本实例屏幕分析临时作业目录
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | 实例数据目录下 screen-analysis    |
+| 所属模块          | backend/screen-recording-analysis |
+| 生效              | 所属进程重启                      |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 绝对路径，必须属于所选实例        |
+| 显式迁移来源      | new-field:no-legacy-source        |
+
+### storage.browserProfileDirectory
+
+原 Backend profile 的显式目录
+
+| 属性              | 合同                                                      |
+| ----------------- | --------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                |
+| 默认              | <configRoot>/data/backend；已有 Stable 必须显式保留旧路径 |
+| 所属模块          | config-node/paths                                         |
+| 生效              | 所属进程重启                                              |
+| 敏感 / 远端可修改 | 否 / 否                                                   |
+| 约束              | 绝对路径，必须属于所选实例                                |
+| 显式迁移来源      | BROWSER_PROFILE_DIR                                       |
+
+### storage.authStoreFile
+
+认证数据库路径
+
+| 属性              | 合同                                      |
+| ----------------- | ----------------------------------------- |
+| 类型              | string；允许 null 恢复默认                |
+| 默认              | <browserProfileDirectory>/auth-store.json |
+| 所属模块          | config-node/paths                         |
+| 生效              | 所属进程重启                              |
+| 敏感 / 远端可修改 | 否 / 否                                   |
+| 约束              | 绝对路径，必须属于所选实例                |
+| 显式迁移来源      | AUTH_STORE_FILE                           |
+
+### storage.terminalSessionStoreFile
+
+终端存储路径
+
+| 属性              | 合同                                                  |
+| ----------------- | ----------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                            |
+| 默认              | <browserProfileDirectory>/terminal-session-store.json |
+| 所属模块          | config-node/paths                                     |
+| 生效              | 所属进程重启                                          |
+| 敏感 / 远端可修改 | 否 / 否                                               |
+| 约束              | 绝对路径，必须属于所选实例                            |
+| 显式迁移来源      | TERMINAL_SESSION_STORE_FILE                           |
+
+### storage.activityDirectory
+
+Activity 存储根；旧环境仅测试使用
+
+| 属性              | 合同                       |
+| ----------------- | -------------------------- |
+| 类型              | string；允许 null 恢复默认 |
+| 默认              | <configRoot>/data/activity |
+| 所属模块          | config-node/paths          |
+| 生效              | 所属进程重启               |
+| 敏感 / 远端可修改 | 否 / 否                    |
+| 约束              | 绝对路径，必须属于所选实例 |
+| 显式迁移来源      | RUNWEAVE_ACTIVITY_HOME     |
+
+### storage.evolutionDirectory
+
+Evolution 存储根；旧环境仅测试使用
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | string；允许 null 恢复默认  |
+| 默认              | <configRoot>/data/evolution |
+| 所属模块          | config-node/paths           |
+| 生效              | 所属进程重启                |
+| 敏感 / 远端可修改 | 否 / 否                     |
+| 约束              | 绝对路径，必须属于所选实例  |
+| 显式迁移来源      | RUNWEAVE_EVOLUTION_HOME     |
+
+### storage.experienceDirectory
+
+Experience 存储根
+
+| 属性              | 合同                         |
+| ----------------- | ---------------------------- |
+| 类型              | string；允许 null 恢复默认   |
+| 默认              | <configRoot>/data/experience |
+| 所属模块          | config-node/paths            |
+| 生效              | 所属进程重启                 |
+| 敏感 / 远端可修改 | 否 / 否                      |
+| 约束              | 绝对路径，必须属于所选实例   |
+| 显式迁移来源      | RUNWEAVE_EXPERIENCE_HOME     |
+
+### storage.scheduledTasksDirectory
+
+定时任务存储根
+
+| 属性              | 合同                              |
+| ----------------- | --------------------------------- |
+| 类型              | string；允许 null 恢复默认        |
+| 默认              | <configRoot>/data/scheduled-tasks |
+| 所属模块          | config-node/paths                 |
+| 生效              | 所属进程重启                      |
+| 敏感 / 远端可修改 | 否 / 否                           |
+| 约束              | 绝对路径，必须属于所选实例        |
+| 显式迁移来源      | RUNWEAVE_SCHEDULED_TASKS_HOME     |
+
+### storage.feishuDirectory
+
+飞书状态目录
+
+| 属性              | 合同                       |
+| ----------------- | -------------------------- |
+| 类型              | string；允许 null 恢复默认 |
+| 默认              | <configRoot>/data/feishu   |
+| 所属模块          | config-node/paths          |
+| 生效              | 所属进程重启               |
+| 敏感 / 远端可修改 | 否 / 否                    |
+| 约束              | 绝对路径，必须属于所选实例 |
+| 显式迁移来源      | RUNWEAVE_FEISHU_STATE_DIR  |
+
+### storage.terminalQuickInputStoreFile
+
+旧配置/内容文件定位；模型迁移后其旧路径仅作来源记录
+
+| 属性              | 合同                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                     |
+| 默认              | <terminalSessionStoreFile 所在目录>/terminal-quick-inputs.json |
+| 所属模块          | config-node/paths                                              |
+| 生效              | 所属进程重启                                                   |
+| 敏感 / 远端可修改 | 否 / 否                                                        |
+| 约束              | 绝对路径，必须属于所选实例                                     |
+| 显式迁移来源      | StoragePaths.terminalQuickInputStoreFile                       |
+
 ## 长任务监控
 
 配置域：`backend.taskSupervision`。
@@ -1076,136 +1294,6 @@ tmux 可执行文件
 | 敏感 / 远端可修改 | 否 / 否                                           |
 | 约束              | 按字段类型校验                                    |
 | 显式迁移来源      | RUNWEAVE_EXPERIENCE_LEARNING                      |
-
-## 数据存储
-
-配置域：`storage`。
-
-### storage.browserProfileDirectory
-
-原 Backend profile 的显式目录
-
-| 属性              | 合同                                                      |
-| ----------------- | --------------------------------------------------------- |
-| 类型              | string；允许 null 恢复默认                                |
-| 默认              | <configRoot>/data/backend；已有 Stable 必须显式保留旧路径 |
-| 所属模块          | config-node/paths                                         |
-| 生效              | 所属进程重启                                              |
-| 敏感 / 远端可修改 | 否 / 否                                                   |
-| 约束              | 绝对路径，必须属于所选实例                                |
-| 显式迁移来源      | BROWSER_PROFILE_DIR                                       |
-
-### storage.authStoreFile
-
-认证数据库路径
-
-| 属性              | 合同                                      |
-| ----------------- | ----------------------------------------- |
-| 类型              | string；允许 null 恢复默认                |
-| 默认              | <browserProfileDirectory>/auth-store.json |
-| 所属模块          | config-node/paths                         |
-| 生效              | 所属进程重启                              |
-| 敏感 / 远端可修改 | 否 / 否                                   |
-| 约束              | 绝对路径，必须属于所选实例                |
-| 显式迁移来源      | AUTH_STORE_FILE                           |
-
-### storage.terminalSessionStoreFile
-
-终端存储路径
-
-| 属性              | 合同                                                  |
-| ----------------- | ----------------------------------------------------- |
-| 类型              | string；允许 null 恢复默认                            |
-| 默认              | <browserProfileDirectory>/terminal-session-store.json |
-| 所属模块          | config-node/paths                                     |
-| 生效              | 所属进程重启                                          |
-| 敏感 / 远端可修改 | 否 / 否                                               |
-| 约束              | 绝对路径，必须属于所选实例                            |
-| 显式迁移来源      | TERMINAL_SESSION_STORE_FILE                           |
-
-### storage.activityDirectory
-
-Activity 存储根；旧环境仅测试使用
-
-| 属性              | 合同                       |
-| ----------------- | -------------------------- |
-| 类型              | string；允许 null 恢复默认 |
-| 默认              | <configRoot>/data/activity |
-| 所属模块          | config-node/paths          |
-| 生效              | 所属进程重启               |
-| 敏感 / 远端可修改 | 否 / 否                    |
-| 约束              | 绝对路径，必须属于所选实例 |
-| 显式迁移来源      | RUNWEAVE_ACTIVITY_HOME     |
-
-### storage.evolutionDirectory
-
-Evolution 存储根；旧环境仅测试使用
-
-| 属性              | 合同                        |
-| ----------------- | --------------------------- |
-| 类型              | string；允许 null 恢复默认  |
-| 默认              | <configRoot>/data/evolution |
-| 所属模块          | config-node/paths           |
-| 生效              | 所属进程重启                |
-| 敏感 / 远端可修改 | 否 / 否                     |
-| 约束              | 绝对路径，必须属于所选实例  |
-| 显式迁移来源      | RUNWEAVE_EVOLUTION_HOME     |
-
-### storage.experienceDirectory
-
-Experience 存储根
-
-| 属性              | 合同                         |
-| ----------------- | ---------------------------- |
-| 类型              | string；允许 null 恢复默认   |
-| 默认              | <configRoot>/data/experience |
-| 所属模块          | config-node/paths            |
-| 生效              | 所属进程重启                 |
-| 敏感 / 远端可修改 | 否 / 否                      |
-| 约束              | 绝对路径，必须属于所选实例   |
-| 显式迁移来源      | RUNWEAVE_EXPERIENCE_HOME     |
-
-### storage.scheduledTasksDirectory
-
-定时任务存储根
-
-| 属性              | 合同                              |
-| ----------------- | --------------------------------- |
-| 类型              | string；允许 null 恢复默认        |
-| 默认              | <configRoot>/data/scheduled-tasks |
-| 所属模块          | config-node/paths                 |
-| 生效              | 所属进程重启                      |
-| 敏感 / 远端可修改 | 否 / 否                           |
-| 约束              | 绝对路径，必须属于所选实例        |
-| 显式迁移来源      | RUNWEAVE_SCHEDULED_TASKS_HOME     |
-
-### storage.feishuDirectory
-
-飞书状态目录
-
-| 属性              | 合同                       |
-| ----------------- | -------------------------- |
-| 类型              | string；允许 null 恢复默认 |
-| 默认              | <configRoot>/data/feishu   |
-| 所属模块          | config-node/paths          |
-| 生效              | 所属进程重启               |
-| 敏感 / 远端可修改 | 否 / 否                    |
-| 约束              | 绝对路径，必须属于所选实例 |
-| 显式迁移来源      | RUNWEAVE_FEISHU_STATE_DIR  |
-
-### storage.terminalQuickInputStoreFile
-
-旧配置/内容文件定位；模型迁移后其旧路径仅作来源记录
-
-| 属性              | 合同                                                           |
-| ----------------- | -------------------------------------------------------------- |
-| 类型              | string；允许 null 恢复默认                                     |
-| 默认              | <terminalSessionStoreFile 所在目录>/terminal-quick-inputs.json |
-| 所属模块          | config-node/paths                                              |
-| 生效              | 所属进程重启                                                   |
-| 敏感 / 远端可修改 | 否 / 否                                                        |
-| 约束              | 绝对路径，必须属于所选实例                                     |
-| 显式迁移来源      | StoragePaths.terminalQuickInputStoreFile                       |
 
 ## 日志
 

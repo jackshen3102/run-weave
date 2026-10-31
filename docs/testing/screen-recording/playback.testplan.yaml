@@ -1,0 +1,199 @@
+version: 1
+name: 屏幕记录二期原生回放与手机链路
+description: >
+  二期待实现合同。Mac 原生操作使用 CUA；iOS 使用 toolkit:agent-device 与仓库共享模拟器池，
+  每例独立建立前提并记录构建、连接、数据来源和截图。合成回放可用于精确边界，真实链路用例必须读取本例真实采集。
+  不对正式库做清理或破坏性操作；不操作其他任务的设备和进程。图片原型、构建和 fixture 不替代真实交互。
+cases:
+  - id: SRP-001
+    name: Mac 展示整屏和准确的前台应用标签
+    required: true
+    description: 时间段是主标题，前台应用仅描述当前帧，详情保持完整截图宽高比。
+    preconditions:
+      - 本例 Debug App 在隔离目录保存了两个可控应用并排可见、前台应用发生切换的真实 ready 记录。
+    steps:
+      - 用 CUA 从菜单打开查看记录，选择对应日期与范围，确认主标题是时间范围而不是某个应用名。
+      - 逐帧查看切换前后画面，确认两应用和桌面边缘均可见，前台应用字段随当前帧变化。
+      - 关闭查看窗口，确认不改变本例原先采集意图。
+  - id: SRP-002
+    name: Mac 回放时钟与三档速度一致
+    required: true
+    description: 打开默认暂停，播放按实际记录时间推进，倍速不是 MP4 编码时长倍率。
+    preconditions:
+      - 本例 Mac App 有时刻明确且跨度足够的 playback fixture，首次速度偏好可在本例配置中隔离。
+    steps:
+      - 用 CUA 打开范围，确认首帧暂停并显示 20×；点击播放，确认画面和实际记录时间同步推进。
+      - 分别使用 20×、40×、60×，在无 buffering 的区间记录至少两秒单调时钟与播放位置，确认推进量符合倍率及一帧误差。
+      - 暂停后观察位置不推进，再打开范围确认记住最近选择的速度。
+  - id: SRP-003
+    name: Mac 拖动保留原播放状态
+    required: true
+    description: 拖动期间暂停，最终帧正确，松手恢复拖动前状态而不是总自动播放。
+    preconditions:
+      - 本例 Mac App 打开含唯一帧号的独立 fixture 范围，胶片带包含可定位的首中尾位置。
+    steps:
+      - 用 CUA 在暂停状态拖动至中间，确认大画面和实际时间定位正确，松手后仍暂停。
+      - 开始播放后快速前后拖动，确认拖动期间暂停，松手完成最终定位后继续播放。
+      - 等待旧请求可能返回，确认没有回跳到之前的拖动目标。
+  - id: SRP-004
+    name: Mac 逐帧与播放末尾行为确定
+    required: true
+    description: 上下帧精确定位且保持暂停，末尾不会自动跳到另一段。
+    preconditions:
+      - 本例 Mac App 有至少两个列表范围，当前范围每帧可通过 fixture 标记辨认。
+    steps:
+      - 用 CUA 播放后点击下一帧再上一帧，确认按实际采样序列移动并保持暂停。
+      - 播放到末尾，确认停在当前范围且不跳下一条；再次点击播放，确认从本范围开头开始。
+  - id: SRP-005
+    name: Mac 跨物理段回放保持时间连续
+    required: true
+    description: 15 分钟展示范围能跨越 10 分钟媒体分段，不漏帧或重复应用前一段时间。
+    preconditions:
+      - 本例 Mac App 的一个展示范围跨两个 ready 物理段，manifest 记录边界两侧帧。
+    steps:
+      - 用 CUA 回放经过物理段边界，核对两侧帧号、实际时间与应用元数据。
+      - 从第二段反向拖到第一段并逐帧越过边界，确认最终帧准确，未重置整个范围时间轴。
+  - id: SRP-006
+    name: Mac 隐私与缺口不会沿用旧画面
+    required: true
+    description: 隐私、已知暂停和未知长缺口有独立反馈，不伪造连续屏幕内容。
+    preconditions:
+      - 本例 Mac fixture 在同一范围包含正常帧、隐私占位、状态事件缺口和超过 60 秒的无事件间隔。
+    steps:
+      - 用 CUA 回放进入隐私区间，确认显示通用占位且不出现应用名或恢复原图入口。
+      - 拖动到已知暂停和未知长缺口，确认显示对应无记录状态，不延续之前的截图。
+      - 返回正常帧，确认可以继续查看而不误判整个范围损坏。
+  - id: SRP-007
+    name: Mac 查看不控制采集生命周期
+    required: true
+    description: 关闭查看窗口采集继续，暂停采集后已提交记录仍能查看。
+    preconditions:
+      - 本例独立 Mac App 正在隔离目录采集，至少有一个 ready 段且记录了当前采样计数。
+    steps:
+      - 用 CUA 打开回放再关闭查看窗口，等待两个采样周期并核对采样计数继续增长。
+      - 通过原生菜单暂停采集，再打开 ready 范围，确认可以读取与回放，没有自动恢复采集。
+  - id: SRP-008
+    name: 手机使用已有连接读取真实记录
+    required: true
+    description: Runweave 内入口复用现有登录，通过真实 Backend 读取 Mac 采集结果。
+    preconditions:
+      - 本例已申请 Runweave 模拟器租约并安装当前源码，已有可用 Runweave 连接，记录构建和 lease 身份。
+      - 当前连接 Backend 指向本例隔离 App，该 App 已真实采集包含可核对无敏感标记的 ready 帧。
+    steps:
+      - 使用 toolkit:agent-device 从首页更多菜单进入屏幕记录，确认没有新登录、配对或服务地址输入。
+      - 选择日期并打开范围，核对时间、实际画面标记与 Mac 真实记录一致；按播放、暂停和倍速，确认画面变化。
+      - 退出页面确认取消请求，完成本例后按设备池规则 finish，不宣称真机验收。
+  - id: SRP-009
+    name: 手机拖动与逐帧可准确定位
+    required: true
+    description: 手机最终定位不受迟到请求覆盖，播放与暂停状态保持正确。
+    preconditions:
+      - 本例模拟器已按租约安装当前 App，连接独立 Backend 和含明确帧号的 playback fixture。
+    steps:
+      - 使用 toolkit:agent-device 在暂停时拖动胶片带，确认最终帧号与时间匹配且保持暂停。
+      - 播放中连续前后拖动后松手，确认从最终位置继续；点上一帧或下一帧后保持暂停。
+      - 观察至旧请求均结束，确认画面不被旧目标覆盖。
+  - id: SRP-010
+    name: 手机断线后不依赖缓存继续查看
+    required: true
+    description: 断线检测后暂停并隐藏媒体，最迟超过五秒有效性期限后不可继续回放，重连保持暂停。
+    preconditions:
+      - 本例模拟器和独立 Backend 可安全断开本例连接，已经加载并播放隔离范围且缓存中有后续帧。
+    steps:
+      - 使用 toolkit:agent-device 观察播放，同时仅中断本例连接，记录断开与最后一次可用确认时间。
+      - 确认检测失败或有效确认超过五秒后画面和缩略图隐藏，不能拖动查看预加载帧。
+      - 恢复本例连接，确认重新校验范围并以暂停状态显示；不自动开始播放。
+  - id: SRP-011
+    name: 手机切换连接不会显示旧机器画面
+    required: true
+    description: generation 与来源约束使旧请求、视图和缓存不能进入新连接。
+    preconditions:
+      - 本例模拟器有两条可切换的测试连接，来源标记不同，其中一条媒体请求可受控延迟。
+    steps:
+      - 使用 toolkit:agent-device 在第一连接请求延迟帧，然后通过现有入口切换第二连接。
+      - 释放第一连接的迟到响应，确认第二连接只显示自己的状态或记录，没有第一台机器画面和应用名。
+      - 检查请求取消和缓存来源，确认旧 view 已释放，不只是视觉上暂时遮住。
+  - id: SRP-012
+    name: 手机媒体请求沿用令牌刷新
+    required: true
+    description: 媒体与列表使用同一凭据刷新机制，不新建认证状态或匿名重试。
+    preconditions:
+      - 本例模拟器连接独立 Backend，有可按现有认证机制控制失效的测试 access token 和有效 refresh token。
+    steps:
+      - 令 access token 失效后使用 toolkit:agent-device 打开新的未缓存画面，确认经过现有刷新后成功加载。
+      - 核对请求有现有 Authorization 和连接身份，未匿名重试或弹出屏幕记录专属登录。
+  - id: SRP-013
+    name: 手机前后台转换释放画面
+    required: true
+    description: 后台停止播放和请求，返回前台重新核验在线状态，不继续显示陈旧缓存。
+    preconditions:
+      - 本例模拟器连接隔离记录并正在播放，构建有可观察的请求与缓存计数。
+    steps:
+      - 使用 toolkit:agent-device 将 App 置于后台，确认播放停止、图像缓存清空、预取取消。
+      - 回到前台，确认重新核验服务有效性后保持暂停，不沿用后台前的未确认帧。
+  - id: SRP-014
+    name: 手机缩放与横屏保留完整画面
+    required: true
+    description: 暂停时可查看细节，旋转布局不改变所选帧，继续播放恢复适配画面。
+    preconditions:
+      - 本例模拟器打开四角有不同标记的完整横向截图，并已暂停在确定 capture ID。
+    steps:
+      - 使用 toolkit:agent-device 缩放和平移，确认可查看细节及四角，没有永久裁剪。
+      - 旋转为横屏再返回，确认 capture ID 和实际时间不变、播放控件可达。
+      - 点击播放，确认回到适配比例并继续回放，新的画面不继承旧帧的局部放大位置。
+  - id: SRP-015
+    name: 手机远端清理后停止使用缓存帧
+    required: true
+    description: 到期立即失效，容量删除在在线可用性核验后清除，不显示为普通加载失败。
+    preconditions:
+      - 本例模拟器打开隔离范围并已有缓存，Mac 验证入口可安全触发本例保留清理。
+    steps:
+      - 触发已缓存段的容量清理，等待一次两秒可用性核验及响应，确认相关画面和胶片带失效并显示已清理。
+      - 对另一个带明确到期时间的缓存帧等待到期，确认不会继续显示，不等待用户主动刷新。
+  - id: SRP-016
+    name: 手机区分服务不可用与空记录
+    required: true
+    description: Backend 在线不等于读服务在线，不支持或旧协议不引导重新配对。
+    preconditions:
+      - 本例模拟器通过可控独立 Backend 分别获得 notRunning、unsupported、旧版本路由 404 和真实空日期响应。
+    steps:
+      - 使用 toolkit:agent-device 分别进入上述状态，确认提示启动 Mac App、当前机器不支持、需更新及当日无记录。
+      - 确认这些状态不显示缓存截图、不无限转圈，也不增加登录或配对页面。
+  - id: SRP-017
+    name: Mac 连续回放保持有界资源
+    required: true
+    description: 真实回放与快速拖动的资源和延迟可测，查看不造成无界队列或新增采样缺失。
+    preconditions:
+      - 本例 Mac 已保存默认十秒采样的真实 ready 记录并继续采集，能够记录 CPU、内存、解码队列、采样计数和定位延迟。
+    steps:
+      - 用 CUA 回放和快速拖动十分钟，记录首帧及最终定位 p95、内存峰值、CPU、队列和采样缺失。
+      - 确认本地定位 p95 不超过一秒、解码并发与缓存均未超计划预算；缓冲时冻结时间而非伪造画面推进。
+      - 关闭查看窗口并等待在途任务退出，确认读取资源释放；未达目标如实失败，不以删除回放功能通过。
+  - id: SRP-018
+    name: 手机连续回放保持有界资源
+    required: true
+    description: 模拟器同机真实链路下响应可测，弱网只缓冲，不积压或转为离线播放。
+    preconditions:
+      - 本例模拟器通过独立 Backend 读取真实 ready 记录，可记录网络字节、内存、在途请求和定位延迟并对本例施加网络延迟。
+    steps:
+      - 使用 toolkit:agent-device 回放和拖动十分钟，确认正常同机链路首帧及最终定位 p95 不超过一秒，缓存不超预算。
+      - 对本例增加网络延迟并重复拖动，确认进入 buffering、位置冻结、队列不积压，最终仍命中最后目标。
+      - 恢复网络并退出页面，确认本例请求与预取释放，报告模拟器结果而非真机性能。
+  - id: SRP-019
+    name: 手机登出清空记录与迟到响应
+    required: true
+    description: 登出后缓存和未完成媒体请求不能保留可见画面，旧会话不能继续取帧。
+    preconditions:
+      - 本例模拟器已有隔离范围的缓存，正在请求一张可受控延迟的画面，使用可注销的测试会话。
+    steps:
+      - 使用 toolkit:agent-device 通过 Runweave 现有入口登出，确认回放和图像缓存清空。
+      - 释放迟到响应，确认不会重新显示；使用旧会话再次请求媒体，确认认证被拒绝。
+  - id: SRP-020
+    name: 新封口记录不改变正在回放的时间轴
+    required: true
+    description: 当前 view 范围固定，刷新列表才纳入新提交帧，保留期限仍能令旧帧失效。
+    preconditions:
+      - 本例 Mac App 正在独立目录采集，同一十五分钟窗口存在 ready 帧和待封口帧，已打开 ready 部分回放。
+    steps:
+      - 使用 CUA 暂停在确定位置，等待新段提交，确认当前轴长度、当前 capture ID 和胶片带位置不突变。
+      - 返回列表刷新后重新打开范围，确认新提交帧可见，且之前 view 已释放。

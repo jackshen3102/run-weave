@@ -40,6 +40,13 @@ export class WorkHistoryService {
     private readonly appServerGateway: AppServerHistoryGateway,
   ) {}
 
+  async analysisEvidencePage(threadID: string, cursor?: string, signal?: AbortSignal) {
+    return this.appServerGateway.getAnalysisEvidence(threadID,cursor,signal);
+  }
+  async analysisThreadsPage(after?: string) {
+    return this.appServerGateway.listThreads({ after,limit: 100 });
+  }
+
   async listTerminals(options: ListOptions): Promise<TerminalArchivePage> {
     const sessions = this.terminalSessionManager.listSessions();
     let threads: AppServerThreadRef[] = [];

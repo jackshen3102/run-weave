@@ -13,9 +13,10 @@ from types import SimpleNamespace
 import uuid
 
 sys.dont_write_bytecode = True
-from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write, browser_enabled, migrate_sources
+from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write, browser_enabled, screen_enabled, migrate_sources
 import job_facts
 import job_browser
+import job_screen
 
 
 def suiji_module():
@@ -85,6 +86,16 @@ def collect(state, path, meta):
                 receipts.append(receipt)
             except (Failure, OSError, ValueError, KeyError):
                 receipts.append(job_browser.unavailable(day, c))
+        if screen_enabled(c, day):
+            bundle = day_root / "screen"
+            try:
+                job_screen.export(c, day, bundle)
+                material, receipt, revision = job_screen.rows(bundle, day, c)
+                rows.extend(material)
+                receipts.append(receipt)
+                meta.setdefault("screenRevisions", {})[day] = revision
+            except (Failure, OSError, ValueError, KeyError):
+                receipts.append(job_screen.unavailable(day, c))
         meta["receipts"][day] = receipts
     write(path / "evidence.json", rows)
     meta.update(phase="reviewed", evidenceHash=digest(rows), read={})
@@ -119,6 +130,7 @@ def prepare(state, args):
         else:
             require(meta["ownerPid"] == args.owner_pid and meta["ownerProcess"] == owner, "OWNER_PROCESS_CHANGED")
     else:
+        job_screen.reconcile_revisions(state)
         days = state.missing()[:state.c["maxDaysPerRun"]]
         if days:
             days = [d for d in days if (date(d) - date(days[0])).days < 366]
@@ -164,6 +176,8 @@ def confirm(state, path, meta, suiji):
         frozen = suiji.work_records.recovery_intent(recovery_args, connection, suiji.Failure, suiji.private_read)
         client, info = suiji.connect(connection, state.c["suiji"]["tokenFile"])
         require(info.get("features", {}).get("workRecords"), "WORK_RECORDS_UNAVAILABLE")
+        if any(scope.startswith("screen:") for day in frozen["arguments"]["input"]["days"] for scope in day["requestedScopes"]):
+            require(info.get("features", {}).get("workScreenTimeline"), "SCREEN_TIMELINE_UNAVAILABLE")
         try:
             suiji.work_records.reconcile(client, str(request), frozen, suiji.Failure, suiji.run_intent)
         except suiji.Failure as error:
@@ -178,6 +192,8 @@ def confirm(state, path, meta, suiji):
     # run_intent persisted this receipt only after its independent readback.
     for day in pending["days"]:
         state.data["days"][day] = {"complete": all(r["status"] == "complete" for r in meta["receipts"][day]), "receipts": meta["receipts"][day], "importId": result["importId"]}
+        if day in meta.get("screenRevisions", {}):
+            state.data["days"][day]["screenRevision"] = meta["screenRevisions"][day]
         meta.setdefault("confirmations", {})[day] = state.data["days"][day]
         if day not in meta["sentDays"]:
             meta["sentDays"].append(day)
@@ -200,6 +216,8 @@ def publish(state, path, meta):
     require(info.get("features", {}).get("workSources"), "WORK_SOURCES_UNAVAILABLE")
     if any(ref["channel"] == "browser-visit" for day in payload["days"] for fact in day["facts"] for ref in fact["sourceRefs"]) or any(s.startswith("browser:") for day in payload["days"] for s in day["requestedScopes"]):
         require(info.get("features", {}).get("workBrowserHistory"), "BROWSER_HISTORY_UNAVAILABLE")
+    if any(scope.startswith("screen:") for day in payload["days"] for scope in day["requestedScopes"]):
+        require(info.get("features", {}).get("workScreenTimeline"), "SCREEN_TIMELINE_UNAVAILABLE")
     source_page = client.call("list_work_sources", {"from": meta["days"][0], "to": meta["days"][-1]})
     for day in meta["days"]:
         for scope in scopes(state.c, day):

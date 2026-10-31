@@ -94,7 +94,7 @@ def config(path):
     scope(c["producerId"])
     scope(c["sourceNamespace"])
     date(c["startDate"])
-    exact(c["sources"], {"localAgent", "feishu"}, {"browser"})
+    exact(c["sources"], {"localAgent", "feishu"}, {"browser", "screen"})
     local, feishu = c["sources"]["localAgent"], c["sources"]["feishu"]
     exact(local, {"providers"}, {"home"})
     require(isinstance(local["providers"], list) and all(p in ("codex", "pi", "claude", "trae") for p in local["providers"]) and len(set(local["providers"])) == len(local["providers"]), "INVALID_PROVIDERS")
@@ -117,6 +117,21 @@ def config(path):
         exact(browser, {"enabled"})
         # Keep the original binding byte-for-byte for old/disabled configurations.
         c["sources"].pop("browser", None)
+    screen = c["sources"].get("screen", {"enabled": False})
+    require(type(screen.get("enabled")) is bool, "INVALID_SCREEN_ENABLED")
+    if screen["enabled"]:
+        exact(screen, {"enabled", "effectiveFrom", "expectedDeviceID", "exporterArgv"})
+        require(sys.platform == "darwin", "SCREEN_REQUIRES_MACOS")
+        date(screen["effectiveFrom"])
+        require(screen["effectiveFrom"] >= c["startDate"], "SCREEN_BEFORE_JOB_START")
+        require(isinstance(screen["expectedDeviceID"], str) and str(uuid.UUID(screen["expectedDeviceID"])).lower() == screen["expectedDeviceID"].lower(), "INVALID_SCREEN_DEVICE")
+        argv = screen["exporterArgv"]
+        require(isinstance(argv, list) and argv and all(isinstance(v, str) and v and "\0" not in v for v in argv), "INVALID_SCREEN_ARGV")
+        require(argv[1:] == ["screen-recording", "analysis", "export", "--instance", "stable"], "SCREEN_EXPORTER_MUST_USE_STABLE")
+        require(Path(argv[0]).is_absolute(), "ABSOLUTE_PATH_REQUIRED")
+    else:
+        exact(screen, {"enabled"})
+        c["sources"].pop("screen", None)
     require(local["providers"] or feishu["enabled"] or (browser["enabled"] and browser["effectiveFrom"] == c["startDate"]), "NO_ENABLED_SOURCE_FOR_START_DATE")
     require(isinstance(c["collectorArgv"], list) and c["collectorArgv"] and all(isinstance(v, str) and v and "\0" not in v for v in c["collectorArgv"]), "INVALID_COLLECTOR_ARGV")
     exact(c["suiji"], {"configPath", "tokenFile", "autoPublish"})
@@ -135,6 +150,11 @@ def browser_enabled(c, day=None):
     return bool(browser.get("enabled") and (day is None or day >= browser["effectiveFrom"]))
 
 
+def screen_enabled(c, day=None):
+    screen = c["sources"].get("screen", {})
+    return bool(screen.get("enabled") and (day is None or day >= screen["effectiveFrom"]))
+
+
 def binding(c):
     connection = read(c["suiji"]["configPath"])
     value = {k: c[k] for k in ("producerId", "sourceNamespace", "startDate", "sources")}
@@ -148,6 +168,8 @@ def scopes(c, day=None):
         values.append("feishu:" + c["sources"]["feishu"]["accountScope"] + ":messages")
     if browser_enabled(c, day):
         values.append("browser:" + c["producerId"] + ":observed")
+    if screen_enabled(c, day):
+        values.append("screen:" + c["producerId"] + ":" + c["sources"]["screen"]["expectedDeviceID"] + ":observed")
     for value in values:
         scope(value)
     return values
@@ -224,33 +246,42 @@ class State:
 
 
 def migrate_sources(state, current_path, next_path, dry_run):
-    """Journal a one-time additive browser migration under the existing job lock."""
+    """Journal one additive browser or screen source under the existing lock."""
     target = str(Path(current_path).resolve())
     next_c = config(next_path)
     journal_path = state.root / "source-migration.json"
+    completed_path = state.root / "source-migration-completed.json"
+    if not journal_path.exists() and state.c == next_c and completed_path.exists():
+        completed = read(completed_path)
+        require(completed["configPath"] == target and completed["newConfig"] == next_c and state.data["binding"] == completed["newState"]["binding"], "MIGRATION_TARGET_CHANGED")
+        return {"dryRun": dry_run, "migrated": True, "alreadyApplied": True, "affectedDays": completed["affectedDays"]}
+
     if journal_path.exists():
         journal = read(journal_path)
         require(journal["configPath"] == target and journal["newConfig"] == next_c, "MIGRATION_TARGET_CHANGED")
         require(state.data["binding"] in (journal["oldBinding"], journal["newState"]["binding"]) and state.c in (journal["oldConfig"], journal["newConfig"]), "MIGRATION_IDENTITY_CHANGED")
     else:
-        require(browser_enabled(next_c) and not browser_enabled(state.c), "ADDITIVE_BROWSER_MIGRATION_ONLY")
+        added = [name for name, enabled in (("browser", browser_enabled), ("screen", screen_enabled)) if enabled(next_c) and not enabled(state.c)]
+        require(len(added) == 1, "ADDITIVE_SOURCE_MIGRATION_ONLY")
+        source = added[0]
         old_base, new_base = copy.deepcopy(state.c), copy.deepcopy(next_c)
-        new_base["sources"].pop("browser")
-        require(old_base == new_base, "MIGRATION_MAY_ONLY_ADD_BROWSER")
+        new_base["sources"].pop(source)
+        require(old_base == new_base, "MIGRATION_MAY_ONLY_ADD_ONE_SOURCE")
         require(not state.data.get("active") and all(b["phase"] == "confirmed" for b in state.data["batches"].values()), "ACTIVE_OR_PENDING_BATCH: recover it before migration")
         updated = copy.deepcopy(state.data)
         updated["binding"] = binding(next_c)
-        effective = next_c["sources"]["browser"]["effectiveFrom"]
+        effective = next_c["sources"][source]["effectiveFrom"]
         affected = [d for d in updated["days"] if d >= effective]
         for day in affected:
             updated["days"][day]["complete"] = False
-        journal = {"configPath": target, "oldConfig": state.c, "newConfig": next_c, "oldBinding": state.data["binding"], "newState": updated, "affectedDays": affected}
-    result = {"dryRun": dry_run, "effectiveFrom": next_c["sources"]["browser"]["effectiveFrom"], "affectedDays": journal["affectedDays"], "oldBinding": journal["oldBinding"], "newBinding": journal["newState"]["binding"]}
+        journal = {"source": source, "configPath": target, "oldConfig": state.c, "newConfig": next_c, "oldBinding": state.data["binding"], "newState": updated, "affectedDays": affected}
+    source = journal.get("source", "browser")
+    result = {"dryRun": dry_run, "effectiveFrom": next_c["sources"][source]["effectiveFrom"], "affectedDays": journal["affectedDays"], "oldBinding": journal["oldBinding"], "newBinding": journal["newState"]["binding"]}
     if dry_run:
         return result
     if not journal_path.exists():
-        write(state.root / "before-browser-config.json", journal["oldConfig"])
-        write(state.root / "before-browser-state.json", state.data)
+        write(state.root / ("before-" + source + "-config.json"), journal["oldConfig"])
+        write(state.root / ("before-" + source + "-state.json"), state.data)
         write(journal_path, journal)
     write(state.file, journal["newState"])
     write(target, next_c)
