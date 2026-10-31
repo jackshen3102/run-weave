@@ -5,7 +5,7 @@ struct CodexResetForecast {
 
   let within24Hours: Double
   let within48Hours: Double
-  let checkedAt: Date
+  let checkedAt: Date?
 
   static func fetch() async throws -> Self {
     let configuration = URLSessionConfiguration.ephemeral
@@ -22,7 +22,7 @@ struct CodexResetForecast {
       response.mimeType == "text/html" else { throw URLError(.badServerResponse) }
 
     // The public page renders the final forecast in these rings. Stop reading once
-    // both values and their check time arrive; the rest is a large history page.
+    // both probabilities arrive; the rest is a large history page.
     var data = Data()
     for try await byte in bytes {
       data.append(byte)
@@ -48,12 +48,12 @@ struct CodexResetForecast {
         let value = Double(raw), (0...100).contains(value) else { return nil }
       return value
     }
-    guard let p24 = probability("24h"), let p48 = probability("48h"), p24 <= p48,
-      let timestamp = capture(#"Last check[\s\S]{0,500}?<time\b[^>]*\bdatetime=["']([^"']+)["']"#, in: html)
+    guard let p24 = probability("24h"), let p48 = probability("48h"), p24 <= p48
       else { return nil }
+    let timestamp = capture(#"Last check[\s\S]{0,500}?<time\b[^>]*\bdatetime=["']([^"']+)["']"#, in: html)
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    guard let checkedAt = formatter.date(from: timestamp) else { return nil }
+    let checkedAt = timestamp.flatMap { formatter.date(from: $0) }
     return Self(within24Hours: p24, within48Hours: p48, checkedAt: checkedAt)
   }
 }
