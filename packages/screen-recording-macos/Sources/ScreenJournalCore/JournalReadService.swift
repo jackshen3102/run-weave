@@ -71,6 +71,8 @@ actor JournalReadService {
     private func analysis() async throws -> AnalysisCoordinator {
         if let analysisCoordinator { return analysisCoordinator }
         let c = try await catalog()
+        // Another reader can initialize the owner while catalog() suspends.
+        if let analysisCoordinator { return analysisCoordinator }
         // Initialization failures stay in this domain and never tear down capture.
         let value = try AnalysisCoordinator(paths: engine.paths, engine: engine, deviceID: c.deviceID)
         analysisCoordinator = value
@@ -79,7 +81,10 @@ actor JournalReadService {
     }
     func analysisRequest(_ method: String, input: String) async throws -> (Data, String) {
         guard input.utf8.count <= 48000 else { throw JournalReadError("INVALID_ARGUMENT") }
-        let r = try JSONDecoder().decode(AnalysisRequest.self, from: Data(input.utf8))
+        guard !closed else { throw JournalReadError("NOT_RUNNING") }
+        let r: AnalysisRequest
+        do { r = try JSONDecoder().decode(AnalysisRequest.self, from: Data(input.utf8)) }
+        catch { throw JournalReadError("INVALID_ARGUMENT") }
         func required(_ text: String?) throws -> String {
             guard let text, !text.isEmpty, text.utf8.count <= 256, !text.contains("\0") else { throw JournalReadError("INVALID_ARGUMENT") }; return text
         }
@@ -91,6 +96,9 @@ actor JournalReadService {
             guard let cursor = r.cursor, let expected = r.expectedCursor, let coverage = r.coverage, let events = r.events else { throw JournalReadError("INVALID_ARGUMENT") }
             try await owner.ingest(deviceID: required(r.expectedDeviceID),threadID: required(r.threadID),expected: expected,cursor: cursor,coverage: coverage,events: events)
             return try json(["accepted":true])
+        case "analysisSearch":
+            guard let q = r.q, let from = r.from, let to = r.to else { throw JournalReadError("INVALID_ARGUMENT") }
+            return try json(await owner.search(AnalysisSearchRequest(q: q, from: from, to: to, limit: r.limit), serverEpoch: serverEpoch))
         case "analysisStatus": return try json(await owner.status())
         case "claimAnalysis":
             guard let from = r.effectiveFrom else { throw JournalReadError("INVALID_ARGUMENT") }

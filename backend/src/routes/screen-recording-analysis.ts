@@ -32,6 +32,18 @@ export function createScreenRecordingAnalysisRouter(service: ScreenRecordingServ
     });
   };
   register('get','/conversations/:id','analysisConversation',() => ({}));
+  register('get','/search','analysisSearch',req => {
+    const { q, from, to, limit } = req.query;
+    if (typeof q !== 'string' || !q.trim() || Buffer.byteLength(q, 'utf8') > 48000 ||
+        typeof from !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(from) ||
+        typeof to !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(to) ||
+        (limit !== undefined && (typeof limit !== 'string' || !/^[0-9]+$/.test(limit)))) {
+      throw new ScreenRecordingFailure(400,'INVALID_ARGUMENT');
+    }
+    const count = limit === undefined ? 100 : integer(limit);
+    if (count < 1 || count > 100) throw new ScreenRecordingFailure(400,'INVALID_ARGUMENT');
+    return { q, from, to, limit: count };
+  });
   register('get','/status','analysisStatus',() => ({}));
   register('get','/cards','analysisCards',req => ({ day: text(req.query.day),...(req.query.cursor === undefined ? {} : { cursor: text(req.query.cursor) }),...(req.query.limit === undefined ? {} : { limit: integer(req.query.limit) }) }));
   register('get','/cards/:id','analysisCard',req => ({ cardID: text(req.params.id) }));

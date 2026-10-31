@@ -59,7 +59,7 @@ struct ScreenRecordingActivitiesView: View {
     }
 }
 @available(iOS 17.0, *)
-private struct ScreenRecordingActivityDetail: View {
+struct ScreenRecordingActivityDetail: View {
     @ObservedObject var session: AppSession
     let card: ScreenAnalysisCard
     let evidence: [ScreenAnalysisEvidence]

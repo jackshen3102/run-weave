@@ -33,6 +33,7 @@ struct ScreenAnalysisClaim: Codable {
 }
 struct ScreenAnalysisReceipt: Codable { let operationID: String; let batchID: String; let revision: Int; let cardIDs: [String] }
 struct ScreenAnalysisStatus: Codable {
+    var keywordSearchVersion: Int? = nil
     let analysisVersion = 1; let deviceID: String; let state: String; let revision: Int
     let queueCount: Int; let failedCount: Int; let latestSuccessMs: Int64?; let processedThroughMs: Int64?; let days: [String]?
     let agentCoverage = "unknown"
@@ -43,4 +44,22 @@ struct ScreenAnalysisExport: Codable {
     let snapshotID: String; let revision: Int; let generatedAt: Int64; let sourceReadAt: Int64
     let coverage: String; let missingIntervals: [ScreenAnalysisMissing]; let cards: [ScreenAnalysisCard]
     let evidence: [ScreenAnalysisEvidence]; let summary: String; var contentHash: String
+}
+
+struct ScreenAnalysisSearchRequest: Codable {
+    let q: String; let from: String; let to: String; var limit: Int? = nil
+}
+struct ScreenAnalysisSearchItem: Codable, Identifiable {
+    var id: String { cardID }
+    let day: String; let cardID: String; let matterID: String; let revision: Int
+    let title: String; let summary: String; let actor: String; let state: String
+    let firstStartMs: Int64; let lastEndMs: Int64; let spanCount: Int
+    let matchedFields: [String]
+}
+struct ScreenAnalysisSearchResponse: Codable {
+    var schemaVersion = 1
+    let deviceID: String; let serverEpoch: String; let revision: Int
+    var timeZone = "Asia/Shanghai"
+    let q: String; let from: String; let to: String
+    let items: [ScreenAnalysisSearchItem]; let hasMore: Bool
 }

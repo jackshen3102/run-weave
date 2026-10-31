@@ -185,3 +185,43 @@ ScreenJournalAnalysisVerify SAME_PLAYBACK_ROOT --retirement
 原进程退出后可用 `--queue-reopen` 在新进程读取同一账本，确认失败预算和永久过期状态仍保留。
 `--bad-analysis` 注入不兼容的衍生库版本，检查原采集存储链路继续写入及旧帧解码不变。
 `--retirement` 删除本例合成媒体，检查文字保留和未处理材料永久缺口；只可用于一次性 fixture。
+
+### 事项关键词搜索
+
+Mac 事项页的“搜索事项”打开原生 sheet；iOS 默认保留“录屏记录”，在“整理事项”下点“搜索已整理事项”
+打开独立搜索页，不改变单日时间线的日期。
+仅在点击搜索或键盘提交时请求；改变关键词或日期清空旧结果并取消旧请求，清空关键词回到初始态。
+默认最近 7 个上海自然日，支持今天、近 7 天、近 30 天及最近 30 天内的自选闭区间；查询依据 cards.day。
+
+只检索当前 Mac 已整理事项的 title/summary，不检索 OCR、detail、证据、会话全文或日报。
+Unicode 空白拆词、去重、多个词 AND；中文连续子串、ASCII 字母忽略大小写，符号均按字面量匹配。
+规范化后限制 100 个 Unicode 标量、8 个词；空词、NUL、非空白控制字符、非法日期或越界范围均拒绝。
+只展示日期、首尾发生时间、多段标记、标题、三行摘要、本人／后台标记及命中字段；列表不取帧。
+结果按实际最后发生时间和 cardID 倒序，最多 100 条，超出提示缩小范围，不分页或计算总量。
+无匹配、服务不可达、查询失败和旧版本不支持分别提示。
+
+HTTP 入口为 `GET /api/screen-recording/analysis/search?q=...&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=100`；
+DTO 见 [共享合同](../shared/src/screen-recording/analysis.ts)。Mac 直接调用同一 owner 的 `analysisSearch`。
+能力由原生 `AnalysisStatus.keywordSearchVersion=1` 声明；旧 Backend 缺路由提示 UPDATE_REQUIRED。
+复用现有 Bearer、连接校验、返回前令牌复核、取消链路与 no-store；iOS 查询文字和页面沿用 Clarity mask，
+API 诊断仅记录不带 query 的路径。无新增服务、查询历史、缓存表或 schema 迁移。
+
+SQLite 使用 cards_day 限定范围、绑定参数和 JSON 投影；同一 owner 同步读取版本与结果，不调用模型或导出。
+同时排除 updated 早于原 30 天文字保留线的记录。SQL 执行预算 2 秒，progress handler 在查询结束时移除；
+返回结果最多 1 MiB，超限返回可重试 BUSY。损坏记录报错，不伪装成无匹配。
+
+点击结果按 day/cardID 重读当前导出，再核对 deviceID/serverEpoch；修订后展示当前内容并提示更新，
+删除、替换或服务变化要求重新搜索。复用事项详情、capture 解析与会话入口；截图过期仍可读保留的文字。
+iOS 连接代际、前后台、鉴权或健康状态变化会清除旧结果与详情，恢复后手动重新提交；返回列表保留查询。
+
+验证入口（仅一次性隔离目录，合成数据）：
+
+```bash
+ScreenJournalAnalysisVerify NEW_EMPTY_ISOLATED_ROOT --search
+ScreenJournalAnalysisVerify NEW_EMPTY_ISOLATED_ROOT --search-fixture
+```
+
+`--search` 验证匹配、范围、排序、保留、输入、超时恢复及损坏记录，并对 30 天 10,005 条事项的
+四类查询各测量 20 次。`--search-fixture` 只生成相同合成事项，供原生页面验证，绝不向正式目录写入。
+行为合同见 [关键词搜索验收](../../docs/testing/screen-recording/search.testplan.yaml)。
+构建、隔离 SQL/HTTP 和原生合成交互不能替代正式部署、真机或真实采集压力验收。

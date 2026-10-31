@@ -58,7 +58,7 @@ actor AnalysisCoordinator {
     func status() throws -> AnalysisStatus {
         let reconciled = try store.scalar("SELECT value FROM metadata WHERE key='scanReconciledAt'") != nil
         let through = reconciled ? try store.scalar("SELECT MAX(end_ms) FROM batches WHERE state='complete' AND end_ms < COALESCE((SELECT MIN(start_ms) FROM batches WHERE state!='complete'),9223372036854775807)").flatMap(Int64.init) : nil
-        return AnalysisStatus(deviceID: deviceID, state: "ready", revision: try revision(),
+        return AnalysisStatus(keywordSearchVersion: 1, deviceID: deviceID, state: "ready", revision: try revision(),
             queueCount: Int(try store.scalar("SELECT COUNT(*) FROM batches WHERE state IN ('pending','running')") ?? "0") ?? 0,
             failedCount: Int(try store.scalar("SELECT COUNT(*) FROM batches WHERE state IN ('failed','source-expired')") ?? "0") ?? 0,
             latestSuccessMs: try store.scalar("SELECT MAX(updated) FROM batches WHERE state='complete'").flatMap(Int64.init),
@@ -353,6 +353,15 @@ actor AnalysisCoordinator {
         let body = try analysisJSON(result)
         guard body.utf8.count < 8*1024*1024 else { throw JournalReadError("BUSY") }
         try store.execute("INSERT OR REPLACE INTO export_snapshots VALUES (?,?,?,?,?)", [snapshotID,day,rev,body,now])
+        return result
+    }
+    func search(_ request: AnalysisSearchRequest, serverEpoch: String, now: Int64 = journalNowMs()) throws -> AnalysisSearchResponse {
+        let query = try AnalysisSearchQuery(request, now: now)
+        // No suspension: revision, rows and retention share the owner's serial boundary.
+        let items = try store.search(query, cutoff: now-30*86400000)
+        let result = AnalysisSearchResponse(deviceID: deviceID, serverEpoch: serverEpoch, revision: try revision(),
+            q: query.q, from: query.from, to: query.to, items: Array(items.prefix(query.limit)), hasMore: items.count > query.limit)
+        guard try JSONEncoder().encode(result).count <= 1024*1024 else { throw JournalReadError("BUSY", retryable: true) }
         return result
     }
     func card(_ id: String) throws -> AnalysisCard {

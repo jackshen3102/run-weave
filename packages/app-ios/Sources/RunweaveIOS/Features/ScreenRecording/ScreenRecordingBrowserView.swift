@@ -50,6 +50,9 @@ struct ScreenRecordingBrowserView: View {
                     }
                     if tab == "activities" {
                         Section {
+                            NavigationLink {
+                                ScreenRecordingActivitySearchView(session: session, openConversation: openConversation)
+                            } label: { Label("搜索已整理事项", systemImage: "magnifyingglass") }
                             Button { tab = "raw" } label: {
                                 Label(loadedDay == day && !ranges.isEmpty ? "查看当天 \(ranges.count) 段录屏" : "查看录屏记录", systemImage: "play.rectangle")
                             }

@@ -18,6 +18,15 @@ extension APIClient {
     func screenAnalysisConversation(provider: String, threadID: String) async throws -> TerminalConversation.Target? {
         try await authorized("/api/screen-recording/analysis/conversations/\(Self.pathComponent(threadID))?provider=\(Self.pathComponent(provider))", requestTimeout: 5, decodeError: screenError)
     }
+    func screenAnalysisSearch(_ request: ScreenAnalysisSearchRequest) async throws -> ScreenAnalysisSearchResponse {
+        var components = URLComponents()
+        components.path = "/api/screen-recording/analysis/search"
+        components.queryItems = [URLQueryItem(name: "q", value: request.q), URLQueryItem(name: "from", value: request.from),
+            URLQueryItem(name: "to", value: request.to), URLQueryItem(name: "limit", value: String(request.limit ?? 100))]
+        // URLComponents leaves '+' literal, while HTTP query parsers treat it as a space.
+        guard let path = components.string?.replacingOccurrences(of: "+", with: "%2B") else { throw APIError.invalidResponse }
+        return try await authorized(path, requestTimeout: 5, decodeError: screenError)
+    }
     func screenAnalysisStatus() async throws -> ScreenAnalysisStatus {
         try await authorized("/api/screen-recording/analysis/status", requestTimeout: 5, decodeError: screenError)
     }
