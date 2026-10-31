@@ -5,7 +5,9 @@
 
 ## 构建与使用
 
-需要 Xcode、XcodeGen。当前验证平台为 Apple Silicon；构建成功不代表权限或全天采集通过。
+需要 Xcode 26+、XcodeGen。当前验证平台为 Apple Silicon；构建成功不代表权限或全天采集通过。
+
+应用图标源为 `Resources/AppIcon.icon`：黑色背景与银白前景分层，由 Xcode 编译为原生图标资源及旧版 macOS 使用的 ICNS。不要仅复制 PNG 转换的 ICNS 替代它，否则系统可能额外添加浅色底板。
 
 ```bash
 packages/screen-recording-macos/build.sh --configuration Debug --derived-data-path .runweave/screen-recording/build
