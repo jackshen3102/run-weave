@@ -41,6 +41,9 @@ scripts/dev-session    开发会话与 Beta 生命周期
 改动某个目录前继续读其就近 `AGENTS.md`；完整清单以
 `git ls-files '**/AGENTS.md' 'AGENTS.md'` 为准。
 
+独立屏幕采集与本地存储：[ScreenJournal](../../packages/screen-recording-macos/README.md)。
+该 macOS 工具不依赖 Backend、Electron 或 RemoteDesk；一期没有网络／iOS 浏览入口。
+
 ## 依赖方向
 
 - UI 运行时通过 `@runweave/shared` 使用协议，不导入 Backend 或 Electron 实现。

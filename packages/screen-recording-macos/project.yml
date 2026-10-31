@@ -1,0 +1,54 @@
+name: ScreenJournal
+options:
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+targets:
+  ScreenJournal:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/ScreenJournalApp
+      - Sources/ScreenJournalCore
+      - path: ThirdPartyLicenses
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.runweave.screen-journal
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: ScreenJournal.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+  ScreenJournalInspect:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/ScreenJournalCore
+      - Sources/ScreenJournalInspect
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.runweave.screen-journal.inspect
+        GENERATE_INFOPLIST_FILE: YES
+  ScreenJournalFixture:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/ScreenJournalCore
+      - tools/make-validation-fixture.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ScreenJournal:
+    build:
+      targets:
+        ScreenJournal: all
+        ScreenJournalInspect: all
+  ScreenJournalFixture:
+    build:
+      targets:
+        ScreenJournalFixture: all
