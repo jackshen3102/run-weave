@@ -16,6 +16,8 @@ Mac Stable 的 `runweave:` 协议不支持 Chromium 原生 Cookie 写入。集�
 
 Electron 的官方 SDK 会把 URL 归一化为 `https://Electron`。Custom Page ID 是额外的后台筛选维度，不覆盖原生 URL，也不单独创建 pageview；不能据此承诺“顶级页面”显示真实路由或原生页面数等于功能进入次数。后台应使用“自定义页面 ID”筛选并保存所需区段，页面级聚合与回放粒度需以真实云端验收结果为准。
 
+桌面录制在 Clarity 的 HTTPS 播放器中重建 DOM；播放器无法加载 `runweave://app/assets/` 下的脚本时，控制台可能出现 `ERR_UNKNOWN_URL_SCHEME`。不能仅凭这些资源错误判定上报或回放失败：先确认所选会话在云端有连续页面和事件，再等待播放器加载完成，观察画面与时间轴是否随操作推进。Strict masking 下文字显示为圆点是预期的隐私遮盖，也不能当成采集缺失。只有实际录制画面或事件链缺失时才按对应链路排查。
+
 随记、隧道抽屉由 [ClarityDrawerObserver](../src/features/analytics/clarity-drawer-observer.tsx) 集中监听关闭→打开，分别发送固定事件 `surface_open_suiji`、`surface_open_tunnels`。重复 render、保持打开与关闭均不发送；关闭后再次打开新增一次。隧道仅在实际支持的 Electron 宿主上记录。事件没有附加内容或动态 ID，不改变 Custom Page ID，也不把抽屉当新页面。
 
 SDK 尚未就绪或正在重启时跳过抽屉事件，不补发历史打开，不增加等待队列或重试。后台事件的会话数不能当成打开次数；按真实事件时间线核对次数和回放。分类与抽屉事件不修改既有 SDK 对 URL、DOM 的采集范围。
