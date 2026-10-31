@@ -14,6 +14,8 @@ targets:
     sources:
       - Sources/ScreenJournalApp
       - Sources/ScreenJournalCore
+      - path: Resources/AppIcon.icon
+        buildPhase: resources
       - path: ThirdPartyLicenses
         type: folder
         buildPhase: resources
@@ -23,6 +25,7 @@ targets:
         INFOPLIST_FILE: Info.plist
         CODE_SIGN_ENTITLEMENTS: ScreenJournal.entitlements
         ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   ScreenJournalInspect:
     type: tool
     platform: macOS
