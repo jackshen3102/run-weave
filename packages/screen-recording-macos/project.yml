@@ -42,6 +42,15 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  ScreenJournalReadVerify:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/ScreenJournalCore
+      - tools/verify-read-service.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   ScreenJournal:
     build:
@@ -52,3 +61,7 @@ schemes:
     build:
       targets:
         ScreenJournalFixture: all
+  ScreenJournalReadVerify:
+    build:
+      targets:
+        ScreenJournalReadVerify: all

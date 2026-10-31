@@ -14,3 +14,12 @@
 600 秒／600 帧上限沿用上游参数。像素转换改用系统 Core Image 的复用 context，关闭中间缓存，
 避免逐帧 Quartz 绘制缓存造成 RSS 峰值增长；编码格式及时间索引不变。
 未移入账户、模型、分析调度、遥测、云服务、第三方依赖或用户数据库。
+
+## 二期回放参考
+
+同一固定提交的 `Views/UI/MainView/ScreenshotSlideshow.swift`、
+`ScreenshotSlideshowPlayback.swift` 和 `Core/Recording/FrameStore.swift` 用于核对实际时间倍速、
+顺序 reader、预取和有界缓存的设计。`JournalPlaybackModel`、`PlaybackFrameReader` 与 iOS
+`ScreenRecordingPlaybackModel` 为本项目独立实现；未复制上游 SwiftUI 或新增其第三方依赖。
+本项目额外实现 owner 读取许可、在线认证、快照、保留清理和失效代际；不采用后台延时视频生成。
+现有 `SegmentWriter` 的代码改写来源与 MIT 文本保持随 Mac App 分发。

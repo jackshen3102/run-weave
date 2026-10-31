@@ -6,6 +6,9 @@ import Combine
     @Published private(set) var settings = RecordingSettings()
     let paths: StorePaths
     private var engine: StorageEngine?
+    private(set) var readService: JournalReadService?
+    private var readSocket: JournalReadSocketServer?
+    @Published private(set) var readServiceError = ""
     private let displays = ActiveDisplayTracker()
     private let system = SystemStateObserver()
     private var timer: Timer?
@@ -39,6 +42,11 @@ import Combine
             status.desiredRecording = settings.desiredRecording; status.privacyRevision = settings.privacyRevision
             status.sessionID = engine.sessionID
             status.diskBytes = try await engine.prepare(settings: settings)
+            let reads = JournalReadService(engine: engine, settings: settings)
+            readService = reads
+            await reads.startObserving()
+            do { readSocket = try JournalReadSocketServer(paths: paths, service: reads) }
+            catch { readServiceError = (error as? JournalReadError)?.code ?? "READ_SERVICE_UNAVAILABLE" }
             systemPaused = system.paused
             system.onChange = { [weak self] in self?.systemChanged() }
             ready = true; nextTick = .now; resumeAt = .now.advanced(by: .seconds(systemPaused ? 5 : 0))
@@ -80,6 +88,8 @@ import Combine
         do {
             try paths.write(settings, to: "settings.json")
             if worker != nil { await withCheckedContinuation { stoppedWaiters.append($0) } }
+            await readSocket?.shutdown()
+            if readSocket == nil { await readService?.shutdown() }
             await flushEvents()
             status.diskBytes = try await timed("finalize_timeout") { try await engine.shutdown(settings: self.settings) }
             transition("stopped", "normal_exit")
@@ -242,5 +252,9 @@ import Combine
         guard ready else { return }
         status.updatedAt = Date().timeIntervalSince1970
         try paths.write(status, to: "runtime/status.json")
+        if let readService {
+            let currentSettings = settings, state = status.state
+            Task { await readService.update(settings: currentSettings, captureState: state) }
+        }
     }
 }

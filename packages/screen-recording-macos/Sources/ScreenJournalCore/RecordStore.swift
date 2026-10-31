@@ -4,6 +4,7 @@ import SQLite3
 final class RecordStore {
     private var db: OpaquePointer?
     let paths: StorePaths
+    let reads = SegmentReadCoordinator()
     let readOnly: Bool
     init(paths: StorePaths, readOnly: Bool = false) throws {
         self.paths = paths; self.readOnly = readOnly

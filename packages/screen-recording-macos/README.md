@@ -1,7 +1,7 @@
 # ScreenJournal
 
 独立 macOS 15+ 菜单栏屏幕记录工具，使用 ScreenCaptureKit、AVFoundation HEVC 和系统 SQLite。
-仅支持本机采集与诊断；没有浏览时间线、网络服务、模型调用、登录项或 iOS 入口。
+提供独立采集、本地存储、Mac 原生回放与同用户 Unix socket 只读服务；Runweave iOS 经现有 Backend 认证在线查看。没有模型调用、额外 TCP 监听或登录项。
 
 ## 构建与使用
 
@@ -97,3 +97,36 @@ recovery、deleting、availability、newer-schema。它不是单元测试，不�
 单核 CPU 百分比为累计 CPU 秒数增量／墙钟秒数 × 100，目标 ≤5%；RSS 峰值 ≤300 MiB。
 有效启用时段成功采样／应有 tick ≥99%，忙碌、错误、编码失败均计缺失；系统暂停与手动暂停另记。
 不足八小时或无权限时必须报告未完成，构建、fixture 与短跑都不能替代。
+
+## 原生回放与在线读取
+
+设置／菜单的“查看记录”按采集 Mac 时区列出日期和时间范围。范围最多 15 分钟，按会话、
+显示器和时钟回拨拆分；只包含 ready 段。打开默认暂停，20×／40×／60× 使用真实采集时间；
+逐帧保持暂停，末尾停止。关闭查看不停止采集，暂停采集不关闭读服务。
+
+读服务由唯一 writer 持有，路径为 `runtime/read.sock`（0600，父目录 0700），仅接受同 UID。
+清理先使读取失效、取消解码，实际读取许可归零后才删除。视图最多 8 个，空闲 60 秒、
+绝对 30 分钟；单视图最多 900 帧，索引合计 8 MiB。最多 2 个解码任务，预取后续 2 帧；
+图像缓存最多 16 帧／128 MiB，缩略图 16 MiB。JPEG 仅按需在内存生成，不另存回放视频。
+
+Backend 路由 `/api/screen-recording` 复用现有 Bearer、隧道认证和服务端会话作用域。
+Backend 只按需连接本机 socket，不管理采集生命周期。隔离验证可在 Backend 启动环境中指定
+`RUNWEAVE_SCREEN_JOURNAL_SOCKET`，HTTP 不接受路径覆盖。iOS 入口在首页更多菜单，当前 UI
+需要 iOS 17+；只在线查看，前后台及连接作用域变化清除画面，断线确认或超过 5 秒未确认后隐藏。
+索引和媒体均经现有 APIClient，HTTP 不缓存；图像内存缓存最多 16 帧／64 MiB，缩略图 8 MiB。
+
+集成工具 scheme 为 `ScreenJournalReadVerify`，仅接受显式隔离 socket 与合成 manifest：
+
+```bash
+ScreenJournalReadVerify --socket ABSOLUTE_SOCKET --fixture-manifest ABSOLUTE_MANIFEST
+ScreenJournalFixture --data-dir NEW_EMPTY_ABSOLUTE_DIRECTORY --scenario playback
+```
+
+`playback` 生成可视帧号、重复时间、回拨、隐私和间隔样本，不能替代真实采集证据。
+Debug 隔离实例的本地 `diagnostics` 方法只返回资源计数，不经过 HTTP 暴露。显式创建隔离目录
+`runtime/hold-read` 可使一个已启动的 reader 最长停留 30 秒；`held-read.json` 标记实际持有许可。
+移除 gate 后 reader 退出。该入口仅用于验证取消不提前释放文件；Release 不执行该行为。
+
+验收合同见 [读取服务](../../docs/testing/screen-recording/read-service.testplan.yaml) 与
+[原生回放](../../docs/testing/screen-recording/playback.testplan.yaml)。构建和合成集成通过不代表
+全合同通过；真实 Mac、模拟器、资源压力与故障用例须分别取证。二期实施验收尚在进行。

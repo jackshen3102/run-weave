@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct SettingsView: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var recorder: CaptureCoordinator
     @State private var draft = RecordingSettings()
     @State private var excluded = ""
@@ -12,6 +13,8 @@ struct SettingsView: View {
                 Text("ScreenJournal").font(.title.bold())
                 Text("屏幕仅存储在此 Mac；关闭窗口后继续记录。")
                 Text("状态：\(recorder.status.displayState)")
+                if !recorder.readServiceError.isEmpty { Text("远程查看不可用：\(recorder.readServiceError)").foregroundStyle(.orange) }
+                Button("查看记录…") { openWindow(id: "journal") }
                 DisclosureGroup("诊断信息") {
                     Text("\(recorder.status.state) · \(recorder.status.reason) · 代际 \(recorder.status.generation) · 在途 \(recorder.status.inFlight ? "是" : "否")").font(.caption).textSelection(.enabled)
                 }

@@ -270,3 +270,10 @@ Debug 的认证撤销按钮另需 `--native-auth-validation`，只用于本例�
 共享 scheme 构建时生成安装包内的 `BuildIdentity.json`，记录提交、源码指纹及构建配置。
 连接页或连接设置中的“构建信息”可按需离线导出该文件。
 本功能不采集运行日志；回查构建和安装记录见 [构建身份](../ios-build-identity/README.md)。
+
+## 屏幕记录
+
+iOS 17+ 首页更多菜单提供原生“屏幕记录”，复用当前电脑连接与 APIClient 认证。采集 Mac 必须
+运行 ScreenJournal，同用户 Backend 通过本地 Unix socket 读取 ready 帧；不提供离线下载。
+详情按实际采样时间播放，后台、连接切换与有效性失败时隐藏画面；屏幕内容区域使用 Clarity mask。
+Mac 与手机缓存只在内存中存在，不另存视频；当前二期完整验收仍在进行，模拟器证据不代表真机。

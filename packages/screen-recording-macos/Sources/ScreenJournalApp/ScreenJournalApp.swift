@@ -9,6 +9,9 @@ import AppKit
         } label: {
             JournalIcon(model: delegate.model)
         }
+        Window("屏幕记录", id: "journal") {
+            JournalBrowserRoot(model: delegate.model)
+        }.defaultLaunchBehavior(.suppressed)
         Window("ScreenJournal 设置", id: "settings") {
             JournalSettings(model: delegate.model).frame(minWidth: 540, minHeight: 570)
         }.defaultLaunchBehavior(.presented)
@@ -67,6 +70,7 @@ private struct JournalMenu: View {
     @Environment(\.openWindow) var openWindow
     var body: some View {
         if let recorder = model.coordinator { RecorderMenu(recorder: recorder) }
+        Button("查看记录…") { NSApp.setActivationPolicy(.regular); openWindow(id: "journal"); NSApp.activate(ignoringOtherApps: true) }
         Button("设置…") { NSApp.setActivationPolicy(.regular); openWindow(id: "settings"); NSApp.activate(ignoringOtherApps: true) }
         Divider()
         Button("退出 ScreenJournal") { NSApp.terminate(nil) }
@@ -85,6 +89,14 @@ private struct JournalSettings: View {
     @ObservedObject var model: RecorderModel
     var body: some View {
         if let recorder = model.coordinator { SettingsView(recorder: recorder) }
+        else { Text(model.startupError.isEmpty ? "正在检查记录…" : model.startupError).padding() }
+    }
+}
+
+private struct JournalBrowserRoot: View {
+    @ObservedObject var model: RecorderModel
+    var body: some View {
+        if let recorder = model.coordinator { JournalBrowserView(recorder: recorder) }
         else { Text(model.startupError.isEmpty ? "正在检查记录…" : model.startupError).padding() }
     }
 }

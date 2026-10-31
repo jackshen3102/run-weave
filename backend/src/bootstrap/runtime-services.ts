@@ -1,3 +1,4 @@
+import { ScreenRecordingService } from "../screen-recording/service";
 import { SideChatService } from "../side-chat/service";
 import { SideChatStore } from "../side-chat/store";
 import { observeCodexPane } from "../terminal/application/codex-context-sync";
@@ -501,8 +502,11 @@ async function assembleRuntimeServices(
     ),
   );
   resources.defer("local-browser", () => localBrowserService.dispose());
+  const screenRecording = new ScreenRecordingService();
+  resources.defer("screen-recording", () => screenRecording.dispose());
   let disposed = false;
   const services: RuntimeServices = {
+    screenRecording,
     ...deviceMonitoring,
     terminalBadges,
     desktopBadgeAccess,
