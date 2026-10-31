@@ -2,6 +2,7 @@ import SwiftUI
 
 struct JournalPlaybackView: View {
     @StateObject private var model: JournalPlaybackModel
+    @Environment(\.journalSettingsPresented) private var settingsPresented
     let service: JournalReadService
     let range: JournalRange
     let revision: String
@@ -54,6 +55,7 @@ struct JournalPlaybackView: View {
             if let id = initialCaptureID, let capture = model.view?.captures.first(where: { $0.id == id }) { model.select(capture) }
         }
         .onChange(of: model.state) { _, value in if value == "playing" { zoom = 1 } }
+        .onChange(of: settingsPresented) { _, presented in if presented { model.pause() } }
         .onDisappear { model.close() }
     }
     private func time(_ value: Int64) -> String { Date(timeIntervalSince1970: Double(value) / 1000).formatted(date: .omitted, time: .standard) }

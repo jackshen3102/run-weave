@@ -4,6 +4,8 @@ import Combine
 @MainActor final class RecorderModel: ObservableObject {
     @Published var coordinator: CaptureCoordinator?
     @Published var startupError = ""
+    @Published var showingSettings = false
+    var reopenMainWindow: (() -> Void)?
     func start() async {
         do {
             umask(0o077)
@@ -36,8 +38,8 @@ import Combine
             let paths = try StorePaths(root: directory.map { URL(fileURLWithPath: $0) } ?? StorePaths.standard,
                 validation: directory != nil, maxBytes: maxBytes, freeBytes: freeBytes)
             let recorder = CaptureCoordinator(paths: paths)
-            coordinator = recorder
             await recorder.initialize()
+            coordinator = recorder
             if recorder.status.state == "failed" {
                 fputs("ScreenJournal: \(recorder.status.reason)\n", stderr)
                 if recorder.status.reason.hasPrefix("writer_active") {

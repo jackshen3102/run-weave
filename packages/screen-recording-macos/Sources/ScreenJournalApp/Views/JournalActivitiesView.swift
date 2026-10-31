@@ -3,7 +3,12 @@ import AppKit
 
 struct JournalActivitiesView: View {
     let service: JournalReadService
-    @State private var day = ""
+    @Binding var day: String
+    let openRecordings: () -> Void
+    @State private var days: [String] = []
+    @State private var rawCount: Int?
+    @State private var loading = true
+    @State private var failed = false
     @State private var snapshot: AnalysisExport?
     @State private var message = "正在读取事项…"
     @State private var selected: AnalysisCard?
@@ -13,7 +18,12 @@ struct JournalActivitiesView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading) {
-                TextField("上海日期 YYYY-MM-DD", text: $day)
+                Text("整理事项").font(.title2.bold())
+                Text("事项是录屏的辅助整理，不影响直接回看。").font(.caption).foregroundStyle(.secondary)
+                if !days.isEmpty {
+                    Picker("日期", selection: $day) { ForEach(days, id: \.self) { Text($0).tag($0) } }
+                }
+                Button(rawCount.map { $0 > 0 ? "查看当天 \($0) 段录屏" : "查看录屏记录" } ?? "查看录屏记录", systemImage: "play.rectangle", action: openRecordings)
                 Button("刷新事项") { Task { await refresh() } }
                 Text(message).font(.caption).foregroundStyle(.secondary)
                 ForEach(Array((snapshot?.missingIntervals ?? []).enumerated()), id: \.offset) { _, gap in
@@ -50,9 +60,22 @@ struct JournalActivitiesView: View {
                         Text(message).font(.caption).foregroundStyle(.secondary)
                     }.padding().frame(maxWidth: .infinity, alignment: .leading)
                 }
-            } else { ContentUnavailableView("选择事项", systemImage: "list.bullet.rectangle", description: Text("尚未整理时可切换原始记录")) }
+            } else if loading {
+                ProgressView("正在读取事项…")
+            } else {
+                ContentUnavailableView {
+                    Label(snapshot?.cards.isEmpty == false ? "选择一条事项" : failed ? "事项暂不可用" : "当天尚未生成事项", systemImage: "list.bullet.rectangle")
+                } description: {
+                    Text(rawCount.map { $0 > 0 ? "当天已有 \($0) 段录屏，可以直接回看。" : "事项与录屏分别保存，可前往录屏记录查看。" } ?? "可以先查看录屏记录。")
+                } actions: {
+                    Button("查看录屏记录", action: openRecordings).buttonStyle(.borderedProminent)
+                }
+            }
         }
-        .task { await refresh() }
+        .task(id: day) {
+            snapshot = nil; selected = nil; rawCount = nil; loading = true; playback = nil; captureID = nil
+            await refresh()
+        }
     }
     @State private var playbackRevision = ""
     @State private var captureID: String?
@@ -64,27 +87,43 @@ struct JournalActivitiesView: View {
     private func refresh() async {
         refreshGeneration += 1
         let generation = refreshGeneration
+        failed = false
         do {
-            if day.isEmpty {
-                let (statusData,_) = try await service.analysisRequest("analysisStatus",input: "{}")
-                let analysis = try JSONDecoder().decode(AnalysisStatus.self,from: statusData)
-                let raw = try await service.status().days.map(\.day)
-                day = (analysis.days + raw).max() ?? analysisDay(journalNowMs())
-            }
+            let (statusData,_) = try await service.analysisRequest("analysisStatus",input: "{}")
+            let analysis = try JSONDecoder().decode(AnalysisStatus.self,from: statusData)
+            let raw = try await service.status().days.map(\.day)
+            guard !Task.isCancelled, generation == refreshGeneration else { return }
+            days = Array(Set(analysis.days + raw + (day.isEmpty ? [] : [day]))).sorted(by: >)
+            if day.isEmpty, let first = days.first { day = first; return }
+            guard !day.isEmpty else { snapshot = nil; message = "尚未生成事项。录屏可直接回看。"; loading = false; return }
             let requestedDay = day
+            // Raw catalogue failures must not hide independently stored activities.
+            let count = try? await recordingCount(on: requestedDay)
+            guard !Task.isCancelled, generation == refreshGeneration, requestedDay == day else { return }
+            rawCount = count
             let (data,_) = try await service.analysisRequest("analysisExport", input: analysisJSON(["day":requestedDay]))
             guard !Task.isCancelled, generation == refreshGeneration, requestedDay == day else { return }
+            loading = false
             snapshot = try JSONDecoder().decode(AnalysisExport.self, from: data)
             selected = snapshot?.cards.first { $0.cardID == selected?.cardID }
             playback = nil; captureID = nil
-            message = snapshot?.cards.isEmpty == true ? "尚未整理出事项，可切换原始记录" : "仅已记录范围 · 上海时间"
+            message = snapshot?.cards.isEmpty == true ? "当天尚未生成事项，无需等待即可回看录屏。" : "仅已记录范围 · 上海时间"
             if snapshot?.coverage != "complete" { message += " · 覆盖不完整" }
             if let summary = snapshot?.summary { message += "\n" + summary }
         } catch {
             guard generation == refreshGeneration, !Task.isCancelled else { return }
-            snapshot = nil; selected = nil; playback = nil; captureID = nil
-            message = "事项暂不可用，原始记录仍可查看"
+            snapshot = nil; selected = nil; loading = false; failed = true; playback = nil; captureID = nil
+            message = "事项读取失败，不影响查看录屏。请刷新重试。"
         }
+    }
+    private func recordingCount(on day: String) async throws -> Int {
+        var cursor: String?; var count = 0
+        repeat {
+            let page = try await service.ranges(day: day, cursor: cursor, limit: 200)
+            try Task.checkCancellation()
+            count += page.items.count; cursor = page.nextCursor
+        } while cursor != nil
+        return count
     }
     private func retry(_ batch: String) async {
         guard let currentRevision = snapshot?.revision else { return }
