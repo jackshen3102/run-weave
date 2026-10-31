@@ -149,3 +149,35 @@ Mac/iOS 默认显示事项，并保留原始记录切换。证据通过 captureI
 分析验收工具只可操作独立 fixture 根目录：`ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT`。
 完整需求与未完成项见 [三期计划](../../docs/plans/2026-10-31-screen-recording-phase-3.md)；工具通过
 不等于真实来源启用、原任务定时运行、随记发布或手机通知已验收。
+
+### 会话来源和清理缺口
+
+Agent-only 事项通过设备、provider 和 thread ID 定位既有会话。Mac 使用
+`runweave://screen-conversation` 交给 Runweave 桌面端；桌面端核对当前连接的设备身份后，
+复用会话阅读器。iOS 在同一连接上解析目标并核对线程，再进入原生阅读页。
+终端不存在、线程变化或来源不可读时保留文字并提示不可用，不自动恢复或启动 Agent。
+Debug 隔离模式不向 Stable 发送链接；可显式传入
+`--validation-conversation-app '/Applications/Runweave Beta pool-04.app'`，要求同时指定隔离数据目录，
+并校验目标是 Beta 应用。Release 拒绝所有 validation 参数。
+
+原始段删除前，在原有 `state_events` 中事务记录 `sourceRetired`：仅保存 capture ID 和实际采样时间，
+保留 30 天，不保存截图或转写。它不参与采集状态和回放区间。尚未分析或仅分批但未完成的材料
+删除后，导出明确标记 `expired-unprocessed`，已生成的文字继续保留。升级前已经删除且没有账本的
+材料无法重建逐帧身份；过期日期采用保守覆盖结论。
+
+现有集成诊断工具增加以下入口（不是屏幕捕获或完整 UI 验收）：
+
+```bash
+ScreenJournalAnalysisVerify NEW_EMPTY_ISOLATED_ROOT --boundaries
+ScreenJournalAnalysisVerify NEW_EMPTY_ISOLATED_ROOT --queue-faults
+ScreenJournalAnalysisVerify SAME_QUEUE_FIXTURE_ROOT --queue-reopen
+ScreenJournalAnalysisVerify NEW_EMPTY_ISOLATED_ROOT --bad-analysis
+ScreenJournalFixture --data-dir NEW_EMPTY_ISOLATED_ROOT --scenario playback
+ScreenJournalAnalysisVerify SAME_PLAYBACK_ROOT --retirement
+```
+
+`--boundaries` 使用合成像素经过 CapturePermit、编码和 ready 索引验证日界、十五分钟批、writing、短尾和迟到帧。
+`--queue-faults` 直接调整隔离库的持久化期限及退避时刻验证恢复，不声称等待了真实五分钟租约。
+原进程退出后可用 `--queue-reopen` 在新进程读取同一账本，确认失败预算和永久过期状态仍保留。
+`--bad-analysis` 注入不兼容的衍生库版本，检查原采集存储链路继续写入及旧帧解码不变。
+`--retirement` 删除本例合成媒体，检查文字保留和未处理材料永久缺口；只可用于一次性 fixture。

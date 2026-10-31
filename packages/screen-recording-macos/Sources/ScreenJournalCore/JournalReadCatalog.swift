@@ -63,7 +63,7 @@ struct JournalReadCatalog {
             finish()
         }
         ranges.sort { $0.startMs == $1.startMs ? $0.rangeID < $1.rangeID : $0.startMs < $1.startMs }
-        let events = try db.rows("SELECT state,reason,started,ended FROM state_events WHERE ended>=? ORDER BY id", [cutoff])
+        let events = try db.rows("SELECT state,reason,started,ended FROM state_events WHERE ended>=? AND state!='sourceRetired' ORDER BY id", [cutoff])
         let intervals = events.compactMap { row -> JournalInterval? in
             guard let start = Double(row["started"] ?? ""), let end = Double(row["ended"] ?? ""), end > start else { return nil }
             let kind: String

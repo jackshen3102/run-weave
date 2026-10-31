@@ -87,6 +87,19 @@ actor StorageEngine {
     func readChanges() -> AsyncStream<Int> { database.reads.changes() }
     func activeReadCount() -> Int { database.reads.activeCount }
     func readRevision() -> Int { database.reads.invalidationRevision }
+    func analysisRetiredCaptures(day: String) throws -> [(String, Int64)] {
+        guard let date = ISO8601DateFormatter().date(from: day+"T00:00:00+08:00") else { throw JournalReadError("INVALID_ARGUMENT") }
+        let start = Int64(date.timeIntervalSince1970*1000), end = start+86400000
+        var result: [(String, Int64)] = []
+        for row in try database.rows("SELECT reason FROM state_events WHERE state='sourceRetired' AND started<? AND ended>=?", [Double(end)/1000,Double(start)/1000]) {
+            guard let text = row["reason"] else { continue }
+            let values = try JSONDecoder().decode([[String:String]].self,from: Data(text.utf8))
+            for value in values {
+                if let id = value["id"], let ms = Int64(value["captured_ms"] ?? ""), ms >= start && ms < end { result.append((id,ms)) }
+            }
+        }
+        return result
+    }
     func stopReads() async {
         database.reads.cancelAll()
         while database.reads.activeCount > 0 { try? await Task.sleep(for: .milliseconds(20)) }

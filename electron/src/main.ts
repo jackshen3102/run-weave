@@ -1,3 +1,4 @@
+import { registerScreenConversationLinks } from "./desktop/screen-conversation-link";
 import { registerClipboardImageHandlers } from "./desktop/clipboard-images";
 import { registerTerminalBadge } from "./monitoring/terminal-badge";
 import { registerResourceNotificationHandlers } from "./monitoring/resource-notifications";
@@ -311,6 +312,8 @@ app.on("render-process-gone", (_event, webContents, details) => {
 app.on("child-process-gone", (_event, details) => {
   desktopRuntime.incidentLogger?.error("desktop.childProcess.gone", details);
 });
+
+registerScreenConversationLinks(() => desktopRuntime.mainWindow);
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 

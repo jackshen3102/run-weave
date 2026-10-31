@@ -4,6 +4,7 @@ import SwiftUI
 @available(iOS 17.0, *)
 struct ScreenRecordingBrowserView: View {
     @ObservedObject var session: AppSession
+    var openConversation: (TerminalConversation.Target) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var tab = "activities"
     @State private var reload = 0
@@ -27,7 +28,7 @@ struct ScreenRecordingBrowserView: View {
                     Text(status.timeZone).font(.caption)
                     Picker("日期", selection: $day) { ForEach(selectableDays, id: \.self) { Text($0).tag($0) } }
                     if status.hasPending { Text("最近记录整理中").foregroundStyle(.secondary) }
-                    if tab == "activities" { ScreenRecordingActivitiesView(session: session, day: day) }
+                    if tab == "activities" { ScreenRecordingActivitiesView(session: session, day: day, openConversation: openConversation) }
                     else if let api = session.api {
                         ForEach(ranges) { range in
                             NavigationLink {

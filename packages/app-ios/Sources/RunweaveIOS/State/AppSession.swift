@@ -334,6 +334,8 @@ final class AppSession: ObservableObject {
     } catch { if epoch == generation { await handle(error, epoch: epoch) } }
   }
 
+  @Published var requestedConversation: TerminalConversation.Target?
+
   func openTerminal(_ id: String, requireUnreadCompletion: Bool = false) async {
     // A tap during recovery must use the transport delivered by that recovery.
     let computerID = connection?.id
@@ -389,6 +391,7 @@ final class AppSession: ObservableObject {
   }
 
   func closeTerminal() {
+    requestedConversation = nil
     browser.invalidate()
     routeRequest += 1
     terminalController?.dispose()

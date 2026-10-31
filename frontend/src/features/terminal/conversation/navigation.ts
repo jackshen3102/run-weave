@@ -80,12 +80,11 @@ export async function openHandoffConversation({
     )
   )
     throw new Error("无法定位该条回复；请查看已有来源摘录");
-  if (origin.messageId)
-    useConversationLocation.getState().set({
+  useConversationLocation.getState().set({
       requestId: crypto.randomUUID(),
       scope: runtime.scope,
       target: conversation.target,
-      messageId: origin.messageId,
+      messageId: origin.messageId ?? "",
     });
   setTerminalNavigation(runtime.scope, {
     parentProjectId: resolveTerminalParentProjectId(projectId),

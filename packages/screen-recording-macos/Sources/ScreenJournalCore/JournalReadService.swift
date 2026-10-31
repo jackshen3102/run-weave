@@ -123,10 +123,11 @@ actor JournalReadService {
             let day = try required(r.day)
             let raw = try await engine.analysisDayCaptures(day, settings: settings)
             let pending = try await engine.analysisDayPending(day) || (c.hasPending && day == analysisDay(journalNowMs()))
+            let retired = try await engine.analysisRetiredCaptures(day: day)
             let expiredDay = day < analysisDay(journalNowMs()-Int64(settings.retentionDays)*86400000)
-            let fingerprint = analysisHash(raw.map { $0.0+":"+String($0.1) }.sorted().joined(separator: "|") + String(pending) + String(expiredDay))
+            let fingerprint = analysisHash(raw.map { $0.0+":"+String($0.1) }.sorted().joined(separator: "|") + String(pending) + String(expiredDay) + retired.map { $0.0+":"+String($0.1) }.sorted().joined(separator: "|"))
             try await owner.observeSource(fingerprint, day: day)
-            let value = try await owner.export(day: day, snapshotRevision: r.snapshotRevision, hasPending: pending, raw: raw, retentionDays: settings.retentionDays)
+            let value = try await owner.export(day: day, snapshotRevision: r.snapshotRevision, hasPending: pending, raw: raw, retentionDays: settings.retentionDays, retired: retired)
             if method == "analysisExport" { return try json(value) }
             let limit = r.limit ?? 100
             guard (1...100).contains(limit) else { throw JournalReadError("INVALID_ARGUMENT") }

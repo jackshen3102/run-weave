@@ -28,7 +28,7 @@ struct RecoveryCoordinator {
                 } catch {
                     try db.execute("UPDATE segments SET state='unavailable',failure=? WHERE id=?", ["interrupted_segment_unrecoverable", segment.id])
                     try db.event("gap", "interrupted_segment_unrecoverable", affected: segment.frames, at: Date(timeIntervalSince1970: segment.start))
-                    try db.execute("UPDATE state_events SET ended=? WHERE id=(SELECT MAX(id) FROM state_events)", [segment.end])
+                    try db.execute("UPDATE state_events SET ended=? WHERE id=(SELECT MAX(id) FROM state_events WHERE state!='sourceRetired')", [segment.end])
                     for file in [media, pending] where FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
                 }
             case "ready":

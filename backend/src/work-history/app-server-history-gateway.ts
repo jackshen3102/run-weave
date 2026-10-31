@@ -17,6 +17,9 @@ export class AppServerHistoryGatewayError extends Error {
 export class AppServerHistoryGateway {
   constructor(private readonly timeoutMs = DEFAULT_TIMEOUT_MS) {}
 
+  async getThreadReference(threadID: string) {
+    return (await this.createClient()).getThread(threadID, AbortSignal.timeout(this.timeoutMs));
+  }
   async getAnalysisEvidence(threadID: string, cursor?: string, signal?: AbortSignal) {
     const timeout = AbortSignal.timeout(this.timeoutMs);
     return (await this.createClient()).getAnalysisEvidence(threadID,cursor,signal ? AbortSignal.any([signal,timeout]) : timeout);

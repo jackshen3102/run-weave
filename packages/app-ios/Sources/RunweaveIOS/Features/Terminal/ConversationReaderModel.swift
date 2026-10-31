@@ -20,9 +20,10 @@ import SwiftUI
   private var started = false
   private var boundTarget: TerminalConversation.Target?
 
-  init(session: AppSession, controller: SessionController, terminalID: String) {
+  init(session: AppSession, controller: SessionController, terminalID: String, expectedTarget: TerminalConversation.Target? = nil) {
     self.session = session; self.controller = controller
     self.terminalID = terminalID; generation = session.generation
+    boundTarget = expectedTarget
     connectionID = session.connection?.id
   }
   private var current: Bool {

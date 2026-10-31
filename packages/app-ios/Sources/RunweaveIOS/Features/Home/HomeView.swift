@@ -18,6 +18,7 @@ struct HomeView: View {
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
   @State private var showingScreenRecording = false
+  @State private var screenConversation: (target: TerminalConversation.Target, generation: Int)?
   @State private var renaming: HomeTerminal?
   @State private var moving: HomeTerminal?
   @State private var initializedGeneration: Int?
@@ -221,8 +222,21 @@ struct HomeView: View {
         query = ""
       }
     }
-    .sheet(isPresented: $showingScreenRecording) {
-      if #available(iOS 17.0, *) { ScreenRecordingBrowserView(session: session) }
+    .sheet(isPresented: $showingScreenRecording, onDismiss: {
+      guard let request = screenConversation else { return }
+      screenConversation = nil
+      guard request.generation == session.generation else { return }
+      Task {
+        await session.openTerminal(request.target.terminalSessionId)
+        guard request.generation == session.generation,
+              session.terminal?.id == request.target.terminalSessionId else { return }
+        session.requestedConversation = request.target
+      }
+    }) {
+      if #available(iOS 17.0, *) { ScreenRecordingBrowserView(session: session) { target in
+        screenConversation = (target, session.generation)
+        showingScreenRecording = false
+      } }
       else { Text("屏幕记录回放需要 iOS 17 或更新版本").padding() }
     }
     .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }

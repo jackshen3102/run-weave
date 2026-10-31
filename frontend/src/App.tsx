@@ -1,3 +1,4 @@
+import { useScreenConversationLink } from "./features/screen-recording/use-conversation-link";
 import { SettingsEditProvider, useManagementExit } from "./features/settings/edit-session";
 import { SettingsPage } from "./pages/settings-page";
 import { isManagementPath, settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
@@ -11,7 +12,7 @@ import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { TunnelDrawer } from "./features/tunnels/drawer";
-import { StatusNoticeProvider } from "./components/status-notice";
+import { StatusNoticeProvider, StatusNotice } from "./components/status-notice";
 import { useTunnelStore } from "./features/tunnels/store";
 import { SuijiConnectionProvider } from "./features/suiji/connection-provider";
 import { SuijiDrawer } from "./features/suiji/drawer";
@@ -140,6 +141,7 @@ function RunweaveApp() {
     connectionId: activeConnectionId,
     generation: activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined,
   });
+  const screenConversation = useScreenConversationLink({ scope: queryScope, apiBase, token }, navigate);
   const [pendingScheduledRunOpen, setPendingScheduledRunOpen] = useState<{ connectionId: string; runId: string } | null>(null);
   const [scheduledRunOpenError, setScheduledRunOpenError] = useState<string | null>(null);
   const { notice: quickInputNotice, dismissNotice: dismissQuickInputNotice } = useQuickInputNotifications(
@@ -521,6 +523,7 @@ function RunweaveApp() {
   );
   return <>
     <ClarityNavigationObserver routes={routeElements} pendingElement={authPendingView} />
+    {screenConversation.notice ? <StatusNotice kind="screen-conversation" className="rounded bg-slate-900 p-4 text-white"><button type="button" onClick={screenConversation.dismiss}>{screenConversation.notice} · 点击关闭</button></StatusNotice> : null}
     {scheduledRunOpenError ? <button type="button" role="alert"
       className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-rose-700 bg-card p-3 text-left text-sm shadow-lg"
       onClick={() => setScheduledRunOpenError(null)}>{scheduledRunOpenError} · 点击关闭</button> : null}

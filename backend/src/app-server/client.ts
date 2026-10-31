@@ -120,10 +120,10 @@ export class AppServerClient {
     return (await response.json()) as AppServerThreadDetailResponse;
   }
 
-  async getThread(threadId: string): Promise<AppServerThreadResponse | null> {
+  async getThread(threadId: string, signal?: AbortSignal): Promise<AppServerThreadResponse | null> {
     const response = await fetch(
       `${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}`,
-      { headers: this.headers() },
+      { headers: this.headers(), signal },
     );
     if (!response.ok) {
       return null;

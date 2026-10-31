@@ -3,3 +3,7 @@ extends: ./electron-builder.yml
 appId: com.runweave.desktop.beta
 productName: Runweave Beta
 artifactName: Runweave-Beta-${version}-${arch}.${ext}
+
+protocols:
+  - name: ScreenJournal conversation
+    schemes: [runweave-beta]

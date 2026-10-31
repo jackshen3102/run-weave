@@ -17,6 +17,11 @@ import Combine
                 guard let index = args.firstIndex(of: flag), args.indices.contains(index + 1) else { throw journalError("missing_validation_argument") }
                 switch flag {
                 case "--validation-data-dir": directory = args[index + 1]
+                case "--validation-conversation-app":
+                    guard args.contains("--validation-data-dir"),
+                          Bundle(path: args[index + 1])?.bundleIdentifier?.hasPrefix("com.runweave.desktop.beta.") == true else {
+                        throw journalError("validation_requires_beta_application_and_isolated_directory")
+                    }
                 case "--validation-max-bytes":
                     guard let value = Int64(args[index + 1]), value > 0 else { throw journalError("invalid_validation_max_bytes") }; maxBytes = value
                 case "--validation-free-bytes":

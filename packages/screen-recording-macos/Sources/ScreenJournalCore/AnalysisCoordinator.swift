@@ -166,22 +166,25 @@ actor AnalysisCoordinator {
             try store.execute("UPDATE batches SET state=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,error='LEASE_EXPIRED' WHERE state='running' AND expires<=?", [now])
             for row in expiredDays { if let day = row["day"] { try changed(day: day) } }
         }
-        guard let row = try store.rows("SELECT * FROM batches WHERE state='pending' AND attempts<3 AND next_attempt<=? ORDER BY start_ms,id LIMIT 1", [now]).first,
-              let id = row["id"] else { return nil }
-        let manifest: AnalysisManifest = try decode(row["manifest"] ?? "")
-        if manifest.captures.contains(where: { $0.availableUntilMs <= now }) {
+        // Retire expired sources in the same claim pass so they cannot starve ready work.
+        while let row = try store.rows("SELECT * FROM batches WHERE state='pending' AND attempts<3 AND next_attempt<=? ORDER BY start_ms,id LIMIT 1", [now]).first {
+            guard let id = row["id"] else { throw JournalReadError("ANALYSIS_UNAVAILABLE") }
+            let manifest: AnalysisManifest = try decode(row["manifest"] ?? "")
+            if manifest.captures.contains(where: { $0.availableUntilMs <= now }) {
+                try store.transaction {
+                    try store.execute("UPDATE batches SET state='source-expired',error='SOURCE_EXPIRED',updated=? WHERE id=?", [now,id]); try changed(day: manifest.day)
+                }; continue
+            }
+            let generation = (Int(row["generation"] ?? "0") ?? 0) + 1
+            let attempt = (Int(row["attempts"] ?? "0") ?? 0) + 1
             try store.transaction {
-                try store.execute("UPDATE batches SET state='source-expired',error='SOURCE_EXPIRED',updated=? WHERE id=?", [now,id]); try changed(day: manifest.day)
-            }; return nil
+                try store.execute("UPDATE batches SET state='running',worker=?,generation=?,attempts=?,expires=?,updated=? WHERE id=?", [workerID,generation,attempt,now+300000,now,id])
+                try store.execute("INSERT INTO attempts(batch_id,generation,started) VALUES (?,?,?)", [id,generation,now])
+                try changed(day: manifest.day)
+            }
+            return AnalysisClaim(manifest: manifest, workerID: workerID, generation: generation, expiresAt: now+300000, attempt: attempt)
         }
-        let generation = (Int(row["generation"] ?? "0") ?? 0) + 1
-        let attempt = (Int(row["attempts"] ?? "0") ?? 0) + 1
-        try store.transaction {
-            try store.execute("UPDATE batches SET state='running',worker=?,generation=?,attempts=?,expires=?,updated=? WHERE id=?", [workerID,generation,attempt,now+300000,now,id])
-            try store.execute("INSERT INTO attempts(batch_id,generation,started) VALUES (?,?,?)", [id,generation,now])
-            try changed(day: manifest.day)
-        }
-        return AnalysisClaim(manifest: manifest, workerID: workerID, generation: generation, expiresAt: now+300000, attempt: attempt)
+        return nil
     }
     private func owned(batchID: String, workerID: String, generation: Int) throws -> AnalysisManifest {
         guard let row = try store.rows("SELECT manifest FROM batches WHERE id=? AND worker=? AND generation=? AND state='running' AND expires>?", [batchID,workerID,generation,journalNowMs()]).first else { throw JournalReadError("LEASE_LOST") }
@@ -314,7 +317,7 @@ actor AnalysisCoordinator {
         }
         return receipt
     }
-    func export(day: String, snapshotRevision: Int?, hasPending: Bool, raw: [(String, Int64)], retentionDays: Int) throws -> AnalysisExport {
+    func export(day: String, snapshotRevision: Int?, hasPending: Bool, raw: [(String, Int64)], retentionDays: Int, retired: [(String, Int64)] = []) throws -> AnalysisExport {
         guard day.range(of: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", options: .regularExpression) != nil else { throw JournalReadError("INVALID_ARGUMENT") }
         let rev = try dayRevision(day)
         if let expected = snapshotRevision, expected != rev { throw JournalReadError("CONFLICT") }
@@ -327,7 +330,10 @@ actor AnalysisCoordinator {
         let accounted = Set(coverage.compactMap { $0["capture_id"] })
         let unseen = raw.filter { $0.1 >= effective && !accounted.contains($0.0) }
         if let first = unseen.map({ $0.1 }).min(), let last = unseen.map({ $0.1 }).max() { missing.append(AnalysisMissing(startMs: first,endMs: last,reason: "pending-discovery")) }
-        if raw.isEmpty && accounted.isEmpty, let start = ISO8601DateFormatter().date(from: day+"T00:00:00+08:00") {
+        let completed = Set(coverage.filter { $0["state"] == "complete" }.compactMap { $0["capture_id"] })
+        let lost = retired.filter { $0.1 >= effective && !completed.contains($0.0) }
+        missing.append(contentsOf: lost.map { AnalysisMissing(startMs: $0.1,endMs: $0.1,reason: "expired-unprocessed") })
+        if raw.isEmpty && retired.isEmpty, let start = ISO8601DateFormatter().date(from: day+"T00:00:00+08:00") {
             let startMs = Int64(start.timeIntervalSince1970*1000), endMs = startMs+86400000-1
             if effective > 0 && effective <= endMs && endMs < journalNowMs()-Int64(retentionDays)*86400000 {
                 missing.append(AnalysisMissing(startMs: max(startMs,effective),endMs: endMs,reason: "expired-unprocessed"))

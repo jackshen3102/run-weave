@@ -43,7 +43,7 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
     if (!data) return;
     if (JSON.stringify(data.target) !== JSON.stringify(location.target)) {
       setLocationError("会话已变化，无法定位原始回复");
-    } else {
+    } else if (location.messageId) {
       const message = Array.from(scroll.current?.querySelectorAll<HTMLElement>("[data-conversation-message]") ?? []).find(item => item.dataset.conversationMessage === location.messageId);
       if (message) {
         message.scrollIntoView({ block: "center" }); setHighlight(location.messageId); capture();

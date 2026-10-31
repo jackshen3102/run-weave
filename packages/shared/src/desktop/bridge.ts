@@ -113,6 +113,7 @@ export interface RunweaveElectronBridge {
   exportDesktopDiagnostics?: () => Promise<void>;
   getLocalConfigurationStatus: () => Promise<ConfigurationStatus>;
   platform: string;
+  onScreenConversationOpen: (listener: (target: import("../screen-recording/conversation-link").ScreenConversationLink) => void) => () => void;
   isElectron: boolean;
   /** Resolve only a user-provided, disk-backed File; synthetic files return an empty path. */
   getPathForFile: (file: File) => string;
