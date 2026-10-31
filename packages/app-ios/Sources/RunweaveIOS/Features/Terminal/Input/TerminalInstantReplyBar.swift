@@ -17,16 +17,14 @@ struct TerminalInstantReplyBar: View {
   let close: () -> Void
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 4) {
       ForEach(replies) { reply in
         Button { send(reply.text) } label: {
-          HStack(spacing: 8) {
-            Text(reply.text).font(.subheadline.weight(.medium))
-            Image(systemName: "return").font(.caption)
-          }
-          .frame(maxWidth: .infinity, minHeight: 44)
-          .background(TerminalAppearance.accent.opacity(0.14))
-          .clipShape(RoundedRectangle(cornerRadius: 12))
+          Text(reply.text).font(.footnote.weight(.medium))
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(TerminalAppearance.accent.opacity(0.10), in: Capsule())
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .accessibilityLabel("发送“\(reply.text)”")
         .accessibilityHint("立即发送并回车，保留输入草稿")
@@ -35,7 +33,8 @@ struct TerminalInstantReplyBar: View {
         .opacity(enabled ? 1 : 0.4)
       }
       Button(action: close) {
-        Image(systemName: "chevron.down").frame(width: 44, height: 44)
+        Image(systemName: "chevron.down").font(.caption)
+          .frame(width: 44, height: 44).contentShape(Rectangle())
       }
       .foregroundColor(.secondary)
       .accessibilityLabel("收起一键回复")
@@ -43,8 +42,6 @@ struct TerminalInstantReplyBar: View {
     }
     .buttonStyle(.plain)
     .foregroundColor(TerminalAppearance.accent)
-    .padding(4)
-    .terminalGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     .accessibilityValue(sending ? "发送中" : "")
   }
 }
