@@ -26,6 +26,7 @@ import {
   runOptional,
   runResult,
 } from "./sync-runtime.mjs";
+import { codexReleaseInstalled, collectSessionReferencedCodexVersions } from "./codex-state.mjs";
 import {
   lockToolkitSync,
   packageMatches,
@@ -104,7 +105,7 @@ const release = toolkitRelease(repoRoot);
 publishedPluginDir = publishToolkitRelease(publishRoot, marketplace, release);
 log(`Toolkit content release ${release.version}.`);
 
-if (codexReleaseInstalled(release)) {
+if (codexReleaseInstalled(release, { marketplaceName, pluginName, publishRoot, cacheRoot: getCodexPluginCacheRoot(pluginName, marketplaceName) })) {
   log(
     "Codex already has this exact Toolkit content; leaving its installation and hook approval unchanged.",
   );
@@ -192,31 +193,6 @@ function hasStagedToolkitChanges() {
   return output.length > 0;
 }
 
-function codexReleaseInstalled(release) {
-  if (!commandExists("codex")) return false;
-  const result = runResult("codex", [
-    "plugin",
-    "list",
-    "--marketplace",
-    marketplaceName,
-    "--json",
-  ]);
-  if (result.status !== 0) return false;
-  const installed = JSON.parse(result.stdout).installed?.find(
-    (plugin) => plugin.pluginId === `${pluginName}@${marketplaceName}`,
-  );
-  return (
-    installed?.version === release.version &&
-    installed?.marketplaceSource?.source === publishRoot &&
-    packageMatches(
-      path.join(
-        getCodexPluginCacheRoot(pluginName, marketplaceName),
-        release.version,
-      ),
-      release.files,
-    )
-  );
-}
 
 function installForCodex(pluginName, marketplaceName) {
   if (!commandExists("codex")) {
@@ -247,6 +223,7 @@ function collectCodexCompatibilityVersions(pluginName, marketplaceName) {
   for (const version of collectSessionReferencedCodexVersions(
     pluginName,
     marketplaceName,
+    codexHome,
   )) {
     addVersion(versions, version);
   }
@@ -272,43 +249,6 @@ function collectCodexCompatibilityVersions(pluginName, marketplaceName) {
   return versions;
 }
 
-function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
-  if (!commandExists("rg")) {
-    return [];
-  }
-
-  const sessionsDir = path.join(codexHome, "sessions");
-  if (!existsSync(sessionsDir)) {
-    return [];
-  }
-
-  const pattern = [
-    "plugins/cache",
-    marketplaceName,
-    pluginName,
-    "[0-9]+\\.[0-9]+\\.[0-9]+\\+codex\\.[a-f0-9]+",
-  ].join("/");
-  const result = runResult(
-    "rg",
-    [
-      "--only-matching",
-      "--no-filename",
-      "--color",
-      "never",
-      pattern,
-      sessionsDir,
-    ],
-    { quiet: true },
-  );
-  if (result.status !== 0 && result.status !== 1) {
-    return [];
-  }
-
-  const versionPattern = /[0-9]+\.[0-9]+\.[0-9]+\+codex\.[a-f0-9]+/g;
-  return Array.from(
-    new Set(`${result.stdout || ""}`.match(versionPattern) ?? []),
-  );
-}
 
 function preserveCodexCompatibilityCache(
   pluginName,
