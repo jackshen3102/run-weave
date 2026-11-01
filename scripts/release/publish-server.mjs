@@ -146,7 +146,9 @@ function npm(args) {
 }
 async function verify(artifact) {
   const { pkg, integrity } = artifact;
-  for (let attempt = 0; attempt < 12; attempt++) {
+  // npm may accept a publish before registry processing makes it visible.
+  // Keep polling the exact version; never republish while it is still processing.
+  for (let attempt = 0; attempt < 90; attempt++) {
     const published = await metadata(pkg.name, pkg.version);
     if (published) {
       assert(
@@ -163,6 +165,10 @@ async function verify(artifact) {
       assert(downloaded === integrity, `Downloaded bytes differ: ${pkg.name}`);
       return;
     }
+    if (attempt % 6 === 0)
+      console.log(
+        `Waiting for npm processing: ${pkg.name}@${pkg.version} (${attempt * 10}s / 900s)`,
+      );
     await sleep(10_000);
   }
   throw new Error(
