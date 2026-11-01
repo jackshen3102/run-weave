@@ -12,7 +12,6 @@ struct TerminalActionsMenu: View, Equatable {
   let canShare: Bool
   let sharing: Bool
   let share: () -> Void
-  let readConversation: () -> Void
   let canReply: Bool
   let reply: () -> Void
   let openDesktop: () -> Void
@@ -39,8 +38,6 @@ struct TerminalActionsMenu: View, Equatable {
   var body: some View {
     Menu {
       Text(cwd)
-      Button(action: readConversation) { Label("阅读会话", systemImage: "book") }
-        .accessibilityIdentifier("terminal-conversation-open")
       if canReply {
         Button(action: reply) { Label("回复辅助", systemImage: "questionmark.bubble") }
           .accessibilityIdentifier("codex-reply-assistant-open")
