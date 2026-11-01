@@ -69,6 +69,8 @@ actor AnalysisCoordinator {
     private func discover(effectiveFrom: Int64, settings: RecordingSettings, captureState: String) async throws {
         let cursor = Int64(try store.scalar("SELECT value FROM metadata WHERE key='scanCursor'") ?? "0") ?? 0
         let page = try await engine.analysisPage(after: cursor, settings: settings)
+        let sourceIntervals = try await engine.catalog(settings: settings).intervals
+        let breaks = sourceIntervals.flatMap { [$0.startMs,$0.endMs] }.sorted()
         var fresh: [JournalCapture] = []
         for frame in page.frames where frame.capture.capturedAtMs >= effectiveFrom {
             if try store.scalar("SELECT capture_id FROM coverage WHERE capture_id=?", [frame.capture.id]) == nil { fresh.append(frame.capture) }
@@ -76,27 +78,26 @@ actor AnalysisCoordinator {
         var groups: [[JournalCapture]] = []; var group: [JournalCapture] = []
         for frame in fresh {
             if let first = group.first, let last = group.last,
-               frame.sessionID != last.sessionID || frame.capturedAtMs < last.capturedAtMs || frame.capturedAtMs - last.capturedAtMs > 120000 || analysisDay(frame.capturedAtMs) != analysisDay(first.capturedAtMs) || frame.capturedAtMs - first.capturedAtMs >= 900000 {
+               CaptureActivity.startsRange(frame, after: last) || CaptureActivity.crossesBreak(breaks, after: last.capturedAtMs, through: frame.capturedAtMs) || analysisDay(frame.capturedAtMs) != analysisDay(first.capturedAtMs) || group.count >= 900 {
                 groups.append(group); group = []
             }
             group.append(frame)
         }
         if !group.isEmpty { groups.append(group) }
         let now = journalNowMs()
-        // Four newly frozen batches per pass. Cursor advances only when all
-        // candidates have been inspected; waiting tails are found on the next wrap.
+        // Freeze one input at a time so the next claim sees the previous card's
+        // committed revision and can extend the same matter. 900 is an input
+        // budget, never a time/activity boundary. All ready tails are eligible.
         var created = 0
-        for (index, captures) in groups.enumerated() {
-            guard created < 4, let first = captures.first, let last = captures.last else { break }
-            let mature = last.capturedAtMs - first.capturedAtMs >= 890000 || index < groups.count - 1 || captureState != "recording" || now - last.capturedAtMs >= 1200000 || analysisDay(last.capturedAtMs) != analysisDay(now)
-            guard mature else { continue }
+        for captures in groups {
+            guard created < 1, let first = captures.first, let last = captures.last else { break }
             let context = try cards().filter { $0.spans.contains { $0.endMs >= first.capturedAtMs - 2700000 && $0.startMs <= first.capturedAtMs } }
-            let inputHash = analysisHash(try analysisJSON(captures) + analysisJSON(context) + "screen-timeline-v1")
+            let inputHash = analysisHash(try analysisJSON(captures) + analysisJSON(context) + "screen-timeline-v2-dynamic")
             let id = UUID().uuidString
             let evidence = captures.filter { !$0.privacyPlaceholder }.map { AnalysisEvidence(id: $0.id, source: "screen", occurredAtMs: $0.capturedAtMs, captureID: $0.id) }
             let manifest = AnalysisManifest(batchID: id, deviceID: deviceID, day: analysisDay(first.capturedAtMs), inputHash: inputHash,
-                promptVersion: "screen-timeline-v1", startMs: first.capturedAtMs, endMs: last.capturedAtMs, captures: captures,
-                intervals: JournalReadCatalog.intervals(for: captures, events: []), context: context, evidence: evidence + (try contextEvidence(context)), agentCoverage: "unknown")
+                promptVersion: "screen-timeline-v2-dynamic", startMs: first.capturedAtMs, endMs: last.capturedAtMs, captures: captures,
+                intervals: JournalReadCatalog.intervals(for: captures, events: sourceIntervals), context: context, evidence: evidence + (try contextEvidence(context)), agentCoverage: "unknown")
             try store.transaction {
                 try store.execute("INSERT INTO batches(id,input_hash,day,start_ms,end_ms,manifest,state,updated) VALUES (?,?,?,?,?,?,'pending',?)", [id,inputHash,manifest.day,manifest.startMs,manifest.endMs,try analysisJSON(manifest),now])
                 for c in captures { try store.execute("INSERT INTO coverage VALUES (?,?)", [c.id,id]) }
@@ -104,7 +105,7 @@ actor AnalysisCoordinator {
             }
             created += 1
         }
-        if created < 4 {
+        if created == 0 {
             try store.execute("INSERT OR REPLACE INTO metadata VALUES ('scanCursor',?)", [String(page.cursor)])
             if page.frames.isEmpty { try store.execute("INSERT OR REPLACE INTO metadata VALUES ('scanReconciledAt',?)", [String(now)]) }
         }
@@ -137,7 +138,7 @@ actor AnalysisCoordinator {
         var events: [AnalysisAgentEvent] = []; var bytes = 0
         for row in rows {
             let event: AnalysisAgentEvent = try decode(row["body"] ?? "")
-            if let first = events.first, analysisDay(first.occurredAtMs) != analysisDay(event.occurredAtMs) || event.occurredAtMs-first.occurredAtMs > 900000 { break }
+            if let first = events.first, analysisDay(first.occurredAtMs) != analysisDay(event.occurredAtMs) { break }
             if bytes + event.text.utf8.count > 32000 { break }
             events.append(event); bytes += event.text.utf8.count
         }
@@ -155,6 +156,7 @@ actor AnalysisCoordinator {
     func claim(workerID: String, expectedDeviceID: String, effectiveFrom: Int64, settings: RecordingSettings, captureState: String) async throws -> AnalysisClaim? {
         guard expectedDeviceID == deviceID, UUID(uuidString: workerID) != nil, effectiveFrom > 0, effectiveFrom <= journalNowMs() else { throw JournalReadError("INVALID_ARGUMENT") }
         try maintain()
+        if try store.scalar("SELECT id FROM batches WHERE state='running' AND expires>? LIMIT 1", [journalNowMs()]) != nil { return nil }
         // Discovery awaits the capture actor, so re-check leases after the await.
         try await discover(effectiveFrom: effectiveFrom, settings: settings, captureState: captureState)
         try discoverAgents()
@@ -169,7 +171,7 @@ actor AnalysisCoordinator {
         // Retire expired sources in the same claim pass so they cannot starve ready work.
         while let row = try store.rows("SELECT * FROM batches WHERE state='pending' AND attempts<3 AND next_attempt<=? ORDER BY start_ms,id LIMIT 1", [now]).first {
             guard let id = row["id"] else { throw JournalReadError("ANALYSIS_UNAVAILABLE") }
-            let manifest: AnalysisManifest = try decode(row["manifest"] ?? "")
+            var manifest: AnalysisManifest = try decode(row["manifest"] ?? "")
             if manifest.captures.contains(where: { $0.availableUntilMs <= now }) {
                 try store.transaction {
                     try store.execute("UPDATE batches SET state='source-expired',error='SOURCE_EXPIRED',updated=? WHERE id=?", [now,id]); try changed(day: manifest.day)
@@ -177,7 +179,20 @@ actor AnalysisCoordinator {
             }
             let generation = (Int(row["generation"] ?? "0") ?? 0) + 1
             let attempt = (Int(row["attempts"] ?? "0") ?? 0) + 1
+            // Queued inputs may predate another commit. Refresh context once,
+            // before the first lease; retries keep their exact frozen input.
+            if attempt == 1 {
+                let captureIDs = Set(manifest.captures.map(\.id))
+                let ownEvidence = manifest.evidence.filter {
+                    $0.source == "screen" ? captureIDs.contains($0.captureID ?? "") :
+                        $0.occurredAtMs >= manifest.startMs && $0.occurredAtMs <= manifest.endMs
+                }
+                manifest.context = try cards().filter { $0.spans.contains { $0.endMs >= manifest.startMs-2700000 && $0.startMs <= manifest.startMs } }
+                manifest.evidence = ownEvidence + (try contextEvidence(manifest.context))
+                manifest.inputHash = analysisHash(try analysisJSON(manifest.captures) + analysisJSON(ownEvidence) + analysisJSON(manifest.context) + "\(manifest.startMs):\(manifest.endMs):" + manifest.promptVersion)
+            }
             try store.transaction {
+                try store.execute("UPDATE batches SET input_hash=?,manifest=? WHERE id=?", [manifest.inputHash,try analysisJSON(manifest),id])
                 try store.execute("UPDATE batches SET state='running',worker=?,generation=?,attempts=?,expires=?,updated=? WHERE id=?", [workerID,generation,attempt,now+300000,now,id])
                 try store.execute("INSERT INTO attempts(batch_id,generation,started) VALUES (?,?,?)", [id,generation,now])
                 try changed(day: manifest.day)
@@ -304,7 +319,9 @@ actor AnalysisCoordinator {
                 try store.execute("INSERT OR IGNORE INTO evidence_refs VALUES (?,?)", [evidence.id,try analysisJSON(evidence)])
             }
             try store.execute("UPDATE agent_events SET body='' WHERE batch_id=?", [batchID])
-            try store.execute("INSERT OR REPLACE INTO analysis_observations VALUES (?,?)", [batchID,result.observation])
+            if !result.observation.isEmpty {
+                try store.execute("INSERT OR REPLACE INTO analysis_observations VALUES (?,?)", [batchID,result.observation])
+            }
             if var object = try JSONSerialization.jsonObject(with: Data(analysisJSON(manifest).utf8)) as? [String:Any], let refs = object["evidence"] as? [[String:Any]] {
                 object["evidence"] = refs.map { ref in var value = ref; value.removeValue(forKey: "text"); return value }
                 let sanitized = String(decoding: try JSONSerialization.data(withJSONObject: object,options: [.sortedKeys]),as: UTF8.self)

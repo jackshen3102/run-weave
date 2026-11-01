@@ -24,6 +24,7 @@ struct ScreenRecordingBrowserView: View {
     @State private var accessDenied = false
     @State private var retryAutomatically = true
     @State private var rangeError = ""
+    @State private var showQuiet = false
     private var selectableDays: [String] {
         Array(Set((status?.days.map(\.day) ?? []) + analysisDays)).sorted(by: >)
     }
@@ -134,7 +135,9 @@ struct ScreenRecordingBrowserView: View {
                     Text(status.hasPending ? "已有画面正在保存，完成后会自动显示。" : status.days.isEmpty ? "这台 Mac 暂无可回看的录屏。请在 Mac 的 ScreenJournal 中确认录屏已开启并获得授权。" : "所选日期没有可回看的录屏，可以选择其他日期。")
                 }
             } else if let api = session.api {
-                ForEach(ranges) { range in
+                let quietCount = ranges.filter { $0.activityKind == "quiet" }.count
+                if quietCount > 0 { Toggle("显示稳定画面（\(quietCount) 段）", isOn: $showQuiet) }
+                ForEach(ranges.filter { showQuiet || $0.activityKind != "quiet" }) { range in
                     NavigationLink {
                         ScreenRecordingPlaybackView(session: session, api: api, range: range, revision: revision, timeZone: status.timeZone)
                             .id("\(session.generation):\(status.serverEpoch):" + range.rangeID)
@@ -145,6 +148,7 @@ struct ScreenRecordingBrowserView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("\(time(range.startMs))–\(time(range.endMs))").font(.headline)
                                 Text("\(range.sampleCount) 帧 · 显示器 \(range.displayID)").font(.caption).foregroundStyle(.secondary)
+                                if range.activityKind == "quiet" { Text("无输入且画面稳定").font(.caption).foregroundStyle(.secondary) }
                             }
                         }
                     }

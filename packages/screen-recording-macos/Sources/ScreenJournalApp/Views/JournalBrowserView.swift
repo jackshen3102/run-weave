@@ -68,6 +68,8 @@ struct JournalRawBrowserView: View {
     @State private var error = ""
     @State private var loading = true
     @State private var requestGeneration = 0
+    @State private var showQuiet = false
+    private var quietCount: Int { ranges.filter { $0.activityKind == "quiet" }.count }
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading) {
@@ -78,12 +80,14 @@ struct JournalRawBrowserView: View {
                 Button("刷新记录") { Task { await refresh() } }
                 if status?.hasPending == true { Text("最新录屏正在保存，完成后自动出现").font(.caption) }
                 if !ranges.isEmpty { Text("当天 \(ranges.count) 段录屏").font(.caption).foregroundStyle(.secondary) }
-                List(ranges, selection: Binding(get: { selected?.rangeID }, set: { id in selected = ranges.first { $0.rangeID == id } })) { range in
+                if quietCount > 0 { Toggle("显示稳定画面（\(quietCount) 段）", isOn: $showQuiet).font(.caption) }
+                List(ranges.filter { showQuiet || $0.activityKind != "quiet" }, selection: Binding(get: { selected?.rangeID }, set: { id in selected = ranges.first { $0.rangeID == id } })) { range in
                     VStack(alignment: .leading) {
                     if let service = recorder.readService { JournalRangeThumbnail(service: service, range: range, revision: revision) }
                     VStack(alignment: .leading) {
                         Text("\(time(range.startMs))–\(time(range.endMs))").font(.headline).lineLimit(2)
                         Text("\(range.sampleCount) 帧 · 显示器 \(range.displayID)").font(.caption).foregroundStyle(.secondary)
+                        if range.activityKind == "quiet" { Text("无输入且画面稳定").font(.caption).foregroundStyle(.secondary) }
                     }
                     }.tag(range.rangeID).padding(.vertical, 5)
                 }
@@ -99,11 +103,14 @@ struct JournalRawBrowserView: View {
                 ContentUnavailableView("录屏列表暂不可用", systemImage: "exclamationmark.triangle", description: Text(error))
             } else if ranges.isEmpty {
                 ContentUnavailableView(status?.hasPending == true ? "录屏正在保存" : "当天没有录屏", systemImage: "video", description: Text(status?.hasPending == true ? "已有画面正在保存，完成后会自动显示。" : days.isEmpty ? "暂无可回看的录屏。请确认已授权并开启屏幕录制。" : "所选日期没有可回看的录屏，可以选择其他日期。"))
+            } else if !showQuiet && quietCount == ranges.count {
+                ContentUnavailableView("这些时段画面稳定", systemImage: "moon", description: Text("展开“显示稳定画面”可回看原始录屏。无输入不代表没有工作。"))
             } else {
                 ContentUnavailableView("选择一段录屏开始回看", systemImage: "play.rectangle", description: Text("当天已有 \(ranges.count) 段录屏，无需等待事项整理。"))
             }
         }
         .frame(minWidth: 980, minHeight: 650)
+        .onChange(of: showQuiet) { _, visible in if !visible && selected?.activityKind == "quiet" { selected = nil } }
         .task {
             while !Task.isCancelled {
                 await refresh()

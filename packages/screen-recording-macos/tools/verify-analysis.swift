@@ -193,8 +193,9 @@ struct AnalysisVerify {
             space: CGColorSpaceCreateDeviceRGB(),bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
         context.setFillColor(CGColor(gray: 0.5,alpha: 1)); context.fill(CGRect(x: 0,y: 0,width: 64,height: 64))
         var sequence = 0
-        func append(_ ms: Int64) async throws {
-            let frame = CapturedFrame(image: context.makeImage()!,capturedAt: Date(timeIntervalSince1970: Double(ms)/1000),displayID: 999,applicationID: "synthetic",idleSeconds: 0,placeholder: false)
+        func append(_ ms: Int64, idle: Double = 0, gray: CGFloat = 0.5) async throws {
+            context.setFillColor(CGColor(gray: gray,alpha: 1)); context.fill(CGRect(x: 0,y: 0,width: 64,height: 64))
+            let frame = CapturedFrame(image: context.makeImage()!,capturedAt: Date(timeIntervalSince1970: Double(ms)/1000),displayID: 999,applicationID: "synthetic",idleSeconds: idle,placeholder: false)
             try await engine.prepareAppend(frame)
             for _ in 0..<100 {
                 if try await engine.append(frame,sequence: sequence,permit: permit,generation: generation) { sequence += 1; return }
@@ -207,7 +208,7 @@ struct AnalysisVerify {
         }
         var manifests: [AnalysisManifest] = []
         func finish(_ value: AnalysisClaim) async throws {
-            let result = try JSONDecoder().decode(AnalysisResult.self,from: Data("{\"cards\":[],\"observation\":\"boundary fixture\"}".utf8))
+            let result = AnalysisResult(cards: [],observation: value.manifest.captures.allSatisfy { CaptureActivity.kind($0) == "quiet" } ? "" : "boundary fixture")
             _ = try await owner.commit(batchID: value.manifest.batchID,workerID: worker,generation: value.generation,operationID: UUID().uuidString,inputHash: value.manifest.inputHash,result: result)
             manifests.append(value.manifest)
         }
@@ -217,19 +218,38 @@ struct AnalysisVerify {
         for _ in 0..<4 { if let c = try await claim() { try await finish(c) } }
         guard manifests.count == 2, Set(manifests.map(\.day)).count == 2,
               manifests.allSatisfy({ $0.captures.count == 1 }) else { throw journalError("cross_day_tail_lost") }
-        // A full 15-minute batch is mature even while recording remains active.
-        for i in 0..<90 { try await append(now-3600000+Int64(i)*10000) }
+        // A continuous 40-minute activity crosses clock quarters without splitting.
+        let longStart = midnight-12*3600000
+        for i in 0..<240 { try await append(longStart+Int64(i)*10000) }
+        for i in 240..<290 { try await append(longStart+Int64(i)*10000,idle: 600) }
+        // No keyboard input, but visible output continues to change.
+        for i in 290..<300 { try await append(longStart+Int64(i)*10000,idle: 1000,gray: i % 2 == 0 ? 0.9 : 0.2) }
         try await engine.finalize()
-        for _ in 0..<4 { if let c = try await claim() { try await finish(c) } }
-        guard manifests.contains(where: { $0.captures.count == 90 && $0.endMs-$0.startMs == 890000 }) else { throw journalError("full_batch_lost") }
+        for _ in 0..<8 { if let c = try await claim() { try await finish(c) } }
+        guard manifests.contains(where: { $0.captures.count == 240 && $0.endMs-$0.startMs == 2390000 }),
+              let quiet = manifests.first(where: { $0.captures.count == 50 }),
+              quiet.captures.allSatisfy({ CaptureActivity.kind($0) == "quiet" && $0.visualChanged == false }),
+              let moving = manifests.first(where: { $0.captures.count == 10 }),
+              moving.captures.allSatisfy({ CaptureActivity.kind($0) == "active" && $0.visualChanged == true }) else { throw journalError("dynamic_activity_boundary_failed") }
+        guard try AnalysisStore(paths: paths).scalar("SELECT body FROM analysis_observations WHERE batch_id=?", [quiet.batchID]) == nil else { throw journalError("empty_activity_observation_saved") }
+        let catalog = try await engine.catalog(settings: settings)
+        guard catalog.ranges.contains(where: { $0.sampleCount == 240 && $0.endMs-$0.startMs == 2390000 }),
+              catalog.ranges.contains(where: { $0.sampleCount == 50 && $0.activityKind == "quiet" }) else { throw journalError("dynamic_catalog_boundary_failed") }
+        try await append(now-60000)
+        try await engine.event("stopped", "synthetic_pause", at: Date(timeIntervalSince1970: Double(now-40000)/1000))
+        try await engine.event("recording", "synthetic_resume", at: Date(timeIntervalSince1970: Double(now-10000)/1000))
         try await append(now-1000)
         guard try await claim() == nil else { throw journalError("writing_frame_claimed") }
         try await engine.finalize()
-        for _ in 0..<3 { guard try await claim() == nil else { throw journalError("active_short_tail_claimed") } }
         var tail: AnalysisClaim?
-        for _ in 0..<3 { if let c = try await claim("paused") { tail = c; break } }
-        guard let tail, tail.manifest.captures.count == 1 else { throw journalError("paused_tail_lost") }
+        for _ in 0..<3 { if let c = try await claim() { tail = c; break } }
+        guard let tail, tail.manifest.captures.count == 1 else { throw journalError("ready_short_tail_lost") }
         try await finish(tail)
+        var resumed: AnalysisClaim?
+        for _ in 0..<3 { if let c = try await claim() { resumed = c; break } }
+        guard let resumed, resumed.manifest.captures.count == 1 else { throw journalError("short_pause_boundary_lost") }
+        try await finish(resumed)
+        guard try await engine.catalog(settings: settings).ranges.filter({ $0.startMs >= now-60000 }).count == 2 else { throw journalError("catalog_bridged_short_pause") }
         // Commit an older timestamp only after the scan has passed newer captures.
         try await append(midnight-60000); try await engine.finalize()
         var late: AnalysisClaim?
@@ -237,9 +257,9 @@ struct AnalysisVerify {
         guard let late, late.manifest.startMs == midnight-60000 else { throw journalError("late_ready_frame_lost") }
         try await finish(late)
         let ids = manifests.flatMap { $0.captures.map(\.id) }
-        guard ids.count == 94, Set(ids).count == 94 else { throw journalError("duplicate_capture_coverage") }
+        guard ids.count == 305, Set(ids).count == 305 else { throw journalError("duplicate_capture_coverage") }
         _ = try await engine.shutdown(settings: settings)
-        print(String(decoding: try JSONSerialization.data(withJSONObject: ["crossDayShortTails":true,"fullBatch":true,"writingExcluded":true,"activeTailWaits":true,"pausedTailScheduled":true,"lateReadyRediscovered":true,"uniqueCaptures":ids.count]),as: UTF8.self))
+        print(String(decoding: try JSONSerialization.data(withJSONObject: ["crossDayShortTails":true,"fortyMinuteActivity":true,"stableVisualsSeparated":true,"dynamicVisualsStayActive":true,"writingExcluded":true,"readyTailScheduled":true,"lateReadyRediscovered":true,"uniqueCaptures":ids.count]),as: UTF8.self))
     }
 
     // Real capture storage pipeline with generated pixels; never reads the user's screen.

@@ -32,6 +32,8 @@ struct ScreenRecordingCapture: Codable, Identifiable, Equatable {
     let frontmostApplication: ScreenRecordingApplication?
     let privacyPlaceholder: Bool
     let availableUntilMs: Int64
+    var idleSeconds: Double? = nil
+    var visualChanged: Bool? = nil
 }
 struct ScreenRecordingInterval: Codable, Equatable {
     let startMs: Int64
@@ -47,6 +49,7 @@ struct ScreenRecordingRange: Codable, Identifiable, Equatable {
     let sampleCount: Int
     let previewCaptureID: String?
     let state: String
+    var activityKind: String? = nil
 }
 struct ScreenRecordingDay: Codable, Identifiable, Equatable {
     var id: String { day }
