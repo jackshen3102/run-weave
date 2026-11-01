@@ -1,0 +1,114 @@
+version: 1
+name: 配置版本升级与恢复
+description: >
+  使用隔离 HOME、真实 CLI 子进程及发行产物验证配置升级。
+  scripts/verify/server/installed.mjs 接入合成配置版本验收，不修改正式配置版本或生产实例。
+cases:
+  - id: CFGUP-001
+    name: 跨版本迁移只留下目标结构
+    required: true
+    description: 从合成版本 1 连续迁移到 3，保留端口取值和原始备份，删除旧字段。
+    preconditions:
+      - 已构建当前平台 Server 与 CLI 发行产物；隔离实例含 legacyPort 和 legacyFlag。
+    steps:
+      - 通过安装验收入口的 upgrade-chain fixture 执行预演，确认列出两个整体版本步骤和一个 logging 域步骤，且原文件未变。
+      - 携带预演的 revision 和 digest 提交，确认版本为 3、revision 只增加一次、端口为 5123、旧字段消失。
+      - 确认 logging 域版本为 2，日志级别 warn 被保留，旧 oldLevel 字段移除。
+      - 确认备份与原字节相同、文件权限私有、回执记录 committed 及实际摘要。
+  - id: CFGUP-002
+    name: 相邻版本只执行剩余步骤
+    required: true
+    description: 版本 2 升至 3 不重复版本 1 的转换。
+    preconditions:
+      - 隔离 upgrade-adjacent fixture 已使用合成版本 2 和新端口字段。
+    steps:
+      - 预演并提交，确认只执行 fixture-retire-v3，保存版本 3。
+  - id: CFGUP-003
+    name: 最新配置重复升级不写盘
+    required: true
+    description: 已完成迁移的配置再次升级不增加 revision，不改变配置字节。
+    preconditions:
+      - 独立 fixture 已完成版本 1 到 3 的迁移，已记录字节和 revision。
+    steps:
+      - 再次预演和提交，确认 changed 为 false、步骤为空、revision 和字节保持一致。
+  - id: CFGUP-004
+    name: 并发修改阻止旧预演提交
+    required: true
+    description: 只改变注释也必须使旧 digest 失效，不能覆盖并发编辑。
+    preconditions:
+      - 隔离 upgrade-conflict fixture 已取得升级预演。
+    steps:
+      - 在文件末尾添加注释但不改 revision，再用旧预演提交，确认 CONFIG_REVISION_CONFLICT。
+      - 确认注释保留，未写迁移回执或覆盖配置。
+  - id: CFGUP-005
+    name: 无法迁移的输入保持原件
+    required: true
+    description: 未来版本、迁移链缺口、类型错误和不完整凭据均在预检阶段拒绝。
+    preconditions:
+      - 分别建立独立的 future、gap、invalid、credentials 合成配置 fixture。
+    steps:
+      - 对每份配置运行对应候选 CLI 的预演，确认分别返回未来版本、迁移链缺口或字段校验错误。
+      - 确认每份原文件字节均未改变，不使用默认值掩盖错误。
+  - id: CFGUP-006
+    name: 运行中的消费者阻止离线迁移
+    required: true
+    description: 对真实运行中的隔离 Backend 和 App Server 提交结构迁移必须拒绝。
+    preconditions:
+      - 安装验收入口已启动隔离 Stable 服务且健康；候选配置 CLI 支持合成版本 3。
+    steps:
+      - 预演并提交版本迁移，确认 CONFIG_UPGRADE_CONSUMER_RUNNING。
+      - 确认配置未改变，后续真实服务健康检查仍通过。
+  - id: CFGUP-007
+    name: 配套旧工具恢复旧配置
+    required: true
+    description: 用支持旧格式的 CLI 恢复其兼容备份，保留递增 revision。
+    preconditions:
+      - upgrade-restore fixture 从有效的版本 1 配置迁移到 3，仍持有原 CLI 和私有备份。
+    steps:
+      - 用原 CLI 预演恢复，再携带三个版本参数执行，确认 schema 回到 1、revision 为 9、端口保留。
+  - id: CFGUP-008
+    name: 原子替换前后中断可恢复
+    required: true
+    description: 提交前后被终止时文件保持完整，重试不重复增加 revision。
+    preconditions:
+      - 两份独立 crash fixture 的 CLI 子进程分别在 settings.yaml rename 前后注入 SIGKILL。
+    steps:
+      - 确认进程中断后回执为 prepared，原始备份存在，活跃配置分别是完整版本 1 或 3。
+      - 不注入故障重新预演并提交，确认版本为 3、revision 为 8、回执为 committed。
+  - id: CFGUP-009
+    name: Server 更新预演不切换运行实例
+    required: true
+    description: 发行包更新预演包含配置检查，但不停止服务、激活版本或改配置。
+    preconditions:
+      - 安装验收的隔离 Server 正运行版本 0.1.0，loopback registry 有候选 0.1.1。
+    steps:
+      - 运行 server update --version 0.1.1 --dry-run，确认输出数据库兼容和配置预演结果。
+      - 重新查询状态，确认 PID、activeVersion 和配置字节未变。
+  - id: CFGUP-010
+    name: 无配置变化的更新保留实例配置
+    required: true
+    description: 真正更新 Server 后配置不变，更新回执保留配置检查结果。
+    preconditions:
+      - 安装验收的隔离 Server 已运行，候选版本配置结构相同。
+    steps:
+      - 执行真实 npm 更新并重新查询健康，确认运行版本已切换、配置字节未变。
+      - 确认 update.json 包含 configuration.changed 为 false 及 savedRevision。
+      - 确认 backendConfigurationVerified 为 true，表示核心域实际采用的 revision 已核对。
+  - id: CFGUP-011
+    name: 数据库不兼容仍阻止更新
+    required: true
+    description: 配置迁移不能放松数据库指纹保护，旧组合指纹只有匹配已知配置摘要时才允许升级。
+    preconditions:
+      - 隔离 registry 的 0.1.0 使用旧组合指纹元数据，0.1.1 数据库一致，0.1.9 使用不同数据库指纹。
+    steps:
+      - 预演升级到 0.1.1，确认数据库兼容判定通过。
+      - 预演升级到 0.1.9，确认 SERVER_DATA_INCOMPATIBLE，原 Backend PID 保持。
+  - id: CFGUP-012
+    name: 配置提交前安装失败恢复原服务
+    required: true
+    description: 注入 npm 安装失败后只在配置和 active 指针未变化时恢复原服务。
+    preconditions:
+      - 隔离实例运行原版本，候选包预检可通过，故障注入只拦截正式 prefix 的 npm install。
+    steps:
+      - 执行更新，确认安装阶段返回失败，原服务随后恢复健康且 activeVersion 保持。
+      - 确认配置字节未变，回执记录 failedPhase 为 installing、recovery 为 original-services-resumed。

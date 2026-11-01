@@ -1,7 +1,7 @@
 # 实例配置 CLI
 
 统一配置实现位于 `packages/config-node`，跨端合同位于
-`packages/shared/src/configuration`。当前处于全仓迁移实施阶段；已安装 Stable 尚未切换。
+`packages/shared/src/configuration`。已有实例可能仍需从旧来源迁移，以目标实例实际状态为准。
 
 正式实例默认使用 `~/.runweave/settings.yaml`；测试实例使用
 `~/.runweave/dev-sessions/<id>/settings.yaml`。文件为 YAML 1.2 单文档，目录必须为
@@ -91,6 +91,10 @@ rw config init --instance stable --auth-file /private/path/new-runweave-auth.jso
 
 ## 迁移
 
+本节命令用于旧 JSON / 环境文件导入，不是发行版本之间的配置迁移链。
+逐版本迁移、仅保留目标结构及失败恢复的约定和实施状态见
+[配置版本与升级迁移合同](../deployment/configuration-upgrades.md)。
+
 ```bash
 rw config migrate --source-manifest /private/path/sources.json --instance stable --dry-run --json
 rw config migrate --source-manifest /private/path/sources.json --instance stable --json
@@ -117,6 +121,26 @@ Stable 迁移拒绝 Dev Session 与历史 Beta 目录中的来源，需分别保
 发布产物声明支持的 YAML schema 和域版本。受管安装/回退在切换程序前检查兼容性；
 缺少声明的旧程序不能直接用作新 YAML 的恢复目标。该检查不会恢复或覆盖配置文件，
 也不能约束用户手工运行历史二进制。
+
+## 发行版本之间的配置升级
+
+`migrate` 导入旧来源；`upgrade` 使用当前 CLI 随包交付的版本迁移链，将已有 YAML 升到
+该程序要求的目标结构。当前正式结构仍为版本 1，无需转换时不写文件、不增加 revision。
+
+```bash
+rw config upgrade --instance stable --dry-run --json
+rw config upgrade --instance stable \
+  --expected-revision <preview-revision> --expected-digest <preview-digest> --json
+```
+
+预演输出源/目标版本、步骤及变化字段名，不输出配置值；执行必须携带预演的 revision/digest。
+结构变化只能在所有配置消费者停止后提交，持有 owner 锁的实例会拒绝迁移；未登记的消费者
+须另行确认停止。独立命令不负责停服、切换程序或启动服务。纯服务端使用
+`rw server update --version X.Y.Z --dry-run` 预检，再使用受管更新统一协调服务与候选包迁移。
+
+迁移备份位于 `config-backups`，恢复回执为 `config-upgrade.json`。未来版本、链缺口、校验错误
+和并发编辑会拒绝写入。中断后先重新预演；已提交的转换不会重复执行。
+恢复旧结构需使用支持该结构的配套工具及备份，新 CLI 不承担逆向转换。
 
 ## 显式恢复备份
 

@@ -44,6 +44,14 @@ export async function runConfigCommand(command: string | undefined, args: string
     return;
   }
   if (command === "backups") { output(store.backups()); return; }
+  if (command === "upgrade") {
+    if (parsed.options["dry-run"]) { output({ environment: context, ...store.previewUpgrade() }); return; }
+    const revision = getStringOption(parsed.options, "expected-revision");
+    const digest = getStringOption(parsed.options, "expected-digest");
+    if (revision === undefined || !Number.isSafeInteger(Number(revision)) || Number(revision) < 0 || !/^[a-f0-9]{64}$/.test(digest ?? "")) throw new ConfigurationError("CONFIG_UPGRADE_PREVIEW_REQUIRED");
+    output({ environment: context, ...store.upgrade({ revision: Number(revision), digest: digest! }) });
+    return;
+  }
   if (command === "explain") {
     const key = parsed.positionals[0];
     if (!key || parsed.positionals.length !== 1) throw new CliError("Usage: rw config explain <key> [--instance <id>] [--json]", 2);
@@ -137,7 +145,7 @@ export async function runConfigCommand(command: string | undefined, args: string
     output({ environment: context, savedRevision: next.value.revision, digest: next.digest, state: "restartRequired" });
     return;
   }
-  throw new CliError("Usage: rw config <path|show|explain|keys|status|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate> [--instance <id>] [--config-dir <absolute path>]", 2);
+  throw new CliError("Usage: rw config <path|show|explain|keys|status|init|validate|doctor|backups|restore|reload|set|import|import-env|migrate|upgrade> [--instance <id>] [--config-dir <absolute path>]", 2);
 }
 
 function parseJsonFile(file: string): unknown {

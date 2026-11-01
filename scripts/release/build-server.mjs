@@ -129,12 +129,15 @@ const schemas = [
   "backend/src/scheduled-tasks/storage",
   "app-server/src/events",
   "app-server/src/state",
-  "packages/shared/src/configuration",
 ];
-const compatibility = createHash("sha256");
+let databaseSources = "";
 for (const directory of schemas)
   for (const file of files(path.join(repo, directory)))
-    compatibility.update(`${directory}/${file.path}:${file.sha256}\n`);
+    databaseSources += `${directory}/${file.path}:${file.sha256}\n`;
+const configurationSources = files(path.join(repo, "packages/shared/src/configuration"))
+  .map(file => `packages/shared/src/configuration/${file.path}:${file.sha256}\n`).join("");
+// A legacy snapshot can only authorize exactly the same database source tree.
+const legacyConfigurations = JSON.parse(readFileSync(path.join(repo, "scripts/release/legacy-configuration-fingerprints.json"), "utf8"));
 const manifest = {
   schemaVersion: 1,
   managementApiVersion: 1,
@@ -147,7 +150,11 @@ const manifest = {
   arch: process.arch,
   nodeModuleAbi: process.versions.modules,
   sqlitePrebuild: `${process.platform}-${process.arch}.node`,
-  dataCompatibility: compatibility.digest("hex"),
+  dataCompatibility: createHash("sha256").update(databaseSources + configurationSources).digest("hex"),
+  configurationUpgradeVersion: 1,
+  databaseCompatibility: createHash("sha256").update(databaseSources).digest("hex"),
+  legacyDataCompatibility: legacyConfigurations.map(snapshot => createHash("sha256")
+    .update(databaseSources + snapshot.files.map(file => `${file.path}:${file.sha256}\n`).join("")).digest("hex")),
   files: [...backendManifest, ...nativeFiles],
 };
 if (process.platform === "darwin")

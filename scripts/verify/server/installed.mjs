@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyConfigurationUpgrades } from "./configuration-upgrades.mjs";
 
 const repo = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -113,7 +114,7 @@ const cliPackage = JSON.parse(
 );
 pack(path.join(source, "cli-package"));
 env.npm_config_prefix = prefix;
-for (const version of ["0.1.0", "0.1.1"]) {
+for (const version of ["0.1.0", "0.1.1", "0.1.9"]) {
   for (const name of ["package", `${process.platform}-${process.arch}`]) {
     const directory = path.join(fixture, `${name}-${version}`);
     cpSync(path.join(source, name), directory, { recursive: true });
@@ -128,6 +129,18 @@ for (const version of ["0.1.0", "0.1.1"]) {
       const manifestFile = path.join(directory, "manifest.json");
       const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
       manifest.version = version;
+      if (version === "0.1.0") {
+        // Legacy metadata fixture: prove the bridge retains the database gate.
+        manifest.dataCompatibility = manifest.legacyDataCompatibility[0];
+        delete manifest.configurationUpgradeVersion;
+        delete manifest.databaseCompatibility;
+        delete manifest.legacyDataCompatibility;
+      }
+      if (version === "0.1.9") {
+        manifest.databaseCompatibility = "0".repeat(64);
+        manifest.legacyDataCompatibility = ["0".repeat(64)];
+        manifest.dataCompatibility = "0".repeat(64);
+      }
       writeFileSync(manifestFile, JSON.stringify(manifest));
     }
     pack(directory);
@@ -314,6 +327,35 @@ try {
     await sleep(200);
   }
   assert(status.healthy, "Service did not become healthy");
+  const configurationEvidence = await verifyConfigurationUpgrades({ repo, fixture, home, run, cliEntry, assert, env });
+  const settingsFile = path.join(home, ".runweave/settings.yaml");
+  const settingsBefore = readFileSync(settingsFile, "utf8");
+  const previewPid = status.backend.pid;
+  assert(status.cliCapabilities?.updateDryRun === true, "CLI did not declare safe update preview support");
+  const updatePreview = JSON.parse(await cli("update", "--version", "0.1.1", "--dry-run"));
+  assert(updatePreview.dryRun && updatePreview.configuration.changed === false, "Update preview missing configuration plan");
+  status = JSON.parse(await cli("status", "--json"));
+  assert(status.backend.pid === previewPid && status.activeVersion === "0.1.0" && readFileSync(settingsFile, "utf8") === settingsBefore, "Update preview mutated the active instance");
+  let databaseRejected = false;
+  try { await cli("update", "--version", "0.1.9", "--dry-run"); }
+  catch (error) { assert(error.message.includes("SERVER_DATA_INCOMPATIBLE"), error.message); databaseRejected = true; }
+  assert(databaseRejected && JSON.parse(await cli("status", "--json")).backend.pid === previewPid, "Database mismatch was not rejected before stopping");
+  const installFault = path.join(fixture, "fail-install.cjs");
+  writeFileSync(installFault, `const cp=require('node:child_process');const fs=require('node:fs');const spawn=cp.spawn;
+    cp.spawn=function(command,args,options){const index=args?.indexOf('--prefix');
+      if(command==='npm' && index>=0 && fs.realpathSync(args[index+1])===${JSON.stringify(realpathSync(prefix))})
+        return spawn(process.execPath,['-e','process.exit(72)'],options);
+      return spawn(command,args,options);};`);
+  let installationRejected = false;
+  try {
+    await run(path.join(prefix, "bin/rw"), ["server", "update", "--version", "0.1.1"], {
+      env: { ...env, NODE_OPTIONS: `${env.NODE_OPTIONS} --require=${installFault}` },
+    });
+  } catch { installationRejected = true; }
+  status = JSON.parse(await cli("status", "--json"));
+  assert(installationRejected && status.healthy && status.activeVersion === "0.1.0"
+    && status.lastUpdate.failedPhase === "installing" && status.lastUpdate.recovery === "original-services-resumed"
+    && readFileSync(settingsFile, "utf8") === settingsBefore, "Failed installation did not resume the unchanged original instance");
   const url = `http://127.0.0.1:${port}`;
   assert((await fetch(url)).status === 200, "Bundled web page missing");
   assert(
@@ -392,6 +434,9 @@ try {
   );
   await cli("update", "--version", "0.1.1");
   status = JSON.parse(await cli("status", "--json"));
+  assert(readFileSync(settingsFile, "utf8") === settingsBefore, "No-op configuration migration rewrote settings");
+  assert(status.lastUpdate.configuration.changed === false && status.lastUpdate.configuration.savedRevision !== undefined, "Update receipt missing configuration outcome");
+  assert(status.lastUpdate.backendConfigurationVerified === true, "Backend configuration application was not verified");
   assert(
     status.healthy &&
       status.activeVersion === "0.1.1" &&
@@ -468,6 +513,7 @@ try {
     foreground.unref();
   }
   const result = {
+    configurationEvidence,
     passed: true,
     fixture,
     address: url,

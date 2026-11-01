@@ -1,5 +1,5 @@
 import "./native-lock";
-import { constants, existsSync, mkdirSync, openSync, closeSync, writeFileSync, renameSync, fsyncSync } from "node:fs";
+import { constants, existsSync, mkdirSync, openSync, closeSync, writeFileSync, renameSync, fsyncSync, readdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -43,7 +43,39 @@ export function registerStableConfigurationRoot(context: EnvironmentContext): vo
   } finally { closeSync(registryFd); }
 }
 
+function withUpgradeGate<T>(context: EnvironmentContext, shared: boolean, run: () => T): T {
+  const directory = ownerDirectory(context);
+  const fd = openSync(path.join(directory, "configuration-upgrade.lock"), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
+  try {
+    assertPrivateDescriptor(fd);
+    if (!tryLock(fd, 0, 0, { shared })) throw new ConfigurationError("CONFIG_UPGRADE_BUSY");
+    return run();
+  } finally { closeSync(fd); }
+}
+
+/** Also checks legacy owner locks; those processes predate the upgrade gate. */
+export function withConfigurationUpgradeOwnership<T>(context: EnvironmentContext, run: () => T, ignoredRoles: readonly string[] = []): T {
+  return withUpgradeGate(context, false, () => {
+    const directory = ownerDirectory(context);
+    const held: number[] = [];
+    try {
+      for (const file of readdirSync(directory).filter(name => name.endsWith(".owner.lock"))) {
+        if (ignoredRoles.includes(file.replace(/\.owner\.lock$/, ""))) continue;
+        const fd = openSync(path.join(directory, file), constants.O_RDWR | constants.O_NOFOLLOW);
+        held.push(fd);
+        assertPrivateDescriptor(fd);
+        if (!tryLock(fd)) throw new ConfigurationError("CONFIG_UPGRADE_CONSUMER_RUNNING", [file.replace(/\.owner\.lock$/, "")]);
+      }
+      return run();
+    } finally { for (const fd of held) closeSync(fd); }
+  });
+}
+
 export function acquireConfigurationOwner(context: EnvironmentContext, role: "backend" | "app-server" | "desktop" | "snapshot-host" | "push-gateway" | "suiji-server" | "research-mcp-management"): { release(): void } {
+  return withUpgradeGate(context, true, () => acquireOwner(context, role));
+}
+
+function acquireOwner(context: EnvironmentContext, role: string): { release(): void } {
   const directory = ownerDirectory(context);
   const fd = openSync(path.join(directory, `${role}.owner.lock`), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   let closed = false;

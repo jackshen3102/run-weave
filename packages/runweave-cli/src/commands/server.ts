@@ -47,6 +47,7 @@ import {
 import { ServerNotInstalledError } from "../server/installation.js";
 import { readCliVersion } from "../version.js";
 import { protectedRestart, updateServer } from "../server/update.js";
+import { SERVER_CLI_CAPABILITIES } from "@runweave/shared/server-management";
 
 function token(ctx: ServerContext): void {
   const file = path.join(ctx.home, "management-token");
@@ -154,6 +155,7 @@ async function status(ctx: ServerContext) {
     healthy: !!backendHealth && !!appHealth && runtimeIssues.length === 0,
     runtimeIssues,
     cliVersion: readCliVersion().version,
+    cliCapabilities: SERVER_CLI_CAPABILITIES,
     installedVersion: existsSync(path.join(installed, "package.json"))
       ? readJson<{ version: string }>(path.join(installed, "package.json"))
           .version
@@ -214,6 +216,7 @@ export async function runServerCommand(
         installed: false,
         healthy: false,
         cliVersion: readCliVersion().version,
+        cliCapabilities: SERVER_CLI_CAPABILITIES,
         guidance: error.message,
       });
       return;
@@ -407,13 +410,14 @@ export async function runServerCommand(
       return;
     }
     if (command === "update") {
-      await updateServer(
+      const preview = await updateServer(
         ctx,
         getStringOption(parsed.options, "version"),
         force,
         getStringOption(parsed.options, "server-package"),
+        parsed.options["dry-run"] === true,
       );
-      output(await status(serverContext(args)));
+      output(parsed.options["dry-run"] ? preview : await status(serverContext(args)));
       return;
     }
     if (command === "service") {

@@ -1,6 +1,9 @@
-import type { ServerMaintenanceLease } from "@runweave/shared/server-management";
-import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { CONFIGURATION_COMPATIBILITY, supportsConfiguration, type ConfigurationUpgradePreview, type ConfigurationUpgradeResult } from "@runweave/shared/configuration";
+import { BACKEND_CORE_CONFIGURATION_DOMAINS, withConfigurationUpgradeOwnership } from "@runweave/config-node";
+import { execFileSync } from "node:child_process";
+import type { ServerMaintenanceLease, ServerConfigurationObservation } from "@runweave/shared/server-management";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   identity,
@@ -25,10 +28,11 @@ export async function protectedRestart<T>(
   ctx: ServerContext,
   force: boolean,
   action: () => Promise<T>,
+  forUpgrade = false,
 ): Promise<T> {
   if (!identity(ctx, "backend")) return action();
   const owner = randomUUID();
-  const url = settings(ctx).localUrl + "/api/server/maintenance";
+  const url = settings(ctx, forUpgrade).localUrl + "/api/server/maintenance";
   const headers = {
     "x-runweave-server-token": readFileSync(
       path.join(ctx.home, "management-token"),
@@ -84,23 +88,48 @@ export async function protectedRestart<T>(
   }
 }
 
+function candidateConfiguration<T>(ctx: ServerContext, target: string, command: string, args: string[] = []): T {
+  try {
+    return JSON.parse(execFileSync(process.execPath, [path.join(target, "server/index.cjs"), command, ...ctx.configArgs, ...args], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000, maxBuffer: 1024 * 1024,
+    })) as T;
+  } catch (error) {
+    const diagnostic = String((error as { stderr?: unknown }).stderr ?? "");
+    let detail: { code?: string; fields?: string[] } = {};
+    try { detail = JSON.parse(diagnostic); } catch { /* Non-configuration failures stay redacted. */ }
+    if (/^CONFIG_[A-Z_]+$/.test(detail.code ?? "") && Array.isArray(detail.fields) && detail.fields.every(field => typeof field === "string"))
+      throw new Error(`${detail.code}${detail.fields.length ? `: ${detail.fields.join(", ")}` : ""}`);
+    const code = diagnostic.match(/CONFIG_[A-Z_]+/)?.[0];
+    throw new Error(code ?? "SERVER_CONFIGURATION_PREFLIGHT_FAILED");
+  }
+}
+
 /** CLI owns activation; installing a Server never replaces the CLI executable. */
 export async function updateServer(
   ctx: ServerContext,
   version: string | undefined,
   force: boolean,
   sourcePackage?: string,
-): Promise<void> {
+  dryRun = false,
+): Promise<unknown> {
   if (version && !/^\d+\.\d+\.\d+$/.test(version))
     throw new Error("--version must be an exact numeric semantic version");
   if (version && sourcePackage)
     throw new Error("Choose --version or --server-package, not both");
   const stage = mkdtempSync(path.join(ctx.home, ".update-"));
   const receipt = path.join(ctx.home, "update.json");
+  let configuration: ConfigurationUpgradePreview | ConfigurationUpgradeResult | undefined;
+  let lastPhase = "preflight";
+  const transactionId = randomUUID();
+  let resumeOriginal: (() => Promise<void>) | undefined;
   const record = (phase: string, extra: Record<string, unknown> = {}) =>
     writeJson(receipt, {
       schemaVersion: 1,
+      transactionId,
       phase,
+      configuration,
+      fromRelease: ctx.release,
+      configurationReceipt: path.join(ctx.context.configRoot, "config-upgrade.json"),
       fromVersion: ctx.manifest.version,
       requestedVersion: version ?? "latest",
       at: new Date().toISOString(),
@@ -122,9 +151,14 @@ export async function updateServer(
       : path.join(stage, "node_modules/@runweave/server");
     const target = materializeServer(candidate, ctx.home).release;
     const manifest = verifyRelease(target);
-    // Conservative first-stage downgrade gate: schema sources must match the active release.
-    // Forward releases are currently held to the same gate until migrations declare compatibility.
-    if (manifest.dataCompatibility !== ctx.manifest.dataCompatibility)
+    const hasUpgrade = manifest.configurationUpgradeVersion === 1;
+    const databaseCompatible = hasUpgrade && manifest.databaseCompatibility
+      ? ctx.manifest.databaseCompatibility
+        ? manifest.databaseCompatibility === ctx.manifest.databaseCompatibility
+        : manifest.legacyDataCompatibility?.includes(ctx.manifest.dataCompatibility)
+          || manifest.dataCompatibility === ctx.manifest.dataCompatibility
+      : manifest.dataCompatibility === ctx.manifest.dataCompatibility;
+    if (!databaseCompatible)
       throw new Error(
         "SERVER_DATA_INCOMPATIBLE: this release does not declare compatibility with the active data schema",
       );
@@ -133,18 +167,40 @@ export async function updateServer(
       "inspect",
       ...ctx.configArgs,
     ]);
-    record("staged", { targetVersion: manifest.version });
+    if (hasUpgrade) {
+      configuration = candidateConfiguration<ConfigurationUpgradePreview>(ctx, target, "config-plan");
+      if (!supportsConfiguration(CONFIGURATION_COMPATIBILITY, configuration.target))
+        throw new Error("CONFIG_UPGRADE_CLI_INCOMPATIBLE: install a matching CLI before switching Server");
+      if (configuration.changed)
+        withConfigurationUpgradeOwnership(ctx.context, () => {}, ["backend", "app-server"]);
+    }
     const foregroundOwner = identity(ctx, "foreground");
     const wasRunning =
       !!identity(ctx, "backend") || !!identity(ctx, "app-server");
     const managed = registered(ctx);
+    const foregroundCapability = foregroundOwner?.configuration ?? {
+      format: "runweave-yaml", schemaVersions: [1],
+      domainVersions: Object.fromEntries(Object.keys(configuration?.target.domainVersions ?? {}).map(domain => [domain, [1]])),
+    };
+    if (configuration && foregroundOwner && !supportsConfiguration(foregroundCapability, configuration.target))
+      throw new Error("CONFIG_UPGRADE_FOREGROUND_INCOMPATIBLE: stop the foreground owner, update, then start with the matching CLI");
+    if (wasRunning && !managed && !foregroundOwner)
+      throw new Error("Unmanaged component owner; refusing to update");
+    if (dryRun) return { dryRun: true, fromVersion: ctx.manifest.version, targetVersion: manifest.version, databaseCompatible: true, configuration: configuration ?? null, restartRequired: wasRunning };
+    record("staged", { targetVersion: manifest.version });
     await protectedRestart(ctx, force, async () => {
-      record("stopping", { targetVersion: manifest.version });
+      lastPhase = "stopping";
+      record(lastPhase, { targetVersion: manifest.version });
       if (wasRunning && managed) await serviceStop(ctx);
       if (wasRunning && foregroundOwner) await foregroundControl(ctx, "pause");
       if (wasRunning && !managed && !foregroundOwner)
         throw new Error("Unmanaged component owner; refusing to update");
-      record("installing", { targetVersion: manifest.version });
+      if (wasRunning) resumeOriginal = async () => {
+        if (managed) await serviceStart(ctx);
+        else if (foregroundOwner) await foregroundControl(ctx, "restart");
+      };
+      lastPhase = "installing";
+      record(lastPhase, { targetVersion: manifest.version });
       let installation: ServerInstallation;
       if (sourcePackage) installation = describeInstallation(candidate);
       else {
@@ -173,21 +229,61 @@ export async function updateServer(
           throw new Error("Installed npm version differs from staged release");
         installation = describeInstallation(installed);
       }
+      // The candidate owns historical parsing. CAS rechecks the preflight snapshot
+      // after all managed readers stop and before publishing the target configuration.
+      if (configuration) {
+        lastPhase = "migrating";
+        record(lastPhase, { targetVersion: manifest.version });
+        configuration = candidateConfiguration<ConfigurationUpgradeResult>(ctx, target, "config-apply", [
+          "--expected-revision", String(configuration.expectedRevision),
+          "--expected-digest", configuration.expectedDigest,
+        ]);
+        record("configuration-committed", { targetVersion: manifest.version });
+      }
+      lastPhase = "activating";
       activateServer(ctx.home, target, installation);
       record("activating", { targetVersion: manifest.version });
       const nextContext = { ...ctx, release: target, manifest };
       if (wasRunning && managed) await serviceStart(nextContext);
       else if (foregroundOwner) await foregroundControl(ctx, "restart");
+      let backendConfigurationVerified = false;
+      if (wasRunning && configuration && "savedRevision" in configuration) {
+        const committed = configuration;
+        lastPhase = "verifying-configuration";
+        record(lastPhase, { targetVersion: manifest.version });
+        const observation = await requestJson(settings(nextContext).localUrl + "/api/server/configuration", {
+          headers: {
+            "x-runweave-server-token": readFileSync(path.join(ctx.home, "management-token"), "utf8").trim(),
+            "x-runweave-server-owner": transactionId,
+          },
+        }) as ServerConfigurationObservation;
+        if (observation.diskError || observation.digest !== committed.digest || observation.savedRevision !== committed.savedRevision
+          || BACKEND_CORE_CONFIGURATION_DOMAINS.some(domain => observation.consumers[domain]?.state !== "applied"
+            || observation.consumers[domain]?.appliedRevision !== committed.savedRevision))
+          throw new Error("CONFIG_UPGRADE_NOT_APPLIED: Backend core consumers have not adopted the saved configuration");
+        backendConfigurationVerified = true;
+      }
       record(wasRunning ? "healthy" : "activated", {
         targetVersion: manifest.version,
+        backendConfigurationVerified,
       });
-    });
+    }, true);
   } catch (error) {
-    record(
+    let recovery: string | undefined;
+    if (resumeOriginal && configuration) {
+      try {
+        const digest = createHash("sha256").update(readFileSync(path.join(ctx.context.configRoot, "settings.yaml"))).digest("hex");
+        if (digest === configuration.expectedDigest && realpathSync(path.join(ctx.home, "current")) === ctx.release) {
+          await resumeOriginal();
+          recovery = "original-services-resumed";
+        } else recovery = "manual-recovery-required";
+      } catch { recovery = "manual-recovery-required"; }
+    }
+    if (!dryRun) record(
       (error as Error).message.startsWith("SERVER_TASKS_ACTIVE")
         ? "blocked"
         : "failed",
-      { error: (error as Error).message },
+      { failedPhase: lastPhase, recovery, error: (error as Error).message },
     );
     throw error;
   } finally {

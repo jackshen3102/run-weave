@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { readFileSync, lstatSync } from "node:fs";
 import path from "node:path";
 import { configuration } from "@runweave/config-node";
+import type { ServerConfigurationObservation } from "@runweave/shared/server-management";
 import { isLocalDirectHttpRequest } from "../server/local-request";
 import { ServerMaintenance } from "../scheduled-tasks/server-maintenance";
 import type { ScheduledTaskRuntime } from "../scheduled-tasks/runtime";
@@ -63,6 +64,10 @@ export function createServerManagementRouter(
     } catch (error) {
       next(error);
     }
+  });
+  router.get("/configuration", (_req, res) => {
+    const { savedRevision, digest, diskError, consumers } = configuration().status();
+    res.json({ savedRevision, digest, diskError, consumers } satisfies ServerConfigurationObservation);
   });
   router.post("/maintenance", async (req, res) => {
     try {

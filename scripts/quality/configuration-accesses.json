@@ -4547,9 +4547,9 @@
     "file": "packages/config-node/src/store.ts",
     "kind": "file-io",
     "expression": "writeFileSync(fd)",
-    "count": 2,
+    "count": 3,
     "category": "configuration-adapter",
-    "reason": "统一配置库负责私有文件、显式迁移或启动身份校验；writeFileSync(fd)"
+    "reason": "统一配置存储在私有目录内原子写入配置、备份与迁移恢复回执；不增加业务配置来源。"
   },
   {
     "file": "packages/pi-codex-recovery/scripts/recovery-probe.mjs",
@@ -11540,9 +11540,9 @@
     "file": "packages/runweave-cli/src/server/update.ts",
     "kind": "file-io",
     "expression": "readFileSync(path.join(ctx.home, \"management-token\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
-    "reason": "读取当前实例私有管理令牌用于维护租约，更新阶段和版本状态写入专属回执，不作为业务配置来源。"
+    "reason": "受管升级读取实例配置摘要以判断能否恢复原服务，并读取私有管理令牌核对 Backend 实际采用的配置版本；不输出凭据。"
   },
   {
     "file": "packages/runweave-server/bin/runtime.cjs",
@@ -12143,5 +12143,157 @@
     "count": 1,
     "category": "test",
     "reason": "Creates a child-process-only HOME adapter for isolated public-package verification."
+  },
+  {
+    "file": "packages/runweave-cli/src/server/update.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(ctx.context.configRoot, \"settings.yaml\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "受管升级读取实例配置摘要以判断能否恢复原服务，并读取私有管理令牌核对 Backend 实际采用的配置版本；不输出凭据。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repo, \"scripts/release/legacy-configuration-fingerprints.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "构建时读取已提交的历史配置源码摘要，与当前数据库源码生成旧发行包兼容指纹；不读取生产配置或凭据。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "environment",
+    "expression": "env.NODE_OPTIONS",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(c.file)",
+    "count": 4,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(conflict.file)",
+    "count": 3,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(item.file)",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(c.root, \"config-backups\", committed.backupId))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(c.root, \"config-upgrade.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(interrupted.root, \"config-upgrade.json\"))",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(stableFile)",
+    "count": 2,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(conflict.file)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(fault)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/configuration-upgrades.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离 HOME 的合成配置 fixture 中读写配置和回执，并用子进程预加载器注入提交中断；不访问生产实例。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(settingsFile)",
+    "count": 4,
+    "category": "test",
+    "reason": "在隔离安装验收实例中比较升级前后配置字节，验证预演与空迁移不改变实例状态；不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment",
+    "expression": "env.NODE_OPTIONS",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离安装验收中用子进程预加载器注入 npm 安装失败，并核对原服务恢复与配置不变；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离安装验收中用子进程预加载器注入 npm 安装失败，并核对原服务恢复与配置不变；不访问生产配置。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(installFault)",
+    "count": 1,
+    "category": "test",
+    "reason": "仅在隔离安装验收中用子进程预加载器注入 npm 安装失败，并核对原服务恢复与配置不变；不访问生产配置。"
   }
 ]

@@ -3,7 +3,11 @@ import {
   resolveConfigurationContext,
   configurationPath,
   withConfigurationArguments,
+  ConfigurationStore,
+  ConfigurationError,
+  configurationOption,
 } from "@runweave/config-node";
+import { supportsConfiguration } from "@runweave/shared/configuration";
 import { installAppServerRuntimeRelease } from "@runweave/config-node/app-server/runtime-release";
 import type { ServerReleaseManifest } from "@runweave/shared/server-management";
 import { createRequire } from "node:module";
@@ -157,6 +161,21 @@ export async function runServerRuntime(args: string[]): Promise<void> {
     )
       throw new Error("Linux glibc is required");
     const [command, component] = args;
+    if (command === "config-plan" || command === "config-apply") {
+      const store = new ConfigurationStore(context);
+      const preview = store.previewUpgrade();
+      const appCapability = readJson<unknown>(path.join(release, "app-server/configuration-compatibility.json"));
+      if (!supportsConfiguration(appCapability, preview.target)) throw new Error("CONFIG_UPGRADE_APP_SERVER_INCOMPATIBLE");
+      if (command === "config-plan") {
+        process.stdout.write(JSON.stringify(preview) + "\n");
+      } else {
+        const revision = configurationOption("expected-revision", args);
+        const digest = configurationOption("expected-digest", args);
+        if (revision === undefined || !Number.isSafeInteger(Number(revision)) || Number(revision) < 0 || !/^[a-f0-9]{64}$/.test(digest ?? "")) throw new Error("CONFIG_UPGRADE_PREVIEW_REQUIRED");
+        process.stdout.write(JSON.stringify(store.upgrade({ revision: Number(revision), digest: digest! })) + "\n");
+      }
+      return;
+    }
     if (command === "inspect") {
       const requireNative = createRequire(
         path.join(release, "backend/index.cjs"),
@@ -193,6 +212,8 @@ export async function runServerRuntime(args: string[]): Promise<void> {
 
 if (require.main === module)
   void runServerRuntime(process.argv.slice(2)).catch((error) => {
-    process.stderr.write(`${(error as Error).message}\n`);
+    process.stderr.write(error instanceof ConfigurationError
+      ? JSON.stringify({ code: error.code, fields: error.fields, location: error.location }) + "\n"
+      : `${(error as Error).message}\n`);
     process.exitCode = 1;
   });

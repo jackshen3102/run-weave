@@ -1,0 +1,31 @@
+[
+  {
+    "sourceRevision": "f96ecff6b81b7dfd1d421a0bc3dada24bf1d5fa1",
+    "files": [
+      {
+        "path": "packages/shared/src/configuration/compatibility.ts",
+        "sha256": "3928b55ea9dd9c3c9573c8f1a63be417e1e1f0bba49931a2837891d04dc59b90"
+      },
+      {
+        "path": "packages/shared/src/configuration/constraints.ts",
+        "sha256": "cb478ec686d5521e73258dbaf2f114ee93b0d1b134c5fa9ebd7d192eb0b05034"
+      },
+      {
+        "path": "packages/shared/src/configuration/fields.ts",
+        "sha256": "b86a30c297a62811aa6b6b53a9680790dc3e286d31a3f8e63ecf668b2bf71287"
+      },
+      {
+        "path": "packages/shared/src/configuration/index.ts",
+        "sha256": "7234c8db21d23c0d3ae908948ab177d29637d9ba11dee8a39b245d43654cf3d2"
+      },
+      {
+        "path": "packages/shared/src/configuration/services.ts",
+        "sha256": "83d2bfb1b33957ff5331e64cde686d4a47498bb42f3d0c79f9066ee0fdca488e"
+      },
+      {
+        "path": "packages/shared/src/configuration/types.ts",
+        "sha256": "abe1d4f4aae972938baf734273ed50360cccbef08a33777ad68bfe791bb602ee"
+      }
+    ]
+  }
+]
