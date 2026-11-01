@@ -56,6 +56,10 @@ extension APIClient {
     func screenAvailability(viewID: String) async throws -> ScreenRecordingAvailability {
         try await authorized("/api/screen-recording/views/\(Self.pathComponent(viewID))/availability", requestTimeout: 5, decodeError: screenError)
     }
+    func screenPackage(viewID: String) async throws -> ScreenRecordingPackage {
+        try await authorized("/api/screen-recording/views/\(Self.pathComponent(viewID))/package", requestTimeout: 120, decodeError: screenError,
+            download: { try ScreenRecordingPackage(download: $0) })
+    }
     func screenFrame(viewID: String, captureID: String, variant: ScreenRecordingVariant) async throws -> Data {
         try await screenJPEG("/api/screen-recording/views/\(Self.pathComponent(viewID))/frames/\(Self.pathComponent(captureID))?variant=\(variant.rawValue)")
     }
@@ -83,6 +87,9 @@ actor ScreenRecordingSource {
     private var activeView: ScreenRecordingView?
     private var confirmed: TimeInterval?
     private var generation = 0
+    private var package: ScreenRecordingPackage?
+    private var decodingFull = false
+    private var decodingThumbnail = false
     init(api: APIClient) { self.api = api }
     func open(rangeID: String, catalogRevision: String) async throws -> ScreenRecordingView {
         generation += 1
@@ -90,7 +97,32 @@ actor ScreenRecordingSource {
         let view = try await api.screenOpen(rangeID: rangeID, catalogRevision: catalogRevision)
         guard token == generation else { await api.screenClose(viewID: view.viewID); throw CancellationError() }
         activeView = view; confirmed = ProcessInfo.processInfo.systemUptime
+        do { try await preparePackage(viewID: view.viewID) }
+        catch {
+            if token == generation { invalidate(); activeView = nil }
+            await api.screenClose(viewID: view.viewID)
+            throw error
+        }
         return view
+    }
+    func preparePackage(viewID: String) async throws {
+        try check(viewID)
+        guard let view = activeView else { throw ScreenRecordingReadError("VIEW_EXPIRED") }
+        if package != nil { return }
+        let token = generation
+        let heartbeat = Task {
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
+                guard !Task.isCancelled, token == generation else { return }
+                _ = try? await availability(viewID: viewID)
+            }
+        }
+        defer { heartbeat.cancel() }
+        let downloaded = try await api.screenPackage(viewID: viewID)
+        try Task.checkCancellation()
+        guard token == generation else { throw CancellationError() }
+        try check(viewID); try downloaded.validate(view)
+        package = downloaded
     }
     func availability(viewID: String) async throws -> ScreenRecordingAvailability {
         let token = generation
@@ -101,7 +133,7 @@ actor ScreenRecordingSource {
             confirmed = ProcessInfo.processInfo.systemUptime
             return value
         } catch {
-            if token == generation && !Task.isCancelled { invalidate() }
+            if token == generation && !Task.isCancelled && !screenRecordingTransient(error) { invalidate() }
             throw error
         }
     }
@@ -109,12 +141,27 @@ actor ScreenRecordingSource {
         guard let view = activeView, view.viewID == viewID, view.expiresAt > screenRecordingNowMs(),
               let confirmed, ProcessInfo.processInfo.systemUptime - confirmed <= 5 else { throw ScreenRecordingReadError("VIEW_EXPIRED") }
     }
+    @available(iOS 16.0, *)
     func frame(viewID: String, captureID: String, variant: ScreenRecordingVariant) async throws -> Data {
         try check(viewID)
         let key = viewID + ":" + captureID + ":" + variant.rawValue
         if let entry = cache[key] { order.removeAll { $0 == key }; order.append(key); return entry.data }
         let token = generation
-        let data = try await api.screenFrame(viewID: viewID, captureID: captureID, variant: variant)
+        let thumbnail = variant == .thumb
+        while thumbnail ? decodingThumbnail : decodingFull {
+            try await Task.sleep(nanoseconds: 20_000_000)
+            guard token == generation else { throw CancellationError() }
+            try check(viewID)
+            if let entry = cache[key] { return entry.data }
+        }
+        try Task.checkCancellation()
+        guard let package else { throw ScreenRecordingReadError("VIEW_EXPIRED") }
+        if thumbnail { decodingThumbnail = true } else { decodingFull = true }
+        defer {
+            if thumbnail { decodingThumbnail = false } else { decodingFull = false }
+            withExtendedLifetime(package) {}
+        }
+        let data = try await package.jpeg(captureID: captureID, variant: variant)
         try Task.checkCancellation()
         guard token == generation else { throw CancellationError() }
         try check(viewID)
@@ -136,7 +183,7 @@ actor ScreenRecordingSource {
         return data
     }
     func invalidate() {
-        generation += 1; confirmed = nil; cache.removeAll(); order.removeAll()
+        generation += 1; confirmed = nil; cache.removeAll(); order.removeAll(); package = nil
         #if DEBUG
         Logger(subsystem: "com.runweave.app.native", category: "ScreenRecording").debug("cacheCleared frames=0 imageBytes=0 thumbnailBytes=0")
         #endif

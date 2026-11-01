@@ -135,6 +135,18 @@ Debug 隔离实例的本地 `diagnostics` 方法只返回资源计数，不经�
 [原生回放](../../docs/testing/screen-recording/playback.testplan.yaml)。构建和合成集成通过不代表
 全合同通过；真实 Mac、模拟器、资源压力与故障用例须分别取证。二期实施验收尚在进行。
 
+### 手机范围媒体包
+
+手机回放通过 `GET /api/screen-recording/views/:viewID/package` 下载当前范围的媒体包，随后本地解码，
+不逐帧请求 JPEG。线格式为四字节大端 JSON 长度、JSON 清单、按清单顺序串接的原始 MP4 段；
+清单只含视图、设备与服务代际、到期时间、帧索引、媒体长度和 SHA-256，不含本机路径。
+每包最多 128 MiB。Backend 流式转发，复用连接归属、取消、no-store 和逐块鉴权复核，
+不在 Backend 保存副本。owner 的 `packageManifest` / `packageMedia` 使用真实读取许可，
+每次最多读取 1 MiB；取消不提前释放实际读取许可，清理可以使后续块明确失效。
+手机校验完整长度、哈希与视图绑定后才使用；不完整下载不会进入回放。
+临时缓存和在线有效性合同见 [iOS 入口](../app-ios/README.md#屏幕记录)。
+旧手机与 Mac 原生回放的按帧读取接口继续保留；新手机连接不支持媒体包的旧版本时明确要求更新。
+
 ## 事项分析（开发中，默认关闭）
 
 分析不属于采集依赖。唯一 App owner 管理独立 `analysis.sqlite`；Backend 通过同用户 socket

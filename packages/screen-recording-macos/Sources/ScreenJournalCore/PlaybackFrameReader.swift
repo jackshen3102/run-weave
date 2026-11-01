@@ -10,6 +10,8 @@ actor PlaybackFrameReader {
     private var source: URL?
     private var nextIndex = 0
     private let context = CIContext(options: [.cacheIntermediates: false])
+    // AVAssetReader forbids cancelReading concurrently with copyNextSampleBuffer.
+    // Keep cancellation and teardown on this actor, after the current read returns.
     func reset() { reader?.cancelReading(); reader = nil; output = nil; source = nil }
     func jpegBatch(_ permits: [JournalFramePermit], variant: JournalVariant) async throws -> [String: Data] {
         defer { reset() }
@@ -26,6 +28,7 @@ actor PlaybackFrameReader {
             reset()
             let asset = AVURLAsset(url: permit.url)
             guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw JournalReadError("MEDIA_UNAVAILABLE") }
+            try permit.lease.check()
             let next = try AVAssetReader(asset: asset)
             let trackOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
             trackOutput.alwaysCopiesSampleData = false
@@ -35,8 +38,7 @@ actor PlaybackFrameReader {
             guard next.startReading() else { throw JournalReadError("MEDIA_UNAVAILABLE") }
             reader = next; output = trackOutput; source = permit.url; nextIndex = index
         }
-        guard let reader, let output else { throw JournalReadError("MEDIA_UNAVAILABLE") }
-        permit.lease.onCancel { reader.cancelReading() }
+        guard let output else { throw JournalReadError("MEDIA_UNAVAILABLE") }
         #if DEBUG
         // An explicit isolated-directory gate verifies that cancellation alone
         // never releases an actual reader's file lease. Bounded even if a probe exits.
@@ -54,7 +56,9 @@ actor PlaybackFrameReader {
             try? FileManager.default.removeItem(at: entered)
         }
         #endif
-        while let sample = output.copyNextSampleBuffer() {
+        while true {
+            try permit.lease.check()
+            guard let sample = output.copyNextSampleBuffer() else { break }
             try permit.lease.check()
             let position = CMSampleBufferGetPresentationTimeStamp(sample).seconds
             nextIndex = Int(position.rounded()) + 1

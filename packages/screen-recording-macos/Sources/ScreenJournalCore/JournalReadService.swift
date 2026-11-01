@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 actor JournalReadService {
     let serverEpoch = UUID().uuidString
@@ -227,6 +228,63 @@ actor JournalReadService {
         if revision != observedRevision || !invalid.isEmpty { cache.removeAll(); order.removeAll(); observedRevision = revision }
         return JournalAvailability(checkedAt: journalNowMs(), expiresAt: value.view.expiresAt, invalidCaptureIDs: invalid.sorted(), intervals: value.view.intervals,
             viewState: invalid.count == value.frames.count ? "gone" : "ready")
+    }
+    // Copy compressed media under the same real file leases used by decoders.
+    // No paths cross the socket and no image decoder runs for package downloads.
+    private func withMedia<T>(_ frame: JournalIndexedCapture, viewID: String, body: (JournalFramePermit) throws -> T) async throws -> T {
+        let permit = try await engine.permit(frame, settings: settings)
+        do {
+            _ = try snapshot(viewID)
+            activeReads[viewID, default: [:]][permit.lease.id] = permit.lease
+            defer {
+                activeReads[viewID]?.removeValue(forKey: permit.lease.id)
+                if activeReads[viewID]?.isEmpty == true { activeReads.removeValue(forKey: viewID) }
+            }
+            try permit.lease.check()
+            let result = try body(permit)
+            try permit.lease.check()
+            _ = try snapshot(viewID)
+            await engine.release(permit)
+            return result
+        } catch { await engine.release(permit); throw error }
+    }
+    func packageManifest(viewID: String) async throws -> JournalPackage {
+        let value = try snapshot(viewID)
+        let frames = value.frames.values.filter { !$0.capture.privacyPlaceholder }.sorted { $0.capture.sequence < $1.capture.sequence }
+        var assets: [JournalPackage.Asset] = []
+        var total = 0
+        for frame in frames where !assets.contains(where: { $0.id == frame.segmentID }) {
+            let asset = try await withMedia(frame, viewID: viewID) { permit in
+                let file = try FileHandle(forReadingFrom: permit.url)
+                defer { try? file.close() }
+                let size = try file.seekToEnd()
+                guard size > 0, size <= 128 * 1024 * 1024, total + Int(size) <= 128 * 1024 * 1024 else { throw JournalReadError("PACKAGE_TOO_LARGE") }
+                try file.seek(toOffset: 0)
+                var hash = SHA256()
+                while let bytes = try file.read(upToCount: 65536), !bytes.isEmpty {
+                    try permit.lease.check(); hash.update(data: bytes)
+                }
+                return JournalPackage.Asset(id: frame.segmentID, byteLength: Int(size), sha256: hash.finalize().map { String(format: "%02x", $0) }.joined(), width: frame.width, height: frame.height)
+            }
+            total += asset.byteLength; assets.append(asset)
+        }
+        _ = try snapshot(viewID)
+        return JournalPackage(viewID: viewID, serverEpoch: serverEpoch, deviceID: value.view.deviceID, expiresAt: value.view.expiresAt, assets: assets,
+            frames: frames.map { JournalPackage.Frame(captureID: $0.capture.id, assetID: $0.segmentID, frameIndex: $0.frameIndex) })
+    }
+    func packageMedia(viewID: String, assetID: String, offset: Int, length: Int) async throws -> Data {
+        guard offset >= 0, length > 0, length <= 1024 * 1024 else { throw JournalReadError("INVALID_ARGUMENT") }
+        let value = try snapshot(viewID)
+        guard let frame = value.frames.values.first(where: { $0.segmentID == assetID && !$0.capture.privacyPlaceholder }) else { throw JournalReadError("NOT_FOUND") }
+        return try await withMedia(frame, viewID: viewID) { permit in
+            let file = try FileHandle(forReadingFrom: permit.url)
+            defer { try? file.close() }
+            let size = try file.seekToEnd()
+            guard UInt64(offset) < size, size <= 128 * 1024 * 1024 else { throw JournalReadError("INVALID_ARGUMENT") }
+            try file.seek(toOffset: UInt64(offset))
+            guard let bytes = try file.read(upToCount: min(length, Int(size) - offset)), !bytes.isEmpty else { throw JournalReadError("MEDIA_UNAVAILABLE") }
+            return bytes
+        }
     }
     func frame(viewID: String, captureID: String, variant: JournalVariant) async throws -> Data {
         let value = try snapshot(viewID)

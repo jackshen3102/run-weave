@@ -40,6 +40,37 @@ export function createScreenRecordingRouter(service: ScreenRecordingService, aut
       } finally { res.off("close", abort); }
     });
   };
+  router.get("/views/:viewID/package", async (req, res) => {
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableFinished) controller.abort(); };
+    res.on("close", abort);
+    try {
+      const token = readBearerToken(req), identity = token ? auth.verifyAccessToken(token) : null;
+      if (!identity) throw new ScreenRecordingFailure(401, "UNAUTHORIZED");
+      const app = auth.getActiveAppSession(identity.sessionId);
+      if (app && app.connectionId !== (req.header("X-Connection-ID") ?? "")) throw new ScreenRecordingFailure(403, "FORBIDDEN");
+      const chunks = service.download(text(req.params.viewID)!, { sessionID: identity.sessionId, connectionID: app?.connectionId ?? "" }, controller.signal);
+      for await (const chunk of chunks) {
+        if (controller.signal.aborted) return;
+        if (!auth.verifyAccessToken(token!)) throw new ScreenRecordingFailure(401, "UNAUTHORIZED");
+        if (!res.headersSent) res.type("application/octet-stream");
+        if (!res.write(chunk)) await new Promise<void>((resolve, reject) => {
+          const clean = () => { res.off("drain", drain); res.off("close", closed); };
+          const drain = () => { clean(); resolve(); };
+          const closed = () => { clean(); reject(new ScreenRecordingFailure(503, "CANCELLED")); };
+          res.once("drain", drain); res.once("close", closed);
+          if (controller.signal.aborted) closed();
+        });
+      }
+      res.end();
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const safe = error instanceof ScreenRecordingFailure ? error : new ScreenRecordingFailure(503, "MEDIA_UNAVAILABLE");
+        if (res.headersSent) res.destroy();
+        else res.status(safe.status).json({ code: safe.code, message: safe.code, retryable: safe.retryable });
+      }
+    } finally { res.off("close", abort); }
+  });
   register("get", "/status", "status", () => ({}));
   register("get", "/days", "days", req => cursor(req, 30));
   register("get", "/ranges", "ranges", req => ({ ...cursor(req, 200), day: text(req.query.day)! }));
