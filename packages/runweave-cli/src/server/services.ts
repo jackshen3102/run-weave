@@ -40,6 +40,11 @@ const quote = (s: string) =>
     .replaceAll("%", "%%")
     .replaceAll("\n", "\\n") +
   '"';
+const pathValue = (s: string) => {
+  if (/[\r\n\0]/.test(s))
+    throw new Error("Unsupported control character in systemd path");
+  return s.replaceAll("%", "%%");
+};
 
 export function registered(ctx: ServerContext): boolean {
   return existsSync(path.join(ctx.home, "service.json"));
@@ -105,6 +110,7 @@ export function renderService(ctx: ServerContext, name: Component): string {
     ...ctx.configArgs,
   ];
   const info = os.userInfo();
+  const home = os.homedir();
   const log = path.join(ctx.home, `${name}.log`);
   if (process.platform === "linux")
     return [
@@ -121,16 +127,16 @@ export function renderService(ctx: ServerContext, name: Component): string {
       "[Service]",
       "Type=simple",
       `User=${info.username}`,
-      `WorkingDirectory=${quote(info.homedir)}`,
-      `Environment=${quote(`HOME=${info.homedir}`)}`,
+      `WorkingDirectory=${pathValue(home)}`,
+      `Environment=${quote(`HOME=${home}`)}`,
       `Environment=${quote(`PATH=${process.env.PATH ?? "/usr/bin:/bin"}`)}`,
       `ExecStart=${args.map(quote).join(" ")}`,
       "Restart=on-failure",
       "RestartSec=10",
       "TimeoutStopSec=90",
       ...(name === "backend" ? ["KillMode=process"] : []),
-      `StandardOutput=${quote(`append:${log}`)}`,
-      `StandardError=${quote(`append:${log}`)}`,
+      `StandardOutput=append:${pathValue(log)}`,
+      `StandardError=append:${pathValue(log)}`,
       "[Install]",
       "WantedBy=multi-user.target",
       "",

@@ -157,6 +157,7 @@ json(path.join(platform, "package.json"), {
   name: `@runweave/server-${target}`,
   version,
   license: "MIT",
+  repository: pkg.repository,
   os: [process.platform],
   cpu: [process.arch],
   ...(process.platform === "linux" ? { libc: ["glibc"] } : {}),

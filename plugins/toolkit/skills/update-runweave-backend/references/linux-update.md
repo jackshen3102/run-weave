@@ -4,6 +4,11 @@
 
 ## 已有更新入口
 
+先区分安装来源：NPM Server 按 `docs/cli/server-cli.md` 和
+`docs/deployment/npm-server-operations.md` 执行 `rw server update`，由 CLI 管理整套组件的
+维护租约、停止、激活和重启；不要再运行下表的独立 Backend/App Server 安装器覆盖它。
+CLI npm 包在原 prefix 单独升级。下表的构建与安装入口适用于源码/独立组件部署。
+
 | 组件           | 入口与需要核对的实现                                                                                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Backend + Web  | `pnpm backend:release -- --release-id=<唯一标识>`；`scripts/release/build-backend.mjs`、`scripts/install/backend.mjs`、`scripts/release/backend-start.mjs`                          |

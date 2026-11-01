@@ -5,6 +5,7 @@
 | 任务                                     | 文档                                                                                           |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | NPM 安装独立后台、常驻和更新             | [服务端管理](../cli/server-cli.md)                                                             |
+| NPM 发行流程、devbox 升级与 Agent 操作 | [NPM Server 运维](./npm-server-operations.md) |
 | 部署形态、环境变量和入口总览             | [overview.md](./overview.md)                                                                   |
 | 虚拟机独立 Backend 发布、安装与回滚      | [backend-standalone.md](./backend-standalone.md)                                               |
 | Linux 整套后台更新与开机自启             | [update-runweave-backend Skill](../../plugins/toolkit/skills/update-runweave-backend/SKILL.md) |

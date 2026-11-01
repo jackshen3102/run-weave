@@ -1,6 +1,6 @@
 {
   "name": "@runweave/server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standalone Runweave Backend, App Server and web resources",
   "license": "MIT",
   "files": [
@@ -25,5 +25,10 @@
     "@runweave/shared": "workspace:*",
     "@types/node": "^22.13.10",
     "esbuild": "^0.25.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackshen3102/run-weave.git",
+    "directory": "packages/runweave-server"
   }
 }

@@ -12015,5 +12015,133 @@
     "count": 1,
     "category": "test",
     "reason": "隔离真实进程验证：读取临时 App Server 发现记录与发布目录，确认拒绝共存时原发布字节和进程保持不变。"
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment",
+    "expression": "process.env.ACTIONS_ID_TOKEN_REQUEST_URL",
+    "count": 1,
+    "category": "distribution",
+    "reason": "GitHub Actions OIDC availability guard for release tooling; never stores or logs the identity token."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment",
+    "expression": "process.env.GITHUB_ACTIONS",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Release tooling refuses publishing outside the GitHub Actions environment."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment",
+    "expression": "process.env.GITHUB_STEP_SUMMARY",
+    "count": 2,
+    "category": "distribution",
+    "reason": "GitHub Actions output file for the public release result; not instance configuration."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_CHANNEL",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Validated next/latest CI release input; not a service runtime setting."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Passes the GitHub OIDC runner environment to npm; lifecycle scripts are disabled and no long-lived publishing token is configured."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(\"packages/runweave-cli/package.json\")",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Reads the source CLI npm version and distribution identity for release verification."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(\"packages/runweave-server/package.json\")",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Reads the source Server npm version and distribution identity for release verification."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Reads verified CI tarball bytes to calculate the publication SHA-512 digest."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(root, \"release-receipt.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Writes public package versions, digests and release phase to the CI artifact receipt."
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(process.env.GITHUB_STEP_SUMMARY)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Writes public release version and source revision to the GitHub Actions summary."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated registry verification removes inherited Runweave and Agent identity overrides."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "Child tooling inherits the runner environment; registry verification overrides HOME and removes Runweave instance variables."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(\"packages/runweave-cli/package.json\")",
+    "count": 1,
+    "category": "test",
+    "reason": "Reads the source CLI npm version and distribution identity for release verification."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(\"packages/runweave-server/package.json\")",
+    "count": 1,
+    "category": "test",
+    "reason": "Reads the source Server npm version and distribution identity for release verification."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(authFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "Creates randomized fixture-only login credentials with mode 0600 in an isolated temporary HOME."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(preloader)",
+    "count": 1,
+    "category": "test",
+    "reason": "Creates a child-process-only HOME adapter for isolated public-package verification."
   }
 ]

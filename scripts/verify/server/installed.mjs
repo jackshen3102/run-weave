@@ -95,8 +95,8 @@ function pack(directory) {
   const packed = JSON.parse(
     execFileSync(
       "npm",
-      ["pack", directory, "--json", "--pack-destination", fixture],
-      { encoding: "utf8" },
+      ["pack", "--json", "--pack-destination", fixture],
+      { encoding: "utf8", cwd: directory },
     ),
   )[0];
   const pkg = JSON.parse(
