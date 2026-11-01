@@ -158,12 +158,18 @@ async function verify(artifact) {
       const response = await fetch(published.dist.tarball, {
         signal: AbortSignal.timeout(120_000),
       });
-      assert(response.ok, `Cannot download ${pkg.name}`);
-      const downloaded = `sha512-${createHash("sha512")
-        .update(Buffer.from(await response.arrayBuffer()))
-        .digest("base64")}`;
-      assert(downloaded === integrity, `Downloaded bytes differ: ${pkg.name}`);
-      return;
+      // Registry metadata can become visible before its tarball reaches the CDN.
+      // Retry that propagation gap without publishing the immutable version again.
+      if (response.status === 404) {
+        await response.body?.cancel();
+      } else {
+        assert(response.ok, `Cannot download ${pkg.name}: HTTP ${response.status}`);
+        const downloaded = `sha512-${createHash("sha512")
+          .update(Buffer.from(await response.arrayBuffer()))
+          .digest("base64")}`;
+        assert(downloaded === integrity, `Downloaded bytes differ: ${pkg.name}`);
+        return;
+      }
     }
     if (attempt % 6 === 0)
       console.log(
