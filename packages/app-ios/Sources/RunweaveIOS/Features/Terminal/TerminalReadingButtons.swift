@@ -1,10 +1,14 @@
 import SwiftUI
 
-struct ConversationReaderButton: View {
+struct TerminalReadingButtons: View {
+  @ObservedObject var sideChat: SideChatModel
   @Binding var expectedTarget: TerminalConversation.Target?
   @Binding var isPresented: Bool
 
   var body: some View {
+    if sideChat.capabilities != nil {
+      TerminalSideChatButton(sideChat: sideChat)
+    }
     Button {
       expectedTarget = nil
       isPresented = true

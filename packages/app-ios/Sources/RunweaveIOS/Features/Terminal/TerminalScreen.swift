@@ -423,10 +423,7 @@ struct TerminalScreen: View {
           .padding(.horizontal, 16)
       }
       HStack(spacing: 0) {
-        if sideChat.capabilities != nil {
-          TerminalSideChatButton(sideChat: sideChat)
-        }
-        ConversationReaderButton(expectedTarget: $expectedConversation, isPresented: $showingConversation)
+        TerminalReadingButtons(sideChat: sideChat, expectedTarget: $expectedConversation, isPresented: $showingConversation)
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
