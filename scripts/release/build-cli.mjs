@@ -42,6 +42,7 @@ const pkg = {
   name: source.name,
   version: source.version,
   license: source.license,
+  repository: source.repository,
   type: "commonjs",
   description:
     "Runweave control-plane CLI and standalone Server lifecycle management",

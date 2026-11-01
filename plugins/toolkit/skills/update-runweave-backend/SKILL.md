@@ -5,11 +5,11 @@ description: 更新 Linux 机器上的整套 Runweave 后台，覆盖 Backend、
 
 # 更新 Runweave Linux 后台
 
-由 Agent 识别实际部署、调用现有构建与安装入口、处理差异并验证结果；systemd 负责长期运行与开机启动。当前没有通用的后台一键更新命令，不编造 `rw backend update`，也不调用桌面更新器。
+由 Agent 识别实际部署、调用现有构建与安装入口、处理差异并验证结果；systemd 负责长期运行与开机启动。NPM Server 部署使用 `rw server update`，覆盖 Backend、Web 与 App Server；CLI 和独立配套服务另行核对。源码/独立组件部署沿用原入口，不编造 `rw backend update`，也不调用桌面更新器。
 
 ## 范围与入口
 
-先读取目标仓库的 `AGENTS.md`、`docs/deployment/backend-standalone.md`、`docs/cli/configuration.md` 和 `docs/cli/service-management.md`；操作某个包前读其就近规则。仓库路径取当前项目或已确认的远端部署，不假定 SSH 登录目录就是源码目录。
+先读取目标仓库的 `AGENTS.md`、`docs/deployment/README.md`、`docs/cli/configuration.md` 和 `docs/cli/service-management.md`。NPM 部署继续读 `docs/cli/server-cli.md`、`docs/deployment/npm-server-operations.md`；源码/独立组件部署读 `docs/deployment/backend-standalone.md`。操作某个包前读其就近规则。仓库路径取当前项目或已确认的远端部署，不假定 SSH 登录目录就是源码目录。
 
 每次整套更新都建立下表。状态只能是待更新、已更新、已一致、不适用或受阻，并记录依据；缺少安装不能直接记为“不适用”。
 
@@ -30,7 +30,7 @@ description: 更新 Linux 机器上的整套 Runweave 后台，覆盖 Backend、
 ## 1. 识别目标与恢复条件
 
 - 确认 Linux 主机、服务运行用户、实例、配置根、Backend profile、源码目录及目标 revision。SSH 用户不等于服务用户；profile 不会把本地文件操作变成远程操作。
-- 读取 Git 状态并记录构建基线。用户要求最新代码时按已有分支关系 fetch/快进；保留本地修改，分叉不硬重置。否则用已确认源码，不擅自切换分支。各组件从同一基线构建，脏工作区如实标记。
+- NPM 部署记录已安装、active、running 版本及 sourceRevision，核对 registry 的目标精确版本和平台包；无需在服务器拉源码或构建。源码部署读取 Git 状态并记录构建基线，用户要求最新代码时按已有分支关系 fetch/快进；保留本地修改，分叉不硬重置。各组件从同一基线构建，脏工作区如实标记。
 - 查 systemd 的已安装 unit 和运行 unit，也查用户级 unit、容器及手动进程；不能只看当前活跃服务或按名字含 `runweave` 筛选。记录真实 unit、owner、ExecStart、数据路径、运行版本、启用状态和依赖。检查输出前过滤 unit/进程参数中的凭据，不打印完整环境文件或进程环境。
 - 保留原 HOME、CODEX_HOME、配置、Agent 登录态、Backend 身份、tmux socket、数据库和 Activity 正文密钥。备份配置、unit/drop-in、旧发布指针与可回退产物；运行中数据库使用其一致性备份方法，不把普通文件复制当成完整备份。
 - 检查目标 Node、架构、libc、ABI、磁盘、依赖工具和权限；独立 Backend 使用匹配目标环境的 Node 22 发布产物。容器或没有 systemd 的环境沿用已有 supervisor；报告不能执行 systemd 分支，不用 `nohup` 冒充开机自启。

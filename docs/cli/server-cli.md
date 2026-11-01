@@ -2,6 +2,7 @@
 
 `@runweave/cli` 唯一提供 rw 命令，`@runweave/server` 提供后台及网页资源；rw 的 `server` 命令组管理独立安装的 Server。
 Server 不注册全局命令，也不携带一份 CLI；升级 Server 不替换 rw。
+CI 打包、npm 发布及已有 devbox 的升级约定见 [NPM Server 运维](../deployment/npm-server-operations.md)。
 安装组件、配置、运行进程是三个独立状态，`npm install` 不注册或启动服务。
 第一阶段一台机器一个 Stable 服务，支持 Node 22，macOS arm64/x64、Linux glibc arm64/x64 为构建目标。
 已有源码部署的 App Server 占用实例时，Server 启动会被拒绝，保留原 App Server 发布指针和发布目录；
@@ -41,6 +42,7 @@ Pi 认证须按 provider 配置，不把仅安装工具当成认证成功。外�
 | `rw server update [--version X.Y.Z] [--force]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
 
 注册系统任务需要管理员权限，进程仍以执行命令的服务用户运行。不要用 sudo 把配置账号切换成另一个用户。
+Linux 服务沿用安装命令的 HOME 与 PATH；迁移已有部署时须保留原服务的 HOME，以继续使用原 Agent 登录态和用户目录。
 全局 npm prefix 必须可写；更新不自动提升 npm 权限。后台连续失败按管理器限速；显式 stop 不自动拉起。
 macOS 使用系统 LaunchDaemon，不把登录启动当开机启动。
 

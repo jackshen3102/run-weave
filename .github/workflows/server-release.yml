@@ -1,8 +1,23 @@
-name: Build standalone NPM server
+name: Release standalone NPM server
 on:
+  push:
+    tags: ["server-v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified packages to npm
+        type: boolean
+        default: false
+      channel:
+        description: npm distribution channel
+        type: choice
+        options: [next, latest]
+        default: next
 permissions:
   contents: read
+concurrency:
+  group: npm-server-release
+  cancel-in-progress: false
 jobs:
   package:
     strategy:
@@ -22,30 +37,107 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.2"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.6.2
-      - name: Check native target
+      - name: Check target and release tag
         env:
           EXPECTED_TARGET: ${{ matrix.target }}
-        run: node -e 'if (`${process.platform}-${process.arch}` !== process.env.EXPECTED_TARGET) process.exit(1)'
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          if (`${process.platform}-${process.arch}` !== process.env.EXPECTED_TARGET) throw new Error('Wrong native target');
+          const version = JSON.parse(readFileSync('packages/runweave-server/package.json')).version;
+          if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `server-v${version}`) throw new Error('Tag and Server version differ');
+          JS
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build distributable
         run: pnpm server:build
       - name: Verify installed tarballs and self-update
         run: pnpm server:verify-installed
-      - name: Pack independent CLI
-        run: npm pack ./.runtime-artifacts/server/cli-package --pack-destination .runtime-artifacts/server
-      - name: Pack platform package
+      - name: Pack verified packages
         env:
           SERVER_TARGET: ${{ matrix.target }}
-        run: npm pack "./.runtime-artifacts/server/$SERVER_TARGET" --pack-destination .runtime-artifacts/server
-      - name: Pack public entry package
-        run: npm pack ./.runtime-artifacts/server/package --pack-destination .runtime-artifacts/server
+        run: |
+          for package in cli-package "$SERVER_TARGET" package; do
+            (cd ".runtime-artifacts/server/$package" && npm pack --pack-destination ..)
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: npm-server-${{ matrix.target }}
           path: .runtime-artifacts/server/*.tgz
           if-no-files-found: error
+  publish:
+    needs: package
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-24.04
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Install OIDC-capable npm
+        run: npm install -g npm@12.2.1 --registry=https://registry.npmjs.org/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-server-*
+          path: release-artifacts
+      - name: Validate complete release
+        run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
+      - name: Publish with trusted identity and verify registry
+        env:
+          RELEASE_CHANNEL: ${{ github.event_name == 'push' && 'latest' || inputs.channel }}
+        run: node scripts/release/publish-server.mjs --artifacts=release-artifacts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-release-receipt
+          path: release-artifacts/release-receipt.json
+          if-no-files-found: ignore
+  verify-registry:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Install public packages and verify native runtime and login
+        run: node scripts/verify/server/registry.mjs
+  promote:
+    needs: verify-registry
+    runs-on: ubuntu-24.04
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - run: npm install -g npm@12.2.1 --registry=https://registry.npmjs.org/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-server-*
+          path: release-artifacts
+      - name: Promote verified packages to requested channel
+        env:
+          RELEASE_CHANNEL: ${{ github.event_name == 'push' && 'latest' || inputs.channel }}
+        run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --promote
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-release-final-receipt
+          path: release-artifacts/release-receipt.json
+          if-no-files-found: ignore
