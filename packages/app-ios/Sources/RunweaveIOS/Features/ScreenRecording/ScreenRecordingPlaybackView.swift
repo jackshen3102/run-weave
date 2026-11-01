@@ -92,7 +92,7 @@ struct ScreenRecordingPlaybackView: View {
     private var transport: some View {
         HStack {
             Button("上一帧", systemImage: "backward.end.fill") { model.step(-1) }
-            Button(model.state == "playing" || model.state == "buffering" ? "暂停" : "播放", systemImage: model.state == "playing" ? "pause.fill" : "play.fill") { model.toggle() }
+            Button(model.state == "playing" || model.state == "buffering" ? "暂停" : "播放", systemImage: model.state == "playing" || model.state == "buffering" ? "pause.fill" : "play.fill") { model.toggle() }
             Button("下一帧", systemImage: "forward.end.fill") { model.step(1) }
             Picker("速度", selection: Binding(get: { model.speed }, set: { model.setSpeed($0) })) {
                 ForEach([20,40,60], id: \.self) { Text("\($0)×").tag($0) }
