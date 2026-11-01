@@ -1,15 +1,20 @@
 ---
 name: update-runweave-backend
-description: 更新 Linux 机器上的整套 Runweave 后台，覆盖 Backend、Web 资源、App Server、全局 rw 与已部署配套服务，检查并补齐 systemd 托管和开机自启。用于更新服务器或无桌面后台；不用于 macOS、桌面端、手机端或 Dev Session。
+description: 通过 npm 更新 Linux 机器上的 Runweave CLI、Backend、Web 与 App Server，检查服务、登录、任务保活和开机自启；旧源码部署先迁移到 npm。用于“升级远程机器到最新版”“更新服务器 CLI 和服务”及无桌面后台；发布 npm 新版本使用 publish-runweave-server，不用于 macOS、桌面端、手机端或 Dev Session。
 ---
 
 # 更新 Runweave Linux 后台
 
-由 Agent 识别实际部署、调用现有构建与安装入口、处理差异并验证结果；systemd 负责长期运行与开机启动。NPM Server 部署使用 `rw server update`，覆盖 Backend、Web 与 App Server；CLI 和独立配套服务另行核对。源码/独立组件部署沿用原入口，不编造 `rw backend update`，也不调用桌面更新器。
+纯服务端统一使用 npm 发行包，不在服务器 git pull、编译或运行源码安装器升级。
+旧源码部署先执行一次迁移，随后进入相同的 npm 升级流程；本地 Mac 桌面端仍保留源码更新，
+由其专属流程处理。CI 从源码构建发行包，不属于目标机器的源码升级。
 
 ## 范围与入口
 
-先读取目标仓库的 `AGENTS.md`、`docs/deployment/README.md`、`docs/cli/configuration.md` 和 `docs/cli/service-management.md`。NPM 部署继续读 `docs/cli/server-cli.md`、`docs/deployment/npm-server-operations.md`；源码/独立组件部署读 `docs/deployment/backend-standalone.md`。操作某个包前读其就近规则。仓库路径取当前项目或已确认的远端部署，不假定 SSH 登录目录就是源码目录。
+读取目标仓库的 `AGENTS.md`、`docs/deployment/npm-server-operations.md`、
+`docs/cli/server-cli.md`、`docs/cli/configuration.md` 和 `docs/cli/service-management.md`。
+服务器本身不需要源码仓库；按本技能及已安装 CLI 的帮助操作。
+旧源码部署另读 `docs/deployment/backend-standalone.md` 的一次性迁移流程。
 
 每次整套更新都建立下表。状态只能是待更新、已更新、已一致、不适用或受阻，并记录依据；缺少安装不能直接记为“不适用”。
 
@@ -29,31 +34,41 @@ description: 更新 Linux 机器上的整套 Runweave 后台，覆盖 Backend、
 
 ## 1. 识别目标与恢复条件
 
-- 确认 Linux 主机、服务运行用户、实例、配置根、Backend profile、源码目录及目标 revision。SSH 用户不等于服务用户；profile 不会把本地文件操作变成远程操作。
-- NPM 部署记录已安装、active、running 版本及 sourceRevision，核对 registry 的目标精确版本和平台包；无需在服务器拉源码或构建。源码部署读取 Git 状态并记录构建基线，用户要求最新代码时按已有分支关系 fetch/快进；保留本地修改，分叉不硬重置。各组件从同一基线构建，脏工作区如实标记。
+- 确认 Linux 主机、服务运行用户、实例、配置根、Backend profile、安装来源及目标 npm 版本。SSH 用户不等于服务用户；profile 不会把本地文件操作变成远程操作。
+- 记录已安装、active、running 版本及 sourceRevision，核对 registry 的目标精确版本和平台包。旧源码部署只记录当前基线及恢复材料，保留仓库和本地修改，不执行源码升级。
 - 查 systemd 的已安装 unit 和运行 unit，也查用户级 unit、容器及手动进程；不能只看当前活跃服务或按名字含 `runweave` 筛选。记录真实 unit、owner、ExecStart、数据路径、运行版本、启用状态和依赖。检查输出前过滤 unit/进程参数中的凭据，不打印完整环境文件或进程环境。
 - 保留原 HOME、CODEX_HOME、配置、Agent 登录态、Backend 身份、tmux socket、数据库和 Activity 正文密钥。备份配置、unit/drop-in、旧发布指针与可回退产物；运行中数据库使用其一致性备份方法，不把普通文件复制当成完整备份。
-- 检查目标 Node、架构、libc、ABI、磁盘、依赖工具和权限；独立 Backend 使用匹配目标环境的 Node 22 发布产物。容器或没有 systemd 的环境沿用已有 supervisor；报告不能执行 systemd 分支，不用 `nohup` 冒充开机自启。
+- 检查目标 Node、架构、libc、ABI、磁盘、依赖工具和权限；Server 使用匹配目标环境的 Node 22 平台包。容器或没有 systemd 的环境沿用已有 supervisor；报告不能执行 systemd 分支，不用 `nohup` 冒充开机自启。
 - 维护通道必须能在 Backend/Bridge/MCP 停止后继续使用，例如独立 SSH。若当前 Agent 只能通过待更新服务控制主机，先建立可恢复的独立通道，再切换；不让更新切断唯一控制路径。
 
-先向用户简述目标、组件清单、代码基线、预计中断与恢复方式。已有整套更新授权时继续执行，不重复索要许可；目标机器或实例确实无法确定时才询问。
+先向用户简述目标、组件清单、目标版本、预计中断与恢复方式。已有整套更新授权时继续执行，不重复索要许可；目标机器或实例确实无法确定时才询问。
 
-## 2. 准备完整产物与配置
+## 2. 升级或迁移
 
-按 [Linux 更新入口与 systemd 细则](references/linux-update.md) 选择真实命令；先准备候选产物和回退材料，再停止旧服务。安装器可能立即切换发布指针，不能把执行安装当成只读预检。
+已由 `rw server` 管理的实例按 [NPM 机器升级](references/npm-update.md) 固定 CLI/Server 两个目标版本，
+在原 prefix 升级 CLI，再用 `rw server update --version` 升级服务。
+版本已一致且运行正常时不重新安装或重启。不重复 init、service install 或手动切换 current。
 
-- 独立发布包方式复用 `backend:release` 和包内安装器，Web 与 Backend 不拆开替换。已有源码或容器部署沿用其方式，不隐式迁移成另一套部署。
-- App Server 安装不等于运行进程已切换；全局 `rw` 更新不等于 systemd 或 Hook 引用的旧路径也更新。
-- 当前业务配置以实例 YAML 为准。旧版本升级先按配置 CLI 的显式迁移流程准备并校验，不能靠新增旧业务环境变量解决，也不能对已有数据运行全新初始化。
-- 配置写入使用 `runweave-management` 技能，保留 CAS 与敏感值私有输入。先核对 `terminal.tmux.shutdownPolicy` 的运行采用值；Stable 应采用 `preserve`，并检查 Backend unit 的 `KillMode=process`。旧进程采用 `cleanup` 时，写入新配置不能保护这次停止；需先排空活动任务或使用已验证迁移方式。
+旧源码或独立 Backend 包部署按仓库的 `docs/deployment/backend-standalone.md` 完成一次性迁移。
+先准备公开 npm 产物、备份和恢复条件，再停止原 owner；不对运行中的实例直接强行接管。
+缺少兼容的平台发行包时报告具体缺口，交给发布流程解决，不退回服务器源码构建。
 
-## 3. 更新并建立持久托管
+配置调整使用 `runweave-management`，保留 CAS 与敏感值私有输入。核对旧进程实际采用的
+`terminal.tmux.shutdownPolicy=preserve` 与 Backend unit 的 `KillMode=process`；
+只修改配置不能保护仍采用 cleanup 的旧进程，需先排空任务或采用已验证的迁移方式。
 
-在已授权范围内更新现有 unit，或为缺少托管的目标服务补齐 systemd；具体规则见参考文件。尽量保留原 unit 名、用户、配置根、数据目录和端口。已有容器编排时复用其持久启动机制，不叠加第二个进程管理器。
+## 3. 服务托管与配套能力
 
-按实际依赖停止消费者，完成安装后先启动提供者、确认可用，再启动消费者；通常先验证 App Server，再验证 Backend，最后验证依赖 Backend 的 Bridge/MCP。Hub 和隧道按实际依赖处理，不把这个例子写死成全机统一顺序。
+按 [systemd 检查](references/systemd.md) 核对唯一 owner、身份、持久自启与恢复条件。
+新装/迁移使用 `rw server service install --dry-run` 审查生成配置，再注册；正常更新复用现有托管。
+已有容器或 supervisor 时保留其持久启动机制，进程使用已发布 npm 产物，不叠加第二套 owner。
 
-每切换一个组件就检查进程身份、目标产物和健康。异常时停止后续切换，依据原因修复或回退该组件；回退前检查数据/schema 与配置兼容性，不自动回滚数据库或覆盖新增数据。已经成功的组件、失败组件和实际回退状态分别记录。
+独立 Hub/MCP/隧道按实际归属核对兼容性、配置、运行与自启。未包含在 Server npm 包的独立程序，
+不假定随包更新，也不调用旧源码安装器补齐；若本次明确要求更新，使用它自己的受支持发行入口，
+缺少发行产物则报告受阻，不把单独产品的失败掩盖为整套完成。保留用户主动停用的服务。
+
+每次切换后检查实际进程与健康。异常时停止后续切换，依据实际状态修复；
+回退前检查数据/schema 与配置兼容性，不自动回滚数据库、覆盖新增数据或启动遗留 unit 抢占实例。
 
 ## 4. 验证更新与开机恢复
 
@@ -70,4 +85,4 @@ description: 更新 Linux 机器上的整套 Runweave 后台，覆盖 Backend、
 
 ## 交付
 
-报告目标机器/实例、源码基线、每个组件的旧新版本、安装与运行结果、自启配置和业务验证。将“运行验证通过”“自启配置通过”“整机重启验证通过”分开，说明未覆盖项及失败后的实际状态。任一必需组件受阻时不能宣布整套完成；无需为本技能运行安装或更新其他 skill。
+报告目标机器/实例、目标 npm 版本与 sourceRevision、每个组件的旧新版本、安装与运行结果、自启配置和业务验证。将“运行验证通过”“自启配置通过”“整机重启验证通过”分开，说明未覆盖项及失败后的实际状态。任一必需组件受阻时不能宣布整套完成；无需为本技能运行安装或更新其他 skill。

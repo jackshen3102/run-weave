@@ -1,4 +1,4 @@
 interface:
-  display_name: "更新 Linux 后台"
-  short_description: "完整更新 Linux 上的 Runweave 后台，并核对服务托管与开机自启"
-  default_prompt: "使用 $update-runweave-backend 更新目标 Linux 机器的整套 Runweave 后台，检查 systemd 托管、开机自启和实际运行结果。"
+  display_name: "升级 Runweave npm 后台"
+  short_description: "升级机器的 CLI 与 Server npm 包，验证服务、登录和任务保活"
+  default_prompt: "使用 $update-runweave-backend 通过 npm 升级目标 Linux 机器的 CLI 和 Server；旧源码部署先迁移，检查服务、登录、终端保活及开机自启。"

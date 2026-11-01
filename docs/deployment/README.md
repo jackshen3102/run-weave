@@ -7,8 +7,8 @@
 | NPM 安装独立后台、常驻和更新             | [服务端管理](../cli/server-cli.md)                                                             |
 | NPM 发行流程、devbox 升级与 Agent 操作 | [NPM Server 运维](./npm-server-operations.md) |
 | 部署形态、环境变量和入口总览             | [overview.md](./overview.md)                                                                   |
-| 虚拟机独立 Backend 发布、安装与回滚      | [backend-standalone.md](./backend-standalone.md)                                               |
-| Linux 整套后台更新与开机自启             | [update-runweave-backend Skill](../../plugins/toolkit/skills/update-runweave-backend/SKILL.md) |
+| 旧源码 / 独立 Backend 迁移到 npm      | [backend-standalone.md](./backend-standalone.md)                                               |
+| Linux npm 后台升级与开机自启             | [update-runweave-backend Skill](../../plugins/toolkit/skills/update-runweave-backend/SKILL.md) |
 | 新服务器初始化 Pi、搜索与子 Agent 扩展   | [pi-agent-setup.md](./pi-agent-setup.md)                                                       |
 | Runweave Beta、Dev Session 与固定槽位    | [runweave-beta.md](./runweave-beta.md)                                                         |
 | Linux x64 桌面预览与打包                 | [electron-linux.md](./electron-linux.md)                                                       |
