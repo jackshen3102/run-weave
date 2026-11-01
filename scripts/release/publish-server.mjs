@@ -219,14 +219,22 @@ try {
   save();
   for (const { pkg } of packages) {
     npm(["dist-tag", "add", `${pkg.name}@${pkg.version}`, channel]);
-    const response = await fetch(
-      `${registry}/-/package/${encodeURIComponent(pkg.name)}/dist-tags`,
-      { signal: AbortSignal.timeout(30_000) },
-    );
-    assert(
-      response.ok && (await response.json())[channel] === pkg.version,
-      `Tag verification failed: ${pkg.name}`,
-    );
+    let tagged = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const response = await fetch(
+        `${registry}/-/package/${encodeURIComponent(pkg.name)}/dist-tags`,
+        { signal: AbortSignal.timeout(30_000) },
+      );
+      assert(response.ok, `Cannot read tags: ${pkg.name} (${response.status})`);
+      if ((await response.json())[channel] === pkg.version) {
+        tagged = true;
+        break;
+      }
+      if (attempt % 6 === 0)
+        console.log(`Waiting for npm tag propagation: ${pkg.name} ${channel}`);
+      await sleep(10_000);
+    }
+    assert(tagged, `Tag verification timed out: ${pkg.name}`);
   }
   receipt.phase = "complete";
   save();

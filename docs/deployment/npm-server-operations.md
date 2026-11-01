@@ -66,6 +66,7 @@ CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成�
 发布脚本 [publish-server.mjs](../../scripts/release/publish-server.mjs) 在发布前核对全套
 版本、sourceRevision、repository、原生依赖及 SHA-512，发布后重新下载核对摘要。
 npm 接受上传后可能仍需处理；脚本对每个精确版本最多等待 15 分钟，期间不重复发布。
+标签写入也可能晚于响应变得可见，写入后最多等待 5 分钟核对；只有全部标签一致才生成完成回执。
 同版本只有字节完全相同才允许跳过并继续。新发布的包先进入 `next`；中间失败可能留下部分包，
 不等于正式发行成功。
 
