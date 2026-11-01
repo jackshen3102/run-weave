@@ -61,7 +61,10 @@ latest projection、sync cursor 和 manifest。测试必须通过
 hook bridge 只发现 app-server 并写事件，不负责启动 app-server。app-server 自动启动失败时，
 backend、hook 和 CLI 的既有主流程必须继续 degraded 运行。
 
-本地源码安装到默认全局 home：
+以下源码安装入口用于本地 Mac 桌面端开发。纯服务端的 App Server 随
+[npm Server](../deployment/npm-server-operations.md) 统一安装、托管与升级，不单独运行这些源码命令。
+
+本地 Mac 源码安装到默认全局 home：
 
 ```bash
 pnpm app-server:install

@@ -147,7 +147,7 @@ Electron 复用主机连接意图，管理本机回环网关、SSH 反向通道�
 
 远端终端/Agent 仍由远端 Backend 执行，可运行任意命令。tmux 存活取决于远端 socket/数据目录；
 Backend 启动的 Workspace Service 生命周期不同，不能按 tmux 的保活合同推断。
-部署见 [独立 Backend 部署](../deployment/backend-standalone.md#通过-agent-维护远端环境)。
+服务端部署和升级统一使用 [npm Server](../deployment/npm-server-operations.md)；旧源码部署先[迁移到 npm](../deployment/backend-standalone.md)。
 
 实现入口：[共享隧道合同](../../packages/shared/src/tunnels/index.ts)、
 [Electron 执行器](../../electron/src/tunnels/manager.ts)、
