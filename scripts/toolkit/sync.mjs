@@ -18,8 +18,6 @@ import path from "node:path";
 import {
   assertFile,
   commandExists,
-  formatCodexTimestamp,
-  getBasePluginVersion,
   log,
   readJson,
   repoRoot,
@@ -27,12 +25,17 @@ import {
   runCapture,
   runOptional,
   runResult,
-  writeJson,
 } from "./sync-runtime.mjs";
+import {
+  lockToolkitSync,
+  packageMatches,
+  publishToolkitRelease,
+  toolkitRelease,
+} from "./release.mjs";
 
 const args = new Set(process.argv.slice(2));
 const ifStaged = args.has("--if-staged");
-const shouldStageCachebuster = ifStaged || args.has("--stage-cachebuster");
+const shouldStageAssets = ifStaged || args.has("--stage-cachebuster");
 
 const pluginRelativePath = "plugins/toolkit";
 const marketplaceRelativePath = ".agents/plugins/marketplace.json";
@@ -42,6 +45,8 @@ const hooksConfigPath = path.join(pluginDir, "hooks.json");
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");
 const traeHome = path.join(homedir(), ".trae");
+const publishRoot = path.join(codexHome, "plugins", "sources", "runweave");
+let publishedPluginDir;
 const syncDisabled = process.env.RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC === "1";
 
 if (syncDisabled) {
@@ -69,15 +74,25 @@ if (!marketplaceName || !pluginName) {
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
-const codexCompatibilityVersions = collectCodexCompatibilityVersions(
-  pluginName,
-  marketplaceName,
-);
-const codexCacheSnapshot = snapshotCodexCompatibilityCache(
-  pluginName,
-  marketplaceName,
-  codexCompatibilityVersions,
-);
+const primaryWorktree = runCapture(
+  "git",
+  ["worktree", "list", "--porcelain", "-z"],
+  { quiet: true },
+)
+  .split("\0")[0]
+  .slice("worktree ".length);
+if (ifStaged && repoRoot !== primaryWorktree) {
+  // A linked branch may contain an older Toolkit. A commit must not downgrade the user's global install.
+  await buildAgentAssets();
+  stageGeneratedAssets();
+  log(
+    "Linked-worktree commit: generated local assets only. Use pnpm toolkit:sync to explicitly publish this branch.",
+  );
+  process.exit(0);
+}
+
+const releaseLock = await lockToolkitSync(codexHome, log);
+process.once("exit", releaseLock);
 
 await buildAgentAssets();
 await installPi({
@@ -85,36 +100,69 @@ await installPi({
     process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"),
   assetsDir: path.join(repoRoot, "plugins", "pi", "dist"),
 });
-updateCodexCachebuster();
-formatCodexPluginManifest();
-installForCodex(pluginName, marketplaceName);
-preserveCodexCompatibilityCache(
-  pluginName,
-  marketplaceName,
-  codexCompatibilityVersions,
-  codexCacheSnapshot,
-);
-cleanupCompatibilitySnapshot(codexCacheSnapshot);
-const traeCacheSnapshot = snapshotTraeCompatibilityCache(pluginName);
-try {
-  installForTrae(pluginName);
-} finally {
-  preserveTraeCompatibilityCache(pluginName, traeCacheSnapshot);
-  cleanupCompatibilitySnapshot(traeCacheSnapshot);
+const release = toolkitRelease(repoRoot);
+publishedPluginDir = publishToolkitRelease(publishRoot, marketplace, release);
+log(`Toolkit content release ${release.version}.`);
+
+if (codexReleaseInstalled(release)) {
+  log(
+    "Codex already has this exact Toolkit content; leaving its installation and hook approval unchanged.",
+  );
+} else {
+  const codexCompatibilityVersions = collectCodexCompatibilityVersions(
+    pluginName,
+    marketplaceName,
+  );
+  const codexCacheSnapshot = snapshotCodexCompatibilityCache(
+    pluginName,
+    marketplaceName,
+    codexCompatibilityVersions,
+  );
+
+  installForCodex(pluginName, marketplaceName);
+  preserveCodexCompatibilityCache(
+    pluginName,
+    marketplaceName,
+    codexCompatibilityVersions,
+    codexCacheSnapshot,
+  );
+  cleanupCompatibilitySnapshot(codexCacheSnapshot);
 }
 
-if (shouldStageCachebuster) {
-  run("git", [
-    "add",
-    path.relative(repoRoot, manifestPath),
-    path.relative(repoRoot, hooksConfigPath),
-    ...bridgeAssets.flatMap((asset) => [
-      `plugins/toolkit/hooks/${asset}`,
-      `electron/resources/hooks/${asset}`,
-    ]),
-    "electron/resources/hooks/runweave-hook-dispatch.cjs",
-    "electron/resources/hooks/pi",
-  ]);
+if (
+  packageMatches(
+    path.join(getTraePluginCacheRoot(pluginName), release.version),
+    release.files,
+  )
+) {
+  log(
+    "Trae already has this exact Toolkit content; leaving its installation unchanged.",
+  );
+} else {
+  const traeCacheSnapshot = snapshotTraeCompatibilityCache(pluginName);
+  try {
+    installForTrae(pluginName);
+  } finally {
+    preserveTraeCompatibilityCache(pluginName, traeCacheSnapshot);
+    cleanupCompatibilitySnapshot(traeCacheSnapshot);
+  }
+}
+
+stageGeneratedAssets();
+
+function stageGeneratedAssets() {
+  if (shouldStageAssets) {
+    run("git", [
+      "add",
+      path.relative(repoRoot, hooksConfigPath),
+      ...bridgeAssets.flatMap((asset) => [
+        `plugins/toolkit/hooks/${asset}`,
+        `electron/resources/hooks/${asset}`,
+      ]),
+      "electron/resources/hooks/runweave-hook-dispatch.cjs",
+      "electron/resources/hooks/pi",
+    ]);
+  }
 }
 
 log(
@@ -132,6 +180,7 @@ function hasStagedToolkitChanges() {
       pluginRelativePath,
       "packages/agent-bridge",
       "scripts/agents",
+      "scripts/toolkit",
       marketplaceRelativePath,
     ],
     { quiet: true },
@@ -143,25 +192,30 @@ function hasStagedToolkitChanges() {
   return output.length > 0;
 }
 
-function updateCodexCachebuster() {
-  const currentManifest = readJson(manifestPath);
-  const baseVersion = getBasePluginVersion(currentManifest.version);
-  currentManifest.version = `${baseVersion}+codex.${formatCodexTimestamp(
-    new Date(),
-  )}`;
-  writeJson(manifestPath, currentManifest);
-  log(`Updated Toolkit cachebuster to ${currentManifest.version}.`);
-}
-
-function formatCodexPluginManifest() {
-  run("pnpm", [
-    "exec",
-    "prettier",
-    "--write",
-    "--parser",
-    "json",
-    path.relative(repoRoot, manifestPath),
+function codexReleaseInstalled(release) {
+  if (!commandExists("codex")) return false;
+  const result = runResult("codex", [
+    "plugin",
+    "list",
+    "--marketplace",
+    marketplaceName,
+    "--json",
   ]);
+  if (result.status !== 0) return false;
+  const installed = JSON.parse(result.stdout).installed?.find(
+    (plugin) => plugin.pluginId === `${pluginName}@${marketplaceName}`,
+  );
+  return (
+    installed?.version === release.version &&
+    installed?.marketplaceSource?.source === publishRoot &&
+    packageMatches(
+      path.join(
+        getCodexPluginCacheRoot(pluginName, marketplaceName),
+        release.version,
+      ),
+      release.files,
+    )
+  );
 }
 
 function installForCodex(pluginName, marketplaceName) {
@@ -232,7 +286,7 @@ function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
     "plugins/cache",
     marketplaceName,
     pluginName,
-    "[0-9]+\\.[0-9]+\\.[0-9]+\\+codex\\.[0-9]+",
+    "[0-9]+\\.[0-9]+\\.[0-9]+\\+codex\\.[a-f0-9]+",
   ].join("/");
   const result = runResult(
     "rg",
@@ -250,7 +304,7 @@ function collectSessionReferencedCodexVersions(pluginName, marketplaceName) {
     return [];
   }
 
-  const versionPattern = /[0-9]+\.[0-9]+\.[0-9]+\+codex\.[0-9]+/g;
+  const versionPattern = /[0-9]+\.[0-9]+\.[0-9]+\+codex\.[a-f0-9]+/g;
   return Array.from(
     new Set(`${result.stdout || ""}`.match(versionPattern) ?? []),
   );
@@ -262,7 +316,9 @@ function preserveCodexCompatibilityCache(
   compatibilityVersions,
   cacheSnapshot,
 ) {
-  const currentVersion = readJson(manifestPath).version;
+  const currentVersion = readJson(
+    path.join(publishedPluginDir, ".codex-plugin/plugin.json"),
+  ).version;
   if (!currentVersion) {
     throw new Error("Toolkit plugin manifest is missing version.");
   }
@@ -442,7 +498,9 @@ function snapshotTraeCompatibilityCache(pluginName) {
 }
 
 function preserveTraeCompatibilityCache(pluginName, cacheSnapshot) {
-  const currentVersion = readJson(manifestPath).version;
+  const currentVersion = readJson(
+    path.join(publishedPluginDir, ".codex-plugin/plugin.json"),
+  ).version;
   if (!currentVersion) {
     throw new Error("Toolkit plugin manifest is missing version.");
   }
@@ -499,7 +557,7 @@ function listDirectoryNames(directoryPath) {
 function addVersion(versions, version) {
   if (
     typeof version === "string" &&
-    /^[0-9]+\.[0-9]+\.[0-9]+\+codex\.[0-9]+$/.test(version)
+    /^[0-9]+\.[0-9]+\.[0-9]+\+codex\.(?:[0-9]+|[a-f0-9]{64})$/.test(version)
   ) {
     versions.add(version);
   }
@@ -533,7 +591,7 @@ function ensureCodexMarketplace(pluginName, marketplaceName) {
     "plugin",
     "marketplace",
     "add",
-    repoRoot,
+    publishRoot,
   ]);
   if (addResult.status === 0) {
     return;
@@ -547,7 +605,7 @@ function ensureCodexMarketplace(pluginName, marketplaceName) {
   }
 
   log(
-    `Codex marketplace ${marketplaceName} points at another source; replacing it with this repo.`,
+    `Moving Codex marketplace ${marketplaceName} to its shared, worktree-independent release source.`,
   );
   runOptional("codex", [
     "plugin",
@@ -555,7 +613,7 @@ function ensureCodexMarketplace(pluginName, marketplaceName) {
     `${pluginName}@${marketplaceName}`,
   ]);
   runOptional("codex", ["plugin", "marketplace", "remove", marketplaceName]);
-  run("codex", ["plugin", "marketplace", "add", repoRoot]);
+  run("codex", ["plugin", "marketplace", "add", publishRoot]);
 }
 
 function installForTrae(pluginName) {
@@ -580,7 +638,7 @@ function installForTrae(pluginName) {
     "--marketplace-name",
     "local",
     "--yes",
-    pluginDir,
+    publishedPluginDir,
   ]);
   const listing = runCapture(traeCommand, ["plugin", "list"], { quiet: true });
   if (!listing.includes(`${pluginName}@local`)) {
