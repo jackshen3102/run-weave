@@ -80,7 +80,7 @@ Linux 正常密钥路径、跨 worker 共用、重启读取、密钥损坏/缺�
 - 带浏览器界面开发：`pnpm dev:electron:headed`
 - 默认监听 `0.0.0.0`，可通过 `DEV_HOST` 环境变量覆盖
 - 构建配置：`electron/electron-builder.yml`
-- 桌面内置 Backend 与 Electron ABI 的 SQLite 模块同放在 App 的 `Contents/Resources/backend`；独立虚拟机 Backend 使用[自己的发布包](./backend-standalone.md)。
+- 桌面内置 Backend 与 Electron ABI 的 SQLite 模块同放在 App 的 `Contents/Resources/backend`；纯服务端统一使用 [npm Server 发行包](./npm-server-operations.md)，旧源码部署先[迁移到 npm](./backend-standalone.md)。
 - 完整 Electron 构建会把固定版本 `whistle@2.10.9` 及其生产依赖、Web UI assets 和 LICENSE staged 到 `resources/whistle-runtime`；运行时不依赖系统或全局 `w2`。
 - Terminal Browser 的三个 Profile 在 Whistle 模式下分别懒启动 loopback Whistle `8081/8082/8083`，应用退出时只停止自己启动的子进程。普通安装态默认使用 Whistle；带独立 userData 的受管 Dev Session 默认 Direct，可从 Profile 设置临时开启代理。三者使用独立 storage、共享 certDir，不修改系统代理或系统钥匙串。
 - `deploy/whistle/proxy.md` 仍是人工部署示例。桌面运行时不会读取或导入该文件，也不会覆盖用户在 Whistle 控制台维护的 Rules；Runweave 只更新保留 Value `runweave-dev-server`。

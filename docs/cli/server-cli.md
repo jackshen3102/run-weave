@@ -77,19 +77,19 @@ verify 使用真实 tarball、本机 loopback npm registry 与隔离用户目录
 升级目标 0.1.1、0.1.2 是同一代码的版本 fixture，不代表真实公网版本。该结果不等同于系统服务安装、开机或真实客户端交互验收。
 完整验收见 [NPM 服务端测试计划](../testing/platform/npm-server.testplan.yaml)。
 
-## 包定位与源码激活
+## 包定位与开发验证产物
 
 `<configRoot>/server/installation.json` 记录受管理的 Server 包路径。没有记录时，先查与 CLI 同前缀的全局 Server，
-再查询 npm 全局目录。也可用 `--server-package <绝对包目录>` 选择源码构建产物；不依赖当前工作目录。
+再查询 npm 全局目录。`--server-package <绝对包目录>` 用于开发/CI 隔离验证本地产物，不依赖当前工作目录；
+不是纯服务端日常升级入口。正式服务器统一使用 npm，旧部署按[迁移说明](../deployment/backend-standalone.md)处理。
 Server 不存在时不会让 rw 的其他命令依赖 Server，也不会自动联网安装。
 
 ```bash
-# 使用源码构建同一种 Server 安装产物
+# 仅在开发/CI 的隔离 HOME 和实例中验证构建产物
 pnpm server:build
 rw server init --server-package /absolute/repo/.runtime-artifacts/server/package
-# 后续源码更新与 NPM 更新共用保护、停止、激活和重启流程
+# 验证候选产物的保护、停止、激活和重启流程
 rw server update --server-package /absolute/repo/.runtime-artifacts/server/package
-rw server update --version 0.1.0
 ```
 
 首次注册可在 init/start 指定路径；已有安装切换来源使用 update，避免绕过运行中任务保护。

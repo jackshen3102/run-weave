@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布 Runweave npm 版本"
+  short_description: "从发行提交到 CI 可信发布、四平台安装验收和 npm 标签核对"
+  default_prompt: "使用 $publish-runweave-server 发布 Runweave 服务端新版本，并跟进 CI 和公开 npm 包验收。"

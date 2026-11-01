@@ -1,9 +1,18 @@
 # NPM Server 发布与服务器升级
 
 面向维护独立服务端的 Agent。命令行为以 [Server CLI](../cli/server-cli.md) 为准；
-本文记录发行步骤和已部署机器的运维约定。先识别安装来源，再选择更新流程。
-NPM 部署使用 `rw server update`；仍采用源码或独立 Backend 包的机器使用
-[原部署流程](./backend-standalone.md)，不因更新而隐式迁移。
+本文记录发行步骤和已部署机器的运维约定。纯服务端统一通过 npm 安装和升级，不依赖桌面端或源码仓库。
+已有 npm 部署使用 `rw server update`；旧源码或独立 Backend 包部署先完成
+[一次性迁移](./backend-standalone.md)，不再通过拉源码、编译和独立安装器升级。
+本地 Mac 桌面端仍使用[源码更新流程](./electron-local-updates.md)；CI 从源码构建 npm 发行包。
+
+## 交给 AI 的两个入口
+
+- “发布一个 Server 新版本”：使用 [publish-runweave-server](../../plugins/toolkit/skills/publish-runweave-server/SKILL.md)，完成版本准备、CI 可信发布与公开安装验证。
+- “把 230 升级到最新版”：使用 [update-runweave-backend](../../plugins/toolkit/skills/update-runweave-backend/SKILL.md)，核对并升级该机器的 CLI 与 Server，验证服务、登录和终端保活。
+
+也可明确指定版本或同时要求两个流程；同时要求时先发布，后将已验证的精确版本交给升级流程。
+发布不会自动部署到机器，机器升级也不会自动创建新发行版。
 
 ## 构建、发布、升级是三个阶段
 
