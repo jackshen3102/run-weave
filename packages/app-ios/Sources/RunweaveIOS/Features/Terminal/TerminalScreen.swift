@@ -426,13 +426,7 @@ struct TerminalScreen: View {
         if sideChat.capabilities != nil {
           TerminalSideChatButton(sideChat: sideChat)
         }
-        Button {
-          expectedConversation = nil
-          showingConversation = true
-        } label: {
-          Image(systemName: "book").frame(width: 44, height: 48).contentShape(Rectangle())
-        }
-        .accessibilityLabel("会话阅读").accessibilityIdentifier("terminal-conversation-open")
+        ConversationReaderButton(expectedTarget: $expectedConversation, isPresented: $showingConversation)
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
