@@ -16,29 +16,6 @@ struct KnowledgeInboxRow: View {
     }.padding(.vertical, 6)
   }
 }
-struct KnowledgeInboxPreview: View {
-  @ObservedObject var session: AppSession
-  @ObservedObject var model: KnowledgeInboxModel
-  var body: some View {
-    Section {
-      if let failure = model.failure { Text(failure).font(.caption).foregroundColor(.orange) }
-      if model.preview?.sourceStatus.status == "partial" { Text("部分来源暂不可用，列表不完整").font(.caption).foregroundColor(.orange) }
-      ForEach(model.preview?.items ?? []) { item in
-        NavigationLink {
-          KnowledgeInboxDetail(session: session, model: model, item: item)
-        } label: { KnowledgeInboxRow(item: item) }
-      }
-      if model.preview == nil && model.failure == nil { ProgressView("正在读取成果…") }
-      if model.preview?.items.isEmpty == true && model.failure == nil && model.preview?.sourceStatus.status == "ok" {
-        Text("当前没有待处理成果").foregroundColor(.secondary)
-      }
-      NavigationLink("查看全部") { KnowledgeInboxList(session: session, model: model) }
-    } header: { Label("自进化", systemImage: "sparkles") }
-    .task(id: "\(session.generation):\(session.foreground)") {
-      if session.foreground { await model.poll("preview") }
-    }
-  }
-}
 struct KnowledgeInboxList: View {
   @ObservedObject var session: AppSession
   @ObservedObject var model: KnowledgeInboxModel

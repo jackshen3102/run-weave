@@ -18,6 +18,7 @@ struct HomeView: View {
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
   @State private var showingScreenRecording = false
+  @State private var showingKnowledgeInbox = false
   @State private var screenConversation: (target: TerminalConversation.Target, generation: Int)?
   @State private var renaming: HomeTerminal?
   @State private var moving: HomeTerminal?
@@ -78,7 +79,6 @@ struct HomeView: View {
 
   private func refreshHome() async {
     await session.refresh()
-    await session.knowledgeInbox.refreshPreview()
     await branchStatuses.refresh(session: session, terminals: attention, force: true)
   }
 
@@ -105,9 +105,6 @@ struct HomeView: View {
             }?.name)
           }
         }
-      }
-      if !searching {
-        KnowledgeInboxPreview(session: session, model: session.knowledgeInbox)
       }
       ForEach(groups) { group in
         Section {
@@ -148,6 +145,12 @@ struct HomeView: View {
         }
       }
     }
+    .background {
+      NavigationLink(isActive: $showingKnowledgeInbox) {
+        KnowledgeInboxList(session: session, model: session.knowledgeInbox)
+          .id(session.generation)
+      } label: { EmptyView() }.hidden()
+    }
     .searchable(text: $query, prompt: "Search projects and terminals")
     .refreshable { await refreshHome() }
     .task(id: conversationRefreshKey) {
@@ -177,6 +180,7 @@ struct HomeView: View {
       expanded.removeAll()
       initializedGeneration = nil
       query = ""
+      showingKnowledgeInbox = false
       branchUpdatesTarget = nil
       renaming = nil
       moving = nil
@@ -187,6 +191,8 @@ struct HomeView: View {
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
+          Button("自进化") { showingKnowledgeInbox = true }
+            .accessibilityIdentifier("knowledge-inbox-entry")
           Button("屏幕记录") { showingScreenRecording = true }.accessibilityIdentifier("screen-recording-entry")
           Button("Mac 桌面") { remoteDesktop.managingHosts = true }
             .accessibilityIdentifier("remote-desktop-hosts")

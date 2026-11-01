@@ -3,7 +3,6 @@ import UIKit
 
 @MainActor
 final class KnowledgeInboxModel: ObservableObject {
-  @Published private(set) var preview: InboxPage?
   @Published private(set) var items: [InboxItem] = []
   @Published private(set) var repositories: [InboxRepository] = []
   @Published private(set) var nextCursor: String?
@@ -23,7 +22,6 @@ final class KnowledgeInboxModel: ObservableObject {
   @Published var repositoryID = ""
   private var service: KnowledgeInboxService?
   private var epoch = UUID()
-  private var previewRequest = 0
   private var listRequest = 0
   private var detailRequest = 0
   private var loadedPages = 1
@@ -40,7 +38,7 @@ final class KnowledgeInboxModel: ObservableObject {
     writeTask?.cancel()
     writeTask = nil
     service = api.map { KnowledgeInboxService(api: $0) }
-    preview = nil; items = []; repositories = []; nextCursor = nil; detail = nil
+    items = []; repositories = []; nextCursor = nil; detail = nil
     failure = nil; detailFailure = nil; actionFailure = nil; unsupported = false; offline = false
     partial = false; writing = false; loading = false
     loadedPages = 1; activeFilter = ""
@@ -72,17 +70,6 @@ final class KnowledgeInboxModel: ObservableObject {
   }
   var canWrite: Bool { service != nil && !writing && !offline && !unsupported && failure == nil && detailFailure == nil }
 
-  func refreshPreview() async {
-    guard let service, !unsupported else { return }
-    let current = epoch
-    previewRequest += 1
-    let request = previewRequest
-    do {
-      let page = try await service.list(limit: 4)
-      guard epoch == current, request == previewRequest, !Task.isCancelled else { return }
-      preview = page; repositories = page.repositories; failure = nil; offline = false
-    } catch { if epoch == current, request == previewRequest { receive(error) } }
-  }
   func refreshList(more: Bool = false) async {
     guard let service, !unsupported else { return }
     let current = epoch
@@ -147,7 +134,6 @@ final class KnowledgeInboxModel: ObservableObject {
       let updated = try await task.value
       guard epoch == current, !Task.isCancelled else { return }
       detail = updated; detailVersion = updated.processedAt == nil ? nil : updated.contentVersion
-      await refreshPreview()
       await refreshList()
     } catch {
       guard epoch == current, !(error is CancellationError), !Task.isCancelled else { return }
@@ -158,8 +144,7 @@ final class KnowledgeInboxModel: ObservableObject {
   }
   func poll(_ area: String) async {
     while !Task.isCancelled && !unsupported {
-      if area == "preview" { await refreshPreview() }
-      else if area == "list" { await refreshList() }
+      if area == "list" { await refreshList() }
       else { await refreshDetail() }
       do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
     }
