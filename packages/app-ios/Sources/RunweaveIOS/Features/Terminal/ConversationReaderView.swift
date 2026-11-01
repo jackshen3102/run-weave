@@ -3,20 +3,21 @@ import RunweaveBrowser
 import SwiftUI
 
 struct ConversationReaderView: View {
-  @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
   @ObservedObject var session: AppSession
   @ObservedObject private var browser: BrowserSession
   let controller: SessionController
   let terminalID: String
   let title: String
+  let close: () -> Void
   @StateObject private var model: ConversationReaderModel
   @StateObject private var anchor = ConversationScrollAnchor()
   @State private var browserPresentationID = UUID()
   @State private var visible = false
 
-  init(session: AppSession, controller: SessionController, terminalID: String, title: String, expectedTarget: TerminalConversation.Target? = nil) {
+  init(session: AppSession, controller: SessionController, terminalID: String, title: String, expectedTarget: TerminalConversation.Target? = nil, close: @escaping () -> Void) {
     self.session = session; self.controller = controller; self.terminalID = terminalID; self.title = title
+    self.close = close
     self.browser = session.browser
     _model = StateObject(wrappedValue: ConversationReaderModel(session: session, controller: controller, terminalID: terminalID, expectedTarget: expectedTarget))
   }
@@ -79,7 +80,7 @@ struct ConversationReaderView: View {
       .background(TerminalAppearance.background)
       .navigationTitle("会话阅读").navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("终端") { dismiss() } }
+        ToolbarItem(placement: .cancellationAction) { Button("终端", action: close) }
         ToolbarItem(placement: .navigationBarTrailing) {
           Button { anchor.capture(); model.refresh() } label: {
             if model.loading { ProgressView() } else { Image(systemName: "arrow.clockwise") }
@@ -111,10 +112,10 @@ struct ConversationReaderView: View {
         anchor.commit()
       }
       .onChange(of: scenePhase) { phase in if phase != .active { anchor.persist() } }
-      .onChange(of: session.generation) { _ in model.cancel(); dismiss() }
-      .onChange(of: session.terminal?.id) { id in if id != terminalID { model.cancel(); dismiss() } }
+      .onChange(of: session.generation) { _ in model.cancel(); close() }
+      .onChange(of: session.terminal?.id) { id in if id != terminalID { model.cancel(); close() } }
       .onChange(of: session.terminalController.map(ObjectIdentifier.init)) { identity in
-        if identity != ObjectIdentifier(controller) { model.cancel(); dismiss() }
+        if identity != ObjectIdentifier(controller) { model.cancel(); close() }
       }
   }
   private func connectBrowser() {

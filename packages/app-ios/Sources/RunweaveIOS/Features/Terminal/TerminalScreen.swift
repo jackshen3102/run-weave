@@ -238,9 +238,11 @@ struct TerminalScreen: View {
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
-    .fullScreenCover(isPresented: $showingConversation, onDismiss: connectBrowserIntents) {
-      ConversationReaderView(session: session, controller: controller, terminalID: details.id, title: title, expectedTarget: expectedConversation)
-        .mobileAnalyticsScreen(.conversationReader)
+    .background {
+      ConversationReaderPresentation(
+        session: session, controller: controller, terminalID: details.id, title: title,
+        expectedTarget: expectedConversation, isPresented: $showingConversation,
+        onDismiss: connectBrowserIntents)
     }
     .sheet(item: $replyContext) { context in
       CodexReplyAssistant(session: session, controller: controller, questions: session.terminalQuestions,
@@ -397,7 +399,7 @@ struct TerminalScreen: View {
         Text(failure).font(.caption).foregroundColor(.red)
       }
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
-      TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible).frame(minHeight: 24)
+      TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible || showingConversation).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 8)
         .ignoresSafeArea(.container, edges: .bottom)
     }
@@ -421,9 +423,7 @@ struct TerminalScreen: View {
           .padding(.horizontal, 16)
       }
       HStack(spacing: 0) {
-        if sideChat.capabilities != nil {
-          TerminalSideChatButton(sideChat: sideChat)
-        }
+        TerminalReadingButtons(sideChat: sideChat, expectedTarget: $expectedConversation, isPresented: $showingConversation)
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
@@ -584,7 +584,6 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
-        readConversation: { expectedConversation = nil; showingConversation = true },
         canReply: currentTerminal?.terminalState.agent == "codex", reply: openReplyAssistant,
         openDesktop: { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) },
         supervisionEnabled: supervision.watch?.enabled == true,
