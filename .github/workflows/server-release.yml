@@ -69,8 +69,22 @@ jobs:
           name: npm-server-${{ matrix.target }}
           path: .runtime-artifacts/server/*.tgz
           if-no-files-found: error
-  publish:
+  validate:
     needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-server-*
+          path: release-artifacts
+      - name: Validate complete release without publishing credentials
+        run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
+  publish:
+    needs: validate
     if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-24.04
     environment: npm-release
@@ -88,8 +102,6 @@ jobs:
         with:
           pattern: npm-server-*
           path: release-artifacts
-      - name: Validate complete release
-        run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
       - name: Publish with trusted identity and verify registry
         env:
           RELEASE_CHANNEL: ${{ github.event_name == 'push' && 'latest' || inputs.channel }}
