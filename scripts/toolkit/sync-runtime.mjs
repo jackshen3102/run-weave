@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 export function commandExists(command) {
@@ -65,37 +65,10 @@ export function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-export function writeJson(filePath, value) {
-  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
 export function assertFile(filePath) {
   if (!existsSync(filePath)) {
     throw new Error(`Required file does not exist: ${filePath}`);
   }
-}
-
-export function getBasePluginVersion(version) {
-  if (typeof version !== "string" || version.trim().length === 0) {
-    throw new Error("plugin.json version must be a non-empty string.");
-  }
-  return version.split("+codex.")[0];
-}
-
-export function formatCodexTimestamp(date) {
-  const parts = [
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds(),
-  ];
-  return parts
-    .map((part, index) =>
-      index === 0 ? String(part) : String(part).padStart(2, "0"),
-    )
-    .join("");
 }
 
 export function shellQuote(value) {

@@ -151,9 +151,17 @@ Hooks 运行时代码放在 `plugins/toolkit/hooks/`。
 pnpm toolkit:sync:staged
 ```
 
-该命令会同步 toolkit hook 资产到 Electron resources、验证插件和 skills，更新
-cachebuster，重新安装 Codex 的 `toolkit@runweave` 与 Trae CLI 的 `toolkit@local`，
-并把 cachebuster、插件 `hooks.json` 与 hook 运行副本写回本次提交。需要跳过本机插件安装时，可设置：
+该命令会同步 toolkit hook 资产到 Electron resources，并将插件安装到 Codex 的
+`toolkit@runweave` 与 Trae CLI 的 `toolkit@local`。分发版本由实际文件内容决定，
+与同步时间、工作区路径无关；相同内容跳过重复安装，不改写源码 manifest 的版本。
+插件 `hooks.json` 与 hook 运行副本写回本次提交。需要跳过本机插件安装时，可设置：
+
+三个工作区共用 `$CODEX_HOME/plugins/sources/runweave` 下的固定 marketplace 和不可变
+内容版本，同步安装通过本机锁串行执行，不再将全局 marketplace 来回切换到不同工作区。
+自动提交只由主工作区发布全局插件；linked worktree 的提交仅生成并暂存本地资产，
+避免旧分支回退全局插件。需要主动发布某个工作区时，在该工作区运行 `pnpm toolkit:sync`。
+包内只包含 Git 跟踪或未忽略的分发文件，不包含 `.playwright-cli` 等本地运行产物。
+真实插件内容变化仍需在 Codex 的 `/hooks` 中审核；同步命令不修改任何 Hook 信任记录。
 
 Codex 线程启动后会保存已加载 skill 的缓存绝对路径。`pnpm toolkit:sync` 会在重新安装
 Codex 插件前快照现有 Toolkit 缓存，并在安装后恢复被历史会话引用过的旧 cachebuster

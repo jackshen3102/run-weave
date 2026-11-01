@@ -12295,5 +12295,61 @@
     "count": 1,
     "category": "test",
     "reason": "仅在隔离安装验收中用子进程预加载器注入 npm 安装失败，并核对原服务恢复与配置不变；不访问生产配置。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(manifest)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(ownerFile)",
+    "count": 3,
+    "category": "runtime-state",
+    "reason": "读取或写入本机 Toolkit 同步锁的进程与随机标识，串行化不同工作区的插件发布，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(source)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(target)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(ownerFile)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取或写入本机 Toolkit 同步锁的进程与随机标识，串行化不同工作区的插件发布，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(target)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/toolkit/release.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
   }
 ]
