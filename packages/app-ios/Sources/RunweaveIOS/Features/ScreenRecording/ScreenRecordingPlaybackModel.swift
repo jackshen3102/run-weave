@@ -14,6 +14,7 @@ import os
     let service: ScreenRecordingSource
     private var generation = 0
     private var request: Task<Void, Never>?
+    private var pendingCapture: ScreenRecordingCapture?
     private var clock: Task<Void, Never>?
     private var validity: Task<Void, Never>?
     private var navigation: Task<Void, Never>?
@@ -110,7 +111,7 @@ import os
         #if DEBUG
         Logger(subsystem: "com.runweave.app.native", category: "ScreenRecording").debug("scrubBegin state=\(self.state, privacy: .public) resume=\(self.wasPlaying, privacy: .public)")
         #endif
-        isScrubbing = true; pause(); generation += 1; request?.cancel()
+        isScrubbing = true; pause(); generation += 1; request?.cancel(); pendingCapture = nil
         navigationGeneration += 1; navigation?.cancel()
         state = "scrubbing"
     }
@@ -142,7 +143,7 @@ import os
     }
     func step(_ direction: Int) {
         guard let view, !view.captures.isEmpty else { return }
-        pause(); let index = current.flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
+        pause(); let index = (pendingCapture ?? current).flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
         let target = view.captures[max(0, min(view.captures.count - 1, index + direction))]
         checkedSeek(Double(target.capturedAtMs), resume: false, exact: target)
     }
@@ -151,6 +152,7 @@ import os
         guard let view, !closed, state != "unavailable" else { return }
         navigationGeneration += 1; let token = navigationGeneration
         navigation?.cancel(); generation += 1; request?.cancel()
+        pendingCapture = exact
         navigation = Task {
             do {
                 let available = try await service.availability(viewID: view.viewID)
@@ -174,18 +176,25 @@ import os
         let gap = view.intervals.first { $0.kind != "privacy" && $0.kind != "unknown" && ms >= $0.startMs && ms < $0.endMs }
             ?? view.intervals.first { $0.kind == "unknown" && ms >= $0.startMs && ms < $0.endMs }
         if let gap, exact == nil {
-            generation += 1; request?.cancel(); image = nil; current = nil
+            generation += 1; request?.cancel(); pendingCapture = nil; image = nil; current = nil
             message = gap.kind == "unknown" ? "此区间无采样" : "此区间暂停或不可记录"
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
         }
         guard let target = exact ?? view.captures.last(where: { $0.capturedAtMs <= ms }) else { return }
         if target.availableUntilMs <= screenRecordingNowMs() { invalidate("记录已过期"); return }
         if current?.id == target.id, image != nil || target.privacyPlaceholder {
+            generation += 1; request?.cancel(); pendingCapture = nil
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
         }
-        generation += 1; let token = generation; request?.cancel(); current = target; image = nil
+        generation += 1; let token = generation; request?.cancel(); pendingCapture = nil
         message = target.privacyPlaceholder ? "隐私保护 · 未记录应用内容" : "加载画面…"
-        if target.privacyPlaceholder { state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return }
+        if target.privacyPlaceholder {
+            image = nil; current = target
+            state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
+        }
+        // Keep the displayed frame and its metadata together until the replacement
+        // is ready, matching Mac playback. Privacy, gaps and invalidation clear it.
+        pendingCapture = target
         state = scrubbing ? "scrubbing" : "buffering"; resumeAfterLoad = resume
         let presentationStart = ContinuousClock.now
         request = Task {
@@ -201,7 +210,8 @@ import os
                 }
                 guard let data else { return }
                 guard !Task.isCancelled, !closed, generation == token else { return }
-                image = UIImage(data: data); message = image == nil ? "画面不可用" : ""
+                guard let nextImage = UIImage(data: data) else { throw ScreenRecordingReadError("MEDIA_UNAVAILABLE") }
+                image = nextImage; current = target; pendingCapture = nil; message = ""
                 if resumeAfterLoad && !scrubbing { position = Double(target.capturedAtMs) }
                 state = scrubbing ? "scrubbing" : resumeAfterLoad ? "playing" : "paused"; lastTick = .now
                 #if DEBUG
@@ -211,17 +221,18 @@ import os
                 #endif
             } catch {
                 guard !Task.isCancelled, !closed, generation == token else { return }
-                state = "unavailable"; image = nil; message = "画面暂不可用"
+                state = "unavailable"; pendingCapture = nil; image = nil; current = nil; message = "画面暂不可用"
             }
         }
     }
     private func invalidate(_ reason: String) {
         generation += 1; navigationGeneration += 1; navigation?.cancel(); request?.cancel(); scrubDispatch?.cancel(); scrubDispatch = nil
+        pendingCapture = nil
         pause(); image = nil; current = nil; state = "unavailable"; message = reason
         Task { await service.invalidate() }
     }
     func close() {
-        closed = true; navigationGeneration += 1; navigation?.cancel(); state = "unavailable"; generation += 1; request?.cancel(); clock?.cancel(); validity?.cancel(); scrubDispatch?.cancel(); image = nil; current = nil; lastConfirmed = nil
+        closed = true; navigationGeneration += 1; navigation?.cancel(); state = "unavailable"; generation += 1; request?.cancel(); pendingCapture = nil; clock?.cancel(); validity?.cancel(); scrubDispatch?.cancel(); image = nil; current = nil; lastConfirmed = nil
         let closingView = view; view = nil
         let previousClose = pendingClose
         pendingClose = Task {
