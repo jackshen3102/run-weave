@@ -5,6 +5,7 @@ import CoreGraphics
 final class FrameStore {
     let database: RecordStore
     private(set) var writer: SegmentWriter?
+    private var activity = CaptureActivityDetector()
     init(database: RecordStore) { self.database = database }
     var needsRotation: Bool { guard let writer else { return false }; return writer.count >= 600 || writer.started.duration(to: .now) >= .seconds(600) }
     func prepareAppend(_ image: CGImage, displayID: UInt32) async throws {
@@ -22,10 +23,11 @@ final class FrameStore {
             writer = try SegmentWriter(id: id, url: database.paths.file(path), width: image.width, height: image.height, displayID: metadata.displayID)
         }
         guard let writer, let index = try writer.append(image) else { return nil }
+        let visualChanged = activity.changed(image, metadata: metadata)
         try database.transaction {
-            try database.execute("INSERT INTO captures VALUES (?,?,?,?,?,?,?,?,?,?,?)", [metadata.id, metadata.sessionID, metadata.sequence,
+            try database.execute("INSERT INTO captures VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [metadata.id, metadata.sessionID, metadata.sequence,
                 writer.id, index, Int64(metadata.capturedAt.timeIntervalSince1970 * 1000), metadata.timezoneOffset, metadata.displayID,
-                metadata.applicationID, metadata.idleSeconds, metadata.privacyPlaceholder ? 1 : 0])
+                metadata.applicationID, metadata.idleSeconds, metadata.privacyPlaceholder ? 1 : 0, visualChanged.map { $0 ? 1 : 0 }])
             try database.execute("UPDATE segments SET frames=?, started=MIN(started,?), ended=MAX(ended,?) WHERE id=?", [index + 1, metadata.capturedAt.timeIntervalSince1970, metadata.capturedAt.timeIntervalSince1970, writer.id])
         }
         return metadata.id

@@ -25,9 +25,9 @@ struct AnalysisResult: Codable {
     var rewriteSpan: AnalysisRewriteSpan? = nil; var replacements: [AnalysisReplacement]? = nil
 }
 struct AnalysisManifest: Codable {
-    let batchID: String; let deviceID: String; let day: String; let inputHash: String; let promptVersion: String
+    let batchID: String; let deviceID: String; let day: String; var inputHash: String; let promptVersion: String
     let startMs: Int64; let endMs: Int64; let captures: [JournalCapture]; let intervals: [JournalInterval]
-    let context: [AnalysisCard]; let evidence: [AnalysisEvidence]; let agentCoverage: String
+    var context: [AnalysisCard]; var evidence: [AnalysisEvidence]; let agentCoverage: String
 }
 struct AnalysisClaim: Codable {
     let manifest: AnalysisManifest; let workerID: String; let generation: Int; let expiresAt: Int64; let attempt: Int

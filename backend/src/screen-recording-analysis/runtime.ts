@@ -63,8 +63,9 @@ export class ScreenRecordingAnalysisRuntime {
     const started = Date.now(); let imageBytes = 0; let frameCount = 0;
     try {
       const idle = idleObservation(claim.manifest);
+      const skipModel = idle !== undefined;
       let result: AnalysisResult;
-      if (idle) result = { cards: [],observation: idle };
+      if (skipModel) result = { cards: [],observation: idle };
       else {
         const root = configurationPath('storage.screenAnalysisDirectory','screen-analysis');
         await mkdir(root,{ recursive: true,mode: 0o700 });
@@ -89,7 +90,7 @@ export class ScreenRecordingAnalysisRuntime {
         const receipt = await this.collector.request<AnalysisReceipt | null>('analysisReceipt',{ operationID },signal);
         if (!receipt) throw error;
       }
-      logger.info('screen-analysis.batch.completed',{ frames: frameCount,imageBytes,textBytes: Buffer.byteLength(JSON.stringify(claim.manifest.evidence)),usage: idle ? null : provider.usage ?? null,elapsedMs: Date.now()-started,attempt: claim.attempt });
+      logger.info('screen-analysis.batch.completed',{ frames: frameCount,imageBytes,textBytes: Buffer.byteLength(JSON.stringify(claim.manifest.evidence)),usage: skipModel ? null : provider.usage ?? null,elapsedMs: Date.now()-started,attempt: claim.attempt });
     } catch (error) {
       const code = error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message) ? error.message : 'ANALYSIS_FAILED';
       await this.collector.request('failAnalysis',{ ...identity,code }).catch(() => {});

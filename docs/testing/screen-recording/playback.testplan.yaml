@@ -47,7 +47,7 @@ cases:
   - id: SRP-005
     name: Mac 跨物理段回放保持时间连续
     required: true
-    description: 15 分钟展示范围能跨越 10 分钟媒体分段，不漏帧或重复应用前一段时间。
+    description: 动态展示范围能跨越多个 10 分钟媒体分段和整刻，不漏帧或重复应用前一段时间。
     preconditions:
       - 本例 Mac App 的一个展示范围跨两个 ready 物理段，manifest 记录边界两侧帧。
     steps:
@@ -58,7 +58,7 @@ cases:
     required: true
     description: 隐私、已知暂停和未知长缺口有独立反馈，不伪造连续屏幕内容。
     preconditions:
-      - 本例 Mac fixture 在同一范围包含正常帧、隐私占位、状态事件缺口和超过 60 秒的无事件间隔。
+      - 本例 Mac fixture 在同一天提供正常帧、独立隐私范围、状态事件缺口和超过 60 秒的无事件间隔。
     steps:
       - 用 CUA 回放进入隐私区间，确认显示通用占位且不出现应用名或恢复原图入口。
       - 拖动到已知暂停和未知长缺口，确认显示对应无记录状态，不延续之前的截图。
@@ -193,7 +193,7 @@ cases:
     required: true
     description: 当前 view 范围固定，刷新列表才纳入新提交帧，保留期限仍能令旧帧失效。
     preconditions:
-      - 本例 Mac App 正在独立目录采集，同一十五分钟窗口存在 ready 帧和待封口帧，已打开 ready 部分回放。
+      - 本例 Mac App 正在独立目录采集，同一连续活动范围存在 ready 帧和待封口帧，已打开 ready 部分回放。
     steps:
       - 使用 CUA 暂停在确定位置，等待新段提交，确认当前轴长度、当前 capture ID 和胶片带位置不突变。
       - 返回列表刷新后重新打开范围，确认新提交帧可见，且之前 view 已释放。

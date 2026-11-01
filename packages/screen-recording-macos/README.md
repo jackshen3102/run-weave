@@ -27,7 +27,7 @@ packages/screen-recording-macos/build.sh --configuration Debug --derived-data-pa
 打开设置暂停回放，关闭面板不自动续播。设置包含采样间隔、高度、保留期限、容量与应用排除。首次按
 [固定 Dayflow 来源](ThirdPartyLicenses/README.md)生成敏感应用名单，后续以保存的实际名单为准。
 前台排除应用使用通用锁形占位；背景排除应用窗口在截图前过滤。网页内容和系统通知不属于
-应用级排除保证。无输入不停止采集，保存可得的 HID 输入空闲秒数。
+应用级排除保证。无输入不停止采集，保存可得的 HID 输入空闲秒数与低分辨率亮度比较产生的画面变化信号。信号只表示可见变化，不能证明事项切换或工作停止；旧采样缺少该信号时保守进入分析。
 
 ## 存储与恢复合同
 
@@ -45,7 +45,7 @@ PNG 仅用于显式诊断导出。7 天期限与 10 GiB 容量预算共同限制
 目录为 408010 字节；这只是静态为主场景的实测，不是全天容量承诺。
 
 目录为 `~/Library/Application Support/ScreenJournal/`，0700；敏感文件 0600。
-独占系统文件锁保证一个写入者。SQLite v1 使用 WAL、FULL 同步和外键，版本高于 v1 拒绝写入。
+独占系统文件锁保证一个写入者。SQLite v2 使用 WAL、FULL 同步和外键；v1 自动添加可选的画面变化信号，未知新版本拒绝写入。
 `settings.json`、`records.sqlite`、`media/`、`pending/`、`runtime/status.json` 均在该目录下。
 
 每段最多 600 帧或 600 秒；显示器、尺寸、配置变化、暂停或退出也会封段。媒体第 N 帧的
@@ -104,8 +104,7 @@ recovery、deleting、availability、newer-schema。它不是单元测试，不�
 
 ## 原生回放与在线读取
 
-主窗口的“录屏记录”按采集 Mac 时区列出日期和时间范围，菜单栏“打开 ScreenJournal”可重新唤起窗口。范围最多 15 分钟，按会话、
-显示器和时钟回拨拆分；只包含 ready 段。打开默认暂停，20×／40×／60× 使用真实采集时间；
+主窗口的“录屏记录”按采集 Mac 时区列出日期和时间范围，菜单栏“打开 ScreenJournal”可重新唤起窗口。范围按会话、显示器、自然日、超过两分钟的采样缺口、时钟回拨及活动／稳定／隐私状态变化拆分；单范围上限 900 帧用于限制读取内存，不按固定分钟数切分。无输入至少两分钟且画面稳定的范围默认收起，可展开回看；只包含 ready 段。打开默认暂停，20×／40×／60× 使用真实采集时间；
 逐帧保持暂停，末尾停止。关闭查看不停止采集，暂停采集不关闭读服务。
 
 读服务由唯一 writer 持有，路径为 `runtime/read.sock`（0600，父目录 0700），仅接受同 UID。
@@ -154,7 +153,10 @@ Debug 隔离实例的本地 `diagnostics` 方法只返回资源计数，不经�
 有界重试，不公开 claim/commit。原始采集与回放在分析不可用时继续工作。
 
 配置入口为 `screenRecording.analysis.*`，需显式绑定设备、生效时间、视觉模型与 effort。
-Backend 每分钟检查，最多四批，常规最多十五帧；模型子进程受超时、输出和图片到期约束。
+Backend 每分钟检查，最多四批，常规最多十五张代表帧；模型子进程受超时、输出和图片到期约束。
+ready 材料按连续活动信号增量领取，不再等待十五分钟；单次最多 900 个采样是输入预算，不是事项边界。
+画面没有有效变化的增量跳过重复模型调用，不新增事项或重复空闲说明；键鼠空闲但画面变化仍正常分析。模型按目标和产物变化划分事项，
+持续同一事项用原卡片与修订续写；处理批次、应用切换和相似标题都不能单独决定事项边界。
 临时图片在子进程退出后清理，Backend 崩溃时独立 watchdog 回收自己创建的进程组。
 屏幕来源只能形成 documented/discussed，Agent 自述不能独立升级为 verified。
 
@@ -192,7 +194,7 @@ ScreenJournalFixture --data-dir NEW_EMPTY_ISOLATED_ROOT --scenario playback
 ScreenJournalAnalysisVerify SAME_PLAYBACK_ROOT --retirement
 ```
 
-`--boundaries` 使用合成像素经过 CapturePermit、编码和 ready 索引验证日界、十五分钟批、writing、短尾和迟到帧。
+`--boundaries` 使用合成像素经过 CapturePermit、编码和 ready 索引验证日界、跨四十分钟的连续活动、稳定／动态画面、writing、ready 短尾和迟到帧。
 `--queue-faults` 直接调整隔离库的持久化期限及退避时刻验证恢复，不声称等待了真实五分钟租约。
 原进程退出后可用 `--queue-reopen` 在新进程读取同一账本，确认失败预算和永久过期状态仍保留。
 `--bad-analysis` 注入不兼容的衍生库版本，检查原采集存储链路继续写入及旧帧解码不变。

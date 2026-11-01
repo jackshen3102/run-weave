@@ -12,6 +12,9 @@ export function idleObservation(manifest: AnalysisManifest): string | undefined 
   if (!manifest.captures.length && !manifest.evidence.length) return '当前没有可分析的已记录材料；不代表没有工作。';
   if (manifest.evidence.some(item => item.source === 'agent' && item.occurredAtMs >= manifest.startMs)) return undefined;
   if (manifest.captures.every(frame => frame.privacyPlaceholder)) return '已记录范围均为隐私占位，未分析画面；后台来源覆盖未知。';
-  if (manifest.captures.every(frame => typeof frame.idleSeconds === 'number' && frame.idleSeconds >= 120)) return '该段无输入记录；可能在阅读，不能据此判断没有工作。后台来源覆盖未知。';
+  // Input idleness alone also includes reading, videos and running Agents.
+  // Older captures have no visual signal and must take the normal analysis path.
+  // Empty means handled without adding another timeline observation.
+  if (manifest.captures.length && manifest.captures.every(frame => frame.visualChanged === false)) return '';
   return undefined;
 }

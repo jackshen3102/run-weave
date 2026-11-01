@@ -6,6 +6,9 @@ struct JournalReadCatalog {
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
         let formatter = DateFormatter(); formatter.calendar = calendar; formatter.timeZone = zone; formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.dateFormat = "yyyy-MM-dd"
         let cutoff = Double(now) / 1000 - Double(settings.retentionDays) * 86400
+        let events = try db.rows("SELECT state,reason,started,ended FROM state_events WHERE ended>=? AND state!='sourceRetired' ORDER BY id", [cutoff])
+        let breaks = events.filter { ["pausedSystem","stopped","gap","failed","blockedPermission","blockedStorage"].contains($0["state"] ?? "") }
+            .flatMap { row in [row["started"],row["ended"]].compactMap { $0.flatMap(Double.init).map { Int64($0 * 1000) } } }.sorted()
         // Directory discovery retains range boundaries, not every capture. The
         // indexed session/sequence scan limits transient row memory to 900 frames.
         let sessions = try db.rows("""
@@ -24,18 +27,18 @@ struct JournalReadCatalog {
             var firstID: String?, firstSequence = 0, lastSequence = 0
             var startMs: Int64 = 0, endMs: Int64 = 0
             var display: UInt32 = 0, count = 0
-            var previewID: String?, previousWindow: Date?
+            var previewID: String?, previousDay: Int64?, activityKind = "active"
             func finish() {
                 guard let id = firstID else { return }
                 let key = "r-" + id
                 members[key] = JournalRangeBounds(sessionID: session, firstSequence: firstSequence, lastSequence: lastSequence)
                 ranges.append(JournalRange(rangeID: key, startMs: startMs, endMs: endMs, displayID: display,
-                    sampleCount: count, previewCaptureID: previewID, state: "ready"))
+                    sampleCount: count, previewCaptureID: previewID, state: "ready", activityKind: activityKind))
                 firstID = nil; previewID = nil; count = 0
             }
             while true {
                 let rows = try db.rows("""
-                    SELECT c.id,c.sequence,c.captured_ms,c.display_id,c.privacy_placeholder,c.segment_id
+                    SELECT c.*
                     FROM captures c JOIN segments s ON s.id=c.segment_id
                     WHERE c.session_id=? AND c.sequence>? AND s.state='ready' AND s.started>=?
                     ORDER BY c.sequence LIMIT 900
@@ -46,24 +49,23 @@ struct JournalReadCatalog {
                           let ms = Int64(row["captured_ms"] ?? ""), let nextDisplay = UInt32(row["display_id"] ?? "") else { throw JournalReadError("MEDIA_UNAVAILABLE") }
                     after = sequence
                     let date = Date(timeIntervalSince1970: Double(ms) / 1000)
-                    guard let dayInterval = calendar.dateInterval(of: .day, for: date), let hour = calendar.dateInterval(of: .hour, for: date) else { throw JournalReadError("MEDIA_UNAVAILABLE") }
+                    guard let dayInterval = calendar.dateInterval(of: .day, for: date) else { throw JournalReadError("MEDIA_UNAVAILABLE") }
                     let dayStart = Int64(dayInterval.start.timeIntervalSince1970 * 1000)
                     if days[dayStart] == nil {
                         days[dayStart] = JournalDay(day: formatter.string(from: date), startMs: dayStart, endMs: Int64(dayInterval.end.timeIntervalSince1970 * 1000))
                     }
-                    let minute = calendar.component(.minute, from: date)
-                    let window = hour.start.addingTimeInterval(Double((minute / 15) * 15 * 60))
-                    if firstID != nil && (display != nextDisplay || ms < endMs || window != previousWindow || count >= 900) { finish() }
-                    if firstID == nil { firstID = id; firstSequence = sequence; startMs = ms; display = nextDisplay }
+                    let kind = CaptureActivity.kind(privateFrame: row["privacy_placeholder"] == "1",
+                        idleSeconds: row["idle_seconds"].flatMap(Double.init), visualChanged: row["visual_changed"].map { $0 == "1" })
+                    if firstID != nil && (display != nextDisplay || ms < endMs || ms - endMs > 120000 || CaptureActivity.crossesBreak(breaks, after: endMs, through: ms) || dayStart != previousDay || kind != activityKind || count >= 900) { finish() }
+                    if firstID == nil { firstID = id; firstSequence = sequence; startMs = ms; display = nextDisplay; activityKind = kind }
                     if previewID == nil && row["privacy_placeholder"] != "1" { previewID = id }
-                    lastSequence = sequence; endMs = ms; count += 1; previousWindow = window
-                    hash.update(data: Data("\(id):\(row["segment_id"] ?? ""):\(ms)|".utf8))
+                    lastSequence = sequence; endMs = ms; count += 1; previousDay = dayStart
+                    hash.update(data: Data("\(id):\(row["segment_id"] ?? ""):\(ms):\(kind)|".utf8))
                 }
             }
             finish()
         }
         ranges.sort { $0.startMs == $1.startMs ? $0.rangeID < $1.rangeID : $0.startMs < $1.startMs }
-        let events = try db.rows("SELECT state,reason,started,ended FROM state_events WHERE ended>=? AND state!='sourceRetired' ORDER BY id", [cutoff])
         let intervals = events.compactMap { row -> JournalInterval? in
             guard let start = Double(row["started"] ?? ""), let end = Double(row["ended"] ?? ""), end > start else { return nil }
             let kind: String
@@ -111,6 +113,7 @@ struct JournalReadCatalog {
                 frontmostApplication: privateFrame ? nil : JournalApplication(id: appID, name: appID.flatMap { names[$0] } ?? "未知应用"),
                 privacyPlaceholder: privateFrame, availableUntilMs: Int64((started + Double(settings.retentionDays) * 86400) * 1000))
             capture.idleSeconds = row["idle_seconds"].flatMap(Double.init)
+            capture.visualChanged = row["visual_changed"].map { $0 == "1" }
             return JournalIndexedCapture(capture: capture, segmentID: segment, frameIndex: index,
                 width: Int(row["width"] ?? "") ?? 0, height: Int(row["height"] ?? "") ?? 0, path: path)
         }

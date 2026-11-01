@@ -71,7 +71,7 @@ import CoreText
                 resources.append(["segmentID": segment.id, "captureIDs": captureIDs, "started": start.timeIntervalSince1970,
                     "sha256BeforeFault": digest, "synthetic": true, "frameDescription": "RGB background, moving white bar; three frames"])
             }
-            if args[3] == "newer-schema" { try db.execute("PRAGMA user_version=2") }
+            if args[3] == "newer-schema" { try db.execute("PRAGMA user_version=3") }
             try db.checkpoint()
             let manifest: [String: Any] = ["scenario": args[3], "synthetic": true, "resources": resources]
             let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])

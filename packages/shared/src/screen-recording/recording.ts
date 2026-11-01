@@ -20,6 +20,8 @@ export interface ScreenRecordingRange {
   sampleCount: number;
   previewCaptureID?: string | null;
   state: 'ready';
+  /** Capture signal only; quiet does not establish that no work occurred. */
+  activityKind?: 'active' | 'quiet' | 'privacy' | null;
 }
 export interface ScreenRecordingCapture {
   id: string;
@@ -31,6 +33,8 @@ export interface ScreenRecordingCapture {
   frontmostApplication?: { id?: string | null; name?: string | null } | null;
   privacyPlaceholder: boolean;
   idleSeconds?: number | null;
+  /** Absent on older captures; unknown must not be treated as unchanged. */
+  visualChanged?: boolean | null;
   availableUntilMs: number;
 }
 export interface ScreenRecordingInterval {
