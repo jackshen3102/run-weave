@@ -14,6 +14,9 @@
 也可明确指定版本或同时要求两个流程；同时要求时先发布，后将已验证的精确版本交给升级流程。
 发布不会自动部署到机器，机器升级也不会自动创建新发行版。
 
+涉及配置变化时，发布与机器升级均遵循[配置版本与升级迁移合同](./configuration-upgrades.md)。
+该文档明确现有能力与待实现的迁移链；不能把旧文件导入命令当成跨版本自动迁移。
+
 ## 构建、发布、升级是三个阶段
 
 1. **构建验证**：固定源码提交及版本，在目标平台构建并验证 tarball。
@@ -80,14 +83,14 @@ npm 接受上传后可能仍需处理；脚本对每个精确版本最多等待 
 `server-darwin-arm64`、`server-darwin-x64`、`server-linux-arm64`、`server-linux-x64`
 （平台包均在 `@runweave` scope）。绑定值：
 
-| 字段 | 值 |
-| --- | --- |
-| Provider | GitHub Actions |
-| Organization or user | `jackshen3102` |
-| Repository | `run-weave` |
-| Workflow filename | `server-release.yml` |
-| Environment | `npm-release` |
-| Allowed actions | `npm publish`、`npm dist-tag` |
+| 字段                 | 值                            |
+| -------------------- | ----------------------------- |
+| Provider             | GitHub Actions                |
+| Organization or user | `jackshen3102`                |
+| Repository           | `run-weave`                   |
+| Workflow filename    | `server-release.yml`          |
+| Environment          | `npm-release`                 |
+| Allowed actions      | `npm publish`、`npm dist-tag` |
 
 GitHub `npm-release` environment 只允许 `main` 分支和 `server-v*` 标签部署。
 发布和提升标签的 job 使用 GitHub-hosted runner、`id-token: write`、Node 22.23.2 与
@@ -106,17 +109,17 @@ npm 12.2.1，不配置长期 `NPM_TOKEN` / `NODE_AUTH_TOKEN`；生成包的 repo
 
 以下为 2026-11-01 迁移后的安装约定，执行前复核实际路径和状态，不能套用到其他 devbox。
 
-| 项目 | 值 |
-| --- | --- |
-| SSH 目标 | `10.37.224.230`，使用本机已有 SSH 配置 |
-| 服务用户 / HOME | `root` / `/var/lib/runweave` |
-| 实例 / 配置根 | `stable` / `/var/lib/runweave/.runweave` |
-| 统一 CLI 入口 | `/usr/local/bin/rw`，指向保留实例 HOME、PATH 和配置根的 wrapper |
-| npm prefix | `/opt/runweave-npm`，realpath `/data00/runweave-npm` |
-| Node | `/opt/runweave-node/node-v22.23.2-linux-x64/bin/node` |
-| systemd | `runweave-server-backend.service`、`runweave-server-app-server.service` |
-| HTTP 地址 | `http://10.37.224.230:5001` |
-| 包定位记录 | `/var/lib/runweave/.runweave/server/installation.json` |
+| 项目            | 值                                                                      |
+| --------------- | ----------------------------------------------------------------------- |
+| SSH 目标        | `10.37.224.230`，使用本机已有 SSH 配置                                  |
+| 服务用户 / HOME | `root` / `/var/lib/runweave`                                            |
+| 实例 / 配置根   | `stable` / `/var/lib/runweave/.runweave`                                |
+| 统一 CLI 入口   | `/usr/local/bin/rw`，指向保留实例 HOME、PATH 和配置根的 wrapper         |
+| npm prefix      | `/opt/runweave-npm`，realpath `/data00/runweave-npm`                    |
+| Node            | `/opt/runweave-node/node-v22.23.2-linux-x64/bin/node`                   |
+| systemd         | `runweave-server-backend.service`、`runweave-server-app-server.service` |
+| HTTP 地址       | `http://10.37.224.230:5001`                                             |
+| 包定位记录      | `/var/lib/runweave/.runweave/server/installation.json`                  |
 
 服务 HOME 下的 `.npmrc` 仅将 `@runweave` scope 指向官方 npm registry，保留其他包的原 registry。
 服务 drop-in 保留 HOME/WorkingDirectory；Backend 还沿用 `/etc/runweave/backend-network.env`。

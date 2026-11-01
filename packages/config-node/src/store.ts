@@ -1,5 +1,6 @@
 import "./native-lock";
-import { registerStableConfigurationRoot } from "./owner";
+import { registerStableConfigurationRoot, withConfigurationUpgradeOwnership } from "./owner";
+import { migrateConfigurationDocument } from "./version-migrations";
 import {
   constants, existsSync, lstatSync, readdirSync, mkdirSync, openSync, closeSync,
   readFileSync, writeFileSync, fstatSync, fsyncSync, renameSync, unlinkSync,
@@ -10,7 +11,7 @@ import { Document, Lexer, Parser, isAlias, isMap, isScalar, isSeq, parseDocument
 import { tryLock } from "fs-native-extensions";
 import {
   readConfigurationPath, configurationPathSegments, isConfigurationObject, type ConfigurationFile, type ConfigurationPatch,
-  type ConfigurationValue, type EnvironmentContext, CONFIGURATION_COMPATIBILITY, supportsConfiguration,
+  type ConfigurationValue, type EnvironmentContext, type ConfigurationUpgradePreview, type ConfigurationUpgradeResult, CONFIGURATION_SCHEMA_VERSION, CONFIGURATION_DOMAIN_VERSIONS, CONFIGURATION_COMPATIBILITY, supportsConfiguration,
 } from "@runweave/shared/configuration";
 import { ConfigurationError } from "./errors";
 import { validateDomains, validateEnvelope, domainForPath, fieldForPath, isConfigurationContainer, flattenConfiguration } from "./validation";
@@ -108,7 +109,7 @@ export class ConfigurationStore {
     } finally { closeSync(fd); }
   }
 
-  private publish(document: Document, previous?: string): ConfigurationSnapshot {
+  private publish(document: Document, previous?: string, backupId?: string): ConfigurationSnapshot {
     const source = document.toString({ lineWidth: 0 });
     const checked = parseConfigurationYaml(source, this.context);
     registerStableConfigurationRoot(this.context);
@@ -118,7 +119,7 @@ export class ConfigurationStore {
       mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
       const backupStat = lstatSync(backupRoot);
       if (!backupStat.isDirectory() || backupStat.isSymbolicLink() || backupStat.mode & 0o077 || typeof process.getuid === "function" && backupStat.uid !== process.getuid()) throw new ConfigurationError("CONFIG_BACKUP_ROOT_INVALID");
-      const backup = path.join(backupRoot, `${Date.now()}-${randomUUID()}.yaml`);
+      const backup = path.join(backupRoot, backupId ?? `${Date.now()}-${randomUUID()}.yaml`);
       const fd = openSync(backup, "wx", 0o600);
       try { writeFileSync(fd, previous); fsyncSync(fd); } finally { closeSync(fd); }
     }
@@ -152,7 +153,7 @@ export class ConfigurationStore {
         const segments = configurationPathSegments(key);
         if (!segments.length || segments.some((part) => !part || unsafeKeys.has(part))) throw new ConfigurationError("CONFIG_FIELD_INVALID");
         const domain = domainForPath(key);
-        if (current.value.domainVersions[domain] !== undefined && current.value.domainVersions[domain] !== 1) throw new ConfigurationError("CONFIG_DOMAIN_VERSION_UNSUPPORTED", [domain]);
+        if (current.value.domainVersions[domain] !== undefined && current.value.domainVersions[domain] !== CONFIGURATION_DOMAIN_VERSIONS[domain]) throw new ConfigurationError("CONFIG_DOMAIN_VERSION_UNSUPPORTED", [domain]);
         const field = fieldForPath(key);
         // Objects/arrays are checked leaf by leaf by the same schema after patch.
         if (!field && !(isConfigurationObject(value) && isConfigurationContainer(key)) && !(Array.isArray(value) && isConfigurationContainer(key, true)) && !(value === null && (isConfigurationContainer(key) || isConfigurationContainer(key, true)))) throw new ConfigurationError("CONFIG_FIELD_UNKNOWN", [key]);
@@ -163,7 +164,7 @@ export class ConfigurationStore {
         for (const segment of segments) target.push(isSeq(current.document.getIn(target, true)) && /^\d+$/.test(segment) ? Number(segment) : segment);
         if (!field && value === null) current.document.deleteIn(target);
         else current.document.setIn(target, value);
-        current.document.setIn(["domainVersions", domain], 1);
+        current.document.setIn(["domainVersions", domain], CONFIGURATION_DOMAIN_VERSIONS[domain]);
         domains.add(domain);
       }
       const revision = Math.max(current.value.revision, options.minimumRevision ?? 0) + 1;
@@ -206,7 +207,7 @@ export class ConfigurationStore {
     if (!isConfigurationObject(value) || !Number.isSafeInteger(value.schemaVersion) || Number(value.schemaVersion) < 1) throw new ConfigurationError("CONFIG_SCHEMA_INVALID");
     // Read only the version-independent identity and revision envelope. Future
     // business fields remain opaque; ordinary reads still reject future schemas.
-    validateEnvelope({ ...value, schemaVersion: 1 }, this.context);
+    validateEnvelope({ ...value, schemaVersion: CONFIGURATION_SCHEMA_VERSION }, this.context);
     const backup = this.readBackup(id);
     const before = new Map(flattenConfiguration(value));
     const after = new Map(flattenConfiguration(backup.value));
@@ -220,6 +221,81 @@ export class ConfigurationStore {
   }
 
   previewRestore(id: string) { return this.prepareRestore(id).preview; }
+
+  /** Upgrade control plane only; business readers must use read(). */
+  readUpgradeSource() {
+    assertPrivateDirectory(this.context.configRoot);
+    const source = readPrivateFile(this.file);
+    const { document, value } = parseYamlDocument(source);
+    if (!isConfigurationObject(value) || !Number.isSafeInteger(value.schemaVersion) || Number(value.schemaVersion) < 1) throw new ConfigurationError("CONFIG_SCHEMA_INVALID");
+    // Identity and envelope are checked before interpreting any historical field.
+    validateEnvelope({ ...value, schemaVersion: CONFIGURATION_SCHEMA_VERSION }, this.context);
+    return { source, document, value: value as ConfigurationFile, digest: createHash("sha256").update(source).digest("hex") };
+  }
+
+  private prepareUpgrade() {
+    const { source, document, value, digest } = this.readUpgradeSource();
+    const original = value as ConfigurationFile;
+    const expectedDigest = digest;
+    const steps = migrateConfigurationDocument(document);
+    const next = parseConfigurationYaml(document.toString({ lineWidth: 0 }), this.context);
+    const failures = Object.values(next.issues).flat();
+    if (failures.length) throw new ConfigurationError("CONFIG_VALIDATION_FAILED", failures.map(issue => issue.path));
+    const before = new Map(flattenConfiguration(original));
+    const after = new Map(flattenConfiguration(next.value));
+    const changedFields = [...new Set([...before.keys(), ...after.keys()])]
+      .filter(key => JSON.stringify(before.get(key)) !== JSON.stringify(after.get(key))).sort();
+    const preview: ConfigurationUpgradePreview = {
+      expectedRevision: original.revision, expectedDigest,
+      source: { schemaVersion: original.schemaVersion, domainVersions: original.domainVersions },
+      target: { schemaVersion: next.value.schemaVersion, domainVersions: { ...CONFIGURATION_DOMAIN_VERSIONS, ...next.value.domainVersions } },
+      steps, changedFields, changed: changedFields.length > 0,
+    };
+    return { source, document, preview };
+  }
+
+  previewUpgrade(): ConfigurationUpgradePreview { return this.prepareUpgrade().preview; }
+
+  private recordUpgrade(value: unknown): void {
+    const file = path.join(this.context.configRoot, "config-upgrade.json");
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    const fd = openSync(temporary, "wx", 0o600);
+    try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); }
+    finally { closeSync(fd); }
+    try {
+      renameSync(temporary, file);
+      const parent = openSync(this.context.configRoot, "r");
+      try { fsyncSync(parent); } finally { closeSync(parent); }
+    } finally { if (existsSync(temporary)) unlinkSync(temporary); }
+  }
+
+  upgrade(expected: { revision: number; digest: string }): ConfigurationUpgradeResult {
+    return this.locked(() => {
+      const { source, document, preview } = this.prepareUpgrade();
+      if (preview.expectedRevision !== expected.revision || preview.expectedDigest !== expected.digest) throw new ConfigurationError("CONFIG_REVISION_CONFLICT");
+      if (!preview.changed) {
+        const receiptFile = path.join(this.context.configRoot, "config-upgrade.json");
+        if (existsSync(receiptFile)) {
+          const receipt: unknown = JSON.parse(readPrivateFile(receiptFile));
+          if (isConfigurationObject(receipt) && receipt.phase === "prepared" && receipt.plannedDigest === expected.digest)
+            this.recordUpgrade({ ...receipt, phase: "committed", savedRevision: expected.revision, digest: expected.digest });
+        }
+        return { ...preview, savedRevision: expected.revision, digest: expected.digest };
+      }
+      return withConfigurationUpgradeOwnership(this.context, () => {
+        const revision = expected.revision + 1;
+        if (!Number.isSafeInteger(revision)) throw new ConfigurationError("CONFIG_REVISION_INVALID");
+        document.set("revision", revision);
+        const backupId = `${Date.now()}-${randomUUID()}.yaml`;
+        const plannedDigest = createHash("sha256").update(document.toString({ lineWidth: 0 })).digest("hex");
+        this.recordUpgrade({ ...preview, backupId, plannedDigest, phase: "prepared" });
+        const next = this.publish(document, source, backupId);
+        const result = { ...preview, savedRevision: next.value.revision, digest: next.digest, backupId };
+        this.recordUpgrade({ ...result, phase: "committed" });
+        return result;
+      });
+    });
+  }
 
   restoreBackup(id: string, expected: { revision: number; digest: string; backupDigest: string }): ConfigurationSnapshot {
     return this.locked(() => {
@@ -270,7 +346,7 @@ export class ConfigurationStore {
 }
 
 export function emptyConfiguration(context: EnvironmentContext): ConfigurationFile {
-  return { schemaVersion: 1, revision: 0, kind: context.kind, instanceId: context.instanceId, domainVersions: {}, migrations: {} };
+  return { schemaVersion: CONFIGURATION_SCHEMA_VERSION, revision: 0, kind: context.kind, instanceId: context.instanceId, domainVersions: {}, migrations: {} };
 }
 
 export function setConfigurationValue(target: ConfigurationFile, key: string, value: ConfigurationValue): void {
@@ -285,5 +361,5 @@ export function setConfigurationValue(target: ConfigurationFile, key: string, va
   const last = parts.at(-1)!;
   if (unsafeKeys.has(last)) throw new ConfigurationError("CONFIG_FIELD_INVALID");
   current[last] = value;
-  target.domainVersions[domainForPath(key)] = 1;
+  target.domainVersions[domainForPath(key)] = CONFIGURATION_DOMAIN_VERSIONS[domainForPath(key)] ?? 1;
 }

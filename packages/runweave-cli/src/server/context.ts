@@ -58,6 +58,7 @@ export interface ProcessIdentity {
   startedAt: string;
   version: string;
   release: string;
+  configuration?: unknown;
 }
 
 export function controlSocket(ctx: ServerContext): string {
@@ -127,8 +128,9 @@ export async function withManagementLock<T>(
     closeSync(fd);
   }
 }
-export function settings(ctx: ServerContext) {
-  const value = new ConfigurationStore(ctx.context).read().value;
+export function settings(ctx: ServerContext, forUpgrade = false) {
+  const store = new ConfigurationStore(ctx.context);
+  const value = (forUpgrade ? store.readUpgradeSource() : store.read()).value;
   const field = (name: string) => readConfigurationPath(value, name);
   const port = Number(field("backend.server.port") ?? 5001);
   const host = String(field("backend.server.host") ?? "127.0.0.1");
@@ -228,7 +230,13 @@ export function verifyRelease(root: string): ServerReleaseManifest {
     manifest.platform !== process.platform ||
     manifest.arch !== process.arch ||
     manifest.nodeModuleAbi !== process.versions.modules ||
-    !manifest.dataCompatibility
+    !manifest.dataCompatibility ||
+    manifest.configurationUpgradeVersion !== undefined && manifest.configurationUpgradeVersion !== 1 ||
+    manifest.configurationUpgradeVersion === 1 && (
+      !/^[a-f0-9]{64}$/.test(manifest.databaseCompatibility ?? "") ||
+      !Array.isArray(manifest.legacyDataCompatibility) ||
+      manifest.legacyDataCompatibility.some(digest => !/^[a-f0-9]{64}$/.test(digest))
+    )
   )
     throw new Error(
       "Unsupported release platform, ABI or compatibility metadata",

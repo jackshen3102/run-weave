@@ -31,15 +31,15 @@ Pi 认证须按 provider 配置，不把仅安装工具当成认证成功。外�
 
 ## 生命周期命令
 
-| 命令                                           | 合同                                                                                    |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `rw server status --json`                      | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执         |
-| `rw server stop`                               | 停止本产品持有的组件，保留 tmux 与数据                                                  |
-| `rw server restart [--force]`                  | 重启原模式；有受影响后台执行时默认拒绝                                                  |
-| `rw server logs [--follow]`                    | 系统托管日志末尾或持续跟随；前台日志在原终端                                            |
-| `rw server service install [--dry-run]`        | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册     |
-| `rw server service uninstall`                  | 注销并停止系统服务，保留配置和数据                                                      |
-| `rw server update [--version X.Y.Z] [--force]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
+| 命令                                                       | 合同                                                                                    |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `rw server status --json`                                  | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执         |
+| `rw server stop`                                           | 停止本产品持有的组件，保留 tmux 与数据                                                  |
+| `rw server restart [--force]`                              | 重启原模式；有受影响后台执行时默认拒绝                                                  |
+| `rw server logs [--follow]`                                | 系统托管日志末尾或持续跟随；前台日志在原终端                                            |
+| `rw server service install [--dry-run]`                    | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册     |
+| `rw server service uninstall`                              | 注销并停止系统服务，保留配置和数据                                                      |
+| `rw server update [--version X.Y.Z] [--dry-run] [--force]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
 
 注册系统任务需要管理员权限，进程仍以执行命令的服务用户运行。不要用 sudo 把配置账号切换成另一个用户。
 Linux 服务沿用安装命令的 HOME 与 PATH；迁移已有部署时须保留原服务的 HOME，以继续使用原 Agent 登录态和用户目录。
@@ -54,14 +54,22 @@ macOS 使用系统 LaunchDaemon，不把登录启动当开机启动。
 
 更新命令由独立 CLI 执行，不修改 CLI 自身安装。流程为下载和预检、维护租约、停止、npm 安装、current 切换、
 原模式重启及健康核对。直接 npm 安装不触发重启，status 会显示分发版本与 active/running 的差异。
-第一阶段使用保守的数据合同指纹；只有存储/配置合同指纹相同的版本可激活，不进行逆向迁移或自动回退。
+新版发行包分别核对数据库指纹和候选包的配置迁移预演，再检查 CLI、App Server 以及前台 owner
+能否读取目标配置。`--dry-run` 下载和校验候选包，但不停止服务、不切换 current、不写配置或更新回执。
+调用前先确认 `server status --json` 的 `cliCapabilities.updateDryRun` 为 true；旧 CLI 可能
+接受但忽略 `--dry-run`，缺少该声明时不能通过执行更新来试探能力。
+预检可能物化候选 release 和 npm 缓存，不承诺文件系统完全无写入。
+正式执行在停服后重新检查配置 revision/digest，再备份、迁移并激活；只在必要时修改配置。
+旧包保留组合指纹保护；具体兼容及恢复规则见[配置升级合同](../deployment/configuration-upgrades.md)。
 
 普通 tmux 中的 Agent 不阻挡更新，但重启期间 HTTP/WS 暂断，正在调用服务 API 的请求可能失败。
 服务托管执行通过本机维护租约保护：先暂停新领取、等待在途领取结束，再列出实际存活执行。
 仅 queued/waiting 或已转交 tmux 的持久记录不因此阻挡。force 只绕过任务保护，不能绕过原生加载、校验和或数据兼容检查。
 维护接口需要本机来源与私有管理令牌，普通网页登录凭据没有维护权限。租约 120 秒，客户端每 30 秒续租；客户端丢失后自动恢复派发。
 
-失败后查看 `<configRoot>/server/update.json` 与日志；不会自动切回旧版。
+失败后查看 `<configRoot>/server/update.json`、`config-upgrade.json` 与日志。更新回执包含失败阶段、
+配置源/目标版本和检查结果；运行态更新还检查 Backend 核心配置域是否采用提交的 revision。
+配置和 active 指针均未变化时尝试恢复原服务；已提交配置或激活新程序后不自动切回旧版。
 可重新安装 NPM 分发包后用 `update --version` 恢复兼容版本。原前台会话在激活时仍由原控制进程持有，失败后保留控制入口供 stop/retry。
 
 ## 源码与验证入口
@@ -75,7 +83,7 @@ build 生成 `.runtime-artifacts/server/cli-package`、`package` 与当前平台
 `pnpm cli:release` 可单独构建 CLI 分发包。
 verify 使用真实 tarball、本机 loopback npm registry 与隔离用户目录 fixture 验证安装和更新；
 升级目标 0.1.1、0.1.2 是同一代码的版本 fixture，不代表真实公网版本。该结果不等同于系统服务安装、开机或真实客户端交互验收。
-完整验收见 [NPM 服务端测试计划](../testing/platform/npm-server.testplan.yaml)。
+完整验收见 [NPM 服务端测试计划](../testing/platform/npm-server.testplan.yaml)及[配置升级验收](../testing/platform/configuration-upgrades.testplan.yaml)。
 
 ## 包定位与开发验证产物
 

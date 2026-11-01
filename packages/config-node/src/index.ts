@@ -5,6 +5,7 @@ export * from "./validation";
 export * from "./runtime";
 export * from "./resolution";
 export * from "./migration";
+export * from "./version-migrations";
 export * from "./owner";
 export * from "./domain";
 export * from "./migration-discovery";

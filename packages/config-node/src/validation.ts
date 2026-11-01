@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  CONFIGURATION_FIELDS, CONFIGURATION_ENUMS, CONFIGURATION_CREDENTIAL_GROUPS, configurationNumberRange, configurationOwnedPath, configurationServiceOrigin, isConfigurationObject, readConfigurationPath, configurationPathSegments, configurationPathSegment,
+  CONFIGURATION_SCHEMA_VERSION, CONFIGURATION_DOMAIN_VERSIONS, CONFIGURATION_FIELDS, CONFIGURATION_ENUMS, CONFIGURATION_CREDENTIAL_GROUPS, configurationNumberRange, configurationOwnedPath, configurationServiceOrigin, isConfigurationObject, readConfigurationPath, configurationPathSegments, configurationPathSegment,
   type ConfigurationFile, type ConfigurationValue, type ConfigurationObject,
   type ConfigurationIssue, type ConfigurationField, type EnvironmentContext,
 } from "@runweave/shared/configuration";
@@ -35,7 +35,7 @@ export function domainForPath(key: string): string {
 
 export function validateEnvelope(value: unknown, context: EnvironmentContext): asserts value is ConfigurationFile {
   if (!isConfigurationObject(value)) throw new ConfigurationError("CONFIG_ROOT_INVALID");
-  if (value.schemaVersion !== 1) throw new ConfigurationError("CONFIG_SCHEMA_UNSUPPORTED");
+  if (value.schemaVersion !== CONFIGURATION_SCHEMA_VERSION) throw new ConfigurationError("CONFIG_SCHEMA_UNSUPPORTED");
   if (!Number.isSafeInteger(value.revision) || Number(value.revision) < 0) throw new ConfigurationError("CONFIG_REVISION_INVALID");
   if (value.kind !== context.kind || value.instanceId !== context.instanceId) throw new ConfigurationError("CONFIG_IDENTITY_MISMATCH");
   if (!isConfigurationObject(value.domainVersions) || !isConfigurationObject(value.migrations)) throw new ConfigurationError("CONFIG_METADATA_INVALID");
@@ -58,7 +58,7 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
     const domain = domainForPath(key);
     // Retired settings may remain in existing files but have no runtime consumer.
     if (domain === "agents.team") continue;
-    if (value.domainVersions[domain] !== undefined && value.domainVersions[domain] !== 1) { issue(key, "CONFIG_DOMAIN_VERSION_UNSUPPORTED"); continue; }
+    if (value.domainVersions[domain] !== undefined && value.domainVersions[domain] !== CONFIGURATION_DOMAIN_VERSIONS[domain]) { issue(key, "CONFIG_DOMAIN_VERSION_UNSUPPORTED"); continue; }
     const field = fieldForPath(key);
     if (!field) {
       // Accept the retired Browser value in existing YAML without exposing it as a setting.
@@ -118,7 +118,7 @@ export function validateDomains(value: ConfigurationFile, context: EnvironmentCo
   }
   for (const [domain, version] of Object.entries(value.domainVersions)) {
     if (domain === "agents.team") continue;
-    if (version !== 1 && !result[domain]) result[domain] = [{ path: domain, code: "CONFIG_DOMAIN_VERSION_UNSUPPORTED" }];
+    if (version !== CONFIGURATION_DOMAIN_VERSIONS[domain] && !result[domain]) result[domain] = [{ path: domain, code: "CONFIG_DOMAIN_VERSION_UNSUPPORTED" }];
   }
   return result;
 }

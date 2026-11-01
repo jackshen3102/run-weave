@@ -3,7 +3,7 @@ export interface ConfigurationObject { [key: string]: ConfigurationValue }
 export interface EnvironmentIdentity { kind: "stable" | "dev"; instanceId: string }
 export interface EnvironmentContext extends EnvironmentIdentity { configRoot: string }
 export interface ConfigurationFile extends ConfigurationObject {
-  schemaVersion: 1;
+  schemaVersion: number;
   revision: number;
   kind: "stable" | "dev";
   instanceId: string;
@@ -11,6 +11,22 @@ export interface ConfigurationFile extends ConfigurationObject {
   migrations: ConfigurationObject;
 }
 export interface ConfigurationIssue { path: string; code: string }
+
+/** Values never cross the upgrade control plane; only field names and versions do. */
+export interface ConfigurationUpgradePreview {
+  expectedRevision: number;
+  expectedDigest: string;
+  source: { schemaVersion: number; domainVersions: Record<string, number> };
+  target: { schemaVersion: number; domainVersions: Record<string, number> };
+  steps: string[];
+  changedFields: string[];
+  changed: boolean;
+}
+export interface ConfigurationUpgradeResult extends ConfigurationUpgradePreview {
+  savedRevision: number;
+  digest: string;
+  backupId?: string;
+}
 export interface ConfigurationValueResolution {
   source: "saved" | "default" | "consumerDefault" | "unset" | "invalid";
   value?: ConfigurationValue;

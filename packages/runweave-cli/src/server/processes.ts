@@ -2,7 +2,7 @@ import { createServer, createConnection } from "node:net";
 import { chmodSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
-import { configuration } from "@runweave/config-node";
+import { configuration, CONFIGURATION_COMPATIBILITY } from "@runweave/config-node";
 import {
   controlSocket,
   identity,
@@ -40,6 +40,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
   const socket = controlSocket(ctx);
   rmSync(socket, { force: true });
   writeJson(path.join(ctx.home, "foreground.json"), {
+    configuration: CONFIGURATION_COMPATIBILITY,
     pid: process.pid,
     startedAt: processStart(process.pid),
     version: ctx.manifest.version,
