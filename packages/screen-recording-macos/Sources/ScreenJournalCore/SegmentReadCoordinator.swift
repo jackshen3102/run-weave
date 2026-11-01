@@ -8,16 +8,10 @@ final class SegmentReadCoordinator: @unchecked Sendable {
         let segmentID: String
         private let lock = NSLock()
         private var cancelled = false
-        private var cancellation: (() -> Void)?
         init(_ segmentID: String) { self.segmentID = segmentID }
         func check() throws { if lock.withLock({ cancelled }) { throw JournalReadError("FRAME_GONE") }; try Task.checkCancellation() }
-        func onCancel(_ body: @escaping () -> Void) {
-            let run = lock.withLock { cancellation = body; return cancelled }
-            if run { body() }
-        }
         func cancel() {
-            let body = lock.withLock { cancelled = true; return cancellation }
-            body?()
+            lock.withLock { cancelled = true }
         }
     }
     private let lock = NSLock()

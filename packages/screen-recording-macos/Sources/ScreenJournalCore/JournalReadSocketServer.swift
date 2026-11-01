@@ -186,7 +186,8 @@ final class JournalReadSocketServer: @unchecked Sendable {
         }
         let allowed: [String: Set<String>] = ["status": [], "days": ["cursor", "limit"], "ranges": ["day", "cursor", "limit"],
             "thumbnail": ["rangeID", "catalogRevision"], "openView": ["rangeID", "catalogRevision"], "availability": ["viewID"],
-            "frame": ["viewID", "captureID", "variant"], "closeView": ["viewID"]]
+            "frame": ["viewID", "captureID", "variant"], "closeView": ["viewID"],
+            "packageManifest": ["viewID"], "packageMedia": ["viewID", "assetID", "offset", "length"]]
         guard let keys = allowed[r.method], Set(r.params.keys).isSubset(of: keys) else { throw JournalReadError("INVALID_ARGUMENT") }
         if r.params["cursor"] != nil && r.params["cursor"]?.text == nil { throw JournalReadError("INVALID_ARGUMENT") }
         if r.params["limit"] != nil && r.params["limit"]?.number == nil { throw JournalReadError("INVALID_ARGUMENT") }
@@ -196,6 +197,10 @@ final class JournalReadSocketServer: @unchecked Sendable {
         case "ranges": return try json(await service.ranges(day: text("day"), cursor: r.params["cursor"]?.text, limit: r.params["limit"]?.number ?? 100))
         case "openView": return try json(await service.open(rangeID: text("rangeID"), catalogRevision: text("catalogRevision")))
         case "availability": return try json(await service.availability(viewID: text("viewID")))
+        case "packageManifest": return try json(await service.packageManifest(viewID: text("viewID")))
+        case "packageMedia":
+            guard let offset = r.params["offset"]?.number, let length = r.params["length"]?.number else { throw JournalReadError("INVALID_ARGUMENT") }
+            return (try await service.packageMedia(viewID: text("viewID"), assetID: text("assetID"), offset: offset, length: length), "application/octet-stream")
         case "frame":
             guard let variant = JournalVariant(rawValue: try text("variant")) else { throw JournalReadError("INVALID_ARGUMENT") }
             return (try await service.frame(viewID: text("viewID"), captureID: text("captureID"), variant: variant), "image/jpeg")

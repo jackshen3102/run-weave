@@ -109,3 +109,11 @@ enum ScreenRecordingVariant: String, Codable { case thumb, preview, full
 }
 func screenRecordingNowMs() -> Int64 { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
 
+
+// BUSY and transport interruption do not imply that a recording has expired.
+func screenRecordingTransient(_ error: Error) -> Bool {
+    if let value = error as? ScreenRecordingReadError { return ["BUSY", "TIMEOUT", "NOT_RUNNING", "CANCELLED"].contains(value.code) }
+    if let value = error as? URLError { return value.code != .cancelled }
+    if case APIError.http(let status) = error { return [429, 502, 503, 504].contains(status) }
+    return false
+}

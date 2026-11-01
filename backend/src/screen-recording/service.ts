@@ -1,4 +1,4 @@
-import type { ScreenRecordingMethod, ScreenRecordingStatus, ScreenRecordingView } from "@runweave/shared/screen-recording";
+import type { ScreenRecordingMethod, ScreenRecordingPackage, ScreenRecordingStatus, ScreenRecordingView } from "@runweave/shared/screen-recording";
 import { ScreenRecordingClient, ScreenRecordingFailure } from "./client";
 
 export interface ScreenRecordingPrincipal { sessionID: string; connectionID: string }
@@ -34,6 +34,36 @@ export class ScreenRecordingService {
         return { header: { contentType: "application/json" as const }, body: Buffer.from(JSON.stringify(status)) };
       }
       throw error;
+    }
+  }
+  async *download(viewID: string, principal: ScreenRecordingPrincipal, signal: AbortSignal): AsyncGenerator<Buffer> {
+    let result;
+    try { result = await this.execute("packageManifest", { viewID }, principal, signal); }
+    catch (error) {
+      if (error instanceof ScreenRecordingFailure && error.code === "INVALID_ARGUMENT") throw new ScreenRecordingFailure(409, "UPDATE_REQUIRED");
+      throw error;
+    }
+    const manifest = JSON.parse(result.body.toString("utf8")) as ScreenRecordingPackage;
+    if (result.body.length > 1024 * 1024 || manifest.version !== 1 || manifest.viewID !== viewID || !("serverEpoch" in result.header) || manifest.serverEpoch !== result.header.serverEpoch ||
+        !Number.isSafeInteger(manifest.expiresAt) || manifest.expiresAt <= Date.now() || !Array.isArray(manifest.assets) || manifest.assets.length > 900 ||
+        !Array.isArray(manifest.frames) || manifest.frames.length > 900) throw new ScreenRecordingFailure(503, "INVALID_PROTOCOL");
+    let total = 0;
+    for (const asset of manifest.assets) {
+      if (!/^[0-9a-f-]{36}$/i.test(asset.id) || !Number.isSafeInteger(asset.byteLength) || asset.byteLength <= 0 || !/^[0-9a-f]{64}$/.test(asset.sha256)) throw new ScreenRecordingFailure(503, "INVALID_PROTOCOL");
+      total += asset.byteLength;
+    }
+    if (total > 128 * 1024 * 1024 || new Set(manifest.assets.map(asset => asset.id)).size !== manifest.assets.length) throw new ScreenRecordingFailure(503, "INVALID_PROTOCOL");
+    const length = Buffer.alloc(4); length.writeUInt32BE(result.body.length);
+    yield Buffer.concat([length, result.body]);
+    for (const asset of manifest.assets) {
+      for (let offset = 0; offset < asset.byteLength;) {
+        if (signal.aborted || manifest.expiresAt <= Date.now()) throw new ScreenRecordingFailure(410, "FRAME_GONE");
+        const length = Math.min(1024 * 1024, asset.byteLength - offset);
+        const chunk = await this.execute("packageMedia", { viewID, assetID: asset.id, offset, length }, principal, signal);
+        if (chunk.header.contentType !== "application/octet-stream" || chunk.body.length !== length) throw new ScreenRecordingFailure(503, "INVALID_PROTOCOL");
+        offset += chunk.body.length;
+        yield chunk.body;
+      }
     }
   }
   dispose(): void { this.client.dispose(); this.owners.clear(); }

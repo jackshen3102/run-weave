@@ -6,6 +6,7 @@ struct ScreenRecordingBrowserView: View {
     @ObservedObject var session: AppSession
     var openConversation: (TerminalConversation.Target) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var browsing = false
     @State private var tab = "raw"
     @State private var reload = 0
     @State private var lastConfirmed: ContinuousClock.Instant?
@@ -17,6 +18,7 @@ struct ScreenRecordingBrowserView: View {
     @State private var loadedDay: String?
     @State private var rangeRequest = 0
     @State private var loadingRanges = false
+    @State private var loadingDay: String?
     @State private var connecting = true
     @State private var connectionMessage = ""
     @State private var accessDenied = false
@@ -74,13 +76,16 @@ struct ScreenRecordingBrowserView: View {
                     }
                 }
             }
+            .onAppear { browsing = true }
+            .onDisappear { browsing = false }
             .navigationTitle("屏幕记录")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) { Button("刷新记录", systemImage: "arrow.clockwise") { reload += 1 } }
             }
             .refreshable { reload += 1 }
-            .task(id: scope + ":\(reload)") {
+            .task(id: scope + ":\(reload):\(browsing)") {
+                guard browsing else { return }
                 invalidate(); analysisDays = []; connecting = true; accessDenied = false; retryAutomatically = true
                 guard session.authenticated, session.foreground, session.health.status == .online else {
                     connecting = false; connectionMessage = "当前电脑未连接。请回到首页检查连接后重试。"; return
@@ -95,7 +100,7 @@ struct ScreenRecordingBrowserView: View {
             .task {
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-                    if let confirmed = lastConfirmed, confirmed.duration(to: .now) > .seconds(5) {
+                    if browsing, let confirmed = lastConfirmed, confirmed.duration(to: .now) > .seconds(5) {
                         invalidate(); connectionMessage = "与这台 Mac 的连接已中断，正在自动重连。"
                     }
                 }
@@ -135,7 +140,8 @@ struct ScreenRecordingBrowserView: View {
                             .id("\(session.generation):\(status.serverEpoch):" + range.rangeID)
                     } label: {
                         HStack(spacing: 12) {
-                            ScreenRecordingRangeThumbnail(api: api, range: range, revision: revision)
+                            Image(systemName: range.previewCaptureID == nil ? "lock.fill" : "play.rectangle")
+                                .foregroundStyle(.secondary).frame(width: 40, height: 40)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("\(time(range.startMs))–\(time(range.endMs))").font(.headline)
                                 Text("\(range.sampleCount) 帧 · 显示器 \(range.displayID)").font(.caption).foregroundStyle(.secondary)
@@ -175,6 +181,7 @@ struct ScreenRecordingBrowserView: View {
             if changed || loadedDay != day || !rangeError.isEmpty { await loadRanges() }
         } catch {
             guard !Task.isCancelled, generation == session.generation else { return }
+            if screenRecordingTransient(error), let confirmed = lastConfirmed, confirmed.duration(to: .now) <= .seconds(5) { return }
             invalidate(); connecting = false
             switch error {
             case APIError.http(403):
@@ -198,10 +205,11 @@ struct ScreenRecordingBrowserView: View {
     }
     private func loadRanges() async {
         guard let api = session.api, let status, status.availability == "ready" else { return }
+        guard !loadingRanges || loadingDay != day else { return }
         rangeRequest += 1
         let request = rangeRequest, selected = day, generation = session.generation, epoch = status.serverEpoch
-        ranges = []; loadedDay = nil; rangeError = ""; loadingRanges = true
-        defer { if request == rangeRequest { loadingRanges = false } }
+        ranges = []; loadedDay = nil; rangeError = ""; loadingRanges = true; loadingDay = selected
+        defer { if request == rangeRequest { loadingRanges = false; loadingDay = nil } }
         if selected.isEmpty { loadedDay = selected; revision = status.catalogRevision; return }
         do {
             var cursor: String?; var items: [ScreenRecordingRange] = []; var version = ""

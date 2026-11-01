@@ -58,7 +58,7 @@ export class ScreenRecordingClient {
             const candidate: unknown = JSON.parse(received.subarray(0, headerSize).toString("utf8")); received = received.subarray(headerSize);
             if (!candidate || typeof candidate !== "object") throw new Error("header");
             const h = candidate as ScreenRecordingSocketResponse;
-            if (h.requestId !== requestId || !Number.isInteger(h.status) || h.status < 200 || h.status > 599 || typeof h.code !== "string" || typeof h.serverEpoch !== "string" || !Number.isInteger(h.payloadLength) || h.payloadLength < 0 || h.payloadLength > 8 * 1024 * 1024 || !["application/json", "image/jpeg"].includes(h.contentType)) throw new Error("header");
+            if (h.requestId !== requestId || !Number.isInteger(h.status) || h.status < 200 || h.status > 599 || typeof h.code !== "string" || typeof h.serverEpoch !== "string" || !Number.isInteger(h.payloadLength) || h.payloadLength < 0 || h.payloadLength > 8 * 1024 * 1024 || !["application/json", "image/jpeg", "application/octet-stream"].includes(h.contentType)) throw new Error("header");
             header = h;
           }
           if (header && received.length >= header.payloadLength) {

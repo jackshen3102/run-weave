@@ -69,6 +69,17 @@ struct JournalView: Codable {
     let intervals: [JournalInterval]
     let expiresAt: Int64
 }
+struct JournalPackage: Codable {
+    struct Asset: Codable { let id: String; let byteLength: Int; let sha256: String; let width: Int; let height: Int }
+    struct Frame: Codable { let captureID: String; let assetID: String; let frameIndex: Int }
+    let version = 1
+    let viewID: String
+    let serverEpoch: String
+    let deviceID: String
+    let expiresAt: Int64
+    let assets: [Asset]
+    let frames: [Frame]
+}
 struct JournalAvailability: Codable {
     let checkedAt: Int64
     let expiresAt: Int64

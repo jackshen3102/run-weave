@@ -74,12 +74,22 @@ export interface ScreenRecordingViewAvailability {
   intervals: ScreenRecordingInterval[];
   viewState: 'ready' | 'gone';
 }
-export type ScreenRecordingReadMethod = 'status' | 'days' | 'ranges' | 'thumbnail' | 'openView' | 'availability' | 'frame' | 'closeView';
+/** Download framing: uint32 BE manifest length, UTF-8 manifest, then MP4 assets in manifest order. */
+export interface ScreenRecordingPackage {
+  version: 1;
+  viewID: string;
+  serverEpoch: string;
+  deviceID: string;
+  expiresAt: number;
+  assets: { id: string; byteLength: number; sha256: string; width: number; height: number }[];
+  frames: { captureID: string; assetID: string; frameIndex: number }[];
+}
+export type ScreenRecordingReadMethod = 'status' | 'days' | 'ranges' | 'thumbnail' | 'openView' | 'availability' | 'frame' | 'closeView' | 'packageManifest' | 'packageMedia';
 export interface ScreenRecordingSocketResponse {
   requestId: string;
   status: number;
   code: string;
   payloadLength: number;
-  contentType: 'application/json' | 'image/jpeg';
+  contentType: 'application/json' | 'image/jpeg' | 'application/octet-stream';
   serverEpoch: string;
 }

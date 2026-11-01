@@ -339,7 +339,8 @@ public actor APIClient {
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
     retryUnauthorized: Bool = true, idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     decodeError: ((Int, Data) -> Error?)? = nil,
-    decode: ((Data) throws -> T)? = nil
+    decode: ((Data) throws -> T)? = nil,
+    download: ((URL) throws -> T)? = nil
   ) async throws -> T {
     let deadline = requestTimeout.map { Date().addingTimeInterval($0) }
     func remainingTimeout() throws -> TimeInterval? {
@@ -355,7 +356,7 @@ public actor APIClient {
     guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
     do {
       let value: T = try await request(path, method: method, body: body, bearer: current.accessToken,
-        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode)
+        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode, download: download)
       guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
@@ -368,7 +369,7 @@ public actor APIClient {
       guard retryUnauthorized else { throw APIError.writeRequiresRetry }
       do {
         let value: T = try await request(path, method: method, body: body, bearer: renewed.accessToken,
-          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode)
+          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode, download: download)
         guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
@@ -391,7 +392,8 @@ public actor APIClient {
     idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     connectionIDOverride: String? = nil,
     decodeError: ((Int, Data) -> Error?)? = nil,
-    decode: ((Data) throws -> T)? = nil
+    decode: ((Data) throws -> T)? = nil,
+    download: ((URL) throws -> T)? = nil
   ) async throws -> T {
     let started = ProcessInfo.processInfo.systemUptime
     var responseStatus: Int?
@@ -435,7 +437,21 @@ public actor APIClient {
         request.cachePolicy = .reloadIgnoringLocalCacheData
       }
       defer { extendedSession?.invalidateAndCancel() }
-      let (data, response) = try await (extendedSession ?? session).data(for: request)
+      let data: Data
+      let response: URLResponse
+      var downloadedFile: URL?
+      defer { if let downloadedFile { try? FileManager.default.removeItem(at: downloadedFile) } }
+      if download != nil {
+        let result = try await (extendedSession ?? session).download(for: request)
+        downloadedFile = result.0; response = result.1
+        if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+          data = Data()
+        } else {
+          let file = try FileHandle(forReadingFrom: result.0)
+          defer { try? file.close() }
+          data = try file.read(upToCount: 65536) ?? Data()
+        }
+      } else { (data, response) = try await (extendedSession ?? session).data(for: request) }
       guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
       responseStatus = http.statusCode
       if (300..<400).contains(http.statusCode) { throw ConnectionIdentityFailure.redirectRejected }
@@ -453,6 +469,7 @@ public actor APIClient {
         { throw failure }
         throw APIError.http(http.statusCode)
       }
+      if let download, let downloadedFile { return try download(downloadedFile) }
       if let decode { return try decode(data) }
       if T.self == EmptyResponse.self {
         return try JSONDecoder().decode(T.self, from: Data("{}".utf8))
