@@ -82,6 +82,12 @@ Backend 对缺项返回明确状态，iOS 的请求错误也显示预览失败�
 源码入口为 [预览读取器](../../app-server/src/agents/thread-previews.ts) 和
 [Backend 映射](../../backend/src/terminal/application/home-conversation.ts)。
 
+## 终端对话阅读
+
+终端工具栏提供对话阅读入口，以覆盖层展示原生阅读器；打开与关闭时保留底层终端挂载及视口，
+不通过重新布局终端改变行列数。阅读页支持关闭和滑动返回，仍使用原会话与连接作用域。
+实现入口见 [ConversationReaderPresentation](../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/ConversationReaderPresentation.swift)。
+
 ## 自进化成果入口
 
 首页右上角更多菜单提供「自进化」入口，首页不展示成果卡片，也不轮询成果。

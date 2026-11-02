@@ -165,7 +165,7 @@ Mac 与 iOS 均默认展示“录屏记录”；“整理事项”为辅助视�
 原保留策略。Daily Record 的可选接入合同见 [CLI](../../docs/cli/README.md#屏幕事项冻结导出)。
 
 分析验收工具只可操作独立 fixture 根目录：`ScreenJournalAnalysisVerify ISOLATED_FIXTURE_ROOT`。
-完整需求与未完成项见 [三期计划](../../docs/plans/2026-10-31-screen-recording-phase-3.md)；工具通过
+当前边界与验收入口见 [架构索引](../../docs/architecture/README.md)；工具通过
 不等于真实来源启用、原任务定时运行、随记发布或手机通知已验收。
 
 ### 会话来源和清理缺口
