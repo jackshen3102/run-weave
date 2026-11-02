@@ -16,7 +16,9 @@ struct CapturedFrame {
     }
     func capture(displayID: UInt32, settings: RecordingSettings) async throws -> CapturedFrame {
         guard CGPreflightScreenCaptureAccess() else { throw journalError("screen_permission_required") }
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        // Hidden applications still participate in the running-process privacy
+        // check below, so the filter snapshot must include them as well.
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else { throw journalError("display_unavailable") }
         let height = settings.height
         let width = max(2, Int((Double(display.width) / Double(display.height) * Double(height)).rounded()) / 2 * 2)
