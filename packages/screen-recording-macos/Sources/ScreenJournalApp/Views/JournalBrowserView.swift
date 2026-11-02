@@ -42,6 +42,8 @@ struct JournalBrowserView: View {
                     .font(.caption)
                 if !screenAccess {
                     Button("授权录屏", action: requestPermission)
+                } else if ["failed", "blockedStorage", "blockedPermission"].contains(recorder.status.state) {
+                    Button("重试记录", systemImage: "arrow.clockwise") { recorder.start() }
                 } else if recorder.status.desiredRecording {
                     Button("暂停记录", systemImage: "pause.fill") { recorder.pause() }
                 } else {
@@ -65,6 +67,7 @@ struct JournalRawBrowserView: View {
     @State private var ranges: [JournalRange] = []
     @State private var revision = ""
     @State private var selected: JournalRange?
+    @State private var selectedRevision = ""
     @State private var error = ""
     @State private var loading = true
     @State private var requestGeneration = 0
@@ -81,7 +84,10 @@ struct JournalRawBrowserView: View {
                 if status?.hasPending == true { Text("最新录屏正在保存，完成后自动出现").font(.caption) }
                 if !ranges.isEmpty { Text("当天 \(ranges.count) 段录屏").font(.caption).foregroundStyle(.secondary) }
                 if quietCount > 0 { Toggle("显示稳定画面（\(quietCount) 段）", isOn: $showQuiet).font(.caption) }
-                List(ranges.filter { showQuiet || $0.activityKind != "quiet" }, selection: Binding(get: { selected?.rangeID }, set: { id in selected = ranges.first { $0.rangeID == id } })) { range in
+                List(ranges.filter { showQuiet || $0.activityKind != "quiet" }, selection: Binding(get: { selected?.rangeID }, set: { id in
+                    guard selected?.rangeID != id else { return }
+                    selected = ranges.first { $0.rangeID == id }; selectedRevision = revision
+                })) { range in
                     VStack(alignment: .leading) {
                     if let service = recorder.readService { JournalRangeThumbnail(service: service, range: range, revision: revision) }
                     VStack(alignment: .leading) {
@@ -96,7 +102,7 @@ struct JournalRawBrowserView: View {
             }.padding().frame(minWidth: 240)
         } detail: {
             if let selected, let service = recorder.readService {
-                JournalPlaybackView(service: service, range: selected, revision: revision).id(selected.rangeID + revision)
+                JournalPlaybackView(service: service, range: selected, revision: selectedRevision).id(selected.rangeID + selectedRevision)
             } else if loading {
                 ProgressView("正在读取录屏…")
             } else if !error.isEmpty {
@@ -127,7 +133,7 @@ struct JournalRawBrowserView: View {
                 selected = nil; ranges = []; revision = ""; await refresh()
             }
         }
-        .task(id: selectedDay) { await loadRanges() }
+        .task(id: selectedDay) { await loadRanges(resetSelection: true) }
     }
     private func time(_ ms: Int64) -> String {
         let formatter = DateFormatter(); formatter.timeStyle = .short; formatter.timeZone = TimeZone(identifier: status?.timeZone ?? "") ?? .current
@@ -139,6 +145,7 @@ struct JournalRawBrowserView: View {
             let value = try await service.status()
             guard !Task.isCancelled else { return }
             let changed = status?.serverEpoch != value.serverEpoch || revision != value.catalogRevision
+            if let status, status.serverEpoch != value.serverEpoch { selected = nil; ranges = []; revision = "" }
             status = value; days = value.days
             if selectedDay.isEmpty { selectedDay = days.first?.day ?? "" }
             if changed || !error.isEmpty { await loadRanges() }
@@ -147,11 +154,12 @@ struct JournalRawBrowserView: View {
             selected = nil; ranges = []; loading = false; self.error = "暂时无法读取录屏，正在自动重试。"
         }
     }
-    private func loadRanges() async {
+    private func loadRanges(resetSelection: Bool = false) async {
         guard let service = recorder.readService else { return }
         requestGeneration += 1
         let request = requestGeneration, day = selectedDay
-        loading = true; selected = nil; ranges = []; error = ""
+        loading = true; error = ""
+        if resetSelection { selected = nil; ranges = [] }
         defer { if request == requestGeneration { loading = false } }
         guard !day.isEmpty else { revision = status?.catalogRevision ?? ""; return }
         do {
@@ -162,6 +170,9 @@ struct JournalRawBrowserView: View {
                 result += page.items; cursor = page.nextCursor; version = page.catalogRevision
             } while cursor != nil
             guard !Task.isCancelled, selectedDay == day, request == requestGeneration else { return }
+            // An open view owns its frame snapshot. A different catalog revision
+            // must not recreate it while its range is still listed and readable.
+            if let selected, !result.contains(where: { $0.rangeID == selected.rangeID }) { self.selected = nil }
             ranges = result; revision = version
         } catch {
             guard !Task.isCancelled, selectedDay == day, request == requestGeneration else { return }
