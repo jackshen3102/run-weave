@@ -15,6 +15,14 @@ effectiveProjectId = childProjectId ?? parentProjectId
 
 shared 的 `buildTerminalChildProjectId`、`parseTerminalChildProjectId` 和 `resolveTerminalParentProjectId` 是跨 backend、Web 与 App 的唯一 ID helper。解析后必须重新构建得到完全相同的字符串，非规范编码、空名称和额外分隔段都不是合法子 ID。
 
+## 工作台前进与后退
+
+Web 工作台历史保存父 Project、当前生效 Project 和终端 Session 的完整目标，最多 50 条。
+切换同一 Worktree 内的终端也形成历史；前进／后退同时恢复三个字段。
+选择经项目与终端数据协调后才写入历史，相邻相同目标不重复记录；后退后新选择会截断前进分支。
+终端关闭或移动后移除旧目标，原空 Context 已有终端时也移除其空目标。
+实现入口见 [workspace store](../../frontend/src/features/terminal/state/workspace-store.ts)。
+
 ## 发现与授权
 
 `TerminalSessionManager.listProjects()` 仍只返回父 Projects，保持旧客户端、Project tabs 和 CRUD 语义不变。子 Project 通过以下接口读取：

@@ -45,6 +45,15 @@ scripts/dev-session    开发会话与 Beta 生命周期
 该 macOS 工具采集不依赖 Backend、Electron 或 RemoteDesk；原生 Mac 回放直接读取同进程服务，
 iOS 经当前 Backend 鉴权连接该 Mac 同用户的 Unix socket。关闭 Backend 不停止采集。
 二期读取／回放的实现与验收边界见包入口；不提供 Web 回放或额外 TCP 服务。
+
+ScreenJournal 默认展示原始录屏，整理事项为可选辅助能力；分析失败不能阻断采集或回放。
+模型在 Backend 外部 worker 执行，App owner 独占衍生库写入；事项不按模型批次或应用切换强制拆分。
+纯屏幕事实不能独立证明执行成功，也不能把 Agent 并行跨度累计为本人工作时长。
+当前合同与验证入口见 [事项分析](../../packages/screen-recording-macos/README.md#事项分析开发中默认关闭)、
+[分析验收](../testing/screen-recording/analysis.testplan.yaml)及
+[既有日报屏幕来源](../testing/skills/daily-record-screen.testplan.yaml)。
+正式来源启用、真实日报迁移、原任务到点执行与手机通知须分别取证，隔离验证不证明这些环节已完成。
+
 独立 NPM 服务端由 `packages/runweave-server/` 分发同源 Backend、App Server 和网页；独立 `@runweave/cli` 唯一提供 rw；
 两个服务进程保持独立，生命周期由 `rw server` 管理，当前合同见 [服务端管理](../cli/server-cli.md)。
 
