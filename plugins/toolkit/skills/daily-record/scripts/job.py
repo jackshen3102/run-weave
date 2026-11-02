@@ -121,14 +121,14 @@ def prepare(state, args):
         if meta["phase"] == "confirmed":
             state.data["active"] = None
             return prepare(state, args)
-        if meta["runId"] != args.run_id:
+        same_owner = meta["ownerPid"] == args.owner_pid and meta["ownerProcess"] == owner
+        # A scheduled continuation retains its run ID but starts a new process.
+        if meta["runId"] != args.run_id or not same_owner:
             require(not (process_identity(meta["ownerPid"]) == meta["ownerProcess"]), "BUSY: original Agent is still active")
             require(args.recover_run_id == meta["runId"], "EXPLICIT_RECOVERY_REQUIRED")
             meta.update(runId=args.run_id, generation=meta["generation"] + 1, ownerPid=args.owner_pid, ownerProcess=owner)
             if "evidenceHash" in meta:
                 template(path, meta)
-        else:
-            require(meta["ownerPid"] == args.owner_pid and meta["ownerProcess"] == owner, "OWNER_PROCESS_CHANGED")
     else:
         job_screen.reconcile_revisions(state)
         days = state.missing()[:state.c["maxDaysPerRun"]]

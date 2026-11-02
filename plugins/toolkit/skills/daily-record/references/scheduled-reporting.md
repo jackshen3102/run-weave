@@ -121,7 +121,9 @@ Mac 飞书另登记 `feishu:<accountScope>:messages`，producerId/sourceNamespac
 
 `job.py status --config ...` 只读返回逐日状态、批次和实际来源回执，不联网。先查 pending，再处理新日期。服务端完整来源诊断使用上述 work-sources 命令。
 
-所有者仍活动时另一 run 返回 BUSY。原进程已退出后，新 run 的 prepare 必须显式给 `--recover-run-id <旧run ID>`，进程 PID 和开始时间均核对，批次代际递增；旧 run 的提交会被拒绝。没有 pending 时可显式 `--recollect` 在新代际目录重新采集，保留旧材料；不得覆盖旧材料或丢弃冻结导入。
+所有者仍活动时，另一进程或 run 的接管返回 BUSY。自动续接会沿用 run ID，但启动新的 Agent 进程；取得本轮真实 PID 后，prepare 也必须显式给 `--recover-run-id <原run ID>`。跨 run 恢复使用同一规则：核对原进程 PID 和开始时间，确认它已退出后接管，批次代际递增；旧代际的提交会被拒绝。同一所有者重试 prepare 不增加代际。
+
+接管保留材料、已读进度、事项映射、已校验导出和冻结请求。未校验草稿须对照返回的模板更新 generation/evidenceHash，再校验；pending 请求先原样 reconcile，不能重新整理。只有需要补采且没有 pending/已发送日期时，才显式用 `--recollect` 在新代际目录采集；不得覆盖旧材料或丢弃冻结导入。
 
 `job.py reconcile` 仅恢复本批次原请求；也可使用配套 `suiji.py --config ... --env-file ... work-reconcile --request <冻结请求> --job-config <任务配置>`。只允许保护配置中显式 autoPublish 的工作事实导入，同一键、目标和参数最多调用 3 次；收到幂等原回执后独立回读。超时仍未知则保留 outbox，不换键，不处理该流后续包。收到明确 WORK_FEED_CHANGED 才允许重新读取核对并准备，最多连续冲突 3 次。手动 retry 和其他笔记/待办写操作不获得自动重试能力。
 
