@@ -44,7 +44,11 @@ scripts/dev-session    开发会话与 Beta 生命周期
 独立屏幕采集与本地存储：[ScreenJournal](../../packages/screen-recording-macos/README.md)。
 该 macOS 工具采集不依赖 Backend、Electron 或 RemoteDesk；原生 Mac 回放直接读取同进程服务，
 iOS 经当前 Backend 鉴权连接该 Mac 同用户的 Unix socket。关闭 Backend 不停止采集。
-二期读取／回放的实现与验收边界见包入口；不提供 Web 回放或额外 TCP 服务。
+原生回放区分逻辑录制区间与有界证据页：区间不按固定时长或帧数拆分，长区间可跨页定位；
+已打开区间保持冻结，不随新增采样扩展。旧客户端仍只接收安全的单页范围，手机按页替换媒体包。
+协议字段、资源上限及兼容边界见[原生回放与在线读取](../../packages/screen-recording-macos/README.md#原生回放与在线读取)，
+验收入口见[读取服务](../testing/screen-recording/read-service.testplan.yaml)和
+[原生回放](../testing/screen-recording/playback.testplan.yaml)；不提供 Web 回放或额外 TCP 服务。
 
 ScreenJournal 默认展示原始录屏，整理事项为可选辅助能力；分析失败不能阻断采集或回放。
 模型在 Backend 外部 worker 执行，App owner 独占衍生库写入；事项不按模型批次或应用切换强制拆分。
