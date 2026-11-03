@@ -90,7 +90,7 @@ struct ScreenRecordingActivityDetail: View {
                 }
                 if let playback, let api = session.api {
                     NavigationLink("打开原始画面") {
-                        ScreenRecordingPlaybackView(session: session,api: api,range: playback.range,revision: revision,timeZone: "Asia/Shanghai",initialCaptureID: captureID)
+                        ScreenRecordingPlaybackView(session: session,api: api,range: playback.timelineRange ?? playback.range,revision: revision,timeZone: "Asia/Shanghai",initialCaptureID: captureID)
                     }
                 }
                 if !message.isEmpty { Text(message).foregroundStyle(.secondary) }

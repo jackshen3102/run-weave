@@ -14,6 +14,9 @@ import os
     let service: ScreenRecordingSource
     private var generation = 0
     private var request: Task<Void, Never>?
+    @Published private(set) var loadingPage = false
+    private var queuedPageSeek = false
+    var timelineRange: ScreenRecordingRange? { view?.timelineRange ?? view?.range }
     private var pendingCapture: ScreenRecordingCapture?
     private var clock: Task<Void, Never>?
     private var validity: Task<Void, Never>?
@@ -32,19 +35,19 @@ import os
         let saved = UserDefaults.standard.integer(forKey: "journalPlaybackSpeed")
         speed = [20,40,60].contains(saved) ? saved : 20
     }
-    func activate(_ range: ScreenRecordingRange, revision: String) async {
+    func activate(_ range: ScreenRecordingRange, revision: String, captureID: String? = nil) async {
         await pendingClose?.value
         guard !Task.isCancelled, view == nil else { return }
         closed = false; recoveringConnection = false; state = "loading"; current = nil; message = "正在下载录屏包…"
-        await open(range, revision: revision)
+        await open(range, revision: revision, captureID: captureID)
     }
-    private func open(_ range: ScreenRecordingRange, revision: String) async {
+    private func open(_ range: ScreenRecordingRange, revision: String, captureID: String?) async {
         let openingGeneration = generation
         do {
-            let result = try await service.open(rangeID: range.rangeID, catalogRevision: revision)
+            let result = try await service.open(rangeID: range.rangeID, catalogRevision: revision, captureID: captureID)
             if closed || Task.isCancelled || openingGeneration != generation { await service.close(viewID: result.viewID); return }
             lastConfirmed = .now
-            view = result; position = Double(range.startMs)
+            view = result; position = Double(result.captures.first(where: { $0.id == captureID })?.capturedAtMs ?? result.range.startMs)
             seek(position, resume: false)
             clock = Task { [weak self] in
                 while !Task.isCancelled {
@@ -55,21 +58,26 @@ import os
             validity = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self, !self.closed else { return }
+                    let checkingViewID = self.view?.viewID
                     do {
                         await self.pendingInvalidation?.value
-                        let available = try await self.service.availability(viewID: result.viewID)
+                        guard !self.loadingPage, let currentView = self.view else {
+                            try await Task.sleep(for: .milliseconds(100)); continue
+                        }
+                        let available = try await self.service.availability(viewID: currentView.viewID)
+                        guard self.view?.viewID == currentView.viewID, !self.loadingPage else { continue }
                         guard !self.closed, !Task.isCancelled else { return }
                         self.lastConfirmed = .now
                         guard available.invalidCaptureIDs.isEmpty else { self.invalidate("记录已过期或清理"); return }
                         if self.recoveringConnection {
-                            try await self.service.preparePackage(viewID: result.viewID)
+                            try await self.service.preparePackage(viewID: currentView.viewID)
                             guard !self.closed, !Task.isCancelled else { return }
                             self.lastConfirmed = .now; self.recoveringConnection = false; self.state = "paused"
                             self.seek(self.position, resume: false)
                         }
                     } catch {
                         guard !self.closed, !Task.isCancelled else { return }
-                        self.connectionFailure(error)
+                        if !self.loadingPage, self.view?.viewID == checkingViewID { self.connectionFailure(error) }
                     }
                     try? await Task.sleep(for: .seconds(2))
                 }
@@ -82,30 +90,30 @@ import os
     }
     func pause() { resumeAfterLoad = false; if state == "playing" || state == "buffering" { state = "paused" } }
     func toggle() {
-        guard let view else { return }
+        guard let range = timelineRange else { return }
         if state == "playing" || state == "buffering" { pause(); return }
-        if state == "unavailable" { return }
+        if state == "unavailable" || loadingPage { return }
         guard let confirmed = lastConfirmed, confirmed.duration(to: .now) <= .seconds(5) else {
             invalidate("连接暂时中断，正在重新连接…", recoverable: true); return
         }
         resumeAfterLoad = true
-        if position >= Double(view.range.endMs) { seek(Double(view.range.startMs), resume: true) }
+        if position >= Double(range.endMs) { seek(Double(range.startMs), resume: true) }
         else { state = "playing"; lastTick = .now }
     }
 
     private func tick() {
-        guard !closed, state != "unavailable" else { return }
+        guard !closed, state != "unavailable", !loadingPage else { return }
         if let view, view.expiresAt <= screenRecordingNowMs() { invalidate("记录已过期，请返回刷新"); return }
         if let confirmed = lastConfirmed, confirmed.duration(to: .now) > .seconds(5) {
             invalidate("连接暂时中断，正在重新连接…", recoverable: true); return
         }
-        guard state == "playing", let view else { return }
+        guard state == "playing", let range = timelineRange else { return }
         let now = ContinuousClock.now
         let duration = lastTick.duration(to: now).components
         let delta = Double(duration.seconds) + Double(duration.attoseconds) / 1e18
         lastTick = now
-        let target = min(Double(view.range.endMs), position + delta * Double(speed) * 1000)
-        seek(target, resume: target < Double(view.range.endMs))
+        let target = min(Double(range.endMs), position + delta * Double(speed) * 1000)
+        seek(target, resume: target < Double(range.endMs))
     }
     func beginScrub() {
         guard !closed, state != "unavailable" else { return }
@@ -113,7 +121,8 @@ import os
         #if DEBUG
         Logger(subsystem: "com.runweave.app.native", category: "ScreenRecording").debug("scrubBegin state=\(self.state, privacy: .public) resume=\(self.wasPlaying, privacy: .public)")
         #endif
-        isScrubbing = true; pause(); generation += 1; request?.cancel(); pendingCapture = nil
+        isScrubbing = true; pause()
+        if !loadingPage { generation += 1; request?.cancel(); pendingCapture = nil }
         state = "scrubbing"
     }
     func scrub(_ value: Double) {
@@ -143,18 +152,29 @@ import os
         seek(position, resume: wasPlaying)
     }
     func step(_ direction: Int) {
-        guard let view, !view.captures.isEmpty else { return }
+        guard let view, !view.captures.isEmpty, !loadingPage else { return }
         pause(); let index = (pendingCapture ?? current).flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
+        if index + direction < 0, (view.pageOffset ?? 0) > 0 {
+            loadPage(offset: (view.pageOffset ?? 0) - 900, resume: false, edge: -1); return
+        }
+        if index + direction >= view.captures.count, let range = view.timelineRange,
+           (view.pageOffset ?? 0) + view.captures.count < range.sampleCount {
+            loadPage(offset: (view.pageOffset ?? 0) + 900, resume: false, edge: 1); return
+        }
         let target = view.captures[max(0, min(view.captures.count - 1, index + direction))]
         seek(Double(target.capturedAtMs), resume: false, exact: target)
     }
     func select(_ capture: ScreenRecordingCapture) { pause(); seek(Double(capture.capturedAtMs), resume: false, exact: capture) }
     private func seek(_ value: Double, resume: Bool, scrubbing: Bool = false, exact: ScreenRecordingCapture? = nil) {
-        guard let view, !closed, state != "unavailable" else { return }
+        guard let view, let range = timelineRange, !closed, state != "unavailable" else { return }
+        if loadingPage {
+            position = max(Double(range.startMs), min(Double(range.endMs), value))
+            resumeAfterLoad = resume; queuedPageSeek = true; return
+        }
         guard let confirmed = lastConfirmed, confirmed.duration(to: .now) <= .seconds(5) else {
             invalidate("连接暂时中断，正在重新连接…", recoverable: true); return
         }
-        position = max(Double(view.range.startMs), min(Double(view.range.endMs), value))
+        position = max(Double(range.startMs), min(Double(range.endMs), value))
         let ms = Int64(position)
         let gap = view.intervals.first { $0.kind != "privacy" && $0.kind != "unknown" && ms >= $0.startMs && ms < $0.endMs }
             ?? view.intervals.first { $0.kind == "unknown" && ms >= $0.startMs && ms < $0.endMs }
@@ -162,6 +182,10 @@ import os
             generation += 1; request?.cancel(); pendingCapture = nil; image = nil; current = nil
             message = gap.kind == "unknown" ? "此区间无采样" : "此区间暂停或不可记录"
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
+        }
+        if let first = view.captures.first, let last = view.captures.last, let full = view.timelineRange,
+           ms < first.capturedAtMs || (ms > last.capturedAtMs && (view.pageOffset ?? 0) + view.captures.count < full.sampleCount) {
+            loadPage(atMs: ms, resume: resume, scrubbing: scrubbing); return
         }
         guard let target = exact ?? view.captures.last(where: { $0.capturedAtMs <= ms }) else { return }
         if target.availableUntilMs <= screenRecordingNowMs() { invalidate("记录已过期"); return }
@@ -199,6 +223,52 @@ import os
             }
         }
     }
+    func filmstripCaptures(all: Bool) -> [ScreenRecordingCapture] {
+        guard state != "unavailable", let captures = view?.captures, !captures.isEmpty else { return [] }
+        if all { return captures }
+        var candidates = [0]
+        for index in captures.indices.dropFirst() {
+            let current = captures[index], previous = captures[index - 1]
+            if current.visualChanged != false || current.privacyPlaceholder != previous.privacyPlaceholder ||
+               current.frontmostApplication?.id != previous.frontmostApplication?.id { candidates.append(index) }
+        }
+        if candidates.last != captures.count - 1 { candidates.append(captures.count - 1) }
+        if candidates.count > 24 {
+            candidates = (0..<24).map { candidates[Int((Double($0) * Double(candidates.count - 1) / 23).rounded())] }
+        }
+        return candidates.map { captures[$0] }
+    }
+    func pageBy(_ direction: Int) {
+        guard let view, let range = view.timelineRange, !loadingPage else { return }
+        let offset = (view.pageOffset ?? 0) + direction * 900
+        guard offset >= 0, offset < range.sampleCount else { return }
+        pause(); loadPage(offset: offset, resume: false, edge: direction)
+    }
+    private func loadPage(atMs: Int64? = nil, offset: Int? = nil, resume: Bool, scrubbing: Bool = false, edge: Int = 0) {
+        guard let previous = view, !closed, state != "unavailable" else { return }
+        generation += 1; let token = generation
+        request?.cancel(); pendingCapture = nil; loadingPage = true; queuedPageSeek = false
+        image = nil; current = nil; resumeAfterLoad = resume
+        message = "正在读取这个时段…"; state = scrubbing ? "scrubbing" : "buffering"
+        request = Task {
+            do {
+                let next = try await service.page(viewID: previous.viewID, offset: offset, atMs: atMs)
+                guard !Task.isCancelled, !closed, generation == token else { await service.close(viewID: next.viewID); return }
+                view = next
+                await service.close(viewID: previous.viewID)
+                guard !Task.isCancelled, !closed, generation == token else { return }
+                loadingPage = false
+                lastConfirmed = .now
+                let exact = queuedPageSeek ? nil : edge < 0 ? next.captures.last : edge > 0 ? next.captures.first : nil
+                let time = queuedPageSeek ? Int64(position) : exact?.capturedAtMs ?? max(next.range.startMs, atMs ?? next.range.startMs)
+                queuedPageSeek = false
+                seek(Double(time), resume: resumeAfterLoad, scrubbing: isScrubbing, exact: exact)
+            } catch {
+                guard !Task.isCancelled, !closed, generation == token else { return }
+                loadingPage = false; invalidate("这个时段暂不可用，请返回刷新")
+            }
+        }
+    }
     private func connectionFailure(_ error: Error) {
         if screenRecordingTransient(error) {
             if let confirmed = lastConfirmed, confirmed.duration(to: .now) <= .seconds(5) { return }
@@ -211,7 +281,7 @@ import os
         recoveringConnection = recoverable
         if !recoverable { validity?.cancel() }
         generation += 1; request?.cancel(); scrubDispatch?.cancel(); scrubDispatch = nil
-        pendingCapture = nil
+        pendingCapture = nil; loadingPage = false; queuedPageSeek = false
         pause(); image = nil; current = nil; state = "unavailable"; message = reason
         let previous = pendingInvalidation
         pendingInvalidation = Task { await previous?.value; await service.invalidate() }

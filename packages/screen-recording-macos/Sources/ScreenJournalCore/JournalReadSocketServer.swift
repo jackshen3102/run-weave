@@ -185,7 +185,7 @@ final class JournalReadSocketServer: @unchecked Sendable {
             return try await service.analysisRequest(r.method, input: input)
         }
         let allowed: [String: Set<String>] = ["status": [], "days": ["cursor", "limit"], "ranges": ["day", "cursor", "limit"],
-            "thumbnail": ["rangeID", "catalogRevision"], "openView": ["rangeID", "catalogRevision"], "availability": ["viewID"],
+            "thumbnail": ["rangeID", "catalogRevision"], "openView": ["rangeID", "catalogRevision", "captureID", "viewID", "offset", "atMs"], "availability": ["viewID"],
             "frame": ["viewID", "captureID", "variant"], "closeView": ["viewID"],
             "packageManifest": ["viewID"], "packageMedia": ["viewID", "assetID", "offset", "length"]]
         guard let keys = allowed[r.method], Set(r.params.keys).isSubset(of: keys) else { throw JournalReadError("INVALID_ARGUMENT") }
@@ -195,7 +195,14 @@ final class JournalReadSocketServer: @unchecked Sendable {
         case "status": return try json(await service.status())
         case "days": return try json(await service.days(cursor: r.params["cursor"]?.text, limit: r.params["limit"]?.number ?? 7))
         case "ranges": return try json(await service.ranges(day: text("day"), cursor: r.params["cursor"]?.text, limit: r.params["limit"]?.number ?? 100))
-        case "openView": return try json(await service.open(rangeID: text("rangeID"), catalogRevision: text("catalogRevision")))
+        case "openView":
+            for key in ["offset", "atMs"] where r.params[key] != nil {
+                guard r.params[key]?.number != nil else { throw JournalReadError("INVALID_ARGUMENT") }
+            }
+            if r.params["viewID"] != nil {
+                return try json(await service.page(viewID: text("viewID"), offset: r.params["offset"]?.number, atMs: r.params["atMs"]?.number.map(Int64.init)))
+            }
+            return try json(await service.open(rangeID: text("rangeID"), catalogRevision: text("catalogRevision"), captureID: r.params["captureID"] == nil ? nil : text("captureID")))
         case "availability": return try json(await service.availability(viewID: text("viewID")))
         case "packageManifest": return try json(await service.packageManifest(viewID: text("viewID")))
         case "packageMedia":

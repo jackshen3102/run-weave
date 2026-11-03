@@ -11,6 +11,7 @@ struct ScreenRecordingPlaybackView: View {
     let initialCaptureID: String?
     let timeZone: String
     @State private var zoom: CGFloat = 1
+    @State private var showAllSamples = false
     @Environment(\.scenePhase) private var scenePhase
     init(session: AppSession, api: APIClient, range: ScreenRecordingRange, revision: String, timeZone: String, initialCaptureID: String? = nil) {
         self.initialCaptureID = initialCaptureID
@@ -47,7 +48,7 @@ struct ScreenRecordingPlaybackView: View {
             }
         }.padding().clarityMask()
         .task(id: lifecycle) {
-            if scenePhase == .active, session.foreground, session.authenticated, session.health.status == .online { await model.activate(range, revision: revision)
+            if scenePhase == .active, session.foreground, session.authenticated, session.health.status == .online { await model.activate(range, revision: revision, captureID: initialCaptureID)
                 if let id = initialCaptureID, let capture = model.view?.captures.first(where: { $0.id == id }) { model.select(capture) }
             }
             else { model.close() }
@@ -100,9 +101,20 @@ struct ScreenRecordingPlaybackView: View {
         }.disabled(model.state == "unavailable" || model.view == nil)
     }
     private var filmstrip: some View {
+        VStack(spacing: 4) {
+            if let view = model.view, let full = view.timelineRange {
+                HStack {
+                    Button("上一部分") { model.pageBy(-1) }.disabled(model.loadingPage || (view.pageOffset ?? 0) == 0)
+                    Spacer()
+                    Text("\((view.pageOffset ?? 0) + 1)–\((view.pageOffset ?? 0) + view.captures.count) / \(full.sampleCount) 次采样").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("下一部分") { model.pageBy(1) }.disabled(model.loadingPage || (view.pageOffset ?? 0) + view.captures.count >= full.sampleCount)
+                }
+            }
+            Toggle(showAllSamples ? "全部采样" : "代表画面 · 展开全部采样", isOn: $showAllSamples).font(.caption)
         ScrollView(.horizontal) {
             LazyHStack {
-                ForEach(model.state == "unavailable" ? [] : (model.view?.captures ?? [])) { capture in
+                ForEach(model.filmstripCaptures(all: showAllSamples)) { capture in
                     Button { model.select(capture) } label: {
                         VStack {
                             if let view = model.view {
@@ -116,6 +128,7 @@ struct ScreenRecordingPlaybackView: View {
                 }
             }
         }.frame(height: 80)
+        }
     }
     private func time(_ value: Int64) -> String {
         let formatter = DateFormatter(); formatter.timeStyle = .medium

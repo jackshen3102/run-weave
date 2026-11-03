@@ -128,7 +128,7 @@ struct JournalActivityDetail: View {
     var body: some View {
         VStack(alignment: .leading) {
             if playback != nil { Button("返回事项详情") { playback = nil; captureID = nil } }
-            if let playback { JournalPlaybackView(service: service, range: playback.range, revision: playbackRevision, initialCaptureID: captureID).id(playback.viewID) }
+            if let playback { JournalPlaybackView(service: service, range: playback.timelineRange ?? playback.range, revision: playbackRevision, initialCaptureID: captureID).id(playback.viewID) }
             else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {

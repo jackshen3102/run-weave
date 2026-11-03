@@ -12,6 +12,9 @@ import AppKit
     private let service: JournalReadService
     private var generation = 0
     private var request: Task<Void, Never>?
+    @Published private(set) var loadingPage = false
+    private var queuedPageSeek = false
+    var timelineRange: JournalRange? { view?.timelineRange ?? view?.range }
     private var pendingCapture: JournalCapture?
     private var clock: Task<Void, Never>?
     private var validity: Task<Void, Never>?
@@ -28,11 +31,11 @@ import AppKit
         let saved = UserDefaults.standard.integer(forKey: "journalPlaybackSpeed")
         speed = [20,40,60].contains(saved) ? saved : 20
     }
-    func open(_ range: JournalRange, revision: String) async {
+    func open(_ range: JournalRange, revision: String, captureID: String? = nil) async {
         do {
-            let result = try await service.open(rangeID: range.rangeID, catalogRevision: revision)
+            let result = try await service.open(rangeID: range.rangeID, catalogRevision: revision, captureID: captureID)
             if closed { await service.close(viewID: result.viewID); return }
-            view = result; position = Double(range.startMs)
+            view = result; position = Double(result.captures.first(where: { $0.id == captureID })?.capturedAtMs ?? result.range.startMs)
             seek(position, resume: false)
             clock = Task { [weak self] in
                 while !Task.isCancelled {
@@ -40,8 +43,8 @@ import AppKit
                     guard let self, !self.closed else { return }; self.tick()
                 }
             }
+            let stream = await service.invalidations()
             invalidations = Task { [weak self] in
-                let stream = await service.invalidations()
                 var initial = true
                 for await _ in stream {
                     guard let self, !Task.isCancelled else { return }
@@ -52,13 +55,18 @@ import AppKit
             validity = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self, !self.closed else { return }
+                    let checkingViewID = self.view?.viewID
                     do {
-                        let available = try await self.service.availability(viewID: result.viewID)
+                        guard !self.loadingPage, let currentView = self.view else {
+                            try await Task.sleep(for: .milliseconds(100)); continue
+                        }
+                        let available = try await self.service.availability(viewID: currentView.viewID)
+                        guard self.view?.viewID == currentView.viewID, !self.loadingPage else { continue }
                         guard !self.closed, !Task.isCancelled else { return }
                         if !available.invalidCaptureIDs.isEmpty {
                             self.invalidate("记录已过期或清理")
                         }
-                    } catch { self.invalidate("记录暂不可用") }
+                    } catch { if !self.loadingPage, self.view?.viewID == checkingViewID { self.invalidate("记录暂不可用") } }
                     try? await Task.sleep(for: .seconds(2))
                 }
             }
@@ -70,9 +78,9 @@ import AppKit
     }
     func pause() { controlGeneration += 1; resumeAfterLoad = false; if state == "playing" || state == "buffering" { state = "paused" } }
     func toggle() {
-        guard let view else { return }
+        guard let view, let range = timelineRange else { return }
         if state == "playing" || state == "buffering" { pause(); return }
-        if state == "unavailable" { return }
+        if state == "unavailable" || loadingPage { return }
         controlGeneration += 1; let control = controlGeneration
         resumeAfterLoad = true; state = "buffering"
         Task {
@@ -80,26 +88,27 @@ import AppKit
                 let validity = try await service.availability(viewID: view.viewID)
                 guard !closed, state != "unavailable", control == controlGeneration else { return }
                 guard validity.invalidCaptureIDs.isEmpty else { invalidate("记录已过期或清理"); return }
-                if position >= Double(view.range.endMs) { seek(Double(view.range.startMs), resume: true) }
+                if position >= Double(range.endMs) { seek(Double(range.startMs), resume: true) }
                 else { state = "playing"; lastTick = .now }
             } catch { invalidate("记录暂不可用") }
         }
     }
     private func tick() {
-        guard !closed, state != "unavailable" else { return }
+        guard !closed, state != "unavailable", !loadingPage else { return }
         if let view, view.expiresAt <= journalNowMs() { invalidate("记录已过期，请返回刷新"); return }
-        guard state == "playing", let view else { return }
+        guard state == "playing", let range = timelineRange else { return }
         let now = ContinuousClock.now
         let duration = lastTick.duration(to: now).components
         let delta = Double(duration.seconds) + Double(duration.attoseconds) / 1e18
         lastTick = now
-        let target = min(Double(view.range.endMs), position + delta * Double(speed) * 1000)
-        seek(target, resume: target < Double(view.range.endMs))
+        let target = min(Double(range.endMs), position + delta * Double(speed) * 1000)
+        seek(target, resume: target < Double(range.endMs))
     }
     func beginScrub() {
         guard !closed, state != "unavailable" else { return }
         wasPlaying = state == "playing" || (state == "buffering" && resumeAfterLoad)
-        isScrubbing = true; pause(); generation += 1; request?.cancel(); pendingCapture = nil
+        isScrubbing = true; pause()
+        if !loadingPage { generation += 1; request?.cancel(); pendingCapture = nil }
         state = "scrubbing"
     }
     func scrub(_ value: Double) {
@@ -126,15 +135,23 @@ import AppKit
         seek(position, resume: wasPlaying)
     }
     func step(_ direction: Int) {
-        guard let view, !view.captures.isEmpty else { return }
+        guard let view, !view.captures.isEmpty, !loadingPage else { return }
         pause(); let index = (pendingCapture ?? current).flatMap { c in view.captures.firstIndex { $0.id == c.id } } ?? 0
+        if index + direction < 0, (view.pageOffset ?? 0) > 0 {
+            loadPage(offset: (view.pageOffset ?? 0) - 900, resume: false, edge: -1); return
+        }
+        if index + direction >= view.captures.count, let range = view.timelineRange,
+           (view.pageOffset ?? 0) + view.captures.count < range.sampleCount {
+            loadPage(offset: (view.pageOffset ?? 0) + 900, resume: false, edge: 1); return
+        }
         let target = view.captures[max(0, min(view.captures.count - 1, index + direction))]
         seek(Double(target.capturedAtMs), resume: false, exact: target)
     }
     func select(_ capture: JournalCapture) { pause(); seek(Double(capture.capturedAtMs), resume: false, exact: capture) }
     private func seek(_ value: Double, resume: Bool, scrubbing: Bool = false, exact: JournalCapture? = nil) {
-        guard let view, !closed, state != "unavailable" else { return }
-        position = max(Double(view.range.startMs), min(Double(view.range.endMs), value))
+        guard let view, let range = timelineRange, !closed, state != "unavailable" else { return }
+        position = max(Double(range.startMs), min(Double(range.endMs), value))
+        if loadingPage { resumeAfterLoad = resume; queuedPageSeek = true; return }
         let ms = Int64(position)
         let gap = view.intervals.first { $0.kind != "privacy" && $0.kind != "unknown" && ms >= $0.startMs && ms < $0.endMs }
             ?? view.intervals.first { $0.kind == "unknown" && ms >= $0.startMs && ms < $0.endMs }
@@ -142,6 +159,10 @@ import AppKit
             generation += 1; request?.cancel(); pendingCapture = nil; image = nil; current = nil
             message = gap.kind == "unknown" ? "此区间无采样" : "此区间暂停或不可记录"
             state = scrubbing ? "scrubbing" : resume ? "playing" : "paused"; return
+        }
+        if let first = view.captures.first, let last = view.captures.last, let full = view.timelineRange,
+           ms < first.capturedAtMs || (ms > last.capturedAtMs && (view.pageOffset ?? 0) + view.captures.count < full.sampleCount) {
+            loadPage(atMs: ms, resume: resume, scrubbing: scrubbing); return
         }
         guard let target = exact ?? view.captures.last(where: { $0.capturedAtMs <= ms }) else { return }
         if target.availableUntilMs <= journalNowMs() { invalidate("记录已过期"); return }
@@ -187,8 +208,53 @@ import AppKit
             }
         }
     }
+    func filmstripCaptures(all: Bool) -> [JournalCapture] {
+        guard state != "unavailable", let captures = view?.captures, !captures.isEmpty else { return [] }
+        if all { return captures }
+        var candidates = [0]
+        for index in captures.indices.dropFirst() {
+            let current = captures[index], previous = captures[index - 1]
+            if current.visualChanged != false || current.privacyPlaceholder != previous.privacyPlaceholder ||
+               current.frontmostApplication?.id != previous.frontmostApplication?.id { candidates.append(index) }
+        }
+        if candidates.last != captures.count - 1 { candidates.append(captures.count - 1) }
+        if candidates.count > 24 {
+            candidates = (0..<24).map { candidates[Int((Double($0) * Double(candidates.count - 1) / 23).rounded())] }
+        }
+        return candidates.map { captures[$0] }
+    }
+    func pageBy(_ direction: Int) {
+        guard let view, let range = view.timelineRange, !loadingPage else { return }
+        let offset = (view.pageOffset ?? 0) + direction * 900
+        guard offset >= 0, offset < range.sampleCount else { return }
+        pause(); loadPage(offset: offset, resume: false, edge: direction)
+    }
+    private func loadPage(atMs: Int64? = nil, offset: Int? = nil, resume: Bool, scrubbing: Bool = false, edge: Int = 0) {
+        guard let previous = view, !closed, state != "unavailable" else { return }
+        generation += 1; let token = generation
+        request?.cancel(); pendingCapture = nil; loadingPage = true; queuedPageSeek = false
+        image = nil; current = nil; resumeAfterLoad = resume
+        message = "正在读取这个时段…"; state = scrubbing ? "scrubbing" : "buffering"
+        request = Task {
+            do {
+                let next = try await service.page(viewID: previous.viewID, offset: offset, atMs: atMs)
+                guard !Task.isCancelled, !closed, generation == token else { await service.close(viewID: next.viewID); return }
+                view = next
+                await service.close(viewID: previous.viewID)
+                guard !Task.isCancelled, !closed, generation == token else { return }
+                loadingPage = false
+                let exact = queuedPageSeek ? nil : edge < 0 ? next.captures.last : edge > 0 ? next.captures.first : nil
+                let time = queuedPageSeek ? Int64(position) : exact?.capturedAtMs ?? max(next.range.startMs, atMs ?? next.range.startMs)
+                queuedPageSeek = false
+                seek(Double(time), resume: resumeAfterLoad, scrubbing: isScrubbing, exact: exact)
+            } catch {
+                guard !Task.isCancelled, !closed, generation == token else { return }
+                loadingPage = false; invalidate("这个时段暂不可用，请返回刷新")
+            }
+        }
+    }
     private func invalidate(_ reason: String) {
-        generation += 1; request?.cancel(); pendingCapture = nil; scrubDispatch?.cancel(); scrubDispatch = nil
+        generation += 1; request?.cancel(); pendingCapture = nil; loadingPage = false; scrubDispatch?.cancel(); scrubDispatch = nil
         pause(); image = nil; current = nil; state = "unavailable"; message = reason
     }
     func close() {

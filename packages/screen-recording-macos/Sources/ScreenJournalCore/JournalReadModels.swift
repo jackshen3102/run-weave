@@ -50,6 +50,7 @@ struct JournalRange: Codable, Identifiable, Equatable {
     let previewCaptureID: String?
     let state: String
     var activityKind: String? = nil
+    var transientChangeCount: Int? = nil
 }
 struct JournalDay: Codable, Identifiable, Equatable {
     var id: String { day }
@@ -70,6 +71,8 @@ struct JournalView: Codable {
     let captures: [JournalCapture]
     let intervals: [JournalInterval]
     let expiresAt: Int64
+    var timelineRange: JournalRange? = nil
+    var pageOffset: Int? = nil
 }
 struct JournalPackage: Codable {
     struct Asset: Codable { let id: String; let byteLength: Int; let sha256: String; let width: Int; let height: Int }
@@ -103,6 +106,7 @@ struct JournalStatus: Codable {
     let days: [JournalDay]
     let latestReadyMs: Int64?
     let hasPending: Bool
+    var intervals: [JournalInterval]? = nil
 }
 enum JournalVariant: String, Codable { case thumb, preview, full
     var height: Int? { self == .thumb ? 180 : self == .preview ? 540 : nil }

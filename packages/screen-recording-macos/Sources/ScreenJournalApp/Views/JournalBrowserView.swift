@@ -71,8 +71,12 @@ struct JournalRawBrowserView: View {
     @State private var error = ""
     @State private var loading = true
     @State private var requestGeneration = 0
-    @State private var showQuiet = false
-    private var quietCount: Int { ranges.filter { $0.activityKind == "quiet" }.count }
+    private var dayIntervals: [JournalInterval] {
+        guard let day = days.first(where: { $0.day == selectedDay }) else { return [] }
+        return (status?.intervals ?? []).filter { $0.endMs > day.startMs && $0.startMs < day.endMs }.map {
+            JournalInterval(startMs: max(day.startMs, $0.startMs), endMs: min(day.endMs, $0.endMs), kind: $0.kind)
+        }.sorted { $0.startMs < $1.startMs }
+    }
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading) {
@@ -83,19 +87,33 @@ struct JournalRawBrowserView: View {
                 Button("刷新记录") { Task { await refresh() } }
                 if status?.hasPending == true { Text("最新录屏正在保存，完成后自动出现").font(.caption) }
                 if !ranges.isEmpty { Text("当天 \(ranges.count) 段录屏").font(.caption).foregroundStyle(.secondary) }
-                if quietCount > 0 { Toggle("显示稳定画面（\(quietCount) 段）", isOn: $showQuiet).font(.caption) }
-                List(ranges.filter { showQuiet || $0.activityKind != "quiet" }, selection: Binding(get: { selected?.rangeID }, set: { id in
+                List(selection: Binding(get: { selected?.rangeID }, set: { id in
                     guard selected?.rangeID != id else { return }
                     selected = ranges.first { $0.rangeID == id }; selectedRevision = revision
-                })) { range in
+                })) {
+                    ForEach(ranges) { range in
                     VStack(alignment: .leading) {
                     if let service = recorder.readService { JournalRangeThumbnail(service: service, range: range, revision: revision) }
                     VStack(alignment: .leading) {
                         Text("\(time(range.startMs))–\(time(range.endMs))").font(.headline).lineLimit(2)
-                        Text("\(range.sampleCount) 帧 · 显示器 \(range.displayID)").font(.caption).foregroundStyle(.secondary)
-                        if range.activityKind == "quiet" { Text("无输入且画面稳定").font(.caption).foregroundStyle(.secondary) }
+                        Text(summary(range)).font(.caption).foregroundStyle(.secondary)
+                        if let changes = range.transientChangeCount, changes > 0 {
+                            Text("含 \(changes) 次短暂画面变化").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     }.tag(range.rangeID).padding(.vertical, 5)
+                    }
+                    if !dayIntervals.isEmpty {
+                        Section("暂停与缺口") {
+                            ForEach(Array(dayIntervals.enumerated()), id: \.offset) { _, interval in
+                                VStack(alignment: .leading) {
+                                    Text("\(time(interval.startMs))–\(time(interval.endMs))").font(.caption)
+                                    Text(interval.kind == "systemInactive" ? "系统未活跃，未采集" : interval.kind == "paused" ? "采集已暂停" : interval.kind == "unknown" ? "无采样，原因未知" : "采集失败或不可记录")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                 }
                 if !error.isEmpty { Text(error).foregroundStyle(.secondary) }
                 if loading { ProgressView("正在读取录屏…") }
@@ -109,14 +127,12 @@ struct JournalRawBrowserView: View {
                 ContentUnavailableView("录屏列表暂不可用", systemImage: "exclamationmark.triangle", description: Text(error))
             } else if ranges.isEmpty {
                 ContentUnavailableView(status?.hasPending == true ? "录屏正在保存" : "当天没有录屏", systemImage: "video", description: Text(status?.hasPending == true ? "已有画面正在保存，完成后会自动显示。" : days.isEmpty ? "暂无可回看的录屏。请确认已授权并开启屏幕录制。" : "所选日期没有可回看的录屏，可以选择其他日期。"))
-            } else if !showQuiet && quietCount == ranges.count {
-                ContentUnavailableView("这些时段画面稳定", systemImage: "moon", description: Text("展开“显示稳定画面”可回看原始录屏。无输入不代表没有工作。"))
+
             } else {
                 ContentUnavailableView("选择一段录屏开始回看", systemImage: "play.rectangle", description: Text("当天已有 \(ranges.count) 段录屏，无需等待事项整理。"))
             }
         }
         .frame(minWidth: 980, minHeight: 650)
-        .onChange(of: showQuiet) { _, visible in if !visible && selected?.activityKind == "quiet" { selected = nil } }
         .task {
             while !Task.isCancelled {
                 await refresh()
@@ -134,6 +150,20 @@ struct JournalRawBrowserView: View {
             }
         }
         .task(id: selectedDay) { await loadRanges(resetSelection: true) }
+    }
+    private func summary(_ range: JournalRange) -> String {
+        let seconds = max(0, (range.endMs - range.startMs) / 1000)
+        let minutes = seconds / 60
+        let duration = seconds == 0 ? "单次采样" : minutes == 0 ? "不足 1 分钟" : minutes < 60 ? "\(minutes) 分钟" : "\(minutes / 60) 小时 \(minutes % 60) 分钟"
+        let kind: String
+        switch range.activityKind {
+        case "quiet": kind = "无输入 · 主体画面稳定"
+        case "passive": kind = "无输入 · 画面有变化"
+        case "unknown": kind = "无输入 · 变化状态未知"
+        case "privacy": kind = "隐私保护"
+        default: kind = "已记录画面"
+        }
+        return duration + " · " + kind
     }
     private func time(_ ms: Int64) -> String {
         let formatter = DateFormatter(); formatter.timeStyle = .short; formatter.timeZone = TimeZone(identifier: status?.timeZone ?? "") ?? .current
