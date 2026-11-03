@@ -29,8 +29,24 @@ actor StorageEngine {
         catalogCache = (key, value)
         return value
     }
-    func rangeFrames(_ bounds: JournalRangeBounds, settings: RecordingSettings) throws -> [JournalIndexedCapture] {
-        try JournalReadCatalog.frames(bounds, database: database, settings: settings)
+    func rangeFrames(_ bounds: JournalRangeBounds, settings: RecordingSettings, offset: Int = 0) throws -> [JournalIndexedCapture] {
+        try JournalReadCatalog.frames(bounds, database: database, settings: settings, offset: offset)
+    }
+    func rangeCount(_ bounds: JournalRangeBounds, settings: RecordingSettings) throws -> Int {
+        Int(try database.scalar("""
+            SELECT COUNT(*) FROM captures c JOIN segments s ON s.id=c.segment_id
+            WHERE c.session_id=? AND c.sequence>=? AND c.sequence<=? AND s.state='ready' AND s.started>=?
+            """, [bounds.sessionID,bounds.firstSequence,bounds.lastSequence,
+                   Date().timeIntervalSince1970 - Double(settings.retentionDays)*86400]) ?? "0") ?? 0
+    }
+    func rangeOffset(_ bounds: JournalRangeBounds, atMs: Int64, settings: RecordingSettings, throughSequence: Int? = nil) throws -> Int {
+        let count = Int(try database.scalar("""
+            SELECT COUNT(*) FROM captures c JOIN segments s ON s.id=c.segment_id
+            WHERE c.session_id=? AND c.sequence>=? AND c.sequence<=? AND c.captured_ms<=?
+            AND s.state='ready' AND s.started>=?
+            """, [bounds.sessionID,bounds.firstSequence,min(bounds.lastSequence, throughSequence ?? bounds.lastSequence),atMs,
+                   Date().timeIntervalSince1970 - Double(settings.retentionDays)*86400]) ?? "0") ?? 0
+        return max(0, count - 1) / 900 * 900
     }
     func analysisPage(after: Int64, settings: RecordingSettings) throws -> (frames: [JournalIndexedCapture], cursor: Int64) {
         let rows = try database.rows("""

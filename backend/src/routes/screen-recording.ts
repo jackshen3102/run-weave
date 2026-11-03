@@ -75,7 +75,19 @@ export function createScreenRecordingRouter(service: ScreenRecordingService, aut
   register("get", "/days", "days", req => cursor(req, 30));
   register("get", "/ranges", "ranges", req => ({ ...cursor(req, 200), day: text(req.query.day)! }));
   register("get", "/ranges/:rangeID/thumbnail", "thumbnail", req => ({ rangeID: text(req.params.rangeID)!, catalogRevision: text(req.query.catalogRevision)! }));
-  register("post", "/views", "openView", req => ({ rangeID: text(req.body?.rangeID)!, catalogRevision: text(req.body?.catalogRevision)! }));
+  register("post", "/views", "openView", req => {
+    const result: Record<string, string | number> = req.body?.viewID !== undefined
+      ? { viewID: text(req.body.viewID)! }
+      : { rangeID: text(req.body?.rangeID)!, catalogRevision: text(req.body?.catalogRevision)! };
+    if (req.body?.captureID !== undefined) result.captureID = text(req.body.captureID)!;
+    for (const key of ["offset", "atMs"] as const) {
+      if (req.body?.[key] !== undefined) {
+        if (!Number.isSafeInteger(req.body[key]) || req.body[key] < 0) throw new ScreenRecordingFailure(400, "INVALID_ARGUMENT");
+        result[key] = req.body[key];
+      }
+    }
+    return result;
+  });
   register("get", "/views/:viewID/availability", "availability", req => ({ viewID: text(req.params.viewID)! }));
   register("get", "/views/:viewID/frames/:captureID", "frame", req => {
     const variant = text(req.query.variant); if (!["thumb", "preview", "full"].includes(variant!)) throw new ScreenRecordingFailure(400, "INVALID_ARGUMENT");

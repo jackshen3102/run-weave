@@ -9,6 +9,7 @@ actor JournalReadService {
     private var captureState = "stopped"
     private struct Snapshot {
         let view: JournalView
+        let bounds: JournalRangeBounds
         let frames: [String: JournalIndexedCapture]
         let created: ContinuousClock.Instant
         var touched: ContinuousClock.Instant
@@ -150,11 +151,10 @@ actor JournalReadService {
             return try json(AnalysisCardsPage(items: Array(value.cards[offset..<end]),revision: value.revision,nextCursor: end < value.cards.count ? "\(value.revision):\(end)" : nil))
         case "resolveAnalysisCapture":
             let id = try required(r.captureID), c = try await catalog()
-            _ = try await engine.analysisCapture(id, settings: settings)
+            let frame = try await engine.analysisCapture(id, settings: settings).capture
             for range in c.ranges {
-                guard let bounds = c.members[range.rangeID] else { continue }
-                let frames = try await engine.rangeFrames(bounds, settings: settings)
-                if frames.contains(where: { $0.capture.id == id }) { return try json(["rangeID": range.rangeID,"catalogRevision":c.revision]) }
+                guard let bounds = c.members[range.rangeID], bounds.sessionID == frame.sessionID else { continue }
+                if (bounds.firstSequence...bounds.lastSequence).contains(frame.sequence) { return try json(["rangeID": range.rangeID,"catalogRevision":c.revision]) }
             }
             throw JournalReadError("FRAME_GONE")
         default: throw JournalReadError("INVALID_ARGUMENT")
@@ -165,7 +165,7 @@ actor JournalReadService {
         let catalog = try await catalog()
         return JournalStatus(version: 1, availability: "ready", deviceID: catalog.deviceID, deviceName: Host.current().localizedName ?? "Mac",
             timeZone: TimeZone.current.identifier, serverEpoch: serverEpoch, catalogRevision: catalog.revision, captureState: captureState,
-            retentionDays: settings.retentionDays, days: catalog.days, latestReadyMs: catalog.ranges.map(\.endMs).max(), hasPending: catalog.hasPending)
+            retentionDays: settings.retentionDays, days: catalog.days, latestReadyMs: catalog.ranges.map(\.endMs).max(), hasPending: catalog.hasPending, intervals: catalog.intervals)
     }
     private struct Cursor: Codable { let revision: String; let offset: Int; let scope: String }
     private func page<T: Codable>(_ items: [T], catalog: JournalCatalog, cursor: String?, limit: Int, maximum: Int, scope: String) throws -> JournalPage<T> {
@@ -193,19 +193,56 @@ actor JournalReadService {
         let items = boundary.map { d in c.ranges.filter { $0.startMs >= d.startMs && $0.startMs < d.endMs } } ?? []
         return try page(items, catalog: c, cursor: cursor, limit: limit, maximum: 200, scope: day)
     }
-    func open(rangeID: String, catalogRevision: String) async throws -> JournalView {
+    func open(rangeID: String, catalogRevision: String, captureID: String? = nil) async throws -> JournalView {
         let c = try await catalog()
         guard c.revision == catalogRevision else { throw JournalReadError("CATALOG_CHANGED", retryable: true) }
         guard let range = c.ranges.first(where: { $0.rangeID == rangeID }), let bounds = c.members[rangeID] else { throw JournalReadError("NOT_FOUND") }
-        let members = try await engine.rangeFrames(bounds, settings: settings)
-        guard members.count == range.sampleCount else { throw JournalReadError("CATALOG_CHANGED") }
+        var offset = 0
+        if let captureID {
+            let frame = try await engine.analysisCapture(captureID, settings: settings).capture
+            guard frame.sessionID == bounds.sessionID, (bounds.firstSequence...bounds.lastSequence).contains(frame.sequence) else { throw JournalReadError("NOT_FOUND") }
+            offset = try await engine.rangeOffset(bounds, atMs: Int64.max, settings: settings, throughSequence: frame.sequence)
+        }
+        return try await makeView(range: range, bounds: bounds, intervals: c.intervals, deviceID: c.deviceID, offset: offset)
+    }
+    func page(viewID: String, offset: Int? = nil, atMs: Int64? = nil) async throws -> JournalView {
+        guard (offset != nil) != (atMs != nil) else { throw JournalReadError("INVALID_ARGUMENT") }
+        let source = try snapshot(viewID)
+        let range = source.view.timelineRange ?? source.view.range
+        guard range.startMs <= (atMs ?? range.startMs), (atMs ?? range.endMs) <= range.endMs else { throw JournalReadError("INVALID_ARGUMENT") }
+        let pageOffset: Int
+        if let offset { pageOffset = offset }
+        else if let atMs {
+            let found = try await engine.rangeOffset(source.bounds, atMs: atMs, settings: settings)
+            pageOffset = atMs > source.view.range.endMs && found == (source.view.pageOffset ?? 0)
+                ? min(found + 900, (range.sampleCount - 1) / 900 * 900) : found
+        }
+        else { throw JournalReadError("INVALID_ARGUMENT") }
+        _ = try snapshot(viewID)
+        let result = try await makeView(range: range, bounds: source.bounds, intervals: source.view.intervals,
+            deviceID: source.view.deviceID, offset: pageOffset, expiresAt: source.view.expiresAt)
+        do { _ = try snapshot(viewID) }
+        catch { close(viewID: result.viewID); throw error }
+        return result
+    }
+    private func makeView(range: JournalRange, bounds: JournalRangeBounds, intervals: [JournalInterval], deviceID: String,
+                          offset: Int, expiresAt: Int64? = nil) async throws -> JournalView {
+        guard offset >= 0, offset < range.sampleCount, offset % 900 == 0 else { throw JournalReadError("INVALID_ARGUMENT") }
+        guard try await engine.rangeCount(bounds, settings: settings) == range.sampleCount else { throw JournalReadError("FRAME_GONE") }
+        let members = try await engine.rangeFrames(bounds, settings: settings, offset: offset)
+        guard members.count == min(900, range.sampleCount - offset), let first = members.first, let last = members.last else { throw JournalReadError("FRAME_GONE") }
         let captures = members.map(\.capture)
-        let view = JournalView(viewID: UUID().uuidString, serverEpoch: serverEpoch, deviceID: c.deviceID, range: range, captures: captures,
-            intervals: JournalReadCatalog.intervals(for: captures, events: c.intervals), expiresAt: min(captures.map(\.availableUntilMs).min() ?? journalNowMs(), journalNowMs() + 1800000))
+        // Older clients see a safe bounded page. New clients use timelineRange
+        // and pageOffset to seek across the full, frozen logical interval.
+        let window = JournalRange(rangeID: range.rangeID, startMs: first.capture.capturedAtMs, endMs: last.capture.capturedAtMs,
+            displayID: range.displayID, sampleCount: members.count, previewCaptureID: first.capture.id, state: "ready", activityKind: range.activityKind)
+        let view = JournalView(viewID: UUID().uuidString, serverEpoch: serverEpoch, deviceID: deviceID, range: window, captures: captures,
+            intervals: intervals.filter { $0.endMs > range.startMs && $0.startMs < range.endMs }, expiresAt: min(expiresAt ?? journalNowMs() + 1800000, captures.map(\.availableUntilMs).min() ?? journalNowMs()),
+            timelineRange: range, pageOffset: offset)
         let bytes = try JSONEncoder().encode(view).count
         prune()
         guard !closed, views.count < 8, views.values.reduce(0, { $0 + $1.bytes }) + bytes <= 8 * 1024 * 1024 else { throw JournalReadError("BUSY", retryable: true) }
-        views[view.viewID] = Snapshot(view: view, frames: Dictionary(uniqueKeysWithValues: members.map { ($0.capture.id, $0) }), created: .now, touched: .now, bytes: bytes)
+        views[view.viewID] = Snapshot(view: view, bounds: bounds, frames: Dictionary(uniqueKeysWithValues: members.map { ($0.capture.id, $0) }), created: .now, touched: .now, bytes: bytes)
         armExpiration()
         return view
     }
@@ -296,7 +333,7 @@ actor JournalReadService {
         guard c.revision == catalogRevision else { throw JournalReadError("CATALOG_CHANGED", retryable: true) }
         guard let bounds = c.members[rangeID] else { throw JournalReadError("NOT_FOUND") }
         let members = try await engine.rangeFrames(bounds, settings: settings)
-        guard let range = c.ranges.first(where: { $0.rangeID == rangeID }), members.count == range.sampleCount else { throw JournalReadError("CATALOG_CHANGED") }
+        guard let range = c.ranges.first(where: { $0.rangeID == rangeID }), members.count == min(900, range.sampleCount) else { throw JournalReadError("CATALOG_CHANGED") }
         guard let frame = members.first(where: { !$0.capture.privacyPlaceholder }) else { throw JournalReadError("PRIVATE_FRAME") }
         return try await image(frame, variant: .thumb, viewID: nil)
     }

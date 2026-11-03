@@ -8,6 +8,7 @@ struct JournalPlaybackView: View {
     let revision: String
     let initialCaptureID: String?
     @State private var zoom: CGFloat = 1
+    @State private var showAllSamples = false
     init(service: JournalReadService, range: JournalRange, revision: String, initialCaptureID: String? = nil) {
         self.initialCaptureID = initialCaptureID
         self.service = service
@@ -39,9 +40,19 @@ struct JournalPlaybackView: View {
                 Picker("速度", selection: Binding(get: { model.speed }, set: { model.setSpeed($0) })) { ForEach([20,40,60], id: \.self) { Text("\($0)×").tag($0) } }.frame(width: 140)
                 Spacer(); Text(time(Int64(model.position))).monospacedDigit()
             }
+            if let view = model.view, let full = view.timelineRange {
+                HStack {
+                    Button("上一部分") { model.pageBy(-1) }.disabled(model.loadingPage || (view.pageOffset ?? 0) == 0)
+                    Spacer()
+                    Text("\((view.pageOffset ?? 0) + 1)–\((view.pageOffset ?? 0) + view.captures.count) / \(full.sampleCount) 次采样").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("下一部分") { model.pageBy(1) }.disabled(model.loadingPage || (view.pageOffset ?? 0) + view.captures.count >= full.sampleCount)
+                }
+            }
+            Toggle(showAllSamples ? "全部采样" : "代表画面 · 展开全部采样", isOn: $showAllSamples).font(.caption)
             ScrollView(.horizontal) {
                 LazyHStack {
-                    ForEach(model.state == "unavailable" ? [] : (model.view?.captures ?? [])) { capture in
+                    ForEach(model.filmstripCaptures(all: showAllSamples)) { capture in
                         Button { model.select(capture) } label: {
                             VStack { if model.state != "unavailable", let view = model.view { JournalFilmstripFrame(service: service, viewID: view.viewID, capture: capture) }; Text(time(capture.capturedAtMs)).font(.caption2) }
                                 .frame(width: 80, height: 65).background(model.current?.id == capture.id ? Color.accentColor.opacity(0.25) : Color.gray.opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: 6))
@@ -51,7 +62,7 @@ struct JournalPlaybackView: View {
             }.frame(height: 80)
         }.padding()
         .task {
-            await model.open(range, revision: revision)
+            await model.open(range, revision: revision, captureID: initialCaptureID)
             if let id = initialCaptureID, let capture = model.view?.captures.first(where: { $0.id == id }) { model.select(capture) }
         }
         .onChange(of: model.state) { _, value in if value == "playing" { zoom = 1 } }

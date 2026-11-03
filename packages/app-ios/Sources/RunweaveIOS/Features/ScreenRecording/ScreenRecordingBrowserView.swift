@@ -24,7 +24,12 @@ struct ScreenRecordingBrowserView: View {
     @State private var accessDenied = false
     @State private var retryAutomatically = true
     @State private var rangeError = ""
-    @State private var showQuiet = false
+    private var dayIntervals: [ScreenRecordingInterval] {
+        guard let boundary = status?.days.first(where: { $0.day == day }) else { return [] }
+        return (status?.intervals ?? []).filter { $0.endMs > boundary.startMs && $0.startMs < boundary.endMs }.map {
+            ScreenRecordingInterval(startMs: max(boundary.startMs, $0.startMs), endMs: min(boundary.endMs, $0.endMs), kind: $0.kind)
+        }.sorted { $0.startMs < $1.startMs }
+    }
     private var selectableDays: [String] {
         Array(Set((status?.days.map(\.day) ?? []) + analysisDays)).sorted(by: >)
     }
@@ -135,9 +140,7 @@ struct ScreenRecordingBrowserView: View {
                     Text(status.hasPending ? "已有画面正在保存，完成后会自动显示。" : status.days.isEmpty ? "这台 Mac 暂无可回看的录屏。请在 Mac 的 ScreenJournal 中确认录屏已开启并获得授权。" : "所选日期没有可回看的录屏，可以选择其他日期。")
                 }
             } else if let api = session.api {
-                let quietCount = ranges.filter { $0.activityKind == "quiet" }.count
-                if quietCount > 0 { Toggle("显示稳定画面（\(quietCount) 段）", isOn: $showQuiet) }
-                ForEach(ranges.filter { showQuiet || $0.activityKind != "quiet" }) { range in
+                ForEach(ranges) { range in
                     NavigationLink {
                         ScreenRecordingPlaybackView(session: session, api: api, range: range, revision: revision, timeZone: status.timeZone)
                             .id("\(session.generation):\(status.serverEpoch):" + range.rangeID)
@@ -147,10 +150,22 @@ struct ScreenRecordingBrowserView: View {
                                 .foregroundStyle(.secondary).frame(width: 40, height: 40)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("\(time(range.startMs))–\(time(range.endMs))").font(.headline)
-                                Text("\(range.sampleCount) 帧 · 显示器 \(range.displayID)").font(.caption).foregroundStyle(.secondary)
-                                if range.activityKind == "quiet" { Text("无输入且画面稳定").font(.caption).foregroundStyle(.secondary) }
+                                Text(summary(range)).font(.caption).foregroundStyle(.secondary)
+                                if let changes = range.transientChangeCount, changes > 0 {
+                                    Text("含 \(changes) 次短暂画面变化").font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                         }
+                    }
+                }
+            }
+            if !dayIntervals.isEmpty {
+                Text("暂停与缺口").font(.headline)
+                ForEach(Array(dayIntervals.enumerated()), id: \.offset) { _, interval in
+                    VStack(alignment: .leading) {
+                        Text("\(time(interval.startMs))–\(time(interval.endMs))")
+                        Text(interval.kind == "systemInactive" ? "系统未活跃，未采集" : interval.kind == "paused" ? "采集已暂停" : interval.kind == "unknown" ? "无采样，原因未知" : "采集失败或不可记录")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -228,6 +243,20 @@ struct ScreenRecordingBrowserView: View {
             guard !Task.isCancelled, request == rangeRequest, generation == session.generation, day == selected else { return }
             rangeError = "录屏目录正在更新或连接暂时中断，正在自动重试。"
         }
+    }
+    private func summary(_ range: ScreenRecordingRange) -> String {
+        let seconds = max(0, (range.endMs - range.startMs) / 1000)
+        let minutes = seconds / 60
+        let duration = seconds == 0 ? "单次采样" : minutes == 0 ? "不足 1 分钟" : minutes < 60 ? "\(minutes) 分钟" : "\(minutes / 60) 小时 \(minutes % 60) 分钟"
+        let kind: String
+        switch range.activityKind {
+        case "quiet": kind = "无输入 · 主体画面稳定"
+        case "passive": kind = "无输入 · 画面有变化"
+        case "unknown": kind = "无输入 · 变化状态未知"
+        case "privacy": kind = "隐私保护"
+        default: kind = "已记录画面"
+        }
+        return duration + " · " + kind
     }
     private func time(_ ms: Int64) -> String {
         let formatter = DateFormatter(); formatter.timeStyle = .short; formatter.timeZone = TimeZone(identifier: status?.timeZone ?? "") ?? .current

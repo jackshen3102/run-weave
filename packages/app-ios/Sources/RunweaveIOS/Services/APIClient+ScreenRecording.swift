@@ -50,8 +50,16 @@ extension APIClient {
         let query = cursor.map { "&cursor=\(Self.pathComponent($0))" } ?? ""
         return try await authorized("/api/screen-recording/ranges?limit=200&day=\(Self.pathComponent(day))" + query, requestTimeout: 5, decodeError: screenError)
     }
-    func screenOpen(rangeID: String, catalogRevision: String) async throws -> ScreenRecordingView {
-        try await authorized("/api/screen-recording/views", method: "POST", body: ["rangeID": rangeID, "catalogRevision": catalogRevision], requestTimeout: 5, decodeError: screenError)
+    func screenOpen(rangeID: String, catalogRevision: String, captureID: String? = nil) async throws -> ScreenRecordingView {
+        var body: [String: Any] = ["rangeID": rangeID, "catalogRevision": catalogRevision]
+        if let captureID { body["captureID"] = captureID }
+        return try await authorized("/api/screen-recording/views", method: "POST", body: body, requestTimeout: 5, decodeError: screenError)
+    }
+    func screenPage(viewID: String, offset: Int?, atMs: Int64?) async throws -> ScreenRecordingView {
+        var body: [String: Any] = ["viewID": viewID]
+        if let offset { body["offset"] = offset }
+        if let atMs { body["atMs"] = atMs }
+        return try await authorized("/api/screen-recording/views", method: "POST", body: body, requestTimeout: 5, decodeError: screenError)
     }
     func screenAvailability(viewID: String) async throws -> ScreenRecordingAvailability {
         try await authorized("/api/screen-recording/views/\(Self.pathComponent(viewID))/availability", requestTimeout: 5, decodeError: screenError)
@@ -91,10 +99,10 @@ actor ScreenRecordingSource {
     private var decodingFull = false
     private var decodingThumbnail = false
     init(api: APIClient) { self.api = api }
-    func open(rangeID: String, catalogRevision: String) async throws -> ScreenRecordingView {
+    func open(rangeID: String, catalogRevision: String, captureID: String? = nil) async throws -> ScreenRecordingView {
         generation += 1
         let token = generation
-        let view = try await api.screenOpen(rangeID: rangeID, catalogRevision: catalogRevision)
+        let view = try await api.screenOpen(rangeID: rangeID, catalogRevision: catalogRevision, captureID: captureID)
         guard token == generation else { await api.screenClose(viewID: view.viewID); throw CancellationError() }
         activeView = view; confirmed = ProcessInfo.processInfo.systemUptime
         do { try await preparePackage(viewID: view.viewID) }
@@ -104,6 +112,35 @@ actor ScreenRecordingSource {
             throw error
         }
         return view
+    }
+    func page(viewID: String, offset: Int? = nil, atMs: Int64? = nil) async throws -> ScreenRecordingView {
+        try check(viewID)
+        generation += 1
+        let token = generation
+        let next = try await api.screenPage(viewID: viewID, offset: offset, atMs: atMs)
+        let heartbeat = Task {
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
+                guard !Task.isCancelled, token == generation else { return }
+                _ = try? await api.screenAvailability(viewID: next.viewID)
+            }
+        }
+        defer { heartbeat.cancel() }
+        do {
+            let downloaded = try await api.screenPackage(viewID: next.viewID)
+            try Task.checkCancellation()
+            guard token == generation else { throw CancellationError() }
+            try downloaded.validate(next)
+            let valid = try await api.screenAvailability(viewID: next.viewID)
+            guard token == generation, !Task.isCancelled, valid.invalidCaptureIDs.isEmpty else { throw CancellationError() }
+            cache.removeAll(); order.removeAll()
+            activeView = next; package = downloaded; confirmed = ProcessInfo.processInfo.systemUptime
+            await api.screenClose(viewID: viewID)
+            return next
+        } catch {
+            await api.screenClose(viewID: next.viewID)
+            throw error
+        }
     }
     func preparePackage(viewID: String) async throws {
         try check(viewID)

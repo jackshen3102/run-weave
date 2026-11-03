@@ -21,7 +21,8 @@ export interface ScreenRecordingRange {
   previewCaptureID?: string | null;
   state: 'ready';
   /** Capture signal only; quiet does not establish that no work occurred. */
-  activityKind?: 'active' | 'quiet' | 'privacy' | null;
+  activityKind?: 'active' | 'quiet' | 'privacy' | 'passive' | 'unknown' | null;
+  transientChangeCount?: number | null;
 }
 export interface ScreenRecordingCapture {
   id: string;
@@ -56,6 +57,7 @@ export interface ScreenRecordingStatus {
   days?: ScreenRecordingDay[];
   latestReadyMs?: number | null;
   hasPending?: boolean;
+  intervals?: ScreenRecordingInterval[] | null;
 }
 export interface ScreenRecordingPage<T> {
   items: T[];
@@ -66,7 +68,11 @@ export interface ScreenRecordingView {
   viewID: string;
   serverEpoch: string;
   deviceID: string;
+  /** Bounded evidence window, at most 900 captures (also safe for older clients). */
   range: ScreenRecordingRange;
+  /** Frozen logical interval; may span multiple evidence windows. */
+  timelineRange?: ScreenRecordingRange | null;
+  pageOffset?: number | null;
   captures: ScreenRecordingCapture[];
   intervals: ScreenRecordingInterval[];
   expiresAt: number;

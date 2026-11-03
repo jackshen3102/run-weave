@@ -50,6 +50,7 @@ struct ScreenRecordingRange: Codable, Identifiable, Equatable {
     let previewCaptureID: String?
     let state: String
     var activityKind: String? = nil
+    var transientChangeCount: Int? = nil
 }
 struct ScreenRecordingDay: Codable, Identifiable, Equatable {
     var id: String { day }
@@ -70,6 +71,8 @@ struct ScreenRecordingView: Codable {
     let captures: [ScreenRecordingCapture]
     let intervals: [ScreenRecordingInterval]
     let expiresAt: Int64
+    var timelineRange: ScreenRecordingRange? = nil
+    var pageOffset: Int? = nil
 }
 struct ScreenRecordingAvailability: Codable {
     let checkedAt: Int64
@@ -91,7 +94,8 @@ struct ScreenRecordingStatus: Codable {
     let days: [ScreenRecordingDay]
     let latestReadyMs: Int64?
     let hasPending: Bool
-    private enum CodingKeys: String, CodingKey { case version, availability, deviceID, deviceName, timeZone, serverEpoch, catalogRevision, captureState, retentionDays, days, latestReadyMs, hasPending }
+    let intervals: [ScreenRecordingInterval]?
+    private enum CodingKeys: String, CodingKey { case version, availability, deviceID, deviceName, timeZone, serverEpoch, catalogRevision, captureState, retentionDays, days, latestReadyMs, hasPending, intervals }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decode(Int.self, forKey: .version); availability = try c.decode(String.self, forKey: .availability)
@@ -105,6 +109,7 @@ struct ScreenRecordingStatus: Codable {
         days = try c.decodeIfPresent([ScreenRecordingDay].self, forKey: .days) ?? []
         latestReadyMs = try c.decodeIfPresent(Int64.self, forKey: .latestReadyMs)
         hasPending = try c.decodeIfPresent(Bool.self, forKey: .hasPending) ?? false
+        intervals = try c.decodeIfPresent([ScreenRecordingInterval].self, forKey: .intervals)
     }
 }
 enum ScreenRecordingVariant: String, Codable { case thumb, preview, full

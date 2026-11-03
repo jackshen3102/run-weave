@@ -19,18 +19,36 @@ struct JournalReadCatalog {
             """, [cutoff])
         var members: [String: JournalRangeBounds] = [:]
         var ranges: [JournalRange] = []
+        var blocks: [String: Int] = [:]
+        var block = 0
         var days: [Int64: JournalDay] = [:]
+        // Gaps are chronological facts across all sessions, including restarts.
+        // Return only gap boundaries, never an unbounded array of capture rows.
+        let samplingGaps = try db.rows("""
+            WITH observed AS (
+                SELECT c.captured_ms AS end_ms,
+                       LAG(c.captured_ms) OVER (ORDER BY c.captured_ms,c.id) AS previous_ms
+                FROM captures c JOIN segments s ON s.id=c.segment_id
+                WHERE s.state='ready' AND s.started>=?
+            )
+            SELECT previous_ms+60000 AS start_ms,end_ms FROM observed WHERE end_ms-previous_ms>60000
+            """, [cutoff]).compactMap { row -> JournalInterval? in
+                guard let start = Int64(row["start_ms"] ?? ""), let end = Int64(row["end_ms"] ?? "") else { return nil }
+                return JournalInterval(startMs: start, endMs: end, kind: "unknown")
+            }
         var hash = SHA256()
         for sessionRow in sessions {
+            block += 1
             guard let session = sessionRow["id"] else { throw JournalReadError("MEDIA_UNAVAILABLE") }
             var after = Int.min
             var firstID: String?, firstSequence = 0, lastSequence = 0
             var startMs: Int64 = 0, endMs: Int64 = 0
             var display: UInt32 = 0, count = 0
-            var previewID: String?, previousDay: Int64?, activityKind = "active"
+            var previewID: String?, previousDay: Int64?, activityKind = "active", applicationID: String?
             func finish() {
                 guard let id = firstID else { return }
                 let key = "r-" + id
+                blocks[key] = block
                 members[key] = JournalRangeBounds(sessionID: session, firstSequence: firstSequence, lastSequence: lastSequence)
                 ranges.append(JournalRange(rangeID: key, startMs: startMs, endMs: endMs, displayID: display,
                     sampleCount: count, previewCaptureID: previewID, state: "ready", activityKind: activityKind))
@@ -54,9 +72,15 @@ struct JournalReadCatalog {
                     if days[dayStart] == nil {
                         days[dayStart] = JournalDay(day: formatter.string(from: date), startMs: dayStart, endMs: Int64(dayInterval.end.timeIntervalSince1970 * 1000))
                     }
-                    let kind = CaptureActivity.kind(privateFrame: row["privacy_placeholder"] == "1",
-                        idleSeconds: row["idle_seconds"].flatMap(Double.init), visualChanged: row["visual_changed"].map { $0 == "1" })
-                    if firstID != nil && (display != nextDisplay || ms < endMs || ms - endMs > 120000 || CaptureActivity.crossesBreak(breaks, after: endMs, through: ms) || dayStart != previousDay || kind != activityKind || count >= 900) { finish() }
+                    let idle = (row["idle_seconds"].flatMap(Double.init) ?? 0) >= 120
+                    let kind = row["privacy_placeholder"] == "1" ? "privacy" : !idle ? "active" :
+                        row["visual_changed"] == nil ? "unknown" : row["visual_changed"] == "1" ? "passive" : "quiet"
+                    let boundary = firstID != nil && (display != nextDisplay || ms < endMs || ms - endMs > 120000 ||
+                        CaptureActivity.crossesBreak(breaks, after: endMs, through: ms) || dayStart != previousDay ||
+                        (applicationID != row["application_id"] && (activityKind != "active" || kind != "active")))
+                    if boundary || (firstID != nil && kind != activityKind) { finish() }
+                    if boundary { block += 1 }
+                    applicationID = row["application_id"]
                     if firstID == nil { firstID = id; firstSequence = sequence; startMs = ms; display = nextDisplay; activityKind = kind }
                     if previewID == nil && row["privacy_placeholder"] != "1" { previewID = id }
                     lastSequence = sequence; endMs = ms; count += 1; previousDay = dayStart
@@ -65,8 +89,31 @@ struct JournalReadCatalog {
             }
             finish()
         }
+        // A short visual interruption stays in its stable parent, with evidence
+        // retained. Never smooth across an app/system/privacy/day boundary.
+        var merged: [JournalRange] = []
+        var i = 0
+        while i < ranges.count {
+            var range = ranges[i]
+            while range.activityKind == "quiet", i + 2 < ranges.count {
+                let change = ranges[i + 1], next = ranges[i + 2]
+                guard change.activityKind == "passive", next.activityKind == "quiet",
+                      next.startMs - change.startMs <= 30000,
+                      blocks[range.rangeID] == blocks[change.rangeID], blocks[range.rangeID] == blocks[next.rangeID],
+                      let first = members[range.rangeID], let last = members[next.rangeID] else { break }
+                range = JournalRange(rangeID: range.rangeID, startMs: range.startMs, endMs: next.endMs,
+                    displayID: range.displayID, sampleCount: range.sampleCount + change.sampleCount + next.sampleCount,
+                    previewCaptureID: range.previewCaptureID, state: "ready", activityKind: "quiet",
+                    transientChangeCount: (range.transientChangeCount ?? 0) + 1)
+                members[range.rangeID] = JournalRangeBounds(sessionID: first.sessionID, firstSequence: first.firstSequence, lastSequence: last.lastSequence)
+                members.removeValue(forKey: change.rangeID); members.removeValue(forKey: next.rangeID)
+                i += 2
+            }
+            merged.append(range); i += 1
+        }
+        ranges = merged
         ranges.sort { $0.startMs == $1.startMs ? $0.rangeID < $1.rangeID : $0.startMs < $1.startMs }
-        let intervals = events.compactMap { row -> JournalInterval? in
+        let knownIntervals = events.compactMap { row -> JournalInterval? in
             guard let start = Double(row["started"] ?? ""), let end = Double(row["ended"] ?? ""), end > start else { return nil }
             let kind: String
             switch row["state"] {
@@ -77,6 +124,24 @@ struct JournalReadCatalog {
             }
             return JournalInterval(startMs: Int64(start * 1000), endMs: Int64(end * 1000), kind: kind)
         }
+        // Preserve uncovered portions of a sampling gap even when another part
+        // is explained by a system/error event (e.g. a failure detected later).
+        let covered = knownIntervals.sorted { $0.startMs < $1.startMs }
+        var intervals = knownIntervals
+        var after = 0
+        for gap in samplingGaps.sorted(by: { $0.startMs < $1.startMs }) {
+            while after < covered.count && covered[after].endMs <= gap.startMs { after += 1 }
+            var cursor = gap.startMs, index = after
+            while index < covered.count && covered[index].startMs < gap.endMs {
+                let event = covered[index]
+                if event.startMs > cursor { intervals.append(JournalInterval(startMs: cursor, endMs: min(event.startMs, gap.endMs), kind: "unknown")) }
+                cursor = max(cursor, event.endMs)
+                if cursor >= gap.endMs { break }
+                index += 1
+            }
+            if cursor < gap.endMs { intervals.append(JournalInterval(startMs: cursor, endMs: gap.endMs, kind: "unknown")) }
+        }
+        intervals.sort { $0.startMs < $1.startMs }
         // Hash the complete membership and availability semantics, not just a row count.
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         hash.update(data: Data((String(settings.retentionDays) + zone.identifier).utf8))
@@ -86,13 +151,12 @@ struct JournalReadCatalog {
             days: days.values.sorted { $0.startMs > $1.startMs }, ranges: ranges, members: members, intervals: intervals,
             hasPending: (Int(try db.scalar("SELECT COUNT(*) FROM segments WHERE state='writing'") ?? "0") ?? 0) > 0)
     }
-    static func frames(_ bounds: JournalRangeBounds, database db: RecordStore, settings: RecordingSettings) throws -> [JournalIndexedCapture] {
+    static func frames(_ bounds: JournalRangeBounds, database db: RecordStore, settings: RecordingSettings, offset: Int = 0) throws -> [JournalIndexedCapture] {
         let rows = try db.rows("""
             SELECT c.*,s.width,s.height,s.path,s.started AS segment_started FROM captures c JOIN segments s ON s.id=c.segment_id
             WHERE c.session_id=? AND c.sequence>=? AND c.sequence<=? AND s.state='ready' AND s.started>=?
-            ORDER BY c.sequence LIMIT 901
-            """, [bounds.sessionID, bounds.firstSequence, bounds.lastSequence, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
-        guard rows.count <= 900 else { throw JournalReadError("CATALOG_CHANGED") }
+            ORDER BY c.sequence LIMIT 900 OFFSET ?
+            """, [bounds.sessionID, bounds.firstSequence, bounds.lastSequence, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400, offset])
         return try indexed(rows, settings: settings)
     }
     static func indexed(_ rows: [[String: String]], settings: RecordingSettings) throws -> [JournalIndexedCapture] {
