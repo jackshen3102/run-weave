@@ -1,6 +1,9 @@
 ---
 name: playwright-cli
-description: Automate browser interactions, test web pages and work with Playwright tests.
+description: >-
+  操作浏览器页面、检查 UI、截图、浏览器验收及运行 Playwright 测试时使用。在 Runweave 中先解析 Profile/Group，
+  附着已有桌面浏览器，包括 SSH 远端且没有 CDP 环境变量的场景；禁止改用服务器无头浏览器。
+  代理、泳道、请求头和下载取回配合 using-rw。
 allowed-tools: Bash(playwright-cli:*) Bash(pnpm:*) Bash(npx:*) Bash(npm:*)
 ---
 
@@ -28,16 +31,29 @@ rules.
 
 ## Choose the browser target first
 
-- For the current Runweave Terminal Browser, when
-  `PLAYWRIGHT_MCP_CDP_ENDPOINT` is non-empty, resolve the Profile first and attach
+- In Runweave, use only its desktop Browser, including for external business
+  websites. Do not launch a server-side headless browser, standalone Chromium/Chrome,
+  or a Playwright standalone session. A missing endpoint, empty group, unavailable
+  desktop, or connection failure does not authorize a different browser.
+- For the current Runweave Terminal Browser, resolve the Profile first and attach
   to the resolver-returned endpoint (not the raw environment value). Do not
   run `playwright-cli open`; `open` navigates the active page and can replace a
   user's current URL with `about:blank`.
+- Run the resolver even when `PLAYWRIGHT_MCP_CDP_ENDPOINT` is empty. SSH terminals
+  can use their existing Runweave identity to resolve the desktop through Backend;
+  do not create your own tunnel or borrow another terminal's identity.
 - For a Runweave Dev Session, resolve the requested surface through
-  `pnpm dev:open` and attach to the returned endpoint. Do not substitute the
+  [runweave-dev-session](../runweave-dev-session/SKILL.md), use `pnpm dev:open`,
+  and attach to the returned endpoint. Do not substitute the
   ambient `PLAYWRIGHT_MCP_CDP_ENDPOINT`.
-- For a standalone browser that is not an existing Runweave surface, use
-  the isolated configuration and environment shown in the standalone quick start.
+- The standalone examples below apply only outside Runweave, when the user's
+  browser constraints permit it. They are never a Runweave fallback.
+
+For browser proxy/Whistle, swimlane/PPE headers, or retrieving downloads, read
+[using-rw](../using-rw/SKILL.md) and use its named `rw browser` commands.
+Do not substitute Playwright request interception, a fresh browser context,
+or server proxy environment variables for the user's desktop Profile settings.
+Use Playwright on the resolved Runweave page for interaction and UI verification.
 
 Attach to the current Runweave Terminal Browser only after resolving its
 Profile. Reuse that Profile-scoped session for later commands, preserve
@@ -56,10 +72,11 @@ pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
 pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" detach
 ```
 
-If the resolver reports a Profile route conflict or Whistle startup failure,
-stop and report it. Do not attach the ambient endpoint and claim the requested
-Profile was selected. On an old Runweave version, fallback is allowed only
-when no explicit Profile override was requested; preserve the CLI warning.
+If resolution or CDP attachment fails, including a Profile route conflict,
+Whistle startup failure, missing terminal binding, or unsupported old version,
+stop this browser path and report the actual error. Do not attach an unresolved
+ambient endpoint, switch browsers, copy login state, or restart the user's browser.
+HTTP checks and simulated pages are separate evidence, not browser acceptance.
 
 The repository-pinned CLI connects to an existing CDP browser with
 `noDefaults: true`, so it does not apply Playwright's download, focus, or media
@@ -113,8 +130,9 @@ and actual UI acceptance, even when a WebMCP tool reports success.
 
 ## Standalone browser quick start
 
-The examples below that use `open` apply to standalone browsers, not existing
-Runweave surfaces. CLI configuration merges with the global configuration;
+Only outside Runweave and when allowed by the user's browser constraints, the
+examples below that use `open` apply to standalone browsers. Never use them to
+recover a failed Runweave connection. CLI configuration merges with the global configuration;
 omitting `cdpEndpoint` does not clear an inherited endpoint. Use the tracked
 `templates/standalone.config.json`, which explicitly clears both remote
 endpoints, and unset endpoint/config environment overrides when opening.
