@@ -10,6 +10,12 @@ rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json]
 全局 `--instance`、`--config-dir` 由 CLI 入口解析，适用于全部 `browser` 子命令。
 在 Runweave 中优先使用 `$RUNWEAVE_CLI_BIN` 指向的实例绑定命令。
 
+在 Runweave 中，页面交互与验收使用 `toolkit:playwright-cli`，附着 resolver 返回的
+`cdpEndpoint`。解析或连接失败时报告实际错误；缺少环境变量、空 Group 或桌面不可用
+都不构成启动独立浏览器或服务器无头浏览器的依据，也不能借用其他终端身份。
+浏览器代理使用下方的 `browser proxy`，通过请求头路由的业务泳道使用 `browser headers`；
+不要用 Playwright 请求拦截或服务器代理环境变量替代桌面 Profile 设置。
+
 SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`、但存在 Runweave
 终端或项目身份时，CLI 自动通过远端 Backend 申请访问凭证并解析桌面 Browser；需要
 `RUNWEAVE_TERMINAL_SESSION_ID`、`RUNWEAVE_PROJECT_ID`、`RUNWEAVE_HOOK_TOKEN`，以及
@@ -41,6 +47,9 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
 ## 请求头规则（Agent 操作）
+
+通过 Header 路由的泳道或 PPE 环境也使用此入口；先从业务配置或文档确认 Header 名称、值和
+匹配域名，不能根据“泳道”猜参数，也不能把 Browser Profile 编号当成业务环境。
 
 简单的请求头设置优先用此入口：与右侧 Headers 面板共用保存和生效逻辑，不需要启用 Whistle
 或配置 HTTPS 拦截。自动解析当前实例、Worktree Profile 和 Group；SSH 终端复用既有 CDP
