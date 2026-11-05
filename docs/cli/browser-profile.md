@@ -255,6 +255,14 @@ resetPermissions 不会伪装已应用。Page session 中的 Target.setAutoAttac
 其余不支持的 page-session Browser/Target 操作明确报错。Cookie、Headers、下载和代理的
 具名操作沿用各自真实实现；已有危险命令仍拒绝。不要用成功附着推断全部原生 CDP 能力受支持。
 
+同一连接、同一 target 只提供一个 primary session。Browser session 内的
+`Target.attachToTarget` / `Target.detachFromTarget` 返回明确的 unsupported 错误；
+不能用 `page.context().newCDPSession(page)` 再创建一个页面会话，也不能返回已有
+primary sessionId 代替新会话，否则会覆盖 Playwright 的会话映射。root connection 的
+附着／分离仍然支持，重复附着同一 target 返回相同 primary sessionId。
+核对实际网络请求头时使用 Playwright 的 `request.allHeaders()`，响应头使用
+`response.allHeaders()`；简化的 `headers()` 结果可能不包含浏览器注入的请求头。
+
 ## 桌面浏览器代理控制
 
 ```bash
