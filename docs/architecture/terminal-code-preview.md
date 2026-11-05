@@ -146,6 +146,10 @@ iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)�
 - 读取失败保留可恢复的选择与输入，不能把失败响应当作空文件。Refresh 重读当前对象；Copy path 复制可定位路径，
   优先使用后端绝对路径，缺失时由 Project path 补齐；行引用通过渲染器选择范围产生，不复制整份正文作为路径。
 
+Web/Electron 的文件名搜索、文本正文和 Diff 查询在没有观察者后保留 60 秒，再回收缓存；
+仍被观察的查询不按此时限回收。这是缓存保留时间，不是自动刷新周期，也不改变 Git 变更列表的
+缓存策略。入口：[预览查询](../../frontend/src/features/terminal/queries/preview.ts)。
+
 ## 从终端打开文件
 
 - Desktop 与 Web 的终端文件路径使用 xterm link provider；HTTP(S) 仍由 WebLinksAddon 处理，OSC 8 的 `file://` 链接进入同一文件入口。

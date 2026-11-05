@@ -1,4 +1,4 @@
-# 桌面整窗无响应取证
+# 桌面无响应取证与崩溃恢复
 
 Electron 壳自动启动独立的诊断 Worker；不依赖 Web 页面里的“开始记录”。
 需要更新桌面壳并重启后生效，只更新 Backend 或前端 runtime 不会安装此能力。
@@ -15,6 +15,20 @@ Electron 壳自动启动独立的诊断 Worker；不依赖 Web 页面里的“�
    Stable 的实际目录以当前安装为准，常见为
    `~/Library/Logs/@runweave/electron/desktop-incidents/responsiveness/`。
 
+## 渲染进程崩溃恢复
+
+应用窗口的渲染进程以 `crashed`、`oom` 或 `abnormal-exit` 退出时，桌面壳在滚动
+60 秒内最多自动重新加载两次。第 3 次弹出“Runweave 界面恢复失败”，由用户选择
+“重新加载”或“暂不恢复”；手动重新加载会清空本窗口的崩溃计数。退出应用或窗口已销毁时不恢复。
+此策略只覆盖应用窗口，不接管内嵌 Browser 标签页；单纯无响应不会触发崩溃重载。
+终端任务仍由后台服务管理，界面恢复不代表任务或 Backend 健康已验证。
+
+诊断事件 `desktop.rendererRecovery.requested` 记录原因、退出码、近期次数及是否自动恢复，
+`desktop.rendererRecovery.reload` 记录重载请求，`desktop.rendererRecovery.failed` 记录恢复流程错误。
+结合 `desktop.renderProcess.gone` 与同版本、同架构的 macOS 崩溃报告判断原因；
+不能仅凭白屏或 Backend 健康就认定内存耗尽。
+实现入口：[渲染恢复](../../electron/src/desktop/renderer-recovery.ts)。
+
 ## 如何区分原因
 
 | 证据                                               | 可以支持的判断                                                                                         |
@@ -27,7 +41,9 @@ Electron 壳自动启动独立的诊断 Worker；不依赖 Web 页面里的“�
 
 可见窗口空闲时每 10 秒探查页面，状态不变时每 30 秒落一条状态记录；
 输入后合并探查，最多每 2 秒一次，隐藏或最小化窗口停止页面探查。页面探针最多一个在途。
-只记录布尔状态和次数，不记录输入内容、网页文本、地址、token 或 cookie。
+页面探针还记录 JS 堆已用、已分配及上限字节数（不可用时为 `null`），以及 `.xterm` 元素数量；
+这些值用于观察趋势，不代表进程总内存或真实活跃终端数。
+不记录输入内容、网页文本、地址、token 或 cookie。
 原生采样包含进程及模块路径，不包含页面截图。日志仅保存在本机，不自动上传。
 
 主线程和 Worker 的心跳检查各每秒一次。事件文件轮转为两份、每份最多 1 MiB。
