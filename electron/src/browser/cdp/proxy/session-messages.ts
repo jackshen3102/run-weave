@@ -18,7 +18,6 @@ import {
 } from "../../view/index.js";
 import type { CdpProxyConnectionState } from "./types.js";
 import { handleBrowserToolCommand } from "../../webmcp/handler.js";
-import { attachProxyTarget, detachProxyTarget } from "./target-attachment.js";
 import {
   getCurrentTargetInfos,
   getTargetInfoForRequest,
@@ -34,18 +33,6 @@ export async function handleBrowserSessionMessage(
   sessionId: string,
 ): Promise<void> {
   const { ws } = conn;
-
-  if (method === "Target.attachToTarget" || method === "Target.detachFromTarget") {
-    try {
-      const result = method === "Target.attachToTarget" ? attachProxyTarget(conn, params)
-        : (detachProxyTarget(conn, params, sessionId), {});
-      sendJson(ws, buildCdpSessionResult(id, sessionId, result));
-    } catch (error) {
-      sendJson(ws, buildCdpSessionError(id, sessionId, -32602,
-        error instanceof Error ? error.message : "Invalid target attachment"));
-    }
-    return;
-  }
 
   if (method === "Browser.getVersion") {
     sendJson(
