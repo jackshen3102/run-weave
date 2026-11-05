@@ -17,6 +17,9 @@ import { terminalQueryKeys } from "./keys";
 import { useTerminalRuntime } from "./provider";
 
 const PREVIEW_SEARCH_DEBOUNCE_MS = 250;
+// File bodies and diffs are reloadable; do not retain every visited file for
+// the connection's default 30 minutes. Active queries remain available.
+const PREVIEW_GC_TIME_MS = 60_000;
 
 export function useTerminalPreviewQueries(input: {
   projectId: string | null;
@@ -61,6 +64,7 @@ export function useTerminalPreviewQueries(input: {
     Boolean(input.selectedChangePath && input.selectedChangeKind);
 
   const search = useQuery({
+    gcTime: PREVIEW_GC_TIME_MS,
     queryKey: terminalQueryKeys.previewFileSearch({
       scope,
       projectId,
@@ -74,6 +78,7 @@ export function useTerminalPreviewQueries(input: {
     enabled: searchEnabled,
   });
   const file = useQuery({
+    gcTime: PREVIEW_GC_TIME_MS,
     queryKey: terminalQueryKeys.previewFile({
       scope,
       projectId,
@@ -95,6 +100,7 @@ export function useTerminalPreviewQueries(input: {
     enabled: changesEnabled,
   });
   const diff = useQuery({
+    gcTime: PREVIEW_GC_TIME_MS,
     queryKey: terminalQueryKeys.previewDiff({
       scope,
       projectId,
