@@ -9,7 +9,14 @@ export const responsivenessProbe = `(() => {
   }
   const body = document.body;
   const active = document.activeElement;
+  const memory = performance.memory;
   return {
+    heap: memory ? {
+      usedBytes: memory.usedJSHeapSize,
+      totalBytes: memory.totalJSHeapSize,
+      limitBytes: memory.jsHeapSizeLimit
+    } : null,
+    terminalSurfaceCount: document.querySelectorAll('.xterm').length,
     focused: document.hasFocus(), visible: document.visibilityState === 'visible',
     bodyPointerBlocked: !!body && getComputedStyle(body).pointerEvents === 'none',
     inert: !!document.querySelector('[inert]'),

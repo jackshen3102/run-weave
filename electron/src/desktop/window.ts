@@ -10,6 +10,7 @@ import {
 } from "electron";
 import pidusage from "pidusage";
 import { watchDesktopWindow } from "./responsiveness.js";
+import { watchRendererRecovery } from "./renderer-recovery.js";
 import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
 import type { SystemMonitorSnapshot } from "@runweave/shared/system-monitor";
 import type { PackagedBackendRuntime } from "../backend/runtime.js";
@@ -203,6 +204,7 @@ export function createWindow(options?: {
   });
 
   watchDesktopWindow(win);
+  watchRendererRecovery(win);
   win.once("ready-to-show", () => {
     win.show();
     options?.onReadyToShow?.(win);
