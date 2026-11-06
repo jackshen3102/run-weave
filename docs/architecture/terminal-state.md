@@ -226,3 +226,5 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 当前状态模型支持 Codex 与 Trae 系列 CLI。Claude、Coco 或普通 shell 命令需要后续扩展 `TerminalAgentKind` 或新增 `shell_running`，不要通过 tail 文本猜测提前混入当前模型。
 
 如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 终态或 Trae lifecycle 终态校正。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。
+
+仍标为 running 的线程不受最近 3 小时活动窗口限制，避免长任务丢失 Stop hook 后永久漏过补偿；其它线程沿用活动窗口，单轮候选仍最多 100 个。

@@ -3,11 +3,32 @@ import { discoverAppServer } from "@runweave/config-node/app-server/discovery";
 import { AppServerClient } from "../../app-server/client";
 import { resolveReplyThread } from "../completion/reply-preview";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
+import { readCodexContext } from "../runtime/codex-context";
+import { getTerminalSessionAgent } from "../state/terminal-state-service";
+
+function resolveHomeThread(manager: TerminalSessionManager, session: TerminalSessionRecord) {
+  const panelId = manager.getPanelWorkspace(session.id)?.activePanelId;
+  const panel = panelId ? manager.getPanel(panelId) : null;
+  const owner = panel ?? session;
+  if (getTerminalSessionAgent(owner) !== "codex") return resolveReplyThread(owner);
+  if (panel) {
+    const observed = readCodexContext(panel);
+    if (observed.managed) {
+      const context = observed.context;
+      const generation = manager.getPanelAgentOperationGeneration(session.id, panel.id);
+      return context?.primaryThreadId && !context.closed &&
+        (!generation || generation.operationId === context.operationId)
+        ? { id: context.primaryThreadId, provider: "codex" as const } : null;
+    }
+  }
+  // Without a native observation, only an explicit binding identifies the current Codex thread.
+  return owner.threadId ? resolveReplyThread(owner) : null;
+}
 
 export function homeConversation(manager: TerminalSessionManager, session: TerminalSessionRecord) {
   const panelId = manager.getPanelWorkspace(session.id)?.activePanelId;
   const owner = (panelId ? manager.getPanel(panelId) : null) ?? session;
-  const identity = resolveReplyThread(owner);
+  const identity = resolveHomeThread(manager, session);
   const key = identity ? `${identity.provider}:${identity.id}:${panelId ?? ""}` : null;
   const reply = owner.latestReply;
   return {
