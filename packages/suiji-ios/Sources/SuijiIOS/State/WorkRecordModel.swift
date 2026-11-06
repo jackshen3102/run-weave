@@ -1,6 +1,10 @@
 import SwiftUI
 @MainActor final class WorkRecordModel: ObservableObject {
   @Published private(set) var items: [WorkFact] = []
+  @Published private(set) var reports: [WorkReport] = []
+  @Published var reportDetail: WorkReport?
+  @Published var reportEditing = false
+  @Published private(set) var view = "all"
   @Published private(set) var days: [WorkDay] = []
   @Published private(set) var nextCursor: String?
   @Published private(set) var loading = false
@@ -18,6 +22,7 @@ import SwiftUI
   private let root = "api/suiji/v1/work-facts"
   init(session: SuijiSession) { self.session = session; client = session.client }
   private var active: Bool { guard let client else { return false }; return session?.isCurrent(client) == true }
+  var reportsSupported: Bool { session?.info?.features?.workReports == true }
   static func today() -> String { let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(identifier: "Asia/Shanghai"); formatter.dateFormat = "yyyy-MM-dd"; return formatter.string(from: Date()) }
   private func persist() async throws {
     guard let store else { throw MessageError(message: "工作草稿尚未就绪") }
@@ -32,8 +37,8 @@ import SwiftUI
     guard let client, active, !(more && (loading || nextCursor == nil)) else { return }
     readTask?.cancel()
     let current = UUID(); generation = current; loading = true; message = ""
-    var query = URLComponents(); query.queryItems = (local.from.isEmpty ? [] : [URLQueryItem(name: "from", value: local.from)]) + (local.to.isEmpty ? [] : [URLQueryItem(name: "to", value: local.to)]) + (more ? nextCursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? [] : [])
-    if !more { items = []; days = []; nextCursor = nil }
+    var query = URLComponents(); query.queryItems = (reportsSupported ? [URLQueryItem(name: "view", value: view)] : []) + (local.from.isEmpty ? [] : [URLQueryItem(name: "from", value: local.from)]) + (local.to.isEmpty ? [] : [URLQueryItem(name: "to", value: local.to)]) + (more ? nextCursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? [] : [])
+    if !more { items = []; reports = []; days = []; nextCursor = nil }
     defer { if current == generation { loading = false; readTask = nil } }
     do {
       let path = root + "?" + (query.percentEncodedQuery ?? "")
@@ -41,6 +46,7 @@ import SwiftUI
       let page = try await task.value
       guard active, generation == current else { return }
       items = more ? items + page.items : page.items
+      reports = more ? reports + (page.reports ?? []) : page.reports ?? []
       var merged = Dictionary(uniqueKeysWithValues: days.map { ($0.date, $0) }); for d in page.days { merged[d.date] = d }; days = merged.values.sorted { $0.date > $1.date }; nextCursor = page.nextCursor
     } catch {
       guard active, generation == current else { return }
@@ -144,4 +150,45 @@ import SwiftUI
       if let current = detail, let updated = result.facts.first(where: { $0.id == current.id }) { detail = updated }; await load()
     } catch { guard active else { return }; if let e = error as? APIError, !e.uncertain { local.batch?.pending = nil; try? await persist() }; message = error.localizedDescription }
   }
+  var reportDraft: WorkReportDraft? { guard let id = reportDetail?.id else { return nil }; return local.reportDrafts?[id] }
+  func show(_ value: String, from: String? = nil, to: String? = nil) async {
+    view = value
+    if let from, let to { await dates(from: from, to: to) } else { await load() }
+  }
+  func openReport(_ report: WorkReport) async {
+    guard let client else { return }; let current = generation
+    do { let value = try await client.request(WorkReportResponse.self, path: "api/suiji/v1/work-reports/" + report.id); if active, current == generation { reportDetail = value.report; reportEditing = false } } catch { if active { message = error.localizedDescription } }
+  }
+  func editReport() async {
+    guard let report = reportDetail, !busy else { return }
+    if local.reportDrafts == nil { local.reportDrafts = [:] }
+    if local.reportDrafts?[report.id] == nil { local.reportDrafts?[report.id] = WorkReportDraft(title: report.title, body: report.body, version: report.version) }
+    do { try await persist(); if active { reportEditing = true } } catch { if active { message = error.localizedDescription } }
+  }
+  func updateReport(title: String? = nil, body: String? = nil) {
+    guard let id = reportDetail?.id, var draft = reportDraft, draft.pending == nil, !busy else { return }
+    if let title { draft.title = title }; if let body { draft.body = body }; local.reportDrafts?[id] = draft
+    Task { do { try await persist() } catch { if active { message = error.localizedDescription } } }
+  }
+  func refreshReportVersion() async {
+    guard let report = reportDetail, reportDraft?.pending == nil, let client, !busy else { return }
+    do { let value = try await client.request(WorkReportResponse.self, path: "api/suiji/v1/work-reports/" + report.id); guard active else { return }; reportDetail = value.report; local.reportDrafts?[report.id]?.version = value.report.version; try await persist(); message = "已读取最新版本并保留草稿，请核对后保存。" } catch { if active { message = error.localizedDescription } }
+  }
+  func saveReport() async {
+    guard let report = reportDetail, var draft = reportDraft, let client, !busy, active else { return }
+    busy = true; message = ""; defer { if active { busy = false } }
+    do {
+      if draft.pending == nil {
+        guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, draft.title.unicodeScalars.count <= 80, !draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, draft.body.unicodeScalars.count <= 20000 else { throw MessageError(message: "标题1–80字，正文1–20000字") }
+        let payload: [String: Any] = ["title": draft.title.trimmingCharacters(in: .whitespacesAndNewlines), "body": draft.body, "expectedVersion": draft.version]
+        draft.pending = PendingOperation(path: "api/suiji/v1/work-reports/" + report.id, method: "PATCH", payload: try JSONSerialization.data(withJSONObject: payload)); local.reportDrafts?[report.id] = draft; try await persist()
+      }
+      guard active else { return }; let p = draft.pending!
+      let value = try await client.request(WorkReportResponse.self, path: p.path, method: p.method, data: p.payload, key: p.key)
+      let expected = try JSONSerialization.jsonObject(with: p.payload) as! [String: Any]
+      guard value.report.id == report.id, value.report.body == expected["body"] as? String, value.report.title == expected["title"] as? String, value.report.version == (expected["expectedVersion"] as? Int ?? 0) + 1 else { throw MessageError(message: "保存回执不匹配，请手动确认原请求") }
+      guard active else { return }; local.reportDrafts?[report.id] = nil; try await persist(); guard active else { return }; reportDetail = value.report; reportEditing = false; await load()
+    } catch { guard active else { return }; if let e = error as? APIError, !e.uncertain { local.reportDrafts?[report.id]?.pending = nil; try? await persist() }; message = error.localizedDescription }
+  }
+
 }

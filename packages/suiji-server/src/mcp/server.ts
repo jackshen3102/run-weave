@@ -11,6 +11,7 @@ import type { Mutation } from "../records/mutations";
 import * as schema from "./schema";
 import { executeTool, result, summaries } from "./results";
 import { readAttachment } from "./attachments";
+import { registerWorkReports } from "./work-reports";
 
 const readOnly = {
   readOnlyHint: true,
@@ -162,6 +163,7 @@ export function createMcpServer(
   server.registerTool("append_followup", { description: "追加本次成功执行的最终成果，保留原文与任务状态。不要写过程、失败或中断。上传成果使用同凭据 POST /mcp/uploads。结果未知时保留原键与参数，等待用户手动重试。agentName/sessionId 仅为自报显示信息。", inputSchema: schema.followupAppendInput, annotations: { ...write, destructiveHint: false } },
     ({ recordId, idempotencyKey, ...input }) => executeTool("append_followup", requestId, async () => result(await followups.append(context(idempotencyKey), recordId, input))));
   if (workRecords) {
+    registerWorkReports(server, workRecords.reports, ownerId, requestId);
     server.registerTool("list_work_sources", { description: "只读预期采集来源、实际覆盖和缺报范围；日期包含两端，最多366天。", inputSchema: z.object({ from: workSchema.workDate, to: workSchema.workDate }).strict(), annotations: readOnly },
       input => executeTool("list_work_sources", requestId, async () => result(await workRecords.sources(ownerId, input))));
     server.registerTool("list_work_facts", { description: "按工作日期倒序读取完整事实。日期包含两端；沿用nextCursor翻页，WORK_FEED_CHANGED时重新读取；来源编号不向用户展示。", inputSchema: workSchema.workList, annotations: readOnly },

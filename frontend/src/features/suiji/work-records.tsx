@@ -1,4 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { WorkReport } from "@runweave/shared/suiji";
+import { WorkReportCard, WorkReportDetail } from "./work-report";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { WorkRecordModel, workLabels, workToday } from "./work-record-model";
@@ -27,6 +29,8 @@ export function WorkRecords({
     if (active) void model.load();
   }, [active, model]);
   const { detail, draft, batch } = state;
+  const [report, setReport] = useState<WorkReport>();
+  if (report) return <WorkReportDetail original={report} model={model} writable={writable} onClose={() => setReport(undefined)} onLogs={() => { setReport(undefined); void model.show("logs", report.from, report.to); }} />;
   const dayTitle = (date: string) => {
     const delta = Math.round(
       (Date.parse(workToday() + "T00:00:00Z") -
@@ -36,6 +40,7 @@ export function WorkRecords({
     return `${delta === 0 ? "今天 · " : delta === 1 ? "昨天 · " : delta === 2 ? "前天 · " : ""}${date}`;
   };
   const empty = () => {
+    if (state.view === "reports") return "这个日期范围尚无周报";
     const days =
       state.from && state.to
         ? Math.floor(
@@ -83,6 +88,9 @@ export function WorkRecords({
             </Button>
           </div>
         </header>
+        {model.reportsSupported && <div className="flex gap-2 px-5 pb-3" aria-label="工作类型">
+          {([["all", "全部"], ["logs", "日志"], ["reports", "总结"]] as const).map(([value,label]) => <Button key={value} size="sm" variant={state.view === value ? "secondary" : "ghost"} onClick={() => void model.show(value)}>{label}</Button>)}
+        </div>}
         {menu ? (
           <div className="flex flex-wrap gap-2 border-y px-5 py-2">
             <Button
@@ -204,7 +212,7 @@ export function WorkRecords({
               {state.error}
             </p>
           ) : null}
-          {[...new Set(state.items.map((i) => i.workDate))].map((date) => (
+          {[...new Set([...state.items.map(i => i.workDate), ...state.reports.map(r => r.to)])].sort().reverse().map((date) => (
             <section key={date} className="pb-5">
               <h2 className="mb-3 text-sm font-medium text-muted-foreground">
                 {dayTitle(date)}{" "}
@@ -213,6 +221,7 @@ export function WorkRecords({
                 </span>
               </h2>
               <div className="flex flex-col gap-3">
+                {state.reports.filter(r => r.to === date).map(r => <WorkReportCard key={r.id} report={r} onOpen={() => setReport(r)} />)}
                 {state.items
                   .filter((i) => i.workDate === date)
                   .map((f) => (
@@ -234,7 +243,7 @@ export function WorkRecords({
               </div>
             </section>
           ))}
-          {!state.loading && !state.items.length ? (
+          {!state.loading && !state.items.length && !state.reports.length ? (
             <p className="py-16 text-center text-muted-foreground">{empty()}</p>
           ) : null}
           {state.loading ? (

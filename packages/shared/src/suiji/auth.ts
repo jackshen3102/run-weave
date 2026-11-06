@@ -11,6 +11,7 @@ export type SuijiInfo = SuijiIdentity & {
     followups: boolean;
     changes?: boolean;
     workRecords?: boolean;
+    workReports?: boolean;
     workSources?: boolean;
     workBrowserHistory?: boolean;
     workScreenTimeline?: boolean;

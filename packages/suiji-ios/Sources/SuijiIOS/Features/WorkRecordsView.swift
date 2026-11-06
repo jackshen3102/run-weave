@@ -6,7 +6,8 @@ struct WorkRecordsView: View {
   @State private var filtering = false
   var body: some View {
     Group {
-      if let id = model.editorID { WorkRecordEditor(model: model, id: id) }
+      if let report = model.reportDetail { WorkReportView(model: model, report: report) }
+      else if let id = model.editorID { WorkRecordEditor(model: model, id: id) }
       else if model.local.batch != nil { WorkReclassificationView(model: model) }
       else if let fact = model.detail {
         ScrollView { VStack(alignment: .leading, spacing: 20) {
@@ -18,7 +19,7 @@ struct WorkRecordsView: View {
         }.padding(20).frame(maxWidth: .infinity, alignment: .leading) }
       } else { feed }
     }.background(SuijiTheme.background).navigationTitle("工作").navigationBarTitleDisplayMode(.inline)
-      .toolbar { if model.editorID == nil, model.detail == nil, model.local.batch == nil {
+      .toolbar { if model.editorID == nil, model.detail == nil, model.local.batch == nil, model.reportDetail == nil {
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button("日期") { filtering = true }
           Menu { Button("刷新工作") { Task { await model.load() } }; Button("重新归类") { Task { await model.beginBatch([]) } }; if model.local.undo != nil { Button("撤销上次归类") { Task { await model.beginBatch([], undo: true) } } }; Button("AI 回顾", action: onReview) } label: { Image(systemName: "ellipsis").accessibilityLabel("工作更多") }
@@ -28,14 +29,18 @@ struct WorkRecordsView: View {
       .task { await model.initialize() }
       .clarityMask()
   }
-  private var dates: [String] { Array(Set(model.items.map(\.workDate))).sorted(by: >) }
+  private var dates: [String] { Array(Set(model.items.map(\.workDate) + model.reports.map(\.to))).sorted(by: >) }
   private var feed: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 14) {
+        if model.reportsSupported { Picker("工作类型", selection: Binding(get: { model.view }, set: { value in Task { await model.show(value) } })) { Text("全部").tag("all"); Text("日志").tag("logs"); Text("总结").tag("reports") }.pickerStyle(.segmented) }
         if !model.local.from.isEmpty || !model.local.to.isEmpty { Text("\(model.local.from.isEmpty ? "最早" : model.local.from) 至 \(model.local.to.isEmpty ? "最近" : model.local.to)").font(.caption).foregroundStyle(.secondary) }
         if !model.message.isEmpty { Text(model.message).foregroundStyle(.orange); Button("重新读取") { Task { await model.load() } } }
         ForEach(dates, id: \.self) { date in
           Text(title(date) + " · \(model.days.first { $0.date == date }?.count ?? 0) 条").font(.subheadline).foregroundStyle(.secondary).padding(.top, 8)
+          ForEach(model.reports.filter { $0.to == date }) { report in
+            WorkReportFeedButton(model: model, report: report)
+          }
           ForEach(model.items.filter { $0.workDate == date }) { fact in
             Button { Task { await model.open(fact.id) } } label: {
               VStack(alignment: .leading, spacing: 10) { Text("\(fact.project ?? "未归类") · \(fact.status.label)").font(.caption).foregroundStyle(.secondary); Text(fact.title).font(.headline); Text(fact.statement).font(.callout).lineSpacing(5) }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(SuijiTheme.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -43,12 +48,13 @@ struct WorkRecordsView: View {
           }
         }
         if model.loading { ProgressView("正在读取工作事实…").frame(maxWidth: .infinity).padding(30) }
-        else if model.items.isEmpty { EmptyState(title: emptyMessage, detail: "仅说明已导入范围，不推断其他机器或渠道没有工作。") }
+        else if model.items.isEmpty && model.reports.isEmpty { EmptyState(title: emptyMessage, detail: "仅说明已导入范围，不推断其他机器或渠道没有工作。") }
         if model.nextCursor != nil { Button("加载更多工作记录") { Task { await model.load(more: true) } }.disabled(model.loading).frame(maxWidth: .infinity).padding() }
       }.padding(.horizontal, 20).padding(.bottom, 90)
     }.refreshable { await model.load() }.overlay(alignment: .bottomTrailing) { Button { Task { await model.edit() } } label: { Image(systemName: "plus").font(.title2.bold()).frame(width: 54, height: 54).background(SuijiTheme.green, in: Circle()).foregroundStyle(SuijiTheme.onGreen) }.accessibilityLabel("补记工作事实").padding(20) }
   }
   private var emptyMessage: String {
+    if model.view == "reports" { return "这个日期范围尚无周报" }
     if !model.local.from.isEmpty, !model.local.to.isEmpty {
       let count = Int(WorkDateCodec.date(model.local.to).timeIntervalSince(WorkDateCodec.date(model.local.from)) / 86400) + 1
       if count > 0, model.days.count == count, model.days.allSatisfy({ $0.count == 0 && $0.coverage == "complete" }) { return "已导入范围内没有记录" }

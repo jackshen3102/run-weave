@@ -41,7 +41,7 @@ if (liveInfo.features?.workRecords) {
     if (name === "work-page") { workPage = JSON.parse(body); if (!workPage.items.length) throw new Error("Real work fixture required"); }
     await writeFile(path.join(artifacts, name + ".json"), body, { mode: 0o600 });
   }
-  const oldInfo = structuredClone(liveInfo); delete oldInfo.features.workRecords;
+  const oldInfo = structuredClone(liveInfo); delete oldInfo.features.workRecords; delete oldInfo.features.workReports;
   await writeFile(path.join(artifacts, "old-info.json"), JSON.stringify(oldInfo), { mode: 0o600 });
 }
 // Compile the SAME DTO definitions consumed by the iOS app, decode and re-encode actual HTTP JSON.
@@ -82,6 +82,7 @@ run([
   path.join(pkg, "Sources/SuijiIOS/Contracts/Reviews.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Followups.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/WorkRecords.swift"),
+  path.join(pkg, "Sources/SuijiIOS/Contracts/WorkReports.swift"),
   path.join(artifacts, "main.swift"),
   "-o",
   path.join(artifacts, "mapping"),

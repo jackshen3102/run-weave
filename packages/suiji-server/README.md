@@ -318,3 +318,11 @@ Lumi 的执行、成果写回与状态变更按当前用户授权执行。`follo
 既有 documented 状态和稳定事项键，无新增迁移或手机 DTO。原始访问在 Mac 本地合并，主题级引用
 只上传访问集合身份与内容摘要；Daily Record 的数量及简短要求见
 [浏览来源说明](../../plugins/toolkit/skills/daily-record/references/browser-history.md)。
+
+### 工作周报
+
+schema 12 / `features.workReports` 提供独立周报，按统计结束日期与每日事实统一分页；不写普通笔记、不增加事实条数。
+HTTP `GET/PATCH /api/suiji/v1/work-reports/:id` 用于阅读和人工编辑；MCP `find_work_report`、`get_work_report`、`publish_work_report` 用于已授权的 Agent 生成。
+发布校验周期内全部事实版本及 feedRevision，保存覆盖快照和修订，同周期唯一，人工编辑禁止自动覆盖。
+默认周五04:00按上海时间统计上周五至本周四七个自然日，补跑仍沿用原定周五；调度在 Runweave Backend，不在随记进程内增加时钟。
+准备/冻结/回读入口见 [随记技能](../../plugins/toolkit/skills/suiji/SKILL.md#工作周报)。

@@ -109,6 +109,7 @@ export const restoreProjects = z
   );
 export const workList = z
   .object({
+    view: z.enum(["all", "logs", "reports"]).default("all"),
     from: workDate.optional(),
     to: workDate.optional(),
     cursor: z.string().max(2048).optional(),

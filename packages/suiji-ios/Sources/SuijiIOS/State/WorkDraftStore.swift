@@ -1,5 +1,12 @@
 import Foundation
 import CryptoKit
+struct WorkReportDraft: Codable, Sendable {
+  var title: String
+  var body: String
+  var version: Int
+  var pending: PendingOperation?
+}
+
 struct WorkDraft: Codable, Sendable {
   var fields: WorkFactInput
   var base: WorkFact?
@@ -17,6 +24,7 @@ struct WorkLocal: Codable, Sendable {
   var from = ""
   var to = ""
   var drafts: [String: WorkDraft] = [:]
+  var reportDrafts: [String: WorkReportDraft]?
   var batch: WorkBatch?
   var undo: [WorkRestoreItem]?
 }

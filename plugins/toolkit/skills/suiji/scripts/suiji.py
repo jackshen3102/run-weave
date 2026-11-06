@@ -17,6 +17,7 @@ import urllib.request
 import uuid
 sys.dont_write_bytecode = True
 import work_records
+import work_reports
 
 
 class Failure(Exception):
@@ -173,6 +174,8 @@ def run_intent(client, path, intent):
             args = intent["arguments"]
             if not followup.get("id") or followup.get("recordId") != args["recordId"] or followup.get("body") != args["body"] or [a["id"] for a in followup.get("attachments", [])] != args.get("attachmentIds", []):
                 raise Failure("INVALID_FOLLOWUP_RESPONSE; original request retained")
+        elif intent["operation"] == "publish_work_report":
+            work_reports.verify(client, intent, result, Failure)
         elif intent["operation"] in ("import_work_facts", "reclassify_work_facts"):
             work_records.verify_result(client, intent, result, Failure)
             if intent.get("indexPath"):
@@ -219,7 +222,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--env-file", help="Protected 0600 file containing only the configured token variable")
-    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry", "work-prepare", "work-import", "work-list", "work-get", "work-reclassify", "work-reconcile", "work-sources"])
+    parser.add_argument("command", choices=["info", "list", "search", "get", "followups", "handoff", "read-attachment", "upload", "append", "complete", "retry", "work-prepare", "work-import", "work-list", "work-get", "work-reclassify", "work-reconcile", "work-sources", "report-prepare", "report-publish"])
+    parser.add_argument("--anchor", help="Original scheduled Friday, YYYY-MM-DD; catch-up keeps this period")
+    parser.add_argument("--wait-seconds", type=int, default=0, choices=range(0,3601), metavar="0..3600")
     for option in ("record-id", "attachment-id", "query", "tag", "status", "kind", "cursor", "input", "request", "file", "from", "to", "out", "fact-id", "job-config"):
         parser.add_argument("--" + option)
     args = parser.parse_args()
@@ -258,6 +263,14 @@ def main():
         raise Failure("BROWSER_HISTORY_UNAVAILABLE")
     if browser_payload and any(s.startswith("screen:") for day in browser_payload.get("days", []) for s in day.get("requestedScopes", [])) and not info.get("features", {}).get("workScreenTimeline"):
         raise Failure("SCREEN_TIMELINE_UNAVAILABLE")
+    if args.command.startswith("report-"):
+        if not info.get("features", {}).get("workReports"):
+            raise Failure("WORK_REPORTS_UNAVAILABLE")
+        if args.command == "report-prepare":
+            if not args.out: raise Failure("OUT_REQUIRED")
+            return work_reports.prepare(client, args, Failure, exclusive_write)
+        if not all((args.input, args.file, args.request)): raise Failure("INPUT_FILE_REQUEST_REQUIRED")
+        return work_reports.publish(client, args, Failure, private_read, exclusive_write, run_intent)
     if args.command == "work-reconcile":
         return work_records.reconcile(client, args.request, recovery, Failure, run_intent)
     if args.command == "work-sources":

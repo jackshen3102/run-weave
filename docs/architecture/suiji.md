@@ -145,7 +145,7 @@ schema10增加work_facts、work_fact_revisions、work_import_runs、work_day_cov
 
 事实按Asia/Shanghai业务日期排序，来源稳定身份与业务幂等各自负责去重。版本检查、人工字段保护、源时间单调和feedRevision分页防止跨客户端覆盖与静默漏读。覆盖回执仅说明实际请求范围，partial/unavailable/缺失不能变成没有工作。内部原生引用不包含原始聊天或本机路径，界面只呈现事实。
 
-Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。每日事实的采集与定时上报由下述 Daily Record 承担；随记工作界面不负责采集和调度，周报与大屏分类未接入。
+Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生使用SwiftUI与独立work草稿文件。工作替换第四个AI主入口，旧AI保留次级入口与普通记录范围，暂不读取新工作领域。每日事实的采集与定时上报由下述 Daily Record 承担；随记工作界面不负责采集和调度，大屏分类未接入。工作周报使用独立 schema12 存储，按结束日期与事实统一分页、混排，不计入事实条数；客户端以可选 `features.workReports` 兼容旧服务。
 
 合同和导入操作见[随记工作事实](../../plugins/toolkit/skills/suiji/references/work-records.md)；行为验收分别见[服务](../testing/suiji/work-records-service.testplan.yaml)与[客户端](../testing/suiji/work-records-clients.testplan.yaml)。源码、隔离服务、Electron、Simulator和生产部署证据分开报告。
 
@@ -177,3 +177,9 @@ devbox 关闭飞书和浏览来源。浏览接入只消费明确选中的本机�
 本机集成验证不替代真实 Mac/飞书、真实 devbox、服务回执与独立回读及到点调度证据；
 手动触发成功也不证明到点运行。旧研究中的远端拉包、随记来源采集与 `get_change`
 不属于当前 Daily Record 合同，不因过程计划曾列出而视为已实现。
+
+工作周报固定覆盖七个自然日，默认每周五 04:00（Asia/Shanghai）生成上周五至本周四的结果。
+生成只消费随记已上报工作事实；`report-prepare` 按实际来源覆盖有界等待日报，缺报日期在报告详情保留。
+来源必须包含周期内全部事实 ID/版本，并核对 feedRevision；同周期唯一，业务幂等与修订保护重复提交和并发修改。
+人工修改后的报告禁止自动覆盖。工作页提供全部/日志/总结、报告阅读与编辑、原始日志日期范围入口；
+未知编辑请求沿用隔离草稿冻结，不在启动或联网时重发。生成调度复用 Runweave Backend，不在随记服务内另建采集器或时钟。
