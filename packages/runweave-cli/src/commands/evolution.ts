@@ -7,6 +7,8 @@ import type {
   EvolutionRun,
   EvolutionRunStage,
   EvolutionSchedule,
+  EvolutionRepository,
+  RemoveEvolutionRepositoryRequest,
   ProviderPolicy,
   UpdateEvolutionScheduleRequest,
 } from "@runweave/shared/evolution";
@@ -45,7 +47,7 @@ interface EvolutionScheduleListResponse {
 }
 
 const EVOLUTION_USAGE =
-  "Usage: rw evolution <run|list|get|cancel|retry|providers|schedule> [options]";
+  "Usage: rw evolution <run|list|get|cancel|retry|providers|schedule|repository> [options]";
 const SCHEDULE_USAGE =
   "Usage: rw evolution schedule <list|create|update|delete> [options]";
 
@@ -61,14 +63,26 @@ export async function runEvolutionCommand(
     subcommand !== "cancel" &&
     subcommand !== "retry" &&
     subcommand !== "providers" &&
-    subcommand !== "schedule"
+    subcommand !== "schedule" &&
+    subcommand !== "repository"
   ) {
     throw new CliError(EVOLUTION_USAGE, 2);
   }
 
-  const parsed = parseArgs(args, new Set(["json", "plain"]));
+  const parsed = parseArgs(args, new Set(["json", "plain", "include-removed"]));
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveEvolutionAuth(parsed.options, io.env);
+
+  if (subcommand === "repository") {
+    await runRepositoryCommand(
+      parsed.positionals,
+      parsed.options,
+      mode,
+      auth,
+      io,
+    );
+    return;
+  }
 
   if (subcommand === "run") {
     const request = buildCreateRunRequest(parsed.options);
@@ -136,6 +150,89 @@ export async function runEvolutionCommand(
     });
   });
   writeOutput(io.stdout, mode, mode === "json" ? run : formatRun(run));
+}
+
+async function runRepositoryCommand(
+  positionals: string[],
+  options: Record<string, string | boolean>,
+  mode: "json" | "plain",
+  auth: AuthContext,
+  io: EvolutionIo,
+): Promise<void> {
+  const [action, repositoryId] = positionals;
+  const usage =
+    "Usage: rw evolution repository list [--include-removed] | remove <repositoryId> --expected-registration-version <hash> --reason <text>";
+  if (
+    (action !== "list" && action !== "remove") ||
+    positionals.length !== (action === "list" ? 1 : 2)
+  )
+    throw new CliError(usage, 2);
+  const allowed = new Set([
+    "instance",
+    "config-dir",
+    "profile",
+    "backend-port",
+    "json",
+    "plain",
+    ...(action === "list"
+      ? ["include-removed"]
+      : ["expected-registration-version", "reason"]),
+  ]);
+  for (const key of Object.keys(options))
+    if (!allowed.has(key))
+      throw new CliError(`Unknown option --${key}. ${usage}`, 2);
+  if (action === "list") {
+    const result = await requestEvolution(() =>
+      auth.requestJson<{ repositories: EvolutionRepository[] }>(
+        `/api/evolution/scopes${options["include-removed"] === true ? "?includeRemoved=true" : ""}`,
+      ),
+    );
+    writeOutput(
+      io.stdout,
+      mode,
+      mode === "json"
+        ? result
+        : result.repositories
+            .map(
+              (repository) =>
+                `${repository.repositoryId}\t${repository.name}\t${repository.registrationHistory?.at(-1)?.action === "removed" ? "removed" : repository.available ? "available" : "unavailable"}\t${repository.registrationVersion}`,
+            )
+            .join("\n"),
+    );
+    return;
+  }
+  const request: RemoveEvolutionRepositoryRequest = {
+    expectedRegistrationVersion: requireStringOption(
+      options,
+      "expected-registration-version",
+    ),
+    reason: requireStringOption(options, "reason").trim(),
+  };
+  if (
+    !repositoryId ||
+    !/^[a-f0-9]{64}$/u.test(repositoryId) ||
+    !/^[a-f0-9]{64}$/u.test(request.expectedRegistrationVersion) ||
+    !request.reason ||
+    request.reason.length > 2000
+  )
+    throw new CliError(usage, 2);
+  const result = await requestEvolution(() =>
+    auth.requestJson<EvolutionRepository>(
+      `/api/evolution/scopes/${encodeURIComponent(repositoryId)}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    ),
+  );
+  writeOutput(
+    io.stdout,
+    mode,
+    mode === "json"
+      ? result
+      : `Removed repository registration ${result.repositoryId}; historical data preserved`,
+  );
 }
 
 async function runScheduleCommand(

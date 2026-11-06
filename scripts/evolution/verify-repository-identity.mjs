@@ -6,7 +6,10 @@ import { mkdtemp, writeFile, stat, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { verifyRepositoryEntrypoints } from "./verify-repository-fixtures.mjs";
+import {
+  verifyRepositoryEntrypoints,
+  verifyRepositoryRemoval,
+} from "./verify-repository-fixtures.mjs";
 import { verifyRepositoryStartup } from "./verify-repository-startup.mjs";
 import { ActivityStore } from "../../backend/src/activity/recording/store.ts";
 import { ActivityEventFactory } from "../../backend/src/activity/recording/event-factory.ts";
@@ -246,6 +249,14 @@ try {
 
   // Seed old heads/revisions using real persistence; then remove only the additive
   // v6 schema in this owned fixture to exercise the v5 migration contract.
+  await verifyRepositoryRemoval(
+    root,
+    store,
+    scopes,
+    service,
+    evolutionFile,
+    passed,
+  );
   const now = new Date().toISOString();
   const runIds = [];
   for (const scope of ["legacy-a", "legacy-b"]) {

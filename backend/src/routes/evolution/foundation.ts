@@ -127,10 +127,39 @@ export function createEvolutionFoundationRouter(
   service: EvolutionService,
 ): Router {
   const router = Router();
-  router.get("/scopes", async (_request, response) => {
+  router.get("/scopes", async (request, response) => {
     try {
       if (!service.repositories) throw new Error("evolution_unavailable");
-      response.json({ repositories: await service.repositories.list() });
+      const { includeRemoved } = z
+        .object({
+          includeRemoved: z.enum(["true", "false"]).optional(),
+        })
+        .strict()
+        .parse(request.query);
+      response.setHeader("Cache-Control", "no-store");
+      response.json({
+        repositories: await service.repositories.list(
+          includeRemoved === "true",
+        ),
+      });
+    } catch (error) {
+      sendEvolutionError(response, error);
+    }
+  });
+  router.delete("/scopes/:repositoryId", async (request, response) => {
+    try {
+      if (!service.repositories) throw new Error("evolution_unavailable");
+      const { repositoryId } = z
+        .object({ repositoryId: z.string().regex(/^[a-f0-9]{64}$/u) })
+        .parse(request.params);
+      const input = z
+        .object({
+          expectedRegistrationVersion: z.string().regex(/^[a-f0-9]{64}$/u),
+          reason: z.string().trim().min(1).max(2000),
+        })
+        .strict()
+        .parse(request.body);
+      response.json(await service.repositories.remove(repositoryId, input));
     } catch (error) {
       sendEvolutionError(response, error);
     }
