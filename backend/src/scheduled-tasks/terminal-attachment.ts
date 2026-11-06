@@ -1,5 +1,6 @@
 import { codexScheduledArgs } from "./providers/codex-options";
 import { stat } from "node:fs/promises";
+import { settingText } from "@runweave/config-node";
 import type {
   OpenScheduledRunResponse,
   ScheduledRun,
@@ -9,6 +10,7 @@ import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalSessionCreationOptions } from "../terminal/application/create-session";
 import { createTerminalSession } from "../terminal/application/create-session";
 import { prepareTerminalAgent } from "../terminal/application/agent-preparation";
+import { isStalePendingAgentPrepare } from "../terminal/application/panel-metadata";
 import {
   ensureTerminalRuntime,
   resolveTmuxTarget,
@@ -263,27 +265,83 @@ export class ScheduledTerminalAttachment {
         });
         this.manager.markRunning(session.id);
       }
-      const preparation = await prepareTerminalAgent(
-        this.manager,
-        session,
-        this.options,
-        {
-          agent: "codex",
-          prompt: "Resume scheduled task conversation",
-          panelId,
-          resumeThreadId: run.threadRef.threadId,
-          args: codexScheduledArgs(run.snapshot),
-          cwd: run.cwd,
-        },
-        { resetPanelBeforeResume: true, skipInitialPrompt: true },
+      if (!tmuxService) throw new Error("terminal_tmux_unavailable");
+      const panel = this.manager.getPanel(panelId);
+      if (!panel) throw new Error("terminal_panel_missing");
+      const target = {
+        ...resolveTmuxTarget(session, tmuxService),
+        paneId: panel.tmuxPaneId,
+      };
+      const pane = (await tmuxService.listPanes(target)).find(
+        (item) => item.paneId === panel.tmuxPaneId,
       );
+      // A timeout does not stop the TUI. Reconfirm the original launch instead
+      // of preparing another agent (which also discards its operation identity).
+      let operationId =
+        pane?.agentPrepareCommand === "codex" &&
+        pane.agentPrepareExit?.startsWith("pending:") &&
+        !isStalePendingAgentPrepare(pane)
+          ? pane.agentPrepareExit.slice("pending:".length)
+          : null;
+      if (operationId) {
+        const generation = this.manager.getPanelAgentOperationGeneration(
+          session.id,
+          panelId,
+        );
+        if (
+          generation &&
+          (generation.operationId !== operationId ||
+            generation.provider !== "codex")
+        )
+          throw new Error("terminal_attachment_changed");
+        if (!generation) {
+          if (
+            !(await this.manager.beginPanelAgentPreparation(
+              session.id,
+              panelId,
+              operationId,
+              "codex",
+            ))
+          )
+            throw new Error("terminal_attachment_changed");
+          this.manager.releasePanelAgentPreparation(
+            session.id,
+            panelId,
+            operationId,
+          );
+        }
+      } else {
+        const preparation = await prepareTerminalAgent(
+          this.manager,
+          session,
+          this.options,
+          {
+            agent: "codex",
+            command: settingText("agents.codex.binary") ?? "codex",
+            prompt: "Resume scheduled task conversation",
+            panelId,
+            resumeThreadId: run.threadRef.threadId,
+            args: [
+              ...codexScheduledArgs(run.snapshot),
+              "-c",
+              'tui.resume_cwd="current"',
+            ],
+            cwd: run.cwd,
+          },
+          {
+            resetPanelBeforeResume: true,
+            skipInitialPrompt: true,
+            stageResumeCommand: true,
+          },
+        );
+        operationId = preparation.operationId;
+      }
       const deadline = Date.now() + READY_TIMEOUT_MS;
       while (Date.now() < deadline) {
         const currentSession = this.manager.getSession(terminalSessionId);
         const currentPanel = this.manager.getPanel(panelId);
-        const tmuxService = this.options.tmuxService;
         const current =
-          currentSession && currentPanel && tmuxService
+          currentSession && currentPanel
             ? await tmuxService
                 .listPanes(resolveTmuxTarget(currentSession, tmuxService))
                 .then((panes) =>
@@ -291,53 +349,86 @@ export class ScheduledTerminalAttachment {
                 )
                 .catch(() => null)
             : null;
-        const exitPrefix = `exit:${preparation.operationId}:`;
+        const exitPrefix = `exit:${operationId}:`;
         if (
           current?.agentPrepareExit?.startsWith(exitPrefix) &&
           this.manager.matchesPanelAgentOperationGeneration(
             terminalSessionId,
             panelId,
-            preparation.operationId,
+            operationId,
             "codex",
           )
         ) {
           await this.manager.updatePanelTerminalState(
             panelId,
             { state: "shell_idle", agent: null },
-            preparation.operationId,
+            operationId,
           );
           throw new Error(
             `terminal_agent_exit:${current.agentPrepareExit.slice(exitPrefix.length)}`,
           );
         }
+        let confirmedState: "agent_idle" | "agent_running" | null = null;
         if (
+          currentSession &&
+          currentPanel &&
           current?.cwd === run.cwd &&
           (current?.activeCommand === "codex" ||
             current?.paneCommand === "node") &&
           this.manager.matchesPanelAgentOperationGeneration(
             terminalSessionId,
             panelId,
-            preparation.operationId,
+            operationId,
             "codex",
           ) &&
-          (await confirmCodexResume(
+          (confirmedState = await confirmCodexResume(
             checkpoint,
             run.threadRef.threadId,
             run.cwd,
             run.snapshot,
+            {
+              panePid: (
+                await tmuxService.textAttachmentProcessIdentity({
+                  ...resolveTmuxTarget(currentSession, tmuxService),
+                  paneId: currentPanel.tmuxPaneId,
+                })
+              ).panePid,
+              panel: currentPanel,
+              operationId,
+            },
           ))
         ) {
+          const latestPanel = this.manager.getPanel(panelId);
+          if (
+            this.manager.getSession(terminalSessionId)?.status !== "running" ||
+            latestPanel?.status !== "running" ||
+            latestPanel.tmuxPaneId !== currentPanel.tmuxPaneId ||
+            !this.manager.matchesPanelAgentOperationGeneration(
+              terminalSessionId,
+              panelId,
+              operationId,
+              "codex",
+            ) ||
+            (latestPanel.threadId &&
+              (latestPanel.threadId !== run.threadRef.threadId ||
+                latestPanel.threadProvider !== "codex"))
+          )
+            throw new Error("terminal_attachment_changed");
           await this.manager.updatePanelThreadId(
             panelId,
             run.threadRef.threadId,
             "codex",
-            preparation.operationId,
+            operationId,
           );
-          await this.manager.updatePanelTerminalState(
-            panelId,
-            { state: "agent_idle", agent: "codex" },
-            preparation.operationId,
-          );
+          // Only complete startup; hooks may already have advanced the state.
+          const state = this.manager.getPanel(panelId)?.terminalState?.state;
+          if (state === "agent_starting" || state === "shell_idle") {
+            await this.manager.updatePanelTerminalState(
+              panelId,
+              { state: confirmedState, agent: "codex" },
+              operationId,
+            );
+          }
           await this.store.putBinding(run.id, {
             terminalSessionId,
             panelId,
