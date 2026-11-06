@@ -63,7 +63,13 @@ public final class NotificationCoordinator: ObservableObject {
     } catch {
       validStorage = false
       message = "提醒设置无法读取，原数据已保留"
+      record("notifications.storage.failed", ["errorType": String(reflecting: type(of: error))])
     }
+  }
+  private func record(_ message: String, _ details: [String: String] = [:]) {
+    DiagnosticStore.shared.append(scope: DiagnosticStore.analyticsScope,
+      DiagnosticRecord(at: ISO8601DateFormatter().string(from: Date()),
+        source: "native-ios:notifications", message: message, details: details))
   }
   private func persist() throws {
     guard validStorage else { throw AttachmentError("提醒设置无法读取") }
@@ -119,6 +125,7 @@ public final class NotificationCoordinator: ObservableObject {
     }
   }
   func enable(_ connection: BackendConnection, kind: NotificationKind = .battery) async throws {
+    record("notifications.enable.started", ["connection": connection.id, "kind": kind.rawValue, "storageValid": String(validStorage)])
     let scope = key(connection, kind)
     refreshFailures[scope] = nil
     guard validStorage else { throw AttachmentError("提醒设置无法读取") }
@@ -294,6 +301,7 @@ public final class NotificationCoordinator: ObservableObject {
     resumeTask = nil
   }
   func foreground(connections: [BackendConnection]) {
+    record("notifications.foreground", ["connections": String(connections.count), "bindings": String(bindings.count), "legacyBindings": String(legacyBindings.count), "storageValid": String(validStorage)])
     automaticConnections = connections
     badgeTask?.cancel()
     badgeTask = Task { [weak self] in
@@ -319,11 +327,17 @@ public final class NotificationCoordinator: ObservableObject {
       return
     }
     refreshing = true
+    record("notifications.refresh.started", ["connections": String(automaticConnections.count), "tokenConfirmed": String(tokenConfirmed)])
     defer {
       refreshing = false
-      if refreshAgain, !Task.isCancelled {
+      record("notifications.refresh.finished", ["cancelled": String(Task.isCancelled), "again": String(refreshAgain)])
+      if refreshAgain {
         refreshAgain = false
-        Task { await refreshEnabled() }
+        // A new foreground request may outlive the refresh it cancelled.
+        // Its replacement must not inherit the old task's cancellation decision.
+        if UIApplication.shared.applicationState != .background {
+          Task { await refreshEnabled() }
+        }
       }
     }
     // Sequential requests stay within the three-connection limit and serialize revoke before sync.
@@ -380,13 +394,22 @@ public final class NotificationCoordinator: ObservableObject {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       let scope = key(connection, kind)
       if bindings[scope]?.enabled == true || bindings[scope]?.pendingRevoke == true { continue }
-      guard let api = try? await connection.client() else { continue }
+      let api: APIClient
+      do { api = try await connection.client() }
+      catch {
+        record("notifications.connection.failed", ["connection": connection.id, "kind": kind.rawValue, "error": displayError(error)])
+        continue
+      }
       let authenticated = await api.hasCredentials()
-      guard authenticated else { continue }
+      guard authenticated else {
+        record("notifications.credentials.missing", ["connection": connection.id, "kind": kind.rawValue])
+        continue
+      }
       do {
         try await enable(connection, kind: kind)
         refreshFailures[scope] = nil
       } catch {
+        record("notifications.enable.failed", ["connection": connection.id, "kind": kind.rawValue, "error": displayError(error), "cancelled": String(Task.isCancelled)])
         if !Task.isCancelled, UIApplication.shared.applicationState != .background {
           refreshFailures[scope] = "提醒注册待更新：\(displayError(error))"
         }

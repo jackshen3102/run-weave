@@ -75,6 +75,10 @@ Evolution 与 Experience 共用 `SHA256(realpath(git-common-dir))` 作为仓库�
 submodule 分开。Project 只承担入口和来源，非 Git 目录不回退到 Project 或全局范围。
 公共解析器见 `backend/src/repository/identity.ts`。仓库移动导致身份改变，迁移不猜测重绑定。
 
+不可访问的仓库可通过 [CLI](../cli/evolution-cli.md#仓库登记) 校验登记版本后注销。
+默认仓库清单隐藏该登记，完整登记快照及注销审计保存于独立的不可变归档表；历史知识、运行、证据与 scope 查询保留。
+路径恢复及清单查询不会重新登记已注销仓库；SQLite 触发器也阻止旧版写入使其重新出现。
+
 页面的“全部仓库”创建持久 reflection batch：冻结当时可用仓库集合与取材上界，每仓库
 一个 Run，沿用全机 lease 顺序运行。幂等键防止重复创建，最多 100 个仓库，页面显示总预算。
 `global:runweave` 仅保留历史审计，新客户端不能创建旧全局 Run。

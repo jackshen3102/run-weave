@@ -3,6 +3,23 @@
 `rw evolution` 通过当前 CLI profile 对应的 Backend API 管理 Evolution Run、Schedule 和
 Provider 状态。它不会在 Backend 不可用时降级为直接读写 `learning.sqlite`。
 
+## 仓库登记
+
+```bash
+rw evolution repository list --instance stable --json
+rw evolution repository remove <repositoryId> \
+  --expected-registration-version <清单中的registrationVersion> \
+  --reason '临时仓库已不存在，移除登记' --instance stable --json
+rw evolution repository list --include-removed --instance stable --json
+```
+
+`remove` 仅注销当前所有已知路径均不可访问的仓库；可访问仓库和登记版本冲突均返回 409。
+注销使用 SQLite 事务校验版本，将完整登记快照及 `registrationHistory` 保存在独立归档表，默认清单隐藏该登记。
+它不删除磁盘目录、经验、洞察、候选、活动、分析运行、归属绑定或证据；历史 scope 查询仍可用。
+`--include-removed` 用于独立回读注销状态、理由和新版本。请求超时或冲突先回读，不盲目重试。
+路径恢复、清单查询和普通重新登记均不会恢复已注销仓库；当前不提供恢复接口。
+SQLite 触发器阻止旧版 Backend 重新写入同一仓库登记，独立归档禁止更新及删除，避免旧版覆盖注销历史。
+
 所有命令支持 `--json` 或 `--plain`，并复用通用的 `--profile`、`--backend-port` 和登录态。
 
 ## Run

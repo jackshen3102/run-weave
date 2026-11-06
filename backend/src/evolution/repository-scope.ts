@@ -5,9 +5,14 @@ import {
   type EvolutionRepository,
   type EvolutionRepositoryContext,
   type EvolutionRepositoryAttribution,
+  type RemoveEvolutionRepositoryRequest,
 } from "@runweave/shared/evolution";
 import { resolveRepositoryIdentity } from "../repository/identity";
 import type { EvolutionRepositoryStore } from "./repository-store";
+import {
+  repositoryRegistrationRemoved,
+  repositoryRegistrationVersion,
+} from "./repository-store";
 
 export class EvolutionRepositoryScopes {
   constructor(
@@ -42,7 +47,7 @@ export class EvolutionRepositoryScopes {
     };
   }
 
-  async list(): Promise<EvolutionRepository[]> {
+  async list(includeRemoved = false): Promise<EvolutionRepository[]> {
     for (const project of this.projects()) {
       if (project.path)
         await this.register(project.path, project.id).catch(() => undefined);
@@ -51,21 +56,53 @@ export class EvolutionRepositoryScopes {
       op: "list",
     })) as EvolutionRepository[];
     return Promise.all(
-      repositories.map(async (repository) => {
-        let available = false;
-        const paths: string[] = [];
-        for (const cwd of repository.paths) {
-          const identity = await resolveRepositoryIdentity(cwd).catch(
-            () => null,
-          );
-          if (identity?.repositoryId === repository.repositoryId) {
-            available = true;
-            paths.unshift(cwd);
-          } else paths.push(cwd);
-        }
-        return { ...repository, paths, available };
-      }),
+      repositories
+        .filter(
+          (repository) =>
+            includeRemoved || !repositoryRegistrationRemoved(repository),
+        )
+        .map(async (repository) => {
+          let available = false;
+          const paths: string[] = [];
+          for (const cwd of repository.paths) {
+            const identity = await resolveRepositoryIdentity(cwd).catch(
+              () => null,
+            );
+            if (identity?.repositoryId === repository.repositoryId) {
+              available = true;
+              paths.unshift(cwd);
+            } else paths.push(cwd);
+          }
+          return {
+            ...repository,
+            paths,
+            available,
+            registrationVersion: repositoryRegistrationVersion(repository),
+          };
+        }),
     );
+  }
+
+  async remove(
+    repositoryId: string,
+    request: RemoveEvolutionRepositoryRequest,
+  ): Promise<EvolutionRepository> {
+    const repository = (await this.list(true)).find(
+      (item) => item.repositoryId === repositoryId,
+    );
+    if (!repository) throw new Error("evolution_repository_not_found");
+    if (repository.available)
+      throw new Error("evolution_repository_still_available");
+    const removed = (await this.store.repository({
+      op: "remove",
+      repositoryId,
+      ...request,
+    })) as EvolutionRepository;
+    return {
+      ...removed,
+      available: false,
+      registrationVersion: repositoryRegistrationVersion(removed),
+    };
   }
 
   async resolve(input: {
@@ -102,7 +139,8 @@ export class EvolutionRepositoryScopes {
   }
 
   async queryScope(id: string): Promise<string> {
-    const repositories = await this.list();
+    // Removed registrations remain addressable for historical knowledge reads.
+    const repositories = await this.list(true);
     if (isEvolutionRepositoryId(id)) {
       if (!repositories.some((item) => item.repositoryId === id))
         throw new Error("evolution_repository_not_found");

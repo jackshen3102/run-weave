@@ -5,6 +5,18 @@ export interface EvolutionRepository {
   projectIds: string[];
   name: string;
   available?: boolean;
+  /** Hash of the persisted registration; required when removing it. */
+  registrationVersion?: string;
+  registrationHistory?: Array<{
+    action: "removed";
+    at: string;
+    reason: string;
+  }>;
+}
+
+export interface RemoveEvolutionRepositoryRequest {
+  expectedRegistrationVersion: string;
+  reason: string;
 }
 
 export interface EvolutionRepositoryContext {
