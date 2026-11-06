@@ -332,6 +332,10 @@ export async function processTerminalAgentHook(
   }
 
   if (input.hookEvent === "UserPromptSubmit" && !context.lifecycleObservation) {
+    await options.terminalSessionManager.mobileReplies?.beginTurn(
+      session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
+      input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,
+    ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.mobile-reply.failed", { error }); });
     await options.terminalSessionManager.feishuNotifications.beginTurn(
       session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
       input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,

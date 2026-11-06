@@ -8,7 +8,7 @@ export interface DeviceSubscription {
   sessionId: string;
   environment: PushEnvironment;
   /** Missing on older battery subscriptions. */
-  kind?: "battery" | "scheduled-task" | "terminal-unread";
+  kind?: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply";
   confirmedAt?: string;
   deviceToken: string;
   displayName: string;
@@ -63,6 +63,16 @@ export interface DeviceDelivery {
 }
 
 export interface DeviceMonitorData {
+  terminalReplies?: {
+    inputs: Record<string, { id: string; hash: string; sessionId: string; subscriptionIds: string[]; expiresAt: number }[]>;
+    turns: Record<string, { id: string; startEventId?: string; threadId: string | null; source: string; hash: string; sessionId: string | null; subscriptionIds: string[]; completed: boolean; startedAt: number }>;
+    deliveries: Record<string, {
+      id: string; terminalSessionId: string; panelId: string | null; sessionId: string; subscriptionId: string;
+      notification: { title: string; body: string; occurredAt: string };
+      state: "pending" | "sending" | "accepted" | "unknown" | "cancelled" | "failed";
+      attempts: number; createdAt: number; nextAttemptAt: number;
+    }>;
+  };
   unread?: { revision: number; count: number };
   schemaVersion: 1;
   hostId: string;

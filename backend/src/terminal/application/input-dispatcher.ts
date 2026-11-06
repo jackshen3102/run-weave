@@ -12,6 +12,7 @@ import type {
   TerminalPromptSubmitKey,
 } from "@runweave/shared/terminal-protocol";
 import { aiDiagnosticLog } from "../../diagnostic-logs/recorder";
+import { logger } from "../../logging/index";
 import type {
   TerminalSessionManager,
   TerminalSessionRecord,
@@ -44,6 +45,8 @@ const BRACKETED_PASTE_END = "\u001b[201~";
 const PROMPT_PASTE_CHUNK_SIZE = 3000;
 
 type TerminalInputDispatchOptions = {
+  /** Verified app login from the HTTP boundary; never accepted from request JSON. */
+  mobileReplySessionId?: string;
   codexInputContext?: CodexInputContext;
   /** Internal task service already owns a supervisor delivery lease for the fixed pane. */
   supervisorInput?: boolean;
@@ -256,6 +259,16 @@ export async function sendInputToSession(
   }
   const release =
     mode === "tmux_exit_copy_mode" || options.textAttachmentLease || options.supervisorInput || options.textAttachmentQueueDrain ? () => {} : beginTerminalInput(session, inputPaneId, intent);
+  let mobileInput: { id: string; panelId: string | null } | undefined;
+  const expectMobileReply = async (panelId: string | null) => {
+    if (!options.mobileReplySessionId || !(mode === "line" || mode === "prompt_paste" || (mode === "prompt_replace" && submit))) return;
+    const owner = panelId ? terminalSessionManager.getPanel(panelId) : session;
+    if (!getAgentForCommand(owner?.activeCommand ?? null)) return;
+    try {
+      const id = await terminalSessionManager.mobileReplies?.expectReply(session.id, panelId, data, options.mobileReplySessionId);
+      if (id) mobileInput = { id, panelId };
+    } catch (error) { logger.warn("terminal-reply.input.failed", { error }); }
+  };
   try {
     const ensured = options.supervisorInput ? null : await ensureTerminalRuntime({
       session,
@@ -347,6 +360,7 @@ export async function sendInputToSession(
       if (operationId?.startsWith("feishu:") && mode === "prompt_replace" && submit) {
         await terminalSessionManager.feishuNotifications.expectReply(session.id, panel?.id ?? null, data, operationId);
       }
+      await expectMobileReply(panel?.id ?? null);
       if (!options.agentLaunch && structuredInput && panel && codexObservation?.managed && "paneId" in target) {
         options.beforeTextAttachmentWrite?.();
         options.validateSupervisorTarget?.();
@@ -410,6 +424,7 @@ export async function sendInputToSession(
       if (operationId?.startsWith("feishu:") && mode === "prompt_replace" && submit) {
         await terminalSessionManager.feishuNotifications.expectReply(session.id, null, data, operationId);
       }
+      await expectMobileReply(null);
       if (!exitTmuxCopyMode) {
         const attachClipboardImages = getAgentForCommand(session.activeCommand) === "codex";
         if (mode === "prompt_replace") {
@@ -443,6 +458,10 @@ export async function sendInputToSession(
       runtimeKind: isTmuxBackedSession(session) ? "tmux" : "pty",
       acceptedAt: new Date().toISOString(),
     };
+  } catch (error) {
+    if (mobileInput) await terminalSessionManager.mobileReplies?.cancelInput(session.id, mobileInput.panelId, mobileInput.id)
+      .catch((error) => { logger.warn("terminal-reply.cancel.failed", { error }); });
+    throw error;
   } finally {
     release();
   }

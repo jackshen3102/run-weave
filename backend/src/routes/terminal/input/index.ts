@@ -8,6 +8,8 @@ import {
   sendTextAttachmentError,
 } from "./text-attachment";
 import type { Router } from "express";
+import type { AuthService } from "../../../auth/service";
+import { readBearerToken } from "../../../auth/middleware";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type {
   SendTerminalInterruptRequest,
@@ -49,6 +51,7 @@ const INTERRUPT_AGENT_IDLE_POLL_INTERVAL_MS = 300;
 const INTERRUPT_AGENT_IDLE_POLL_TIMEOUT_MS = 5_000;
 
 interface TerminalInputRouteOptions {
+  authService?: AuthService;
   textAttachmentDelivery?: TerminalTextAttachmentDelivery;
   ptyService?: PtyService;
   runtimeRegistry?: TerminalRuntimeRegistry;
@@ -179,6 +182,9 @@ export function registerTerminalInputRoutes(
       return;
     }
 
+    const identity = options.authService?.verifyAccessToken(readBearerToken(req) ?? "");
+    const mobileReplySessionId = identity && options.authService?.getActiveAppSession(identity.sessionId)
+      ? identity.sessionId : undefined;
     if (parsed.data.textAttachmentIds?.length) {
       if (!options.textAttachmentDelivery) {
         res.status(503).json({ message: "文本附件服务不可用" });
@@ -189,6 +195,7 @@ export function registerTerminalInputRoutes(
           await options.textAttachmentDelivery.composer(
             session.id,
             parsed.data,
+            mobileReplySessionId,
           ),
         );
       } catch (error) {
@@ -199,7 +206,7 @@ export function registerTerminalInputRoutes(
     try {
       const payload = await submitTerminalInput(
         terminalSessionManager,
-        options ?? {},
+        { ...options, mobileReplySessionId },
         session,
         parsed.data,
       );

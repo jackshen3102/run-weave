@@ -375,7 +375,7 @@ public final class NotificationCoordinator: ObservableObject {
       }
     }
     for (connection, kind) in automaticConnections.flatMap({ connection in
-      [NotificationKind.scheduledTask, .terminalUnread].map { (connection, $0) }
+      [NotificationKind.scheduledTask, .terminalUnread, .terminalReply].map { (connection, $0) }
     }) {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       let scope = key(connection, kind)

@@ -351,6 +351,7 @@ export class TerminalTextAttachmentDelivery {
   composer(
     sessionId: string,
     request: SendTerminalInputRequest,
+    mobileReplySessionId?: string,
   ): Promise<SendTerminalInputResponse> {
     if (
       !request.operationId ||
@@ -422,6 +423,7 @@ export class TerminalTextAttachmentDelivery {
             ptyService: this.pty,
             tmuxService: this.tmux,
             textAttachmentLease: true,
+            mobileReplySessionId,
             codexInputContext: request.codexInputContext,
             beforeTextAttachmentWrite: () => this.recheck(target, false),
           },

@@ -57,6 +57,8 @@ export class TerminalCompletionEventService {
 
     try { await this.terminalSessionManager.feishuNotifications.complete(input, completionRevision); }
     catch (error) { logger.warn("terminal-completion.feishu-policy.failed", { error }); }
+    try { await this.terminalSessionManager.mobileReplies?.complete(input); }
+    catch (error) { logger.warn("terminal-completion.mobile-reply.failed", { error }); }
 
     const event = this.terminalEventService.record({
       kind: "completion",
