@@ -10,7 +10,7 @@ cases:
       - 隔离 Backend 已认证且 CLI 来自本次源码，当前 cwd 属于 Git 仓库。
       - 准备包含原始证据行、未来有效期和多组触发词的合法记录，不提供 codePaths。
     steps:
-      - 用 CLI 保存记录并按匹配症状查询；确认返回完整记录、匹配词、repositoryId、namespace 和 lookupId，最多三条。
+      - 用 CLI 保存记录并按匹配症状查询；确认返回适用条件、反例、行动、验证方式和证据索引，不含 evidence[].archived，同时保留匹配词、repositoryId、namespace 和 lookupId，最多三条；用 show 读取同一记录，确认版本一致且保留完整归档摘录。
       - 分别用无关症状及仅包含 ASCII 触发词子串的查询检索；确认 matches 为空。
   - id: EXPERIENCE-002
     name: 仓库身份隔离
