@@ -44,7 +44,7 @@ export function SuijiWorkspace({
   onOpenLink?: (url: string) => void;
 }) {
   const { client, info, store } = connection;
-  const [work] = useState(() => new WorkRecordModel(client, store));
+  const [work] = useState(() => new WorkRecordModel(client, store, info.features?.workReports === true));
   const [reviewLocked, setReviewLocked] = useState(false);
   const [reviewReturn, setReviewReturn] = useState<{ tab: string; detail?: { record: SuijiRecord; citedVersion?: number } }>();
   const [tab, setTab] = useState("records"),

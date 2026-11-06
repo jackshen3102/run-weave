@@ -36,11 +36,13 @@ export type WorkDay = {
 };
 export type WorkFactPage = {
   items: WorkFact[];
+  reports?: import("./work-reports").WorkReport[];
   days: WorkDay[];
   nextCursor: string | null;
   feedRevision: string;
 };
 export type WorkFactFilter = {
+  view?: "all" | "logs" | "reports";
   from?: string;
   to?: string;
   cursor?: string;

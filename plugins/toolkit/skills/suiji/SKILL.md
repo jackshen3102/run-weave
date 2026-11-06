@@ -43,3 +43,9 @@ Agent 名称和会话 ID 只是可选显示信息；有真实可用值才填写�
 ## 工作事实
 
 服务声明 `features.workRecords=true` 时，可使用同一 CLI 的 `work-prepare`、`work-import`、`work-list`、`work-get`、`work-reclassify`。工作事实与旧 note/task、跟进、完成状态相互独立；不为工作事实设置任务完成状态。先读取现有事实，按用户要求核对材料和同事项合并，再使用稳定 externalKey/eventKey 导入。统一包与状态、覆盖规则见 [工作事实合同](references/work-records.md)。正文只展示事实，不展示来源编号；内部原生引用不包含路径或完整聊天。
+
+## 工作周报
+
+服务声明 `features.workReports=true` 时，可用 `report-prepare --out <新目录> [--anchor <原定周五>] [--wait-seconds 0..3600]` 只读准备资料。默认北京时间最近的周五为锚点，覆盖上周五至本周四七个自然日；补跑不滚动到执行日前七天。先读完整 prepared.json 的所有事实、覆盖回执和已有报告，跨日合并同一事项，保留已验证/Agent反馈/进行中/未完成的区别。缺报不表示没有工作。
+
+`report-publish --input <prepared.json> --file <0600的title/body JSON> --request <唯一新文件>` 保存到工作 tab，独立回读后确认。报告不进入普通笔记、不增加事实条数，同一周期唯一；来源变化须重新准备，人工编辑不得自动覆盖。未知结果冻结原请求，按主流程等待明确授权后 `retry`，定时任务也不自动重放周报写入。CLI 必须与已声明周报能力的服务配套，旧安装未含命令时使用仓库同版脚本，不替换全局技能。

@@ -21,7 +21,7 @@ public struct WorkFact: Codable, Identifiable, Equatable, Sendable {
   public let manualFields: [String]
 }
 public struct WorkDay: Codable, Equatable, Sendable { public let date: String; public let count: Int; public let coverage: String }
-public struct WorkFactPage: Codable, Sendable { public let items: [WorkFact]; public let days: [WorkDay]; public let nextCursor: String?; public let feedRevision: String }
+public struct WorkFactPage: Codable, Sendable { public let items: [WorkFact]; public let reports: [WorkReport]?; public let days: [WorkDay]; public let nextCursor: String?; public let feedRevision: String }
 struct WorkFactResponse: Codable, Sendable { let fact: WorkFact }
 struct WorkFactsResponse: Codable, Sendable { let facts: [WorkFact] }
 struct WorkFactInput: Codable, Equatable, Sendable {

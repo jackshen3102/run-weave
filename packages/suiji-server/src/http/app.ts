@@ -1,5 +1,6 @@
 import { WorkRecordService } from "../work-records/service";
 import { workRecordRouter } from "./work-records";
+import { workReportRouter } from "./work-reports";
 import { FollowupService } from "../followups/service";
 import { followupRouter } from "./followups";
 import { randomUUID } from "node:crypto";
@@ -140,7 +141,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { workRecords: true, workSources: true, workBrowserHistory: true, workScreenTimeline: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
+        features: { workRecords: true, workReports: true, workSources: true, workBrowserHistory: true, workScreenTimeline: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );
@@ -152,6 +153,7 @@ export function createApp(
   });
   const root = "/api/suiji/v1";
   app.use(`${root}/work-facts`, workRecordRouter(workRecords));
+  app.use(`${root}/work-reports`, workReportRouter(workRecords.reports));
   app.get(`${root}/correction-lexicon`, route(async (_req, res) => {
     res.json(await lexicons.get(res.locals.auth.ownerId));
   }));

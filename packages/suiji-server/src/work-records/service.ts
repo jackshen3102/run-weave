@@ -17,6 +17,7 @@ import * as repo from "./repository";
 import * as schema from "./schema";
 import { importFacts } from "./imports";
 import { coverageDays, listSources, sourceRange } from "./sources";
+import { WorkReportService, report, reportColumns } from "../work-reports/service";
 
 const cursorSchema = z
   .object({
@@ -25,6 +26,7 @@ const cursorSchema = z
     owner: z.string().uuid(),
     from: schema.workDate.nullable(),
     to: schema.workDate.nullable(),
+    view: z.enum(["all", "logs", "reports"]).optional(),
     revision: z.string().regex(/^\d+$/),
     date: schema.workDate,
     created: z.string().datetime(),
@@ -32,7 +34,8 @@ const cursorSchema = z
   })
   .strict();
 export class WorkRecordService {
-  constructor(private pool: pg.Pool) {}
+  readonly reports: WorkReportService;
+  constructor(private pool: pg.Pool) { this.reports = new WorkReportService(pool); }
   async get(owner: string, id: string) {
     return repo.fact(await repo.get(this.pool, owner, id));
   }
@@ -64,20 +67,24 @@ export class WorkRecordService {
           cursor.server !== head.server ||
           cursor.owner !== owner ||
           cursor.from !== (input.from ?? null) ||
-          cursor.to !== (input.to ?? null)
+          cursor.to !== (input.to ?? null) || (cursor.view ?? "all") !== input.view
         )
           throw invalid("游标不属于当前服务、账户或日期范围");
         if (cursor.revision !== head.revision) repo.changed(head.revision);
         const anchor = await client.query(
-          "SELECT 1 FROM work_facts WHERE owner_id=$1 AND id=$2 AND work_date=$3::date AND created_at=$4::timestamptz",
+          "SELECT 1 FROM work_facts WHERE owner_id=$1 AND id=$2 AND work_date=$3::date AND created_at=$4::timestamptz UNION ALL SELECT 1 FROM work_reports WHERE owner_id=$1 AND id=$2 AND period_to=$3::date AND created_at=$4::timestamptz",
           [owner, cursor.id, cursor.date, cursor.created],
         );
         if (!anchor.rowCount) throw invalid("游标位置无效");
       }
       const rows = (
-        await client.query<repo.WorkRow>(
-          `SELECT ${repo.columns} FROM work_facts w WHERE owner_id=$1 AND ($2::date IS NULL OR work_date >= $2) AND ($3::date IS NULL OR work_date <= $3)
-        AND ($4::date IS NULL OR (work_date,created_at,id)<($4::date,$5::timestamptz,$6::uuid)) ORDER BY w.work_date DESC,w.created_at DESC,w.id DESC LIMIT $7`,
+        await client.query<{ id: string; date: string; created: Date; kind: string }>(
+          `WITH feed AS (
+            SELECT id,work_date AS day,created_at AS created,'fact' AS kind FROM work_facts WHERE owner_id=$1
+            UNION ALL SELECT id,period_to AS day,created_at AS created,'report' AS kind FROM work_reports WHERE owner_id=$1
+          ) SELECT id,day::text AS date,created,kind FROM feed
+          WHERE ($8 = 'all' OR ($8 = 'logs' AND kind='fact') OR ($8 = 'reports' AND kind='report')) AND ($2::date IS NULL OR day >= $2) AND ($3::date IS NULL OR day <= $3)
+          AND ($4::date IS NULL OR (day,created,id)<($4::date,$5::timestamptz,$6::uuid)) ORDER BY day DESC,created DESC,id DESC LIMIT $7`,
           [
             owner,
             input.from ?? null,
@@ -86,12 +93,16 @@ export class WorkRecordService {
             cursor?.created ?? null,
             cursor?.id ?? null,
             input.limit + 1,
+            input.view,
           ],
         )
       ).rows;
-      const items = rows.slice(0, input.limit).map(repo.fact),
-        last = items.at(-1);
-      const dates = new Set(items.map(i => i.workDate));
+      const selected = rows.slice(0, input.limit), last = selected.at(-1);
+      const factRows = (await client.query<repo.WorkRow>(`SELECT ${repo.columns} FROM work_facts WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "fact").map(r => r.id)])).rows;
+      const items = selected.flatMap(r => factRows.filter(f => f.id === r.id).map(repo.fact));
+      const reportRows = (await client.query<Parameters<typeof report>[0]>(`SELECT ${reportColumns} FROM work_reports WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "report").map(r => r.id)])).rows;
+      const reports = selected.flatMap(r => reportRows.filter(f => f.id === r.id).map(report));
+      const dates = new Set(selected.map(i => i.date));
       if (input.from && input.to) {
         sourceRange.parse({ from: input.from, to: input.to });
         for (let t = Date.parse(input.from); t <= Date.parse(input.to); t += 86400000)
@@ -100,6 +111,7 @@ export class WorkRecordService {
       const days = await coverageDays(client, owner, [...dates]);
       return {
         items,
+        reports,
         days,
         feedRevision: head.revision,
         nextCursor:
@@ -112,8 +124,9 @@ export class WorkRecordService {
                   from: input.from ?? null,
                   to: input.to ?? null,
                   revision: head.revision,
-                  date: last.workDate,
-                  created: last.createdAt,
+                  view: input.view,
+                  date: last.date,
+                  created: last.created.toISOString(),
                   id: last.id,
                 }),
               ).toString("base64url")

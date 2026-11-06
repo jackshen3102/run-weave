@@ -2,6 +2,7 @@ import type {
   WorkFact,
   WorkFactInput,
   WorkFactPage,
+  WorkReport,
   WorkDay,
   WorkReclassification,
   WorkProjectRestore,
@@ -38,6 +39,8 @@ export type WorkBatch = {
 };
 type State = {
   items: WorkFact[];
+  reports: WorkReport[];
+  view: "all" | "logs" | "reports";
   days: WorkDay[];
   cursor: string | null;
   from: string;
@@ -55,6 +58,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : "操作失败"
 export class WorkRecordModel {
   state: State = {
     items: [],
+    reports: [],
+    view: "all",
     days: [],
     cursor: null,
     from: "",
@@ -72,6 +77,7 @@ export class WorkRecordModel {
   constructor(
     readonly client: SuijiClient,
     readonly store: SuijiDraftStore,
+    readonly reportsSupported = false,
   ) {}
   subscribe = (f: () => void) => {
     this.listeners.add(f);
@@ -124,13 +130,14 @@ export class WorkRecordModel {
     this.read?.abort();
     this.read = new AbortController();
     const sequence = ++this.generation,
-      { from, to, cursor } = this.state;
+      { from, to, cursor, view } = this.state;
     this.set({
       loading: true,
       error: "",
-      ...(!more ? { items: [], days: [], cursor: null } : {}),
+      ...(!more ? { items: [], reports: [], days: [], cursor: null } : {}),
     });
     const params = new URLSearchParams({
+      ...(this.reportsSupported ? { view } : {}),
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
       ...(more && cursor ? { cursor } : {}),
@@ -153,6 +160,7 @@ export class WorkRecordModel {
         : page.days;
       this.set({
         items: more ? [...this.state.items, ...page.items] : page.items,
+        reports: more ? [...this.state.reports, ...(page.reports ?? [])] : page.reports ?? [],
         days,
         cursor: page.nextCursor,
       });
@@ -170,6 +178,11 @@ export class WorkRecordModel {
     } finally {
       if (sequence === this.generation) this.set({ loading: false });
     }
+  }
+  persistReportDraft(key: string, value: unknown) { return this.persist(key, value); }
+  async clearReportDraft(key: string) { await this.writes; await this.store.remove(key); }
+  async show(view: State["view"], from = this.state.from, to = this.state.to) {
+    this.set({ view }); await this.dates(from, to);
   }
   async dates(from: string, to: string) {
     if (from && to && from > to) {
