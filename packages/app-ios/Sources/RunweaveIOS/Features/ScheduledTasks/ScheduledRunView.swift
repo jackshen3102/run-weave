@@ -73,8 +73,9 @@ struct ScheduledRunView: View {
         Button(opening ? "正在恢复对话…" : (run.waitingContinuation ? "停止自动继续并接管到终端" : "打开对话并继续追问")) { open() }
           .buttonStyle(.borderless).disabled(opening || !active || !session.canWrite)
       }
-      if run.terminalBinding?.attachmentState == "failed" { Text(run.terminalBinding?.error ?? "恢复失败，请重试").font(.caption).foregroundColor(.red) }
-      if let failure { Text(failure).font(.caption).foregroundColor(.red) }
+      if let message = failure ?? (run.terminalBinding?.attachmentState == "failed" && !opening ? run.terminalBinding?.error ?? "恢复失败，请重试" : nil) {
+        Text(message).font(.caption).foregroundColor(.red)
+      }
     }
     .padding(.vertical, 8)
     .listRowBackground(highlighted ? Color.accentColor.opacity(0.08) : Color.clear)

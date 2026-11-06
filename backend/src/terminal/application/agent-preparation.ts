@@ -28,6 +28,7 @@ import {
   TMUX_AGENT_PREPARE_EXIT_OPTION,
 } from "../tmux/service";
 import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
+import { withStagedAgentLaunch } from "./staged-agent-launch";
 
 const AGENT_SHELL_STARTUP_DELAY_MS = 10_000;
 const agentPreparationLogger = logger.child({
@@ -44,6 +45,8 @@ export interface PrepareTerminalAgentInternalOptions {
   validateSupervisorTarget?: () => void;
   resetPanelBeforeResume?: boolean;
   skipInitialPrompt?: boolean;
+  /** Scheduled resumes can exceed the PTY line limit before shell initialization. */
+  stageResumeCommand?: boolean;
 }
 
 export async function prepareTerminalAgent(
@@ -289,19 +292,25 @@ export async function prepareTerminalAgent(
         TMUX_AGENT_PREPARE_EXIT_OPTION,
         `pending:${operationId}`,
       );
-      await sendInputToSession(
+      const launchCommand = buildAgentLaunchCommand(
+        request,
+        operationId,
+        internalOptions?.skipInitialPrompt === true,
+      );
+      const submit = (command: string) => sendInputToSession(
         terminalSessionManager,
         { ...options, agentLaunch: true, supervisorInput: internalOptions?.supervisorInput, validateSupervisorTarget: internalOptions?.validateSupervisorTarget },
         session,
-        buildAgentLaunchCommand(
-          request,
-          operationId,
-          internalOptions?.skipInitialPrompt === true,
-        ),
+        command,
         "line",
         operationId,
         paneTarget,
       );
+      if (resetPanelBeforeResume && internalOptions?.stageResumeCommand) {
+        await withStagedAgentLaunch(launchCommand, submit);
+      } else {
+        await submit(launchCommand);
+      }
       commandSubmittedAt = new Date().toISOString();
       commandSubmitted = true;
     } catch (error) {
@@ -481,8 +490,10 @@ function buildAgentLaunchCommand(
       ]
         .filter(Boolean)
         .join(" ");
-  const codexContext = request.agent === "codex" && !request.commandLine?.trim()
-    ? `RUNWEAVE_CODEX_CONFIG_ARGS=${shellQuote(JSON.stringify(args))} RUNWEAVE_CODEX_EXECUTABLE=${shellQuote(command)} ` : "";
+  const codexContext =
+    request.agent === "codex" && !request.commandLine?.trim()
+      ? `RUNWEAVE_CODEX_CONFIG_ARGS=${shellQuote(JSON.stringify(args))} RUNWEAVE_CODEX_EXECUTABLE=${shellQuote(command)} `
+      : "";
   return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 

@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile, readlink, stat } from "node:fs/promises";
 
 const exec = promisify(execFile);
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +107,14 @@ export function hasLocalCodexBypass(args: readonly string[]): boolean {
 /** Read native argv without parsing the prompt or shell display text. */
 export async function readCodexProcessArguments(pid: number): Promise<string[] | null> {
   try {
+    if (process.platform === "linux") {
+      const root = `/proc/${pid}`;
+      const owner = await stat(root);
+      const executable = await readlink(`${root}/exe`);
+      const [command, ...args] = (await readFile(`${root}/cmdline`, "utf8")).split("\0").slice(0, -1);
+      return owner.uid === process.getuid?.() && path.basename(executable) === "codex" &&
+        path.basename(command ?? "") === "codex" ? args : null;
+    }
     const { stdout } = await exec(helper, ["--process-argv", String(pid)], {
       encoding: "buffer",
       timeout: 3000,
