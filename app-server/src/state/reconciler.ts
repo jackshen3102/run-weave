@@ -179,6 +179,8 @@ export class AgentThreadStatusReconciler {
       .filter((thread) => RECONCILED_AGENTS.has(thread.agent))
       .filter((thread) => !thread.threadId.startsWith("unknown-thread:"))
       .filter((thread) => {
+        // A lost Stop hook must remain recoverable even after a long turn.
+        if (thread.status === "running") return true;
         const lastActivityAtMs = Date.parse(thread.lastActivityAt);
         return !Number.isFinite(lastActivityAtMs) || lastActivityAtMs >= cutoff;
       })
