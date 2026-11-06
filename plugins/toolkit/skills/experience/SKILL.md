@@ -31,15 +31,19 @@ rw experience search --cwd "$PWD" --query '具体症状及相关工具' --json
 
 ## 核对与采用
 
-`matches` 最多三条。读取 `record.applicability`、`avoid`、`actions`、`verification` 和
-`evidence`。原始证据由绝对路径与行范围定位；原文件已清理时可读 `evidence.archived.text`，
-明确它是脱敏摘录。结合当前代码、版本、环境和实际结果决定是否采用。
+`matches` 最多三条。先读取 `record.applicability`、`avoid`、`actions`、`verification` 和
+`evidence` 索引，结合当前代码、版本、环境和实际结果判断是否适用。检索响应不附带历史摘录。
+明确不适用时直接否决，不因命中扩大任务范围，也不为完成流程读取全部历史日志。
 
-`excluded` 中的记录不作为当前建议；必要时通过下列入口调查原因：
+需要原始证据才能判断适用前提或选择处理路线时，再读取完整记录；不要求每次命中都调用：
 
 ```bash
 rw experience show EXPERIENCE_ID --cwd "$PWD" --json
 ```
+
+原始证据由绝对路径与行范围定位；原文件已清理时可读完整记录中的 `evidence[].archived.text`，
+明确它是历史脱敏摘录，不能代替本次现场验证。`excluded` 中的记录不作为当前建议，
+必要时也可通过 `show` 调查失效原因。结果回执仍使用本次检索命中的版本。
 
 经验独立存储，源码变化不自动使其失效；可选的 `codePaths` 仅供定位。
 同仓库 worktree 共用经验，但各自的版本、配置和环境仍须现场核对。经验是线索，

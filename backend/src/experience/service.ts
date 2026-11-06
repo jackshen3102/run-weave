@@ -86,7 +86,22 @@ export class ExperienceService {
       lookupId: randomUUID(),
       repositoryId: scope.repositoryId,
       namespace: scope.namespace,
-      matches: matches.slice(0, 3),
+      matches: matches.slice(0, 3).map((match) => ({
+        ...match,
+        record: {
+          ...match.record,
+          // Keep archived excerpts in storage; show loads them on demand.
+          evidence: match.record.evidence.map(
+            ({ path, startLine, endLine, note, sha256 }) => ({
+              path,
+              startLine,
+              endLine,
+              note,
+              sha256,
+            }),
+          ),
+        },
+      })),
       excluded,
     };
     withExperienceStore(scope.directory, (store) =>
