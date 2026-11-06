@@ -12351,5 +12351,29 @@
     "count": 1,
     "category": "distribution",
     "reason": "读取 Git 分发输入或校验和写入不可变 Toolkit 发布文件及 marketplace 清单，不作为实例业务配置来源。"
+  },
+  {
+    "file": "backend/src/scheduled-tasks/providers/codex-resume.ts",
+    "kind": "file-io",
+    "expression": "readFile(`/proc/${pid}/fdinfo/${fd}`)",
+    "count": 1,
+    "category": "system",
+    "reason": "读取 Linux 前台 Codex 进程文件描述符访问标志，用于确认原会话历史的写入所有权，不作为实例配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/application/staged-agent-launch.ts",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "写入权限为 0600 的短期 Agent 启动脚本，由交互 shell 消费并删除，避免 PTY 输入截断，不存储业务配置。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/codex-execution.ts",
+    "kind": "file-io",
+    "expression": "readFile(`${root}/cmdline`)",
+    "count": 1,
+    "category": "system",
+    "reason": "读取当前用户 Linux Codex 进程的原生参数以核对恢复启动身份，不读取或覆盖实例业务配置。"
   }
 ]
