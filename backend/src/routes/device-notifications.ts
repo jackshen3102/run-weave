@@ -14,7 +14,7 @@ const registration = z
     displayName: z.string().trim().min(1).max(80),
     enabled: z.boolean(),
     explicitEnable: z.boolean().optional(),
-    kind: z.enum(["battery", "scheduled-task", "terminal-unread"]).optional(),
+    kind: z.enum(["battery", "scheduled-task", "terminal-unread", "terminal-reply"]).optional(),
   })
   .strict();
 export function createDeviceNotificationsRouter(
@@ -47,21 +47,21 @@ export function createDeviceNotificationsRouter(
               available: false,
               reason: "电量监控暂不可用",
               subscriptions: [],
-              supportedKinds: req.query.unread === "1" ? ["battery", "scheduled-task", "terminal-unread"] : ["battery", "scheduled-task"],
+              supportedKinds: ["battery", "scheduled-task", ...(req.query.unread === "1" ? ["terminal-unread"] : []), ...(req.query.replies === "1" ? ["terminal-reply"] : [])],
             });
             return;
           }
           throw new SubscriptionError(503, "提醒暂不可用");
         }
         if (req.method === "GET" && req.path === "/status") {
-          res.json(service.status(identity.sessionId, req.query.unread === "1"));
+          res.json(service.status(identity.sessionId, req.query.unread === "1", req.query.replies === "1"));
           return;
         }
         const id = req.params.installationId;
         if (!z.string().uuid().safeParse(id).success)
           throw new SubscriptionError(400, "Invalid installationId");
         const kind = z
-          .enum(["battery", "scheduled-task", "terminal-unread"])
+          .enum(["battery", "scheduled-task", "terminal-unread", "terminal-reply"])
           .safeParse(req.params.kind ?? "battery");
         if (!kind.success)
           throw new SubscriptionError(400, "Invalid notification kind");

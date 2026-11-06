@@ -115,7 +115,9 @@ export class PushClient {
       displayName: value.displayName,
       version: value.version,
       categories:
-        value.kind === "terminal-unread"
+        value.kind === "terminal-reply"
+          ? ["terminal.reply"]
+          : value.kind === "terminal-unread"
           ? ["terminal.unread"]
           : value.kind === "scheduled-task"
           ? ["task.completed", "task.failed"]

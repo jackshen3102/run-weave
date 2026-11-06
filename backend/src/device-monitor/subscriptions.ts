@@ -76,8 +76,9 @@ export class DeviceSubscriptions {
           : null,
     };
   }
-  status(sessionId: string, includeUnread = false) {
+  status(sessionId: string, includeUnread = false, includeReplies = false) {
     const supportedKinds = includeUnread ? ["battery", "scheduled-task", "terminal-unread"] : ["battery", "scheduled-task"];
+    if (includeReplies) supportedKinds.push("terminal-reply");
     const owner = this.auth.getActiveAppSession(sessionId);
     if (!owner)
       return {
@@ -116,7 +117,10 @@ export class DeviceSubscriptions {
       reason: this.push
         ? (this.failure ?? deliveryFailure)
         : "此电脑尚未配置推送服务",
-      subscriptions: [...latest.values()].filter((value) => includeUnread || value.kind !== "terminal-unread").map((value) => this.dto(value)),
+      subscriptions: [...latest.values()].filter((value) =>
+        (includeUnread || value.kind !== "terminal-unread") &&
+        (includeReplies || value.kind !== "terminal-reply"),
+      ).map((value) => this.dto(value)),
     };
   }
 
@@ -300,7 +304,7 @@ export class DeviceSubscriptions {
   async revoke(
     sessionId: string,
     installationId: string,
-    kind: "battery" | "scheduled-task" | "terminal-unread" = "battery",
+    kind: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply" = "battery",
   ): Promise<boolean> {
     const owner = this.owner(sessionId);
     const values = Object.values(this.store.snapshot().subscriptions).filter(

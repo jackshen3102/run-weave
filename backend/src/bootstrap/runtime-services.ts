@@ -8,6 +8,7 @@ import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
 import { TerminalBadges } from "../device-monitor/terminal-badges";
+import { TerminalReplyNotifications } from "../device-monitor/terminal-replies";
 import { DesktopBadgeAccess } from "../device-monitor/desktop-badge-access";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { ResourceMonitorService } from "../resource-monitor/service";
@@ -482,6 +483,15 @@ async function assembleRuntimeServices(
   const terminalBadges = deviceMonitoring.batteryAlerts
     ? new TerminalBadges(terminalSessionManager, terminalEventService, deviceMonitoring.batteryAlerts.subscriptions)
     : null;
+  if (deviceMonitoring.batteryAlerts) {
+    const mobileReplies = new TerminalReplyNotifications(terminalSessionManager, deviceMonitoring.batteryAlerts.subscriptions);
+    terminalSessionManager.mobileReplies = mobileReplies;
+    resources.defer("terminal-replies", async () => {
+      terminalSessionManager.mobileReplies = undefined;
+      await mobileReplies.dispose();
+    });
+    await mobileReplies.start();
+  }
   resources.defer("terminal-badges", () => terminalBadges?.dispose());
   const desktopBadgeAccess = deviceMonitoring.batteryAlerts
     ? new DesktopBadgeAccess(authService, deviceMonitoring.batteryAlerts.subscriptions)

@@ -34,6 +34,9 @@
 相同版本仅接受相同内容，已撤销 ID 不能重新注册。
 手机连接设置保留“低电量提醒”开关。已登录的连接默认独立订阅定时任务事件
 `task.completed`、`task.failed`，无需开关；开启低电量不会改变任务订阅。
+新手机另独立订阅 `terminal-reply` 的 `terminal.reply`，用于手机提交的终端输入所产生的最终回复。
+Backend 状态接口只在 `replies=1` 时返回该类型，避免旧 iOS 的枚举解码失败；
+回复来源与投递边界见[完成通知](../../docs/architecture/terminal-completion-notifications.md#手机输入的回复推送)。
 
 发送示例（用真实绑定 ID 和事件发生时间替换占位值）：
 

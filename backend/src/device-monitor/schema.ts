@@ -10,7 +10,7 @@ const subscription = z
     username: z.string(),
     sessionId: z.string(),
     environment,
-    kind: z.enum(["battery", "scheduled-task", "terminal-unread"]).optional(),
+    kind: z.enum(["battery", "scheduled-task", "terminal-unread", "terminal-reply"]).optional(),
     confirmedAt: z.string().datetime().optional(),
     deviceToken: z.string(),
     displayName: z.string(),
@@ -25,6 +25,22 @@ const subscription = z
 export const deviceMonitorSchema = z
   .object({
     unread: z.object({ revision: z.number().int().positive(), count: z.number().int().nonnegative() }).optional(),
+    terminalReplies: z.object({
+      inputs: z.record(z.array(z.object({
+        id: z.string(), hash: z.string(), sessionId: z.string(), subscriptionIds: z.array(z.string().uuid()), expiresAt: time,
+      }).strict())),
+      turns: z.record(z.object({
+        id: z.string().uuid(), startEventId: z.string().optional(), threadId: z.string().nullable(),
+        source: z.string(), hash: z.string(), sessionId: z.string().nullable(), subscriptionIds: z.array(z.string().uuid()),
+        completed: z.boolean(), startedAt: time,
+      }).strict()),
+      deliveries: z.record(z.object({
+        id: z.string(), terminalSessionId: z.string(), panelId: z.string().nullable(), sessionId: z.string(), subscriptionId: z.string().uuid(),
+        notification: z.object({ title: z.string(), body: z.string(), occurredAt: z.string().datetime() }).strict(),
+        state: z.enum(["pending", "sending", "accepted", "unknown", "cancelled", "failed"]),
+        attempts: z.number().int().nonnegative(), createdAt: time, nextAttemptAt: time,
+      }).strict()),
+    }).strict().optional(),
     schemaVersion: z.literal(1),
     hostId: z.string().uuid(),
     cycle: z
