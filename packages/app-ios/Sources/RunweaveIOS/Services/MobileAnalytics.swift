@@ -12,6 +12,7 @@ public enum MobileAnalytics {
     case settings
     case developmentResources = "development_resources"
     case composer, quickReplies = "quick_replies", quickReplyEditor = "quick_reply_editor"
+    case quickCommands = "quick_commands", quickCommandRuns = "quick_command_runs", quickCommandRun = "quick_command_run"
     case scheduledTasks = "scheduled_tasks", scheduledTaskEditor = "scheduled_task_editor"
     case browser, filePreview = "file_preview", history, terminalInfo = "terminal_info", diagnostics
     case remoteDesktop = "remote_desktop", remoteHosts = "remote_hosts", remotePairing = "remote_pairing"
@@ -35,6 +36,22 @@ public enum MobileAnalytics {
   enum RemoteEvent: String {
     case opened = "remote_opened", visible = "remote_visible", inputSent = "remote_input_sent"
     case closed = "remote_closed", paired = "remote_paired"
+  }
+
+  enum Action: String {
+    case composerSend = "composer_send", composerQueue = "composer_queue"
+    case quickCommandSend = "quick_command_send", quickCommandBackground = "quick_command_background"
+  }
+
+  enum ActionOutcome: String {
+    case started, acknowledged, unconfirmed, interrupted
+  }
+
+  /// Fixed categories only. An acknowledgement confirms Backend acceptance, never Agent completion.
+  static func actionEvent(_ action: Action, _ outcome: ActionOutcome) {
+    let event = "\(action.rawValue)_\(outcome.rawValue)"
+    let accepted = initialized ? ClaritySDK.sendCustomEvent(value: event) : false
+    diagnostic("clarity.action", ["event": event, "enabled": String(initialized), "accepted": String(accepted)])
   }
 
   /// Coarse event counts only; exact per-use joins live in the local remote usage archive.

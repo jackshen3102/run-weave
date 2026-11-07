@@ -78,7 +78,7 @@ struct QuickCommandRunsView: View {
       }
         .navigationViewStyle(.stack).tint(TerminalAppearance.accent)
     }
-    .clarityMask().mobileAnalyticsScreen(.quickReplies)
+    .clarityMask().mobileAnalyticsScreen(.quickCommandRuns)
   }
 
   private func runList(_ runs: [ScheduledRun]) -> some View {
@@ -233,7 +233,7 @@ struct QuickCommandRunDetail: View {
     } message: { Text("保留原终端，为此历史记录恢复一个新终端。") }
     .onDisappear { operation?.cancel() }
     .onChange(of: polling) { if !$0 { operation?.cancel(); confirmReplace = false } }
-    .clarityMask().mobileAnalyticsScreen(.quickReplies)
+    .clarityMask().mobileAnalyticsScreen(.quickCommandRun)
   }
 
   private func archive() {

@@ -299,7 +299,7 @@ struct TerminalScreen: View {
     } message: {
       Text("删除后将结束该远端终端会话及其活跃旁聊，旁聊记录保留。")
     }
-    .mobileAnalyticsScreen(tab == "Commands" ? .quickReplies : tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
+    .mobileAnalyticsScreen(tab == "Commands" ? .quickCommands : tab == "Files" ? .terminalFiles : tab == "Changes" ? .terminalChanges : .terminalChat)
   }
 
   private func connectBrowserIntents() {

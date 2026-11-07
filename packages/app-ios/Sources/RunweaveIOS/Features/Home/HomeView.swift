@@ -15,6 +15,7 @@ struct HomeView: View {
   @State private var query = ""
   @State private var expanded = Set<String>()
   @State private var newProject = false
+  @State private var newTerminalProject: TerminalProject?
   @State private var deleting: HomeTerminal?
   @State private var showingDiagnostics = false
   @State private var showingScreenRecording = false
@@ -136,7 +137,7 @@ struct HomeView: View {
               }
             }.accessibilityLabel(searching ? group.project.name : "展开或收起 \(group.project.name)")
             Button {
-              Task { await session.createTerminal(projectID: group.id) }
+              newTerminalProject = group.project
             } label: {
               Image(systemName: "plus")
             }
@@ -181,6 +182,7 @@ struct HomeView: View {
       initializedGeneration = nil
       query = ""
       showingKnowledgeInbox = false
+      newTerminalProject = nil
       branchUpdatesTarget = nil
       renaming = nil
       moving = nil
@@ -221,6 +223,12 @@ struct HomeView: View {
     }
     .sheet(item: $renaming) { terminal in
       RenameTerminalView(session: session, terminal: terminal).mobileAnalyticsScreen(.renameTerminal)
+    }
+    .sheet(item: $newTerminalProject) { project in
+      NewTerminalView(session: session, project: project) { projectID in
+        newTerminalProject = nil
+        Task { await session.createTerminal(projectID: projectID) }
+      }
     }
     .sheet(item: $moving) { terminal in
       MoveTerminalView(session: session, terminal: terminal) { id in

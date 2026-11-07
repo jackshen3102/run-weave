@@ -15,6 +15,22 @@ struct TerminalProject: Codable, Identifiable {
   var id: String { projectId }
 }
 
+// Source: packages/shared/src/terminal/project-context.ts
+struct TerminalProjectContext: Decodable, Identifiable {
+  let projectId: String
+  let parentProjectId: String
+  let name: String
+  let branch: String?
+  let path: String?
+  let isPrimary: Bool
+  let availability: String
+  var id: String { projectId }
+  // A parent without a configured path retains the default home-directory behavior.
+  var canCreateTerminal: Bool {
+    availability == "available" || (isPrimary && availability == "path_unavailable")
+  }
+}
+
 struct TerminalState: Codable {
   var state: String
   var agent: String?
