@@ -12108,7 +12108,7 @@
     "file": "scripts/verify/server/registry.mjs",
     "kind": "environment-forward",
     "expression": "...process.env",
-    "count": 2,
+    "count": 1,
     "category": "test",
     "reason": "Child tooling inherits the runner environment; registry verification overrides HOME and removes Runweave instance variables."
   },

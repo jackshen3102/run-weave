@@ -7,7 +7,7 @@ export function processStartIdentity(pid: number): string | null {
   try {
     return execFileSync(process.platform === "win32" ? "powershell.exe" : "ps",
       process.platform === "win32"
-        ? ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`]
+        ? ["-NoProfile", "-NonInteractive", "-Command", `[Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`]
         : ["-p", String(pid), "-o", "lstart="],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000, windowsHide: true },
     ).trim() || null;

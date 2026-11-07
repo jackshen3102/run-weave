@@ -6,7 +6,10 @@ export function assertWindowsPrivatePath(file: string): void {
   if (process.platform !== "win32") return;
   const script = `
 $ErrorActionPreference = 'Stop'
-$acl = Get-Acl -LiteralPath $env:RUNWEAVE_PRIVATE_PATH
+# Use .NET directly: a parent pwsh may export a PSModulePath incompatible with Windows PowerShell.
+$acl = if ([IO.Directory]::Exists($env:RUNWEAVE_PRIVATE_PATH)) {
+  [IO.Directory]::GetAccessControl($env:RUNWEAVE_PRIVATE_PATH)
+} else { [IO.File]::GetAccessControl($env:RUNWEAVE_PRIVATE_PATH) }
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
 $allowed = @($sid.Value, 'S-1-5-18', 'S-1-5-32-544')
 if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $allowed) { throw 'owner' }
