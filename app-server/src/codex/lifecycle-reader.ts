@@ -1,9 +1,10 @@
 import { settingText } from "@runweave/config-node";
-import { open, readdir } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 const ROLLOUT_TAIL_BYTES = 1024 * 1024;
+const ROLLOUT_LOOKBACK_BYTES = 64 * ROLLOUT_TAIL_BYTES;
 const TERMINAL_LIFECYCLE_TYPES = new Set([
   "task_started",
   "task_complete",
@@ -58,13 +59,11 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
     }
     try {
       const previous = this.snapshots.get(threadId);
-      const tail = await readFileTail(filePath, previous?.signature);
-      if (tail.content === null) return previous!.lifecycle;
-      const lifecycle = parseLatestLifecycle(tail.content);
+      const snapshot = await readFileLifecycle(filePath, previous);
       this.snapshots.delete(threadId);
-      this.snapshots.set(threadId, { signature: tail.signature, lifecycle });
+      this.snapshots.set(threadId, snapshot);
       if (this.snapshots.size > 128) this.snapshots.delete(this.snapshots.keys().next().value!);
-      return lifecycle;
+      return snapshot.lifecycle;
     } catch {
       this.threadPaths.delete(threadId);
       this.snapshots.delete(threadId);
@@ -100,21 +99,40 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
   }
 }
 
-async function readFileTail(filePath: string, previousSignature?: string): Promise<{ signature: string; content: string | null }> {
+async function readFileLifecycle(
+  filePath: string,
+  previous?: { signature: string; lifecycle: CodexRolloutLifecycle | null },
+): Promise<{ signature: string; lifecycle: CodexRolloutLifecycle | null }> {
   const handle = await open(filePath, "r");
   try {
     const { size, dev, ino, mtimeMs, ctimeMs } = await handle.stat();
     const signature = `${filePath}:${dev}:${ino}:${size}:${mtimeMs}:${ctimeMs}`;
-    if (signature === previousSignature) return { signature, content: null };
-    const start = Math.max(0, size - ROLLOUT_TAIL_BYTES);
-    const buffer = Buffer.alloc(size - start);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
-    const value = buffer.subarray(0, bytesRead).toString("utf8");
-    if (start === 0) {
-      return { signature, content: value };
+    if (signature === previous?.signature) return previous;
+    const floor = Math.max(0, size - ROLLOUT_LOOKBACK_BYTES);
+    let end = size;
+    let suffix = Buffer.alloc(0);
+    let lifecycle: CodexRolloutLifecycle | null = null;
+    // Long turns can append megabytes without another lifecycle record. Search
+    // backwards in bounded chunks rather than mistaking a quiet tail for no turn.
+    while (end > floor && !lifecycle) {
+      const start = Math.max(floor, end - ROLLOUT_TAIL_BYTES);
+      const buffer = Buffer.alloc(end - start);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+      if (bytesRead !== buffer.length) return { signature, lifecycle: null };
+      const value = Buffer.concat([buffer, suffix]);
+      const boundary = start > 0 ? value.indexOf(10) : -1;
+      const complete = start === 0 ? value : boundary < 0 ? Buffer.alloc(0) : value.subarray(boundary + 1);
+      lifecycle = parseLatestLifecycle(complete.toString("utf8"));
+      // Lifecycle records fit in one chunk; discard oversized tool/image lines.
+      suffix = boundary >= 0 && boundary < ROLLOUT_TAIL_BYTES
+        ? Buffer.from(value.subarray(0, boundary + 1)) : Buffer.alloc(0);
+      end = start;
     }
-    const firstNewline = value.indexOf("\n");
-    return { signature, content: firstNewline === -1 ? "" : value.slice(firstNewline + 1) };
+    const current = await stat(filePath);
+    if (current.dev !== dev || current.ino !== ino || current.size !== size ||
+        current.mtimeMs !== mtimeMs || current.ctimeMs !== ctimeMs)
+      return { signature, lifecycle: null };
+    return { signature, lifecycle };
   } finally {
     await handle.close();
   }

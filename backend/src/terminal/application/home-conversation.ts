@@ -21,8 +21,9 @@ function resolveHomeThread(manager: TerminalSessionManager, session: TerminalSes
         ? { id: context.primaryThreadId, provider: "codex" as const } : null;
     }
   }
-  // Without a native observation, only an explicit binding identifies the current Codex thread.
-  return owner.threadId ? resolveReplyThread(owner) : null;
+  // Hook-only Codex clears threadId on Stop but keeps the completed conversation
+  // in lastThreadId. Reuse the provider-checked identity while Codex is active.
+  return resolveReplyThread(owner);
 }
 
 export function homeConversation(manager: TerminalSessionManager, session: TerminalSessionRecord) {

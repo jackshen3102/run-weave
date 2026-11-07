@@ -4,6 +4,7 @@ import path from "node:path";
 import { configuration } from "@runweave/config-node";
 import { isCodexConversationContext, type CodexConversationContext } from "@runweave/shared/terminal/codex-context";
 import type { TerminalPanelRecord } from "../manager/records";
+import { isCodexConversationThread } from "./codex-thread-identity";
 
 export function codexContextPath(terminalSessionId: string, panelId: string): string {
   const key = createHash("sha256").update(`${terminalSessionId}\0${panelId}`).digest("hex");
@@ -35,8 +36,9 @@ export function readCodexContext(panel: Pick<TerminalPanelRecord, "id" | "termin
   } catch { return { managed: true, context: null }; }
 }
 
-export function codexHookBelongsToPrimary(panel: TerminalPanelRecord, threadId: string | null | undefined, initialSessionStart = false): boolean {
+export async function codexHookBelongsToPrimary(panel: TerminalPanelRecord, threadId: string | null | undefined, initialSessionStart = false): Promise<boolean> {
   const { managed, context } = readCodexContext(panel);
-  return !managed || Boolean(threadId && context && !context.closed &&
+  if (!managed) return !threadId || await isCodexConversationThread(threadId) !== false;
+  return Boolean(threadId && context && !context.closed &&
     (context.primaryThreadId === threadId || (initialSessionStart && context.revision === 0)));
 }
