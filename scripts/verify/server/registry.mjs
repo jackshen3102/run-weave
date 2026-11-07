@@ -1,7 +1,7 @@
 // Exercise the real public npm packages in an isolated HOME and prefix.
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import {
   mkdtempSync,
   mkdirSync,
@@ -168,6 +168,10 @@ try {
     }),
   );
 } catch (error) {
+  if (process.platform === "win32") {
+    const script = `Get-ChildItem -LiteralPath $env:RW_FIXTURE -Force -Recurse | Where-Object { $_.FullName -notlike '*node_modules*' -and $_.FullName -notlike '*releases*' } | Select-Object -First 15 | ForEach-Object { $_.FullName; (Get-Acl -LiteralPath $_.FullName).Access | Select-Object IdentityReference,FileSystemRights,AccessControlType,IsInherited,PropagationFlags | Format-Table }; [Security.Principal.WindowsIdentity]::GetCurrent().User.Value`;
+    try { process.stderr.write(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", env: { ...process.env, RW_FIXTURE: fixture } })); } catch {}
+  }
   if (log !== undefined) process.stderr.write(readFileSync(path.join(fixture, "foreground.log"), "utf8").slice(-16000));
   throw error;
 } finally {

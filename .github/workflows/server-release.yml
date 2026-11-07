@@ -4,6 +4,10 @@ on:
     tags: ["server-v*"]
   workflow_dispatch:
     inputs:
+      windows_only:
+        description: Verify Windows only (never publish)
+        type: boolean
+        default: false
       publish:
         description: Publish verified packages to npm
         type: boolean
@@ -23,17 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            target: darwin-arm64
-          - runner: macos-15-intel
-            target: darwin-x64
-          - runner: ubuntu-24.04
-            target: linux-x64
-          - runner: ubuntu-24.04-arm
-            target: linux-arm64
-          - runner: windows-2022
-            target: win32-x64
+        include: ${{ fromJSON(inputs.windows_only && '[{"runner":"windows-2022","target":"win32-x64"}]' || '[{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x64"},{"runner":"ubuntu-24.04","target":"linux-x64"},{"runner":"ubuntu-24.04-arm","target":"linux-arm64"},{"runner":"windows-2022","target":"win32-x64"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -78,6 +72,7 @@ jobs:
           path: .runtime-artifacts/server/*.tgz
           if-no-files-found: error
   validate:
+    if: ${{ !inputs.windows_only }}
     needs: package
     runs-on: ubuntu-24.04
     steps:

@@ -18,5 +18,5 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
     execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
       env: { ...process.env, RUNWEAVE_PRIVATE_PATH: file }, stdio: "ignore", timeout: 10_000, windowsHide: true,
     });
-  } catch { throw new ConfigurationError("CONFIG_WINDOWS_ACL_NOT_PRIVATE"); }
+  } catch { throw new ConfigurationError("CONFIG_WINDOWS_ACL_NOT_PRIVATE", [file]); }
 }
