@@ -57,6 +57,11 @@ function token(ctx: ServerContext): void {
       flag: "wx",
     });
   const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  if (process.platform === "win32") {
+    const batchQuote = (value: string) => `"${value.replaceAll("%", "%%")}"`;
+    writeFileSync(path.join(ctx.home, "rw.cmd"), `@echo off\r\nsetlocal DisableDelayedExpansion\r\n${batchQuote(process.execPath)} ${batchQuote(__filename)} %*\r\n`);
+    return;
+  }
   writeFileSync(
     path.join(ctx.home, "rw"),
     `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(__filename)} "$@"\n`,
@@ -73,12 +78,14 @@ function inspect(ctx: ServerContext): void {
 }
 function binary(name: string): string | null {
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
-    const file = path.join(directory, name);
+    for (const suffix of process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""]) {
+    const file = path.join(directory, name + suffix);
     try {
       accessSync(file, constants.X_OK);
       return file;
     } catch {
       /* next PATH entry */
+    }
     }
   }
   return null;
@@ -201,6 +208,8 @@ export async function runServerCommand(
   ]);
   for (const key of Object.keys(parsed.options))
     if (!allowed.has(key)) throw new Error(`Unknown server option: --${key}`);
+  if (process.platform === "win32" && (command === "service" || command === "update"))
+    throw new Error("Windows supports foreground Server only. Keep rw server start open; service installation and in-place update are not supported yet.");
   const output = (value: unknown) =>
     io.stdout.write(JSON.stringify(value, null, 2) + "\n");
   let ctx: ServerContext;
@@ -272,14 +281,17 @@ export async function runServerCommand(
       initialized: existsSync(
         path.join(ctx.context.configRoot, "settings.yaml"),
       ),
-      terminalReady: !runtimeError && tools.tmux?.installed,
+      terminalReady: !runtimeError && (process.platform === "win32" || tools.tmux?.installed),
+      terminalRuntime: process.platform === "win32" ? "pty" : "tmux",
+      terminalRecovery: process.platform === "win32" ? "while-backend-running" : "tmux",
       tools,
       agents: {
         codex: { authenticated: codexAuthenticated },
         pi: { authentication: "not checked; configure a provider before use" },
       },
-      guidance:
-        "Install missing Git/tmux with your system package manager; install and authenticate Agent tools separately.",
+      guidance: process.platform === "win32"
+        ? "Keep rw server start open. Install Git and authenticate Agent tools separately; tmux is not required."
+        : "Install missing Git/tmux with your system package manager; install and authenticate Agent tools separately.",
     });
     if (runtimeError) throw new Error(runtimeError);
     return;
@@ -328,6 +340,10 @@ export async function runServerCommand(
       setConfigurationValue(value, "backend.server.host", host);
       setConfigurationValue(value, "backend.server.port", port);
       setConfigurationValue(value, "terminal.tmux.shutdownPolicy", "preserve");
+      if (process.platform === "win32") {
+        setConfigurationValue(value, "terminal.tmux.enabled", false);
+        setConfigurationValue(value, "scheduledTasks.enabled", false);
+      }
       setConfigurationValue(value, "storage.activityKeyStorage", "file");
       store.initialize(value);
       token(ctx);

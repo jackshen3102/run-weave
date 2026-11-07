@@ -12,6 +12,8 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { localRegistry, npmCommand } from "./local-registry.mjs";
+import { verifyWindowsTerminal } from "./windows-terminal.mjs";
 
 const serverVersion = JSON.parse(
   readFileSync("packages/runweave-server/package.json"),
@@ -19,7 +21,7 @@ const serverVersion = JSON.parse(
 const cliVersion = JSON.parse(
   readFileSync("packages/runweave-cli/package.json"),
 ).version;
-const fixture = mkdtempSync(path.join(os.tmpdir(), "rw-registry-"));
+const fixture = mkdtempSync(path.join(process.platform === "win32" ? os.homedir() : os.tmpdir(), "rw-registry-"));
 const home = path.join(fixture, "home"),
   prefix = path.join(fixture, "prefix");
 mkdirSync(home, { mode: 0o700 });
@@ -31,7 +33,8 @@ writeFileSync(
 const env = {
   ...process.env,
   HOME: home,
-  NODE_OPTIONS: `--require=${preloader}`,
+  ...(process.platform === "win32" ? { USERPROFILE: home } : {}),
+  NODE_OPTIONS: `--require=${JSON.stringify(preloader)}`,
   npm_config_registry: "https://registry.npmjs.org/",
 };
 for (const key of Object.keys(env))
@@ -69,11 +72,18 @@ function run(command, args) {
     );
   });
 }
-const rw = (...args) => run(path.join(prefix, "bin/rw"), ["server", ...args]);
+const cliCommand = process.platform === "win32"
+  ? [process.execPath, path.join(prefix, "node_modules/@runweave/cli/dist/index.js")]
+  : [path.join(prefix, "bin/rw")];
+const rw = (...args) => run(cliCommand[0], [...cliCommand.slice(1), "server", ...args]);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let foreground, log;
+let foreground, log, registry;
 try {
-  await run("npm", [
+  if (process.argv.includes("--local")) {
+    registry = await localRegistry(path.resolve(".runtime-artifacts/server"), fixture);
+    env.npm_config_registry = registry.url;
+  }
+  await run(npmCommand[0], [...npmCommand.slice(1),
     "install",
     "-g",
     "--prefix",
@@ -108,7 +118,7 @@ try {
     "Native runtime not ready",
   );
   log = openSync(path.join(fixture, "foreground.log"), "a");
-  foreground = spawn(path.join(prefix, "bin/rw"), ["server", "start"], {
+  foreground = spawn(cliCommand[0], [...cliCommand.slice(1), "server", "start"], {
     env,
     cwd: fixture,
     stdio: ["ignore", log, log],
@@ -144,6 +154,8 @@ try {
     headers: { authorization: `Bearer ${session.accessToken}` },
   });
   assert(verified.ok, "Authenticated request failed");
+  const terminal = process.platform === "win32"
+    ? await verifyWindowsTerminal(url, session.accessToken, home) : null;
   console.log(
     JSON.stringify({
       platform: `${process.platform}-${process.arch}`,
@@ -151,9 +163,13 @@ try {
       cliVersion,
       healthy: true,
       loginVerified: true,
+      terminal,
       fixture,
     }),
   );
+} catch (error) {
+  if (log !== undefined) process.stderr.write(readFileSync(path.join(fixture, "foreground.log"), "utf8").slice(-16000));
+  throw error;
 } finally {
   if (foreground?.exitCode === null) {
     await rw("stop").catch(() => foreground.kill("SIGTERM"));
@@ -165,4 +181,5 @@ try {
     );
   }
   if (log !== undefined) closeSync(log);
+  await registry?.close();
 }

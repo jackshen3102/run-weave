@@ -1,4 +1,5 @@
 import "./native-lock";
+import { syncDirectory } from "./platform";
 import { constants, existsSync, mkdirSync, openSync, closeSync, writeFileSync, renameSync, fsyncSync, readdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -26,7 +27,7 @@ export function registerStableConfigurationRoot(context: EnvironmentContext): vo
   const registry = path.join(directory, "stable-root.json");
   const registryFd = openSync(path.join(directory, "stable-root.lock"), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   try {
-    assertPrivateDescriptor(registryFd);
+    assertPrivateDescriptor(registryFd, undefined, path.join(directory, "stable-root.lock"));
     if (!tryLock(registryFd)) throw new ConfigurationError("CONFIG_ROOT_REGISTRATION_BUSY");
     if (existsSync(registry)) {
       let stored: unknown;
@@ -37,8 +38,7 @@ export function registerStableConfigurationRoot(context: EnvironmentContext): vo
       const file = openSync(temporary, "wx", 0o600);
       try { writeFileSync(file, JSON.stringify({ root: canonicalPath(context.configRoot) })); fsyncSync(file); } finally { closeSync(file); }
       renameSync(temporary, registry);
-      const parent = openSync(directory, "r");
-      try { fsyncSync(parent); } finally { closeSync(parent); }
+      syncDirectory(directory);
     }
   } finally { closeSync(registryFd); }
 }
@@ -47,7 +47,7 @@ function withUpgradeGate<T>(context: EnvironmentContext, shared: boolean, run: (
   const directory = ownerDirectory(context);
   const fd = openSync(path.join(directory, "configuration-upgrade.lock"), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   try {
-    assertPrivateDescriptor(fd);
+    assertPrivateDescriptor(fd, undefined, path.join(directory, "configuration-upgrade.lock"));
     if (!tryLock(fd, 0, 0, { shared })) throw new ConfigurationError("CONFIG_UPGRADE_BUSY");
     return run();
   } finally { closeSync(fd); }
@@ -63,7 +63,7 @@ export function withConfigurationUpgradeOwnership<T>(context: EnvironmentContext
         if (ignoredRoles.includes(file.replace(/\.owner\.lock$/, ""))) continue;
         const fd = openSync(path.join(directory, file), constants.O_RDWR | constants.O_NOFOLLOW);
         held.push(fd);
-        assertPrivateDescriptor(fd);
+        assertPrivateDescriptor(fd, undefined, path.join(directory, file));
         if (!tryLock(fd)) throw new ConfigurationError("CONFIG_UPGRADE_CONSUMER_RUNNING", [file.replace(/\.owner\.lock$/, "")]);
       }
       return run();
@@ -81,7 +81,7 @@ function acquireOwner(context: EnvironmentContext, role: string): { release(): v
   let closed = false;
   const release = () => { if (!closed) { closed = true; closeSync(fd); } };
   try {
-    assertPrivateDescriptor(fd);
+    assertPrivateDescriptor(fd, undefined, path.join(directory, `${role}.owner.lock`));
     if (!tryLock(fd)) throw new ConfigurationError("CONFIG_INSTANCE_ALREADY_RUNNING", [role]);
     registerStableConfigurationRoot(context);
     return { release };

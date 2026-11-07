@@ -286,7 +286,10 @@ export class PtyService {
           ptyProcess.resize(cols, rows);
         },
         signal(signal) {
-          ptyProcess.kill(toTerminalSignal(signal));
+          if (process.platform === "win32") {
+            if (signal === "SIGINT") ptyProcess.write("\u0003");
+            else ptyProcess.kill();
+          } else ptyProcess.kill(toTerminalSignal(signal));
         },
         dispose() {
           if (ptyProcess.destroy) {

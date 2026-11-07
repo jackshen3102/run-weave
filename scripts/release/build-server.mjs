@@ -183,7 +183,7 @@ pkg.files = ["bin", "README.md"];
 delete pkg.scripts;
 pkg.version = version;
 pkg.optionalDependencies = Object.fromEntries(
-  ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].map((name) => [
+  ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"].map((name) => [
     `@runweave/server-${name}`,
     version,
   ]),

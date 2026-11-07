@@ -24,7 +24,7 @@ function spawnComponent(ctx: ServerContext, name: Component): ChildProcess {
       name,
       ...ctx.configArgs,
     ],
-    { stdio: ["ignore", "inherit", "inherit"], env: process.env },
+    { stdio: process.platform === "win32" ? ["ignore", "inherit", "inherit", "ipc"] : ["ignore", "inherit", "inherit"], env: process.env },
   );
   child.on("error", (error) => process.stderr.write(`${error.message}\n`));
   return child;
@@ -38,7 +38,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
   )
     throw new Error("SERVER_ALREADY_RUNNING");
   const socket = controlSocket(ctx);
-  rmSync(socket, { force: true });
+  if (process.platform !== "win32") rmSync(socket, { force: true });
   writeJson(path.join(ctx.home, "foreground.json"), {
     configuration: CONFIGURATION_COMPATIBILITY,
     pid: process.pid,
@@ -62,7 +62,6 @@ export async function foreground(ctx: ServerContext): Promise<void> {
     intentional = true;
     for (const child of [...children].reverse()) {
       if (child.exitCode !== null || child.signalCode !== null) continue;
-      child.kill("SIGTERM");
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new Error("Component shutdown timed out")),
@@ -72,6 +71,8 @@ export async function foreground(ctx: ServerContext): Promise<void> {
           clearTimeout(timer);
           resolve();
         });
+        if (process.platform === "win32" && child.connected) child.send("runweave:shutdown");
+        else child.kill("SIGTERM");
       });
     }
     children = [];
@@ -148,7 +149,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(socket, () => {
-        chmodSync(socket, 0o600);
+        if (process.platform !== "win32") chmodSync(socket, 0o600);
         resolve();
       });
     });
@@ -161,7 +162,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
     stopping = true;
     await stop();
     server.close();
-    rmSync(socket, { force: true });
+    if (process.platform !== "win32") rmSync(socket, { force: true });
     rmSync(path.join(ctx.home, "foreground.json"), { force: true });
     process.removeListener("SIGTERM", shutdown);
     process.removeListener("SIGINT", shutdown);

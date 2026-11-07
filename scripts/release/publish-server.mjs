@@ -9,7 +9,7 @@ const root = path.resolve(
     "release-artifacts",
 );
 const registry = "https://registry.npmjs.org";
-const targets = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"];
+const targets = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"];
 const server = JSON.parse(
   readFileSync("packages/runweave-server/package.json"),
 );
@@ -247,7 +247,7 @@ try {
   if (process.env.GITHUB_STEP_SUMMARY)
     writeFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `Released ${server.name}@${server.version}, ${cli.name}@${cli.version} to ${channel}.\nSource: ${revision}\nAll six registry tarballs verified by SHA-512.\n`,
+      `Released ${server.name}@${server.version}, ${cli.name}@${cli.version} to ${channel}.\nSource: ${revision}\nAll seven registry tarballs verified by SHA-512.\n`,
       { flag: "a" },
     );
 } catch (error) {

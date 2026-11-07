@@ -12,10 +12,6 @@ function normalizeCommand(command: string): string {
 
 export function resolveDefaultTerminalCommand(): string {
   if (process.platform === "win32") {
-    const configured = process.env.COMSPEC?.trim();
-    if (configured) {
-      return configured;
-    }
     return "powershell.exe";
   }
 

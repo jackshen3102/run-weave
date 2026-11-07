@@ -32,6 +32,8 @@ jobs:
             target: linux-x64
           - runner: ubuntu-24.04-arm
             target: linux-arm64
+          - runner: windows-2022
+            target: win32-x64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +44,7 @@ jobs:
         with:
           version: 10.6.2
       - name: Check target and release tag
+        shell: bash
         env:
           EXPECTED_TARGET: ${{ matrix.target }}
         run: |
@@ -56,8 +59,13 @@ jobs:
       - name: Build distributable
         run: pnpm server:build
       - name: Verify installed tarballs and self-update
+        if: runner.os != 'Windows'
         run: pnpm server:verify-installed
+      - name: Verify Windows installation, login and PowerShell terminal
+        if: runner.os == 'Windows'
+        run: node scripts/verify/server/registry.mjs --local
       - name: Pack verified packages
+        shell: bash
         env:
           SERVER_TARGET: ${{ matrix.target }}
         run: |
@@ -117,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2022]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

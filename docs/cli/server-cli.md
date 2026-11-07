@@ -4,7 +4,7 @@
 Server 不注册全局命令，也不携带一份 CLI；升级 Server 不替换 rw。
 CI 打包、npm 发布及已有 devbox 的升级约定见 [NPM Server 运维](../deployment/npm-server-operations.md)。
 安装组件、配置、运行进程是三个独立状态，`npm install` 不注册或启动服务。
-第一阶段一台机器一个 Stable 服务，支持 Node 22，macOS arm64/x64、Linux glibc arm64/x64 为构建目标。
+第一阶段一台机器一个 Stable 服务，支持 Node 22，macOS arm64/x64、Linux glibc arm64/x64、Windows x64 为构建目标。
 已有源码部署的 App Server 占用实例时，Server 启动会被拒绝，保留原 App Server 发布指针和发布目录；
 Server 仅在取得 App Server 实例所有权并通过占用检查后激活其发布，启动期间持续持有该所有权。
 具体平台是否已验收以发布证据为准，不以存在 CI 矩阵当作通过。
@@ -28,6 +28,33 @@ CLI 单独安装时，status/doctor 返回 Server 未安装及安装指引，其
 doctor 检查 Server 发行组件、SQLite/PTY 原生加载及外部工具，区分基础服务、终端和 Agent 登录可用性。
 Pi 认证须按 provider 配置，不把仅安装工具当成认证成功。外部工具不自动安装。
 前台运行两个组件，必需组件异常会结束前台会话；Ctrl-C 关闭服务但保留 tmux。
+
+## Windows 轻量模式
+
+适用于 Windows 10 1809 及以上版本或 Windows 11 x64，使用系统 PowerShell 与 ConPTY，无需 WSL、tmux 或 Visual Studio。
+需要 Node.js **22.x x64**，安装后重新打开 PowerShell。Windows 平台包须先完成发布；已发布的 Server 0.1.4 / CLI 0.10.5 尚不包含此适配。
+含 Windows 平台包的版本可用后，在 PowerShell 运行：
+
+```powershell
+node --version
+npm.cmd install -g @runweave/cli @runweave/server
+rw.cmd server init
+rw.cmd server doctor --json
+rw.cmd server start
+```
+
+使用 `.cmd` 入口可避免 PowerShell 默认执行策略阻止 npm 生成的 `.ps1` 文件，无需修改系统执行策略。
+保存初始化显示的密码，保持启动窗口打开，在浏览器访问 `http://127.0.0.1:5001` 登录并创建终端。
+默认终端是 PowerShell；Agent CLI 可单独安装并在终端手工启动。涉及 Git 仓库时另装 Git for Windows。
+
+支持输入输出、调整尺寸、Ctrl+C 中断、关闭终端，以及 Backend 仍运行时的网页断线重连。
+关闭启动窗口、停止或重启服务会结束终端进程；不支持跨 Backend 重启恢复、tmux 分屏、Fork/Recover Agent、定时任务或系统服务托管。
+`server service` 与 `server update` 在 Windows 明确拒绝；首次版本不提供原地升级。不要把重新 `npm install` 视为运行版本已切换。
+配置默认位于当前用户的 `.runweave`，使用 Windows ACL 校验：只允许当前用户、SYSTEM 和 Administrators 访问。
+共享目录或宽松 ACL 的 `--config-dir` / `--auth-file` 会被拒绝，不通过放宽权限绕过。
+
+在另一个 PowerShell 窗口执行 `rw.cmd server status --json` 查看状态，或 `rw.cmd server stop` 正常停止。
+Windows 安装集成验收入口为 `node scripts/verify/server/registry.mjs --local`，验证实际 npm 安装、登录、PTY 和停止；不等同于浏览器 UI 验收。
 
 ## 生命周期命令
 

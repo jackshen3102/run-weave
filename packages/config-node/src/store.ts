@@ -16,6 +16,8 @@ import {
 import { ConfigurationError } from "./errors";
 import { validateDomains, validateEnvelope, domainForPath, fieldForPath, isConfigurationContainer, flattenConfiguration } from "./validation";
 import { assertPrivateDirectory, readPrivateFile } from "./private-file";
+import { assertWindowsPrivatePath } from "./windows-permissions";
+import { syncDirectory } from "./platform";
 
 const MAX_BYTES = 1024 * 1024;
 const unsafeKeys = new Set(["__proto__", "prototype", "constructor", "<<"]);
@@ -74,7 +76,8 @@ function assertPrivateFile(file: string, fd?: number): void {
   const stat = fd === undefined ? lstatSync(file) : fstatSync(fd);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new ConfigurationError("CONFIG_FILE_NOT_PRIVATE_REGULAR");
   if (typeof process.getuid === "function" && stat.uid !== process.getuid()) throw new ConfigurationError("CONFIG_FILE_OWNER_MISMATCH");
-  if ((stat.mode & 0o077) !== 0) throw new ConfigurationError("CONFIG_FILE_PERMISSIONS_INVALID");
+  if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) throw new ConfigurationError("CONFIG_FILE_PERMISSIONS_INVALID");
+  assertWindowsPrivatePath(file);
   if (stat.size > MAX_BYTES) throw new ConfigurationError("CONFIG_FILE_TOO_LARGE", [], { line: 1, column: 1 });
 }
 
@@ -84,8 +87,7 @@ export class ConfigurationStore {
 
   read(): ConfigurationSnapshot {
     if (!existsSync(this.file)) throw new ConfigurationError("CONFIG_MIGRATION_REQUIRED");
-    const root = lstatSync(this.context.configRoot);
-    if (!root.isDirectory() || root.isSymbolicLink() || root.mode & 0o077 || typeof process.getuid === "function" && root.uid !== process.getuid()) throw new ConfigurationError("CONFIG_ROOT_PERMISSIONS_INVALID");
+    assertPrivateDirectory(this.context.configRoot);
     assertPrivateFile(this.file);
     const fd = openSync(this.file, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -99,7 +101,7 @@ export class ConfigurationStore {
     mkdirSync(this.context.configRoot, { recursive: true, mode: 0o700 });
     const dirStat = lstatSync(this.context.configRoot);
     if (!dirStat.isDirectory() || dirStat.isSymbolicLink() || (typeof process.getuid === "function" && dirStat.uid !== process.getuid())) throw new ConfigurationError("CONFIG_ROOT_OWNER_MISMATCH");
-    if ((dirStat.mode & 0o077) !== 0) throw new ConfigurationError("CONFIG_ROOT_PERMISSIONS_INVALID");
+    assertPrivateDirectory(this.context.configRoot);
     // Never unlink: the kernel releases the lock on process exit and reboot.
     const fd = openSync(path.join(this.context.configRoot, "settings.lock"), constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
     try {
@@ -117,8 +119,7 @@ export class ConfigurationStore {
     if (previous !== undefined) {
       const backupRoot = path.join(this.context.configRoot, "config-backups");
       mkdirSync(backupRoot, { recursive: true, mode: 0o700 });
-      const backupStat = lstatSync(backupRoot);
-      if (!backupStat.isDirectory() || backupStat.isSymbolicLink() || backupStat.mode & 0o077 || typeof process.getuid === "function" && backupStat.uid !== process.getuid()) throw new ConfigurationError("CONFIG_BACKUP_ROOT_INVALID");
+      assertPrivateDirectory(backupRoot);
       const backup = path.join(backupRoot, backupId ?? `${Date.now()}-${randomUUID()}.yaml`);
       const fd = openSync(backup, "wx", 0o600);
       try { writeFileSync(fd, previous); fsyncSync(fd); } finally { closeSync(fd); }
@@ -128,8 +129,7 @@ export class ConfigurationStore {
     finally { closeSync(fd); }
     try {
       renameSync(temporary, this.file);
-      const parent = openSync(this.context.configRoot, "r");
-      try { fsyncSync(parent); } finally { closeSync(parent); }
+      syncDirectory(this.context.configRoot);
     } finally { if (existsSync(temporary)) unlinkSync(temporary); }
     return checked;
   }
@@ -264,8 +264,7 @@ export class ConfigurationStore {
     finally { closeSync(fd); }
     try {
       renameSync(temporary, file);
-      const parent = openSync(this.context.configRoot, "r");
-      try { fsyncSync(parent); } finally { closeSync(parent); }
+      syncDirectory(this.context.configRoot);
     } finally { if (existsSync(temporary)) unlinkSync(temporary); }
   }
 

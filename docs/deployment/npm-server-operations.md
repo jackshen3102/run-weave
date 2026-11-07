@@ -29,7 +29,7 @@
 ### 自动发行入口
 
 [server-release.yml](../../.github/workflows/server-release.yml) 负责完整发行：
-四个平台构建与本地安装/自更新验证 → OIDC 发布六个包到 `next` → 四个平台从公共
+五个平台构建与本地安装验证（macOS/Linux 含自更新，Windows 含 PowerShell PTY） → OIDC 发布七个包到 `next` → 五个平台从公共
 registry 安装并验证原生运行时、服务和登录 → 提升到请求的 dist-tag。
 只做构建的手动触发不会发布；没有通过全部安装验证时不提升 `latest`。
 
@@ -45,7 +45,7 @@ git push origin server-vX.Y.Z
 
 标签必须与 Server package.json 的版本严格一致。该标签流程最终提升为 `latest`。
 版本号仍由发布者按改动选择，CI 不会给每次普通提交自动递增版本或发包。
-主包和四个平台包版本相同，CLI 版本独立；这条整套发行流程要求两个版本均更新，
+主包和五个平台包版本相同，CLI 版本独立；这条整套发行流程要求两个版本均更新，
 不复用已经由另一份构建发布的 CLI 版本。
 
 也可以在 `main` 手动触发，选择发布到 `next` 先验收：
@@ -60,11 +60,11 @@ gh run list --repo jackshen3102/run-weave --workflow server-release.yml --limit 
 gh run view <run-id> --repo jackshen3102/run-weave
 ```
 
-Agent 要记录 run ID、head SHA、六个包版本和最终回执。
+Agent 要记录 run ID、head SHA、七个包版本和最终回执。
 `npm-server-<platform>` 是各平台构建产物，`npm-release-receipt` 记录发布阶段，
 `npm-release-final-receipt` 的 `phase=complete` 表示发布及标签核对完成。
 平台包先于主包发布；公共主包及 CLI 只取 Linux x64 job 的一份已验证产物。
-CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成的包目录运行。
+CLI 包须包含原生锁依赖及五个平台 prebuild；`npm pack` 从生成的包目录运行。
 
 发布脚本 [publish-server.mjs](../../scripts/release/publish-server.mjs) 在发布前核对全套
 版本、sourceRevision、repository、原生依赖及 SHA-512，发布后重新下载核对摘要。
@@ -80,8 +80,8 @@ npm 接受上传后可能仍需处理；版本信息与包文件也可能先后�
 
 ### 一次性可信发布配置
 
-六个包分别设置 npm Trusted Publisher：`@runweave/cli`、`@runweave/server` 和
-`server-darwin-arm64`、`server-darwin-x64`、`server-linux-arm64`、`server-linux-x64`
+七个包分别设置 npm Trusted Publisher：`@runweave/cli`、`@runweave/server` 和
+`server-darwin-arm64`、`server-darwin-x64`、`server-linux-arm64`、`server-linux-x64`、`server-win32-x64`
 （平台包均在 `@runweave` scope）。绑定值：
 
 | 字段                 | 值                            |
@@ -97,6 +97,7 @@ GitHub `npm-release` environment 只允许 `main` 分支和 `server-v*` 标签�
 发布和提升标签的 job 使用 GitHub-hosted runner、`id-token: write`、Node 22.23.2 与
 npm 12.2.1，不配置长期 `NPM_TOKEN` / `NODE_AUTH_TOKEN`；生成包的 repository 指向同一 GitHub 仓库。
 
+新增的 `@runweave/server-win32-x64` 必须单独完成首次创建与 Trusted Publisher 绑定；存在 CI job 不表示它已可发布。
 首次创建包及绑定信任关系需要维护者认证。新包先完成首次发布才能建立信任；不要用
 临时空包替代正式平台产物。信任连接的 Pending validation 不能算已验证，必须完成一次真实 OIDC 发布。
 接通后日常 CI 发布无需浏览器认证；配置变更时仍可能要求身份验证。

@@ -1,0 +1,78 @@
+// Real authenticated HTTP + WebSocket + ConPTY integration, against an installed Server.
+import { randomBytes } from "node:crypto";
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const assert = (ok, message) => { if (!ok) throw new Error(message); };
+export async function verifyWindowsTerminal(url, token, cwd) {
+  async function api(route, body, method = "POST") {
+    const response = await fetch(`${url}/api/terminal/${route}`, {
+      method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    assert(response.ok, `${method} ${route}: ${response.status} ${await response.clone().text()}`);
+    return response.status === 204 ? null : response.json();
+  }
+  const project = await api("project", { name: "Windows PTY verification", path: cwd });
+  let socket, id;
+  try {
+    const created = await api("session", { projectId: project.projectId });
+    id = created.terminalSessionId;
+    const session = await api(`session/${id}`, undefined, "GET");
+    assert(session.command.toLowerCase().endsWith("powershell.exe"), "Default shell is not PowerShell");
+    assert(!session.tmuxSessionName, "Windows unexpectedly created tmux");
+    async function connect() {
+      const { ticket } = await api(`session/${id}/ws-ticket`, {});
+      const ws = new WebSocket(`${url.replace("http", "ws")}/ws/terminal?terminalSessionId=${id}&token=${encodeURIComponent(ticket)}`);
+      let output = "", connected = false, failure;
+      ws.addEventListener("message", event => {
+        const message = JSON.parse(event.data);
+        if (["output", "snapshot"].includes(message.type)) output += message.data;
+        if (message.type === "connected") connected = message.runtimeKind === "pty";
+        if (message.type === "error") failure = message.message;
+      });
+      ws.addEventListener("error", () => { failure = "WebSocket error"; });
+      async function wait(predicate, label, timeout = 15_000) {
+        const deadline = Date.now() + timeout;
+        while (!predicate()) {
+          assert(!failure, failure);
+          assert(Date.now() < deadline, `Timed out: ${label}; terminal tail: ${output.slice(-1000)}`);
+          await sleep(50);
+        }
+      }
+      await wait(() => connected, "PTY connected");
+      return {
+        ws,
+        send: message => ws.send(JSON.stringify(message)),
+        waitOutput: marker => wait(() => output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "").includes(marker), marker),
+      };
+    }
+    const nonce = randomBytes(6).toString("hex");
+    socket = await connect();
+    socket.send({ type: "input", data: `$rwProbe='${nonce}'; Write-Output ('READY_'+$rwProbe)\r` });
+    await socket.waitOutput(`READY_${nonce}`);
+    socket.send({ type: "resize", cols: 112, rows: 35 });
+    await sleep(300);
+    socket.send({ type: "input", data: "Write-Output ('SIZE_'+$Host.UI.RawUI.WindowSize.Width+'x'+$Host.UI.RawUI.WindowSize.Height)\r" });
+    await socket.waitOutput("SIZE_112x35");
+    socket.send({ type: "input", data: "Write-Output ('WAIT_'+$rwProbe); Start-Sleep -Seconds 60\r" });
+    await socket.waitOutput(`WAIT_${nonce}`);
+    socket.send({ type: "signal", signal: "SIGINT" });
+    await sleep(300);
+    socket.send({ type: "input", data: "Write-Output ('INTERRUPTED_'+$rwProbe)\r" });
+    await socket.waitOutput(`INTERRUPTED_${nonce}`);
+    socket.ws.close();
+    socket = await connect();
+    await socket.waitOutput(`READY_${nonce}`);
+    socket.send({ type: "input", data: "Write-Output ('RECONNECTED_'+$rwProbe)\r" });
+    await socket.waitOutput(`RECONNECTED_${nonce}`);
+    await api(`session/${id}`, undefined, "DELETE");
+    const sessions = await api("session", undefined, "GET");
+    assert(!sessions.some(item => item.terminalSessionId === id), "Closed terminal remains listed");
+    id = null;
+    return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true };
+  } finally {
+    socket?.ws.close();
+    if (id) await api(`session/${id}`, undefined, "DELETE").catch(() => {});
+    await api(`project/${project.projectId}`, undefined, "DELETE");
+  }
+}
