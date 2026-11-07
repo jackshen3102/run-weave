@@ -12423,5 +12423,29 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "从运行上下文取得已安装 rw 的可执行入口，解析绑定 Profile 和本次浏览器组，不作为持久业务配置来源。"
+  },
+  {
+    "file": "plugins/toolkit/skills/browse-record/scripts/browse_job.py",
+    "kind": "native-or-shell",
+    "expression": "require(c.get(\"transport\") == \"http\" and not os.environ.get(\"RUNWEAVE_SCHEDULED_TASK_RUN_ID\"), \"INTERACTIVE_HTTP_AUTHORIZATION_REQUIRED\")",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "检查 Backend 注入的运行身份，禁止后台定时任务执行需要用户明确授权的本机会话导出。"
+  },
+  {
+    "file": "plugins/toolkit/skills/browse-record/scripts/browse_job.py",
+    "kind": "native-or-shell",
+    "expression": "resolution = json.loads(command([os.environ.get(\"RUNWEAVE_CLI_BIN\", \"rw\"), \"browser\", \"profile\", \"resolve\", \"--profile\", c[\"profile\"].split(\"-\")[-1], \"--group-id\", c[\"group\"], \"--json\"]))",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从运行上下文取得当前实例 rw 可执行入口，解析显式授权的原 Profile 和 Group，不读取其他实例身份。"
+  },
+  {
+    "file": "plugins/toolkit/skills/browse-record/scripts/browse_job.py",
+    "kind": "native-or-shell",
+    "expression": "write(path / \"http-binding.json\", {\"machine\": c[\"machine\"], \"profile\": c[\"profile\"], \"transport\": \"http\", \"scheduledRunId\": os.environ.get(\"RUNWEAVE_SCHEDULED_TASK_RUN_ID\")})",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "仅记录 Backend 注入的真实定时运行身份到私有批次绑定回执，不作为业务配置或凭据来源。"
   }
 ]
