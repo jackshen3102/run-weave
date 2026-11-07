@@ -51,7 +51,8 @@ iOS 经当前 Backend 鉴权连接该 Mac 同用户的 Unix socket。关闭 Back
 [原生回放](../testing/screen-recording/playback.testplan.yaml)；不提供 Web 回放或额外 TCP 服务。
 
 ScreenJournal 默认展示原始录屏，整理事项为可选辅助能力；分析失败不能阻断采集或回放。
-模型在 Backend 外部 worker 执行，App owner 独占衍生库写入；事项不按模型批次或应用切换强制拆分。
+模型在 Backend 外部 worker 执行，每天北京时间 01:00 整理前一天及更早未处理的已启用范围；App owner 固定输入上界并持久化每日完成进度。
+事项不按模型批次或应用切换强制拆分。
 纯屏幕事实不能独立证明执行成功，也不能把 Agent 并行跨度累计为本人工作时长。
 当前合同与验证入口见 [事项分析](../../packages/screen-recording-macos/README.md#事项分析开发中默认关闭)、
 [分析验收](../testing/screen-recording/analysis.testplan.yaml)及

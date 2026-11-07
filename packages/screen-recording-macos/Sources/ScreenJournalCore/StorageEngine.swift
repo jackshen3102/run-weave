@@ -48,12 +48,12 @@ actor StorageEngine {
                    Date().timeIntervalSince1970 - Double(settings.retentionDays)*86400]) ?? "0") ?? 0
         return max(0, count - 1) / 900 * 900
     }
-    func analysisPage(after: Int64, settings: RecordingSettings) throws -> (frames: [JournalIndexedCapture], cursor: Int64) {
+    func analysisPage(after: Int64, effectiveFrom: Int64 = 0, throughMs: Int64 = Int64.max, settings: RecordingSettings) throws -> (frames: [JournalIndexedCapture], cursor: Int64) {
         let rows = try database.rows("""
             SELECT c.*,c.rowid AS row_id,s.width,s.height,s.path,s.started AS segment_started
             FROM captures c JOIN segments s ON s.id=c.segment_id
-            WHERE c.rowid>? AND s.state='ready' AND s.started>=? ORDER BY c.rowid LIMIT 900
-            """, [after, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
+            WHERE c.rowid>? AND c.captured_ms>=? AND c.captured_ms<=? AND s.state='ready' AND s.started>=? ORDER BY c.rowid LIMIT 900
+            """, [after, effectiveFrom, throughMs, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
         return (try JournalReadCatalog.indexed(rows, settings: settings), Int64(rows.last?["row_id"] ?? "0") ?? 0)
     }
     func analysisDayCaptures(_ day: String, settings: RecordingSettings) throws -> [(String, Int64)] {

@@ -29,6 +29,8 @@ export function isConfigurationContainer(key: string, array = false): boolean {
 }
 
 export function domainForPath(key: string): string {
+  const declared = Object.keys(CONFIGURATION_DOMAIN_VERSIONS).find((domain) => key === domain || key.startsWith(`${domain}.`));
+  if (declared) return declared;
   const parts = key.split(".");
   return ["backend", "services", "desktop", "agents"].includes(parts[0]!) ? parts.slice(0, 2).join(".") : parts[0]!;
 }

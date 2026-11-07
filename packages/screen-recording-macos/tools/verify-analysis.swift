@@ -258,8 +258,21 @@ struct AnalysisVerify {
         try await finish(late)
         let ids = manifests.flatMap { $0.captures.map(\.id) }
         guard ids.count == 305, Set(ids).count == 305 else { throw journalError("duplicate_capture_coverage") }
+        // A daily window must exclude both newly discovered and queued later frames.
+        try await append(now-500); try await engine.finalize()
+        guard let later = try await claim() else { throw journalError("daily_later_frame_required") }
+        try await owner.fail(batchID: later.manifest.batchID,workerID: worker,generation: later.generation,code: "SYNTHETIC_RETRY")
+        let cutoff = midnight-1
+        for _ in 0..<4 {
+            let bounded = try await owner.claim(workerID: worker,expectedDeviceID: deviceID,effectiveFrom: 1,throughMs: cutoff,settings: settings,captureState: "paused")
+            guard bounded == nil else { throw journalError("daily_window_claimed_later_frame") }
+        }
+        try await owner.completeDay(expectedDeviceID: deviceID,throughMs: cutoff)
+        try await owner.completeDay(expectedDeviceID: deviceID,throughMs: cutoff)
+        let saved = try AnalysisStore(paths: paths).scalar("SELECT value FROM metadata WHERE key='lastDailyRunThroughMs'")
+        guard saved == String(cutoff), try await owner.status().windowDrained == true else { throw journalError("daily_completion_not_persisted") }
         _ = try await engine.shutdown(settings: settings)
-        print(String(decoding: try JSONSerialization.data(withJSONObject: ["crossDayShortTails":true,"fortyMinuteActivity":true,"stableVisualsSeparated":true,"dynamicVisualsStayActive":true,"writingExcluded":true,"readyTailScheduled":true,"lateReadyRediscovered":true,"uniqueCaptures":ids.count]),as: UTF8.self))
+        print(String(decoding: try JSONSerialization.data(withJSONObject: ["crossDayShortTails":true,"fortyMinuteActivity":true,"stableVisualsSeparated":true,"dynamicVisualsStayActive":true,"writingExcluded":true,"readyTailScheduled":true,"lateReadyRediscovered":true,"uniqueCaptures":ids.count,"dailyCutoffExcludesLaterBatches":true,"dailyCompletionPersisted":true]),as: UTF8.self))
     }
 
     // Real capture storage pipeline with generated pixels; never reads the user's screen.
