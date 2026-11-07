@@ -19,6 +19,14 @@ targets:
       - path: ThirdPartyLicenses
         type: folder
         buildPhase: resources
+    postBuildScripts:
+      - name: Bundle app usage tools
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          destination="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/AppUsageTools"
+          mkdir -p "$destination"
+          /usr/bin/rsync -a --delete --exclude='__pycache__' --exclude='*.pyc' --exclude='.gitignore' "$SRCROOT/tools/app-usage/" "$destination/"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.runweave.screen-journal

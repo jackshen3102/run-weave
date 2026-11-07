@@ -1,4 +1,14 @@
-# Dayflow 来源
+# 第三方来源
+
+## 应用使用记录的离线解析
+
+`tools/app-usage/vendor/ccl_segb` 复用 CCL Forensics 的 MIT 授权 SEGB 解析器，
+来源为 [nichtlegacy/screentime 的 vendored 副本](https://github.com/nichtlegacy/screentime/tree/main/src/screentime/_vendor/ccl_segb)。
+获取日期及逐文件 SHA-256 保存在 `tools/app-usage/vendor/SOURCE.json`；完整授权见
+[CCL-SEGB-MIT.txt](CCL-SEGB-MIT.txt)，源码也保留原版权和授权。该副本包含重复 trailer、
+已删除／未使用槽位的处理。Python 工具可离线运行，也随 App 打包用于自动归档；原生读取器使用系统框架。
+
+## 屏幕记录来源
 
 固定研究／移植基线：[JerryZLiu/Dayflow@730d6f84b919998158ff7fdab15e3f032f7d8135](https://github.com/JerryZLiu/Dayflow/tree/730d6f84b919998158ff7fdab15e3f032f7d8135)。
 版权与 MIT 授权完整保存在 [Dayflow-MIT.txt](Dayflow-MIT.txt)，并随 App 打包。

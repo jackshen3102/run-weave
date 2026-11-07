@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 @main struct ScreenJournalApp: App {
+    init() { AppUsageExport.runCommandIfRequested() }
     @NSApplicationDelegateAdaptor(JournalDelegate.self) private var delegate
     var body: some Scene {
         MenuBarExtra {
@@ -40,8 +41,10 @@ import AppKit
         guard !terminating else { return .terminateCancel }
         terminating = true
         Task {
+            await model.appUsage.shutdown()
             let success = await model.coordinator?.shutdown() ?? true
             if !success {
+                model.appUsage.start()
                 let alert = NSAlert(); alert.messageText = "记录尚未完成保存"
                 alert.informativeText = model.coordinator?.status.reason ?? "未知错误"
                 alert.runModal()
@@ -75,8 +78,21 @@ private struct JournalMenu: View {
         Button("打开 ScreenJournal") { showJournal(openWindow, model: model) }
         Button("设置…") { showJournal(openWindow, model: model, settings: true) }
             .disabled(model.coordinator == nil)
+        Button(model.exportingAppUsage ? "正在导出应用使用记录…" : "导出应用使用记录…") { model.exportAppUsage() }
+            .disabled(model.exportingAppUsage)
+        AppUsageMenu(collector: model.appUsage)
         Divider()
         Button("退出 ScreenJournal") { NSApp.terminate(nil) }
+    }
+}
+private struct AppUsageMenu: View {
+    @ObservedObject var collector: AppUsageCollector
+    var body: some View {
+        Toggle("自动归档应用使用记录", isOn: Binding(get: { collector.enabled }, set: { collector.setEnabled($0) }))
+        if collector.enabled {
+            Text(collector.label)
+            Button("立即采集应用使用记录") { collector.collectNow() }.disabled(collector.collecting)
+        }
     }
 }
 private struct RecorderMenu: View {
