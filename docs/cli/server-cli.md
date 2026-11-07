@@ -32,12 +32,12 @@ Pi 认证须按 provider 配置，不把仅安装工具当成认证成功。外�
 ## Windows 轻量模式
 
 适用于 Windows 10 1809 及以上版本或 Windows 11 x64，使用系统 PowerShell 与 ConPTY，无需 WSL、tmux 或 Visual Studio。
-需要 Node.js **22.x x64**，安装后重新打开 PowerShell。Windows 平台包须先完成发布；已发布的 Server 0.1.4 / CLI 0.10.5 尚不包含此适配。
-含 Windows 平台包的版本可用后，在 PowerShell 运行：
+需要 Node.js **22.x x64**，安装后重新打开 PowerShell。Windows 适配从 Server 0.1.5 / CLI 0.10.6 的 `next` 测试通道开始；`latest` 稳定通道不随测试发布变动。
+确认对应测试版本已发布后，在 PowerShell 运行：
 
 ```powershell
 node --version
-npm.cmd install -g @runweave/cli @runweave/server
+npm.cmd install -g @runweave/cli@next @runweave/server@next
 rw.cmd server init
 rw.cmd server doctor --json
 rw.cmd server start
