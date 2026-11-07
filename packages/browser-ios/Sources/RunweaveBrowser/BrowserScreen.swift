@@ -4,7 +4,11 @@ import UIKit
 public struct BrowserScreen: View {
   @ObservedObject var browser: BrowserSession
   @Environment(\.scenePhase) private var scenePhase
-  public init(browser: BrowserSession) { self.browser = browser }
+  private let returnLabel: String?
+  public init(browser: BrowserSession, returnLabel: String? = nil) {
+    self.browser = browser
+    self.returnLabel = returnLabel
+  }
 
   private let chrome = Color(uiColor: .secondarySystemBackground)
 
@@ -30,12 +34,14 @@ public struct BrowserScreen: View {
   private func navigationBar(_ page: BrowserPage) -> some View {
     HStack(spacing: 4) {
       Button { browser.collapse() } label: {
-        Image(systemName: "chevron.down")
-          .font(.system(size: 18, weight: .medium))
-          .frame(width: 44, height: 48)
-          .contentShape(Rectangle())
+        HStack(spacing: 4) {
+          Image(systemName: "chevron.down").font(.system(size: 18, weight: .medium))
+          if let returnLabel { Text(returnLabel).font(.subheadline) }
+        }
+        .frame(minWidth: 44, minHeight: 48)
+        .contentShape(Rectangle())
       }
-      .accessibilityLabel(browser.configuration.returnLabel)
+      .accessibilityLabel(returnLabel ?? browser.configuration.returnLabel)
       .accessibilityIdentifier("browser-collapse")
 
       Button { perform(page, action: .link) } label: {
