@@ -26,6 +26,8 @@ read 返回受保护输入路径。当前 Agent 阅读实际资料，输出 `tit
 
 本技能不启用调度。手动链路及工作隔离通过后，按 [scheduled-task](../scheduled-task/SKILL.md) 展示机器、账号范围、频率、时区与工具权限的具体草稿，用户确认最终数据后才写入。
 
+已确认的每日联合任务按 [每日浏览同步](references/daily-reporting.md) 执行：同一轮先处理两个独立来源，最后只生成知乎昨日阅读回顾；该参考不授予创建任务、改配置或启动其他 Agent 的权限。
+
 ## 每日 App 使用时长
 
 按 [App 使用时长](references/app-usage.md) 配置 `transport:"app-usage"`，复用上述 prepare/import/reconcile 命令。
