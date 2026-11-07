@@ -90,8 +90,7 @@ struct HomeView: View {
       }
       if session.health.status == .offline {
         Section { Text("本地电脑暂时不可用，列表会保留最近一次加载的数据。").foregroundColor(.orange) }
-      }
-      if let error = session.error {
+      } else if let error = session.error {
         Section { Text(error).foregroundColor(.red) }
       }
       if session.loading && session.overview == nil { ProgressView() }
