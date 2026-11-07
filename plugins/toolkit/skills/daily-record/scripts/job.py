@@ -36,28 +36,57 @@ def command(argv, accepted=(0,)):
     return result
 
 
+def adapter_receipts(c, day, rows, receipts, errors):
+    suiji_module()  # Loads only helpers; no connection or credentials are opened.
+    import source_adapter
+    results = []
+    for actual in receipts:
+        scope = actual["sourceScope"]
+        if actual["status"] != "complete" and not errors.get(scope):
+            errors[scope] = ["SOURCE_" + actual["status"].upper()]
+        selected = [r for r in rows if r["day"] == day and r["ref"]["sourceScope"] == scope]
+        effective = c["sources"]["screen"]["effectiveFrom"] if scope.startswith("screen:") else c["startDate"]
+        args = ("work", scope, actual["from"], actual["to"], effective, actual["collectedAt"])
+        try:
+            items = [{"id": r["anchor"] + ":" + r["role"] if r["ref"]["channel"] == "local-agent" else r["id"],
+                      "version": r["sourceVersion"], "occurredAt": r["occurredAt"]} for r in selected]
+            result = source_adapter.receipt(*args, actual["status"], items, errors.get(scope, []))
+        except (ValueError, KeyError, TypeError):
+            # An invalid adapter cannot invalidate evidence from another source.
+            rows[:] = [r for r in rows if not (r["day"] == day and r["ref"]["sourceScope"] == scope)]
+            actual.update(status="unavailable", collectedAt=stamp(), **window(day))
+            errors[scope] = ["INVALID_ADAPTER_RESULT"]
+            result = source_adapter.receipt("work", scope, actual["from"], actual["to"], effective, actual["collectedAt"], "unavailable", [], errors[scope])
+        results.append(result)
+    return results
+
+
 def collect(state, path, meta):
     c = state.c
     rows, meta["receipts"], meta["sourceDirs"] = [], {}, {}
+    meta["sourceErrors"], meta["adapterReceipts"] = {}, {}
     for day in meta["days"]:
         day_root = directory(path / (day + "-g" + str(meta["generation"])))
         meta["sourceDirs"][day] = str(day_root)
-        receipts = []
+        receipts, errors = [], {}
         local = c["sources"]["localAgent"]
-        if local["providers"]:
-            bundle = day_root / "agent"
-            argv = c["collectorArgv"] + ["collect", "--from", day, "--to", day, "--timezone", c["timeZone"], "--out", str(bundle), "--providers", ",".join(local["providers"]), "--machine-id", c["producerId"]]
+        for provider in local["providers"]:
+            bundle = day_root / ("agent-" + provider)
+            scope = "agent:" + c["producerId"] + ":" + provider
+            argv = c["collectorArgv"] + ["collect", "--from", day, "--to", day, "--timezone", c["timeZone"], "--out", str(bundle), "--providers", provider, "--machine-id", c["producerId"]]
             if local.get("home"):
                 argv += ["--home", local["home"]]
             for thread in state.data["excludedThreads"]:
                 argv += ["--exclude-thread", thread]
             try:
                 command(argv, (0, 2))
-                material, actual = job_facts.native_rows(bundle, c)
+                material, actual = job_facts.native_rows(bundle, c, day)
+                require(len(actual) == 1 and actual[0]["sourceScope"] == scope and all(m["ref"]["sourceScope"] == scope for m in material), "AGENT_SOURCE_IDENTITY_CHANGED")
                 rows.extend(material)
                 receipts.extend(actual)
-            except Failure:
-                receipts.extend({"sourceScope": "agent:" + c["producerId"] + ":" + p, "status": "unavailable", "collectedAt": stamp(), **window(day)} for p in local["providers"])
+            except (Failure, OSError, ValueError, KeyError, TypeError) as error:
+                errors[scope] = [str(error) if isinstance(error, Failure) else "INVALID_SOURCE_DATA"]
+                receipts.append({"sourceScope": scope, "status": "unavailable", "collectedAt": stamp(), **window(day)})
         if c["sources"]["feishu"]["enabled"]:
             bundle = day_root / "feishu"
             try:
@@ -69,10 +98,10 @@ def collect(state, path, meta):
                 state.data["feishuIdentity"] = identity["openId"]
                 rows.extend(material)
                 receipts.append(receipt)
-            except Failure as error:
-                if str(error) == "FEISHU_IDENTITY_CHANGED":
-                    raise
-                receipts.append({"sourceScope": "feishu:" + c["sources"]["feishu"]["accountScope"] + ":messages", "status": "unavailable", "collectedAt": stamp(), **window(day)})
+            except (Failure, OSError, ValueError, KeyError, TypeError) as error:
+                scope = "feishu:" + c["sources"]["feishu"]["accountScope"] + ":messages"
+                errors[scope] = [str(error) if isinstance(error, Failure) else "INVALID_SOURCE_DATA"]
+                receipts.append({"sourceScope": scope, "status": "unavailable", "collectedAt": stamp(), **window(day)})
         if screen_enabled(c, day):
             bundle = day_root / "screen"
             try:
@@ -81,8 +110,12 @@ def collect(state, path, meta):
                 rows.extend(material)
                 receipts.append(receipt)
                 meta.setdefault("screenRevisions", {})[day] = revision
-            except (Failure, OSError, ValueError, KeyError):
+            except (Failure, OSError, ValueError, KeyError, TypeError):
                 receipts.append(job_screen.unavailable(day, c))
+        reports = adapter_receipts(c, day, rows, receipts, errors)
+        write(day_root / "adapter-receipts.json", reports)
+        meta["adapterReceipts"][day] = str(day_root / "adapter-receipts.json")
+        meta["sourceErrors"][day] = errors
         meta["receipts"][day] = receipts
     write(path / "evidence.json", rows)
     meta.update(phase="reviewed", evidenceHash=digest(rows), read={}, imageReads={})
@@ -153,6 +186,7 @@ def prepare(state, args):
     state.save_batch(path, meta)
     return {"batch": str(path), "runId": meta["runId"], "generation": meta["generation"], "phase": meta["phase"],
             "template": str(path / "facts.template.json"), "receipts": meta.get("receipts"), "priorFacts": state.data["identities"],
+            "adapterReceipts": meta.get("adapterReceipts", {}),
             "next": "reconcile" if meta.get("pending") else "publish" if meta["phase"] in ("validated", "pending") else "review/read then validate/publish", "remainingDays": state.missing()}
 
 
@@ -262,29 +296,41 @@ def context(state, path, meta, args):
         command([sys.executable, str(Path(__file__).with_name("feishu.py")), "context", "--bundle", str(bundle), "--message-id", args.message_id, "--minutes", str(args.minutes), "--out", str(out)])
         rows, receipt, identity = job_facts.feishu_rows(out, args.date, state.c)
         require(identity and identity["openId"] == state.data["feishuIdentity"], "FEISHU_IDENTITY_CHANGED")
-    except Failure:
+    except (Failure, OSError, ValueError, KeyError, TypeError):
         for r in meta["receipts"][args.date]:
             if r["sourceScope"].startswith("feishu:"):
                 r.update(status="partial", collectedAt=stamp())
+        if meta.get("adapterReceipts", {}).get(args.date):
+            reports = adapter_receipts(state.c, args.date, job_facts.evidence(path, meta), meta["receipts"][args.date], meta.setdefault("sourceErrors", {}).setdefault(args.date, {}))
+            write(Path(meta["adapterReceipts"][args.date]), reports)
         state.save_batch(path, meta)
         raise
     materials = job_facts.evidence(path, meta)
     previous = {m["id"]: m for m in materials}
+    additions = {}
     for row in rows:
-        if row["id"] in previous:
-            if previous[row["id"]] != row:
+        existing = previous.get(row["id"], additions.get(row["id"]))
+        if existing is not None:
+            if any(value != row.get(key) for key, value in existing.items()):
                 for r in meta["receipts"][args.date]:
                     if r["sourceScope"].startswith("feishu:"):
                         r.update(status="partial", collectedAt=stamp())
+                if meta.get("adapterReceipts", {}).get(args.date):
+                    reports = adapter_receipts(state.c, args.date, materials, meta["receipts"][args.date], meta.setdefault("sourceErrors", {}).setdefault(args.date, {}))
+                    write(Path(meta["adapterReceipts"][args.date]), reports)
                 state.save_batch(path, meta)
                 raise Failure("FEISHU_MESSAGE_CHANGED: recollect instead of mixing snapshots")
         else:
-            materials.append(row)
-    write(path / "evidence.json", materials)
-    meta["evidenceHash"] = digest(materials)
+            additions[row["id"]] = row
+    materials.extend(additions.values())
     for r in meta["receipts"][args.date]:
         if r["sourceScope"] == receipt["sourceScope"]:
             r["collectedAt"] = receipt["collectedAt"]
+    if meta.get("adapterReceipts", {}).get(args.date):
+        reports = adapter_receipts(state.c, args.date, materials, meta["receipts"][args.date], meta.setdefault("sourceErrors", {}).setdefault(args.date, {}))
+        write(Path(meta["adapterReceipts"][args.date]), reports)
+    write(path / "evidence.json", materials)
+    meta["evidenceHash"] = digest(materials)
     template(path, meta)
     state.save_batch(path, meta)
     return {"messages": len(rows), "template": str(path / "facts.template.json")}

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import uuid
 
-from job_state import Failure, date, digest, read, require, scopes, stamp, window, write
+from job_state import Failure, date, digest, read, require, scopes, window, write
 
 
 def evidence(path, meta):
@@ -14,18 +14,24 @@ def evidence(path, meta):
     return value
 
 
-def native_rows(bundle, c):
+def native_rows(bundle, c, day=None):
     manifest = read(bundle / "manifest.json")
+    require(isinstance(manifest, dict), "INVALID_NATIVE_MANIFEST")
+    require(manifest.get("schemaVersion") == 1 and manifest.get("machineId") == c["producerId"] and manifest.get("timeZone") == c["timeZone"], "NATIVE_COLLECTION_IDENTITY_CHANGED")
+    require(manifest.get("from") == manifest.get("to") and (day is None or manifest["from"] == day), "NATIVE_COLLECTION_RANGE_CHANGED")
+    require(isinstance(manifest.get("sources"), list) and all(isinstance(r, dict) and r.get("status") in ("complete", "partial", "unavailable") for r in manifest["sources"]), "INVALID_NATIVE_RECEIPTS")
     raw = (bundle / "materials.jsonl").read_bytes()
     import hashlib
     require(hashlib.sha256(raw).hexdigest() == manifest["materialsSha256"], "NATIVE_MATERIALS_CHANGED")
     result = []
     for line in raw.decode().splitlines():
         m = json.loads(line)
+        require(m["day"] == manifest["from"], "NATIVE_DAY_MISMATCH")
         require(hashlib.sha256(m["text"].encode()).hexdigest() == m["textSha256"], "NATIVE_TEXT_CHANGED")
         scope = "agent:" + c["producerId"] + ":" + m["provider"]
         project = m.get("project", {})
         result.append({"id": "agent:" + m["id"], "day": m["day"], "role": m["role"], "text": m["text"],
+                       "occurredAt": m["occurredAt"], "sourceVersion": m["textSha256"],
                        "anchor": scope + ":" + m["threadId"] + ":" + str(m.get("nativeId", m["locator"]["byteOffset"])),
                        "threadId": m["threadId"], "origin": m["origin"], "phase": m.get("phase"),
                        "project": c["projectAliases"].get(project.get("id"), project.get("name") if project.get("id") != "unclassified" else None),
@@ -47,15 +53,18 @@ def feishu_rows(bundle, day, c):
     from feishu import stamp as message_stamp
     from zoneinfo import ZoneInfo
     for m in rows:
-        occurred = message_stamp(m["create_time"], ZoneInfo("Asia/Shanghai")).date().isoformat()
+        when = message_stamp(m["create_time"], ZoneInfo("Asia/Shanghai")).astimezone(ZoneInfo("Asia/Shanghai"))
+        occurred = when.date().isoformat()
         require(occurred == day, "FEISHU_DAY_MISMATCH")
         text = m.get("content", "")
         text = text if isinstance(text, str) else json.dumps(text, ensure_ascii=False)
         result.append({"id": "feishu:" + m["message_id"], "day": day, "role": "user", "text": text,
+                       "occurredAt": when.isoformat(),
                        "author": m.get("sender", {}).get("id"), "anchor": scope + ":" + m["message_id"], "project": None,
                        "ref": {"channel": "feishu-message", "sourceScope": scope, "nativeId": m["message_id"], "hash": digest({"id": m["message_id"], "author": m.get("sender", {}).get("id"), "text": text, "day": occurred})}})
+        result[-1]["sourceVersion"] = result[-1]["ref"]["hash"]
     receipt = {"sourceScope": scope, "status": "complete" if manifest["status"] == "complete" else "partial",
-               "collectedAt": stamp(), **window(day)}
+               "collectedAt": manifest["collectedAt"], **window(day)}
     return result, receipt, manifest.get("identity")
 
 

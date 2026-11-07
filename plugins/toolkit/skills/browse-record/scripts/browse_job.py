@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "suiji" / "scripts"))
 import suiji
+import zhihu_http
+import source_adapter
 
 
 def require(ok, code):
@@ -61,7 +63,7 @@ def directory(path):
 
 def config(path):
     c = read(path)
-    require(set(c) - {"scheduledGroup"} == {"schemaVersion", "timeZone", "serverId", "ownerId", "connectionId", "externalAccountId", "machine", "profile", "group", "stateDir", "suijiConfig", "tokenFile"}, "INVALID_CONFIG_FIELDS")
+    require(set(c) - {"scheduledGroup", "transport", "sessionFile", "effectiveFrom"} == {"schemaVersion", "timeZone", "serverId", "ownerId", "connectionId", "externalAccountId", "machine", "profile", "group", "stateDir", "suijiConfig", "tokenFile"}, "INVALID_CONFIG_FIELDS")
     require(type(c.get("scheduledGroup", False)) is bool, "INVALID_SCHEDULED_GROUP_POLICY")
     require(c.get("schemaVersion") == 1 and c.get("timeZone") == "Asia/Shanghai", "INVALID_CONFIG")
     for key in ("serverId", "ownerId", "connectionId"):
@@ -72,6 +74,13 @@ def config(path):
     connection = read(c["suijiConfig"])
     require(connection.get("mcpPath") == "/mcp/browse" and all(connection.get(k) == c[k] for k in ("serverId", "ownerId")), "BROWSE_CREDENTIAL_IDENTITY_REQUIRED")
     require(c.get("profile") in ("profile-1", "profile-2", "profile-3") and c.get("group"), "BROWSER_BINDING_REQUIRED")
+    require(c.get("transport", "browser") in ("browser", "http"), "INVALID_TRANSPORT")
+    if c.get("transport") == "http":
+        require(isinstance(c.get("sessionFile"), str) and Path(c["sessionFile"]).is_absolute(), "ABSOLUTE_SESSION_PATH_REQUIRED")
+    else:
+        require("sessionFile" not in c, "HTTP_SESSION_REQUIRES_HTTP_TRANSPORT")
+    if "effectiveFrom" in c:
+        require(dt.date.fromisoformat(c["effectiveFrom"]).isoformat() == c["effectiveFrom"], "INVALID_EFFECTIVE_DATE")
     return c
 
 
@@ -127,10 +136,56 @@ def browser_read(c, options, folder):
         command(cli + ["detach"])
 
 
+def authorize_http(c):
+    require(c.get("transport") == "http" and not os.environ.get("RUNWEAVE_SCHEDULED_TASK_RUN_ID"), "INTERACTIVE_HTTP_AUTHORIZATION_REQUIRED")
+    path = Path(c["sessionFile"])
+    directory(path.parent)
+    if path.exists() or path.is_symlink():
+        suiji.private_read(path)
+    resolution = json.loads(command([os.environ.get("RUNWEAVE_CLI_BIN", "rw"), "browser", "profile", "resolve", "--profile", c["profile"].split("-")[-1], "--group-id", c["group"], "--json"]))
+    require(resolution.get("profileId") == c["profile"] and resolution.get("browserGroupId") == c["group"], "BROWSER_BINDING_CHANGED")
+    cli = ["pnpm", "exec", "playwright", "cli", "-s=browse-http-auth-" + c["connectionId"]]
+    command(cli + ["attach", "--cdp=" + resolution["cdpEndpoint"]])
+    try:
+        script = """async page => {
+          const cookies = await page.context().cookies([
+            'https://www.zhihu.com/api/v4/me',
+            'https://api.zhihu.com/unify-consumption/read_history',
+            'https://zhuanlan.zhihu.com/api/articles/1'
+          ]);
+          return {cookies, userAgent:await page.evaluate(() => navigator.userAgent)};
+        }"""
+        output = command(cli + ["run-code", script])
+        require("### Result\n" in output, "HTTP_AUTHORIZATION_UNAVAILABLE")
+        auth = json.JSONDecoder().raw_decode(output.split("### Result\n", 1)[1])[0]
+        auth["cookies"] = [cookie for cookie in auth["cookies"] if cookie.get("domain", "").lstrip(".") in ("zhihu.com", "www.zhihu.com", "api.zhihu.com", "zhuanlan.zhihu.com")]
+        auth.update(schemaVersion=1, **{k: c[k] for k in ("machine", "profile", "externalAccountId")})
+        require(zhihu_http.Session(auth, c).identity() == c["externalAccountId"], "ACCOUNT_CHANGED")
+        write(path, auth)
+        return {"authorized": True, "transport": "http", "sessionFile": str(path), "accountHash": hashlib.sha256(c["externalAccountId"].encode()).hexdigest()[:12]}
+    finally:
+        command(cli + ["detach"])
+
+
 def client(c):
     value, info = suiji.connect(read(c["suijiConfig"]), c["tokenFile"])
     require(info.get("features", {}).get("browse"), "BROWSE_SERVICE_UNAVAILABLE")
     return value
+
+
+def adapter_receipt(c, start, end, result=None, error=None):
+    begin = dt.datetime.combine(dt.date.fromisoformat(start), dt.time(), ZoneInfo(c["timeZone"]))
+    finish = dt.datetime.combine(dt.date.fromisoformat(end) + dt.timedelta(days=1), dt.time(), ZoneInfo(c["timeZone"]))
+    items = {}
+    for value in (result or {}).get("items", []):
+        observed, entry = value["observation"], value["entry"]
+        key = observed["contentType"] + ":" + observed["contentId"] + ":" + entry["browseDate"]
+        item = {"id": key, "version": digest({k: entry[k] for k in ("title", "body", "sourceUrl", "contentState")}), "occurredAt": observed["readTime"]}
+        if key not in items or item["occurredAt"] > items[key]["occurredAt"]:
+            items[key] = item
+    return source_adapter.receipt("browse", "browse:zhihu:" + c["connectionId"], begin.isoformat(), finish.isoformat(), c.get("effectiveFrom"),
+                                  dt.datetime.now(dt.timezone.utc).isoformat(), "unavailable" if error else result["coverage"]["state"], list(items.values()),
+                                  [error] if error else result["coverage"]["errors"])
 
 
 def prepare(c, config_path, start, end):
@@ -146,7 +201,8 @@ def prepare(c, config_path, start, end):
             if manifest["state"] in ("prepared", "pending"):
                 require(path.parent == root.resolve(), "ORIGINAL_BATCH_BELONGS_TO_ANOTHER_STATE_DIRECTORY")
                 require(manifest["from"] == start and manifest["to"] == end, "RESOLVE_ORIGINAL_BATCH_FIRST")
-                return {"batch": str(path), "runId": manifest["runId"], "state": manifest["state"], "reused": True}
+                return {"batch": str(path), "runId": manifest["runId"], "state": manifest["state"], "reused": True,
+                        **({"adapterReceipt": str(path / "adapter-receipt.json")} if (path / "adapter-receipt.json").exists() else {})}
             if manifest["state"] == "collecting":
                 require(path.parent == root.resolve() and manifest["from"] == start and manifest["to"] == end and manifest["configHash"] == digest(c), "RECOVER_ORIGINAL_RANGE_FIRST")
                 if (path / "payload.json").exists():
@@ -154,7 +210,8 @@ def prepare(c, config_path, start, end):
                     require(payload["identityBefore"] == c["externalAccountId"] == payload["identityAfter"], "ACCOUNT_CHANGED")
                     manifest.update(state="prepared", payloadHash=digest(payload))
                     write(path / "manifest.json", manifest)
-                    return {"batch": str(path), "runId": manifest["runId"], "state": "prepared", "reused": True}
+                    return {"batch": str(path), "runId": manifest["runId"], "state": "prepared", "reused": True,
+                            **({"adapterReceipt": str(path / "adapter-receipt.json")} if (path / "adapter-receipt.json").exists() else {})}
                 resume = (manifest["runId"], path)
         run = resume[0] if resume else str(uuid.uuid4())
         path = resume[1] if resume else directory(root / run)
@@ -162,17 +219,24 @@ def prepare(c, config_path, start, end):
         write(path / "manifest.json", manifest)
         write(active_file, {"path": str(path), "runId": run})
         try:
-            result = browser_read(c, {"from": start, "to": end, "externalAccountId": c["externalAccountId"], "connectionId": c["connectionId"]}, path)
+            options = {"from": start, "to": end, "externalAccountId": c["externalAccountId"], "connectionId": c["connectionId"]}
+            if c.get("transport") == "http":
+                write(path / "http-binding.json", {"machine": c["machine"], "profile": c["profile"], "transport": "http", "scheduledRunId": os.environ.get("RUNWEAVE_SCHEDULED_TASK_RUN_ID")})
+                result = zhihu_http.collect(c, options)
+            else:
+                result = browser_read(c, options, path)
             require(result.get("identityBefore") == c["externalAccountId"] == result.get("identityAfter"), "ACCOUNT_CHANGED")
+            write(path / "adapter-receipt.json", adapter_receipt(c, start, end, result))
             payload = {k: result[k] for k in ("identityBefore", "identityAfter", "items", "coverage")}
             payload.update(runId=run, connectionId=c["connectionId"], externalAccountId=c["externalAccountId"], **{"from": start, "to": end})
             write(path / "payload.json", payload)
             manifest.update(state="prepared", payloadHash=digest(payload), historyUnchanged=result["historyUnchanged"])
             write(path / "manifest.json", manifest)
-            return {"batch": str(path), "runId": run, "coverage": result["coverage"], "historyUnchanged": result["historyUnchanged"]}
+            return {"batch": str(path), "runId": run, "coverage": result["coverage"], "historyUnchanged": result["historyUnchanged"], "adapterReceipt": str(path / "adapter-receipt.json")}
         except Exception as error:
             code = str(error)
             reason = "needs-login" if code == "NEEDS_LOGIN" else "identity-changed" if "ACCOUNT_CHANGED" in code else "parse-failed" if "PARSE" in code else "unavailable"
+            write(path / "adapter-receipt.json", adapter_receipt(c, start, end, error=reason))
             manifest["error"] = reason
             try:
                 client(c).call("report_browse_failure", {"idempotencyKey": run, "input": {"runId": run, "connectionId": c["connectionId"], "externalAccountId": c["externalAccountId"], "from": start, "to": end, "reason": reason}})
@@ -284,7 +348,7 @@ def publish_digest(path, input_path):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "import", "reconcile", "read", "publish-digest"])
+    parser.add_argument("command", choices=["authorize-http", "prepare", "import", "reconcile", "read", "publish-digest"])
     for name in ("config", "from", "to", "batch", "date", "input"):
         parser.add_argument("--" + name)
     args = parser.parse_args()
@@ -293,10 +357,13 @@ def main():
     if args.command == "publish-digest":
         return publish_digest(args.batch, args.input)
     c = config(args.config)
+    if args.command == "authorize-http":
+        return authorize_http(c)
     if args.command == "read":
         return read_digest(c, args.config, args.date)
     now = dt.datetime.now(ZoneInfo("Asia/Shanghai")).date()
-    return prepare(c, args.config, getattr(args, "from") or (now - dt.timedelta(days=1)).isoformat(), args.to or now.isoformat())
+    start = getattr(args, "from") or max((now - dt.timedelta(days=1)).isoformat(), c.get("effectiveFrom", "0001-01-01"))
+    return prepare(c, args.config, start, args.to or now.isoformat())
 
 
 if __name__ == "__main__":

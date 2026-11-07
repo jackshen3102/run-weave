@@ -34,6 +34,8 @@ def rows(bundle, day, c):
         # transient view ID or raw thread transcript is a source reference.
         ref = {"channel": "screen-timeline", "sourceScope": source_scope(c), "nativeId": card["cardID"], "revision": str(card["revision"]), "hash": digest(card)}
         result.append({"id": "screen:" + value["deviceID"] + ":" + card["cardID"], "day": day, "role": "observation", "text": json.dumps(card, ensure_ascii=False),
+                       "occurredAt": dt.datetime.fromtimestamp(min(span["startMs"] for span in card["spans"]) / 1000, dt.timezone.utc).isoformat(),
+                       "sourceVersion": str(card["revision"]) + ":" + ref["hash"],
                        "anchor": source_scope(c) + ":" + card["matterID"], "project": None, "ref": ref})
     receipt = {"sourceScope": source_scope(c), "status": value["coverage"], "collectedAt": stamp(), **window(day)}
     return result, receipt, value["revision"]
