@@ -50,6 +50,7 @@ struct RecordDetail: View {
       VStack(alignment: .leading, spacing: 20) {
         if let citedVersion, citedVersion != record.version { Text("此记录已更新；回答引用的是版本 \(citedVersion)，下方是当前原文。").font(.footnote).foregroundStyle(.secondary) }
         if let status = record.taskStatus { TaskStatusBadge(status: status) }
+        if let material = record.material { Text("\(material.materialDate) · \(material.typeLabel) · \(material.status(version: record.version))").font(.subheadline) }
         RecordBody(text: record.body)
           .frame(maxWidth: .infinity, alignment: .leading)
         tagSection
@@ -62,7 +63,7 @@ struct RecordDetail: View {
     }
       .clarityMask()
       .background(SuijiTheme.background)
-      .navigationTitle(record.kind == .note ? "想法详情" : "待办详情")
+      .navigationTitle(record.material != nil ? "素材详情" : record.kind == .note ? "想法详情" : "待办详情")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar(.hidden, for: .tabBar)
       .safeAreaInset(edge: .bottom, spacing: 0) { if hasBottomActions { bottomBar } }
@@ -95,7 +96,7 @@ struct RecordDetail: View {
         do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
         copyFeedback = ""
       }
-      .confirmationDialog("移入回收站？正文和附件会保留，可随时恢复。", isPresented: $confirmingTrash, titleVisibility: .visible) {
+      .confirmationDialog(record.material == nil ? "移入回收站？正文和附件会保留，可随时恢复。" : "移入回收站后停止新的素材整理；已生成的总结仍会保留。", isPresented: $confirmingTrash, titleVisibility: .visible) {
         Button("移入回收站", role: .destructive) { Task { await session.changeRecord(record, action: .trash(true)) } }
         Button("取消", role: .cancel) {}
       }

@@ -33,7 +33,7 @@
 		AD936FCBED631FA67E05C3EA = {
 			isa = PBXGroup;
 			children = (
-				AF93120D892A47DCA2910002 /* Assets.xcassets */,
+                ABCDEF123456789000000004, ABCDEF123456789000000005,				AF93120D892A47DCA2910002 /* Assets.xcassets */,
 				61DE1B08FE2FC56EE9044434 /* Suiji/SuijiApp.swift */,
 				A8792157CB4F27FB949C035F /* Suiji.app */,
 			);
@@ -50,11 +50,11 @@
 				E2AA269EB967A8853A258BFA /* Frameworks */,
 				41D311A605520FC7B8B9A980 /* Resources */,
 				AABCDEF12345678900000001 /* Verify build identity */,
+                ABCDEF123456789000000001 /* Embed Share Extension */,
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
+			dependencies = (ABCDEF123456789000000002);
 			name = Suiji;
 			packageProductDependencies = (
 				8CE3E71EF8635D2BF27913BB /* SuijiIOS */,
@@ -87,7 +87,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				34A04005BCAF206EEC990BD9 /* Suiji */,
+                ABCDEF123456789000000003 /* SuijiShare */,				34A04005BCAF206EEC990BD9 /* Suiji */,
 			);
 		};
 /* End PBXProject section */
@@ -152,6 +152,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;
+                CODE_SIGN_ENTITLEMENTS = Suiji/Suiji.entitlements;
 				SUIJI_CLARITY_ENABLED = YES;
 				SUIJI_CLARITY_PROJECT_ID = yr5biwkeyf;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -175,6 +176,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;
+                CODE_SIGN_ENTITLEMENTS = Suiji/Suiji.entitlements;
 				SUIJI_CLARITY_ENABLED = YES;
 				SUIJI_CLARITY_PROJECT_ID = yr5biwkeyf;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -226,6 +228,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = Suiji/Info.plist;
+                CODE_SIGN_ENTITLEMENTS = Suiji/Suiji.entitlements;
 				SUIJI_CLARITY_ENABLED = YES;
 				SUIJI_CLARITY_PROJECT_ID = yr5biwkeyf;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -280,6 +283,23 @@
 			productName = SuijiIOS;
 		};
 /* End XCSwiftPackageProductDependency section */
+        ABCDEF123456789000000001 = { isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (ABCDEF123456789000000006); name = "Embed Share Extension"; runOnlyForDeploymentPostprocessing = 0; };
+        ABCDEF123456789000000002 = { isa = PBXTargetDependency; target = ABCDEF123456789000000003; targetProxy = ABCDEF123456789000000007; };
+        ABCDEF123456789000000007 = { isa = PBXContainerItemProxy; containerPortal = 244210E48437B6556980A702; proxyType = 1; remoteGlobalIDString = ABCDEF123456789000000003; remoteInfo = SuijiShare; };
+        ABCDEF123456789000000003 = { isa = PBXNativeTarget; buildConfigurationList = ABCDEF123456789000000008; buildPhases = (ABCDEF123456789000000009, ABCDEF123456789000000010); buildRules = (); dependencies = (); name = SuijiShare; packageProductDependencies = (ABCDEF123456789000000011); productName = SuijiShare; productReference = ABCDEF123456789000000005; productType = "com.apple.product-type.app-extension"; };
+        ABCDEF123456789000000004 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuijiShare/ShareViewController.swift; sourceTree = "<group>"; };
+        ABCDEF123456789000000005 = { isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SuijiShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        ABCDEF123456789000000006 = { isa = PBXBuildFile; fileRef = ABCDEF123456789000000005; settings = { ATTRIBUTES = (RemoveHeadersOnCopy); }; };
+        ABCDEF123456789000000008 = { isa = XCConfigurationList; buildConfigurations = (ABCDEF123456789000000012,ABCDEF123456789000000013,ABCDEF123456789000000014); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        ABCDEF123456789000000009 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (ABCDEF123456789000000015); runOnlyForDeploymentPostprocessing = 0; };
+        ABCDEF123456789000000010 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (ABCDEF123456789000000016); runOnlyForDeploymentPostprocessing = 0; };
+        ABCDEF123456789000000011 = { isa = XCSwiftPackageProductDependency; package = BC4A71180870F7945155FBB0; productName = SuijiCaptureCore; };
+        ABCDEF123456789000000015 = { isa = PBXBuildFile; fileRef = ABCDEF123456789000000004; };
+        ABCDEF123456789000000016 = { isa = PBXBuildFile; productRef = ABCDEF123456789000000011; };
+        ABCDEF123456789000000012 = { isa = XCBuildConfiguration; name = Debug; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = SuijiShare/SuijiShare.entitlements; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 0.1.0; INFOPLIST_FILE = SuijiShare/Info.plist; PRODUCT_BUNDLE_IDENTIFIER = com.runweave.suiji.share; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG"; TARGETED_DEVICE_FAMILY = 1; IPHONEOS_DEPLOYMENT_TARGET = 18.6; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks","@executable_path/../../Frameworks"); }; };
+        ABCDEF123456789000000013 = { isa = XCBuildConfiguration; name = Profile; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = SuijiShare/SuijiShare.entitlements; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 0.1.0; INFOPLIST_FILE = SuijiShare/Info.plist; PRODUCT_BUNDLE_IDENTIFIER = com.runweave.suiji.share; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; SWIFT_ACTIVE_COMPILATION_CONDITIONS = ""; TARGETED_DEVICE_FAMILY = 1; IPHONEOS_DEPLOYMENT_TARGET = 18.6; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks","@executable_path/../../Frameworks"); }; };
+        ABCDEF123456789000000014 = { isa = XCBuildConfiguration; name = Release; buildSettings = { APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = SuijiShare/SuijiShare.entitlements; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 0.1.0; INFOPLIST_FILE = SuijiShare/Info.plist; PRODUCT_BUNDLE_IDENTIFIER = com.runweave.suiji.share; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_VERSION = 5.0; SWIFT_ACTIVE_COMPILATION_CONDITIONS = ""; TARGETED_DEVICE_FAMILY = 1; IPHONEOS_DEPLOYMENT_TARGET = 18.6; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks","@executable_path/../../Frameworks"); }; };
+
 	};
 	rootObject = 244210E48437B6556980A702 /* Project object */;
 }

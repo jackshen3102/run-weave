@@ -1,3 +1,4 @@
+import { materialValue, materialReceipt, saveMaterial, validateMaterial } from "../materials/service";
 import { listChanges } from "./changes";
 import { followupSummaries } from "../followups/repository";
 import { randomUUID } from "node:crypto";
@@ -16,6 +17,9 @@ import { transaction } from "../db/pool";
 import { digest, mutate, type Mutation } from "./mutations";
 import { getRecord } from "./repository";
 export type RecordQuery = {
+  category?: "idea" | "task" | "material";
+  materialFrom?: string;
+  materialTo?: string;
   trash?: "true";
   kind?: string;
   taskStatus?: string;
@@ -28,6 +32,9 @@ export type RecordQuery = {
 };
 export class RecordService {
   constructor(private pool: pg.Pool) {}
+  materialReceipt(owner: string, id: string, version: number) {
+    return materialReceipt(this.pool, owner, id, version);
+  }
   changes(owner: string, input: { cursor?: string; limit: number }) {
     return listChanges(this.pool, owner, input);
   }
@@ -50,7 +57,13 @@ export class RecordService {
     });
   }
   async list(owner: string, query: RecordQuery): Promise<RecordPage> {
+    if ((query.materialFrom || query.materialTo) && query.category !== "material") throw invalid("素材日期只能用于素材分类");
+    if (query.materialFrom && query.materialTo && query.materialFrom > query.materialTo) throw invalid("起始日期不得晚于结束日期");
     const { cursor, limit, ...filters } = query;
+    const material = query.category === "material";
+    const materialExists = "EXISTS(SELECT 1 FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
+    const materialDay = "(SELECT material_date FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
+    const materialTime = "(SELECT captured_at FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
     const fingerprint = digest(filters);
     const values: unknown[] = [owner];
     const where = [
@@ -61,6 +74,11 @@ export class RecordService {
       values.push(value);
       where.push(sql.replace("?", `$${values.length}`));
     };
+    if (query.category === "idea") where.push("kind='note'", `NOT ${materialExists}`);
+    if (query.category === "task") where.push("kind='task'");
+    if (material) where.push(materialExists);
+    if (query.materialFrom) add(`${materialDay}>=?::date`, query.materialFrom);
+    if (query.materialTo) add(`${materialDay}<=?::date`, query.materialTo);
     if (query.kind) add("kind=?", query.kind);
     if (query.taskStatus) add("task_status=?", query.taskStatus);
     if (query.tag) add("?=ANY(tags)", query.tag);
@@ -77,8 +95,14 @@ export class RecordService {
           !Number.isFinite(Date.parse(c.at))
         )
           throw new Error();
-        values.push(c.at, c.id);
-        where.push(`(created_at,id)<($${values.length - 1},$${values.length})`);
+        if (material) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(c.day)) throw new Error();
+          values.push(c.day, c.at, c.id);
+          where.push(`(${materialDay},${materialTime},id)<($${values.length - 2}::date,$${values.length - 1}::timestamptz,$${values.length}::uuid)`);
+        } else {
+          values.push(c.at, c.id);
+          where.push(`(created_at,id)<($${values.length - 1},$${values.length})`);
+        }
       } catch {
         throw invalid("游标与当前筛选不匹配");
       }
@@ -90,7 +114,7 @@ export class RecordService {
       );
       const rows = (
         await client.query(
-          `SELECT id FROM records WHERE ${where.join(" AND ")} ORDER BY created_at DESC,id DESC LIMIT $${values.length}`,
+          `SELECT id FROM records WHERE ${where.join(" AND ")} ORDER BY ${material ? `${materialDay} DESC,${materialTime} DESC,id DESC` : "created_at DESC,id DESC"} LIMIT $${values.length}`,
           values,
         )
       ).rows;
@@ -109,7 +133,8 @@ export class RecordService {
             ? Buffer.from(
                 JSON.stringify({
                   f: fingerprint,
-                  at: last.createdAt,
+                  at: material ? last.material!.capturedAt : last.createdAt,
+                  ...(material ? { day: last.material!.materialDate } : {}),
                   id: last.id,
                 }),
               ).toString("base64url")
@@ -125,6 +150,7 @@ export class RecordService {
       { ...input, attachmentIds: input.attachmentIds ?? [] },
       async (client) => {
         const id = randomUUID();
+        validateMaterial(input.kind, input.material);
         this.checkContent(input.body, input.attachmentIds ?? []);
         await client.query(
           "INSERT INTO records(id,owner_id,kind,body,task_status,created_via,tags) VALUES($1,$2,$3,$4,$5,$6,$7)",
@@ -144,6 +170,7 @@ export class RecordService {
           id,
           input.attachmentIds ?? [],
         );
+        if (input.material) await saveMaterial(client, context.ownerId, id, input.material);
         return this.snapshot(client, context, id);
       },
     );
@@ -153,6 +180,8 @@ export class RecordService {
       const old = await getRecord(client, context.ownerId, id, true);
       this.version(old, input.expectedVersion);
       const kind = input.kind ?? old.kind;
+      const material = input.material === undefined ? old.material : input.material;
+      validateMaterial(kind, material, old.material);
       const taskStatus =
         kind === old.kind ? old.taskStatus : kind === "task" ? "open" : null;
       const body = input.body ?? old.body,
@@ -160,6 +189,7 @@ export class RecordService {
         ids = input.attachmentIds ?? old.attachments.map((a) => a.id);
       this.checkContent(body, ids);
       if (
+        digest(material ? materialValue(material) : null) === digest(old.material ? materialValue(old.material) : null) &&
         kind === old.kind &&
         body === old.body &&
         JSON.stringify(tags) === JSON.stringify(old.tags ?? []) &&
@@ -171,6 +201,7 @@ export class RecordService {
         "UPDATE records SET body=$3,kind=$4,task_status=$5,tags=$6,version=version+1,updated_at=clock_timestamp() WHERE owner_id=$1 AND id=$2",
         [context.ownerId, id, body, kind, taskStatus, tags],
       );
+      if (input.material !== undefined) await saveMaterial(client, context.ownerId, id, input.material, old.material);
       return this.snapshot(client, context, id);
     });
   }

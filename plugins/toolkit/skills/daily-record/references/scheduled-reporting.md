@@ -155,3 +155,44 @@ Mac 飞书另登记 `feishu:<accountScope>:messages`，producerId/sourceNamespac
 摘要。确认独立回读后保存已消费 revision；prepare 补查最近七天的日期修订，同事实沿旧键更新。
 安装态 CLI、Skill 和 collector 需分别部署；源码修改不表示线上任务已升级。本期隔离实现验证
 不授权更改用户实际任务、迁移个人来源或发布真实随记。
+
+### 主动分享素材（默认关闭）
+
+只给一个已指定的日报生产者增加 `sources.materials`，不新增定时任务，不在所有机器默认打开：
+
+```json
+{
+  "enabled": true,
+  "effectiveFrom": "2026-11-07",
+  "accountScope": "<serverId>:<ownerId>"
+}
+```
+
+沿用既有 producerId/sourceNamespace，经 `migrate-sources --next-config ... --dry-run` 检查，
+再迁移配置；服务 work_sources 需登记 `materials:<serverId>:<ownerId>`，绑定同一生产者与生效日期。
+生效日前的素材仅保留查看。变化流扫描与待处理索引原子保存；发布回执确认前不视为消费完成。
+已确认旧日期收到素材或改日期后重新安排，不限最近七天；新旧日期都检查，人工字段继续受保护。
+complete 只表示当前范围中已上传的素材读完，不证明手机全天活动完整或没有离线待发送素材。
+
+`job read` 返回实际图片路径与 SHA256，不会把文字读取算作读图。执行 Agent 必须把每张图片交给
+当前具备读图能力的模型（例如实际调用 view_image 或返回 MCP image 块）。之后写 0600 的阅读回执：
+
+```json
+{
+  "materialId": "material:<recordId>",
+  "sourceHash": "<服务返回hash>",
+  "reader": "<实际模型>",
+  "toolCallId": "<真实读图调用标识>",
+  "images": [{ "attachmentId": "<UUID>", "sha256": "<实际图片hash>" }],
+  "observation": "实际看见的内容；与用户备注分开"
+}
+```
+
+运行 `job.py image-read --config ... --batch ... --run-id ... --generation ... --id material:<recordId> --image-receipt ...`。
+没有读图能力、读取失败或不支持附件时，在 facts 文件 `materialReviews` 中使用 deferred，保持 partial/待整理；
+不能只凭文件名、正文备注或哈希确认图片已读。启用前必须在实际日报执行模型验证一次真实图像输入。
+
+候选文件除原 days 外可包含 `materialReviews`，每条为 `{id,outcome,reason}`，outcome 为 included、merged、
+no-new-fact 或 deferred。每份素材都需审阅，no-new-fact 不生成虚假事实。validate 绑定版本/hash/实际读图回执，
+publish 前再读当前版本，服务导入事务最终校验。链接只证明收到了链接，不自动抓取或声称读过全文。
+返回 VERSION_CONFLICT 后重新 prepare --recollect/read/validate；未知写结果继续原冻结请求。

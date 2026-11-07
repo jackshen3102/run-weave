@@ -56,3 +56,13 @@ Mac 浏览概览使用 `browser-visit` 引用，要求服务声明 `features.wor
 上报 nativeId 为 `visits:<身份集合SHA256>`，hash 为完整 observation 集合摘要；不含 URL 或路径。
 重复访问与工作事项必须先合并，独立浏览主题每日最多3条、正文每条最多160字；不因引用数量拆条。
 来源 `browser:<producerId>:observed` 的 complete 只表示所登记现存日志读取完整，不表示全天活动覆盖。
+
+### 素材结果回执
+
+服务支持 workMaterials 时，导入可附加 materialResults。每条含 recordId、recordVersion、sourceHash、
+outcome（included/merged/no-new-fact）和 eventKeys；省略时旧导入合同不变。
+来源 channel 为 suiji-material，scope 为 materials:<serverId>:<ownerId>，nativeId 为 recordId，
+revision 为 record.version，hash 使用服务返回 sourceHash；不把原文、URL 或本机路径放入 sourceRef。
+处理回执与事实在同一个事务提交，成功后独立回读事实和素材 processedVersion/processedAt。
+原始素材和回执保留，编辑后需要处理新版本；取消分类/删除不自动删除过去成果。
+跨日仅移动由该素材单独证明的事实；多来源旧事实保留，不能把其他来源的当日进展一并移动。

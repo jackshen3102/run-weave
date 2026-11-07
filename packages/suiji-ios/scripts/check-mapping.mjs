@@ -75,9 +75,13 @@ function run(argv) {
   const result = spawnSync(argv[0], argv.slice(1), { stdio: "inherit" });
   if (result.status !== 0) throw new Error("Swift mapping command failed");
 }
+run(["xcrun", "swiftc", "-emit-library", "-emit-module", "-module-name", "SuijiCaptureCore",
+  path.join(pkg, "Sources/SuijiCaptureCore/Contracts.swift"), path.join(pkg, "Sources/SuijiCaptureCore/Materials.swift"),
+  "-emit-module-path", path.join(artifacts, "SuijiCaptureCore.swiftmodule"), "-o", path.join(artifacts, "libSuijiCaptureCore.dylib")]);
 run([
   "xcrun",
   "swiftc",
+  "-I", artifacts, "-L", artifacts, "-lSuijiCaptureCore", "-Xlinker", "-rpath", "-Xlinker", artifacts,
   path.join(pkg, "Sources/SuijiIOS/Contracts/Contracts.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Reviews.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Followups.swift"),
@@ -132,6 +136,15 @@ for (const record of before.items) {
       )
   )
     throw new Error("Attachment/status mapping mismatch");
+}
+if (liveInfo.features?.materials) {
+  if (!before.items.some(record => record.material)) throw new Error("Real material fixture required");
+  for (const record of before.items) {
+    const mapped = after.items.find(item => item.id === record.id);
+    for (const key of ["captureId", "capturedAt", "materialDate", "inputType", "sourceUrl", "sourceHash", "processedVersion", "processedAt"]) {
+      if ((record.material?.[key] ?? null) !== (mapped.material?.[key] ?? null)) throw new Error("Material mapping mismatch: " + key);
+    }
+  }
 }
 console.log(
   "Real HTTP -> production Swift Codable -> JSON fields and body scalars match",

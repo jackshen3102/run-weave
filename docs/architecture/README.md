@@ -137,6 +137,10 @@ Frontend 和工具菜单消费通用插件合同，不承担功能专属分支�
 ## 随记
 
 独立云服务、Swift App 和交付证据见 [随记 M1](./suiji.md)。
+素材仍属于 note，通过可选 material 合同区分；SuijiShare 仅依赖独立 SuijiCaptureCore，
+与主 App 共享身份隔离队列及串行刷新锁。日报来源默认关闭，消费回执与工作事实原子导入；
+当前合同与尚待真机验证的边界见 [服务](../../packages/suiji-server/README.md#用户主动提交的素材)及
+[原生分享](../../packages/suiji-ios/README.md#素材与系统分享)。
 
 ## 维护规则
 

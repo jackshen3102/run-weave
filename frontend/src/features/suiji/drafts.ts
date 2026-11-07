@@ -1,5 +1,6 @@
 import type {
   RecordKind,
+  MaterialMetadata,
   SuijiAttachment,
   SuijiInfo,
   UploadedAttachment,
@@ -20,6 +21,7 @@ export type DraftFile = {
 export type CorrectionTrace = { correctionId: string; inputText: string; correctedText: string; applied: boolean };
 export type FeedbackIntent = { correctionId: string; key: string; recordId: string; recordVersion: number; saveKey: string };
 export type SuijiDraft = {
+  material?: MaterialMetadata | null;
   correctionTrace?: CorrectionTrace;
   id: string;
   kind: RecordKind;

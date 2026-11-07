@@ -1,4 +1,5 @@
 export * from "./records";
+export * from "./materials";
 export * from "./auth";
 export * from "./errors";
 export * from "./limits";

@@ -17,8 +17,7 @@ struct RecordEditorSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-          if model.draft.followupRecordID == nil { Picker("记录类型", selection: $model.draft.kind) { Text("想法").tag(RecordKind.note); Text("待办").tag(RecordKind.task) }
-            .pickerStyle(.segmented).disabled(!model.editable) }
+          if model.draft.followupRecordID == nil { MaterialEditorFields(model: model) }
           if model.draft.recordID != nil {
             Text("切换为待办时设为未完成；切换为想法时清除待办状态。").font(.footnote).foregroundStyle(.secondary)
           }
@@ -71,6 +70,7 @@ struct RecordEditorSheet: View {
         ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } }
       }
       .onChange(of: model.draft.body) { _, _ in textSelection = nil; Task { await model.persist() } }
+      .onChange(of: model.draft.material) { _, _ in Task { await model.persist() } }
       .onChange(of: model.draft.kind) { _, _ in Task { await model.persist() } }
       .onChange(of: model.draft.tags) { _, _ in Task { await model.persist() } }
       .onChange(of: photo) { _, item in Task { await importPhoto(item) } }

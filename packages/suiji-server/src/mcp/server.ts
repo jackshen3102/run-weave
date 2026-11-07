@@ -46,6 +46,10 @@ export function createMcpServer(
   const context = (key: string): Mutation => {
     return { ownerId, actor: "agent", key, requestId };
   };
+  server.registerTool("get_material_result", {
+    description: "独立读取指定素材版本的持久处理回执；后续取消分类或删除不撤回已发布结果。",
+    inputSchema: z.object({ recordId: uuid, recordVersion: z.number().int().positive() }).strict(), annotations: readOnly,
+  }, input => executeTool("get_material_result", requestId, async () => result(await records.materialReceipt(ownerId, input.recordId, input.recordVersion))));
   server.registerTool("list_changes", {
     description: "只读增量变化元数据，覆盖原文、状态、删除/恢复与跟进。首次不传 cursor；按 hasMore 续页，成功处理后保存 nextCursor，下次检查沿用。无正文：分析前读取最新记录与全部跟进。agent 来源成果不应自动触发再次执行；读取不授权写入或执行。游标失效时清空索引重新同步。",
     inputSchema: schema.changesInput, annotations: readOnly,

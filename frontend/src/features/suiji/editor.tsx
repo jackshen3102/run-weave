@@ -78,6 +78,7 @@ export function SuijiEditor({
                 size="sm"
                 variant={draft.kind === kind ? "default" : "ghost"}
                 aria-pressed={draft.kind === kind}
+                disabled={Boolean(draft.material) && kind === "task"}
                 onClick={() => model.edit({ kind })}
               >
                 {label}
@@ -88,7 +89,7 @@ export function SuijiEditor({
         : null}
         {!model.followupRecordId && draft.id !== "new" ? (
           <p className="text-sm text-muted-foreground">
-            切换为待办时设为未完成；切换为想法时清除待办状态。
+            {draft.material ? `素材归属日期：${draft.material.materialDate}。此编辑保留素材分类；转换类型请在新版随记中操作。` : "切换为待办时设为未完成；切换为想法时清除待办状态。"}
           </p>
         ) : null}
         <label className="flex flex-col gap-2">

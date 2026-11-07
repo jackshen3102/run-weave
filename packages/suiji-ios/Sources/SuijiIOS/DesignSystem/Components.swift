@@ -61,12 +61,14 @@ struct RecordCard<Destination: View>: View {
   private var content: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text(record.kind == .note ? "想法" : record.taskStatus == .done ? "待办 · 已完成" : "待办").font(.caption).foregroundStyle(.secondary)
+        Text(record.material != nil ? "素材 · " + record.material!.typeLabel : record.kind == .note ? "想法" : record.taskStatus == .done ? "待办 · 已完成" : "待办").font(.caption).foregroundStyle(.secondary)
         Spacer()
         if canChangeStatus || busy {
           Label(reopening ? actionTitle : "提交中", systemImage: "circle").font(.caption).padding(.horizontal, 10).frame(minHeight: 44).hidden()
         } else if let status = record.taskStatus { TaskStatusBadge(status: status) }
       }.allowsHitTesting(false)
+      if let material = record.material { Text(material.status(version: record.version)).font(.caption).foregroundStyle(.secondary) }
+      if record.body.isEmpty, record.material != nil { Text(record.material?.inputType == "image" ? "截图素材" : record.material?.sourceUrl ?? "文字素材") }
       if !record.body.isEmpty { RecordBody(text: record.body, lineLimit: 8, linksOnly: true).frame(maxWidth: .infinity, alignment: .leading) }
       ForEach(record.attachments) { attachment in
         Label(attachment.fileName, systemImage: attachment.kind == "image" ? "photo" : "doc.text").clarityMask().font(.subheadline).foregroundStyle(SuijiTheme.green).allowsHitTesting(false)

@@ -263,6 +263,8 @@ def main():
         raise Failure("BROWSER_HISTORY_UNAVAILABLE")
     if browser_payload and any(s.startswith("screen:") for day in browser_payload.get("days", []) for s in day.get("requestedScopes", [])) and not info.get("features", {}).get("workScreenTimeline"):
         raise Failure("SCREEN_TIMELINE_UNAVAILABLE")
+    if browser_payload and browser_payload.get("materialResults") and not info.get("features", {}).get("workMaterials"):
+        raise Failure("WORK_MATERIALS_UNAVAILABLE")
     if args.command.startswith("report-"):
         if not info.get("features", {}).get("workReports"):
             raise Failure("WORK_REPORTS_UNAVAILABLE")

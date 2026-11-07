@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { z } from "zod";
 import type { AttachmentService } from "../storage/attachments";
 import { invalid } from "../errors";
@@ -26,6 +27,7 @@ export async function readAttachment(
       attachmentId: input.attachmentId,
       mimeType: file.mimeType,
       byteSize: size,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
     });
     value.content.push({
       type: "image",
