@@ -41,13 +41,18 @@ python3 scripts/suiji.py --config /private/suiji.json read-attachment --attachme
 
 `followups` 自动读取全部页；`read-attachment` 返回原工具分页，需要时用返回的 nextCursor 继续。图片保持 MCP image 内容块，结果不是图片已经被 Agent 阅读的证明。
 
-成果输入文件只包含 recordId、body、可选 attachmentIds、agentName、sessionId。成果文件和 request 均使用本次唯一的路径；创建失败时不继续提交同名旧文件。append 必须通过 `--record-id` 独立传入本次选中的目标，脚本在联网前核对文件中的 recordId，缺少参数或不匹配时直接拒绝。文件内容和参数不是 shell 代码：
+成果输入文件只包含 recordId、简短摘要 body、可选 agentName、sessionId；默认不传 attachmentIds。只有用户明确要求向随记保存指定材料时，才增加 attachmentIds。完整结果仍在当前终端交付。成果文件和 request 均使用本次唯一的路径；创建失败时不继续提交同名旧文件。append 必须通过 `--record-id` 独立传入本次选中的目标，脚本在联网前核对文件中的 recordId，缺少参数或不匹配时直接拒绝。文件内容和参数不是 shell 代码：
 
 ```bash
-python3 scripts/suiji.py --config /private/suiji.json upload --record-id <UUID> --file /private/report.md --request /private/upload-intent.json
 python3 scripts/suiji.py --config /private/suiji.json append --record-id <本次选中的 UUID> --input /private/result.json --request /private/result-intent.json
 python3 scripts/suiji.py --config /private/suiji.json complete --record-id <UUID> --request /private/complete-intent.json
 python3 scripts/suiji.py --config /private/suiji.json retry --request /private/result-intent.json
+```
+
+仅在用户明确要求向随记保存指定附件时，才先上传，再把返回 ID 写入成果的 attachmentIds：
+
+```bash
+python3 scripts/suiji.py --config /private/suiji.json upload --record-id <UUID> --file /private/report.md --request /private/upload-intent.json
 ```
 
 append/complete/upload 不接受已有 request 路径，防止覆盖结果未知的意图。retry 只重放文件，不接受新正文或新文件。已知业务拒绝也保留原意图便于核对；如需要改变请求，先确认原请求未提交再建立新的独立意图。不要将请求文件提交 Git。

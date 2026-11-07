@@ -17,7 +17,7 @@ const PR = /^https:\/\/github\.com\/([a-z\d][a-z\d-]*)\/([\w.-]*[\w-][\w.-]*)\/p
 /** Only explicit references in this final reply; never follow links inside retrieved material. */
 function references(text: string) {
   const candidates = [
-    ...text.matchAll(/\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^\s)]+)(?:\s+"[^"\n]*")?\s*\)|`([^`\n]+)`|https:\/\/github\.com\/[^\s<>`）)]+|(?:^|\s)((?:\.\/)?docs\/[^\s<>`）)]+)/gm),
+    ...text.matchAll(/\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^\s)]+)(?:\s+"[^"\n]*")?\s*\)|`([^`\n]+)`|https:\/\/github\.com\/[^\s<>`）)]+|(?:^|\s)((?:(?:\.\/)?docs\/|\/)[^\s<>`）)]+)/gm),
   ];
   const result = new Map<string, { kind: SupervisionDeliverable["kind"]; reference: string }>();
   for (const match of candidates) {

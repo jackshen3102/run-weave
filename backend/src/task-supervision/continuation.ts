@@ -38,7 +38,7 @@ export async function sendSupervisionOffer(target: SupervisionTarget, offer: Off
   try {
     valid();
     const session = operations.manager.getSession(target.terminalSessionId)!;
-    if (terminalInputAdmission(session).revision !== inputRevision) throw new Error("用户输入已变化，未发送旧续接。");
+    if (terminalInputAdmission(session).inputWriteRevision !== inputRevision) throw new Error("用户输入已变化，未发送旧续接。");
     if (!operations.deliver) throw new Error("终端输入服务不可用。");
     if (options.confirmedEmpty) clearTerminalDraft(session, operations.manager.getPanel(target.panelId)?.tmuxPaneId ?? null, "user-confirmed-empty");
     deliveryStarted = true;
@@ -64,7 +64,7 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
   const panel = operations.manager.getPanel(target.panelId);
   if (!session || !panel || panel.terminalState?.state !== "agent_idle")
     throw new SupervisionError("原 Agent 当前不是空闲状态，未重试续接。");
-  const inputRevision = terminalInputAdmission(session).revision;
+  const inputRevision = terminalInputAdmission(session).inputWriteRevision;
   const { native: latestReply } = await readFinalReply(async () => source, {
     kind: "reply", eventId: "user-retry", source: "terminal", ...target,
     summary: null, createdAt: new Date().toISOString(),

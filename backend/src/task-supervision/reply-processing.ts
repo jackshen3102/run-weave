@@ -191,7 +191,7 @@ export async function processSupervisionReply(
           w.revision !== revision ||
           terminalInputAdmission(
             operations.manager.getSession(target.terminalSessionId)!,
-          ).revision !== inputRevision
+          ).inputWriteRevision !== inputRevision
         )
           return null;
         w.goalState = resolved.needsClarification ? "needs_review" : "ready";
@@ -282,7 +282,7 @@ export async function processSupervisionReply(
         !operations.current(target) ||
         terminalInputAdmission(
           operations.manager.getSession(target.terminalSessionId)!,
-        ).revision !== inputRevision
+        ).inputWriteRevision !== inputRevision
       ) {
         if (w.pendingReply?.eventId === event.eventId) delete w.pendingReply;
         if (w.revision === revision && w.status === "classifying")
@@ -298,6 +298,7 @@ export async function processSupervisionReply(
           ...result.sourceMessageIds,
           ...(result.assessment?.criteria.flatMap((row) => row.sourceMessageIds) ?? []),
           ...(result.assessment?.progress?.sourceMessageIds ?? []),
+          ...(result.assessment?.backgroundWait?.sourceMessageIds ?? []),
           ...result.guidance.authorizationMessageIds,
           ...(previous ? [previous.reportMessageId] : []),
         ]),

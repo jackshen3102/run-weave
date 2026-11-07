@@ -5,6 +5,7 @@ extension TaskWatch {
     decisions.filter { $0.contextRevision == contextRevision && ($0.threadId == nil || $0.threadId == target.threadId) }
   }
   var assessmentHeld: Bool { currentDecisions.last.map { $0.goalVersion == goalDefinition?.version && $0.isHeld } ?? false }
+  var backgroundWaiting: Bool { assessmentHeld && currentDecisions.last?.assessment?.holdReason == "background_wait" }
   var awaitingTask: Bool { taskStartMessageId.hasPrefix("pending:") }
   var draftUnconfirmed: Bool {
     !assessmentHeld && status == "error" && currentDecisions.last?.deliveryBlock == "draft_unconfirmed"
@@ -25,7 +26,7 @@ extension TaskWatch {
     if goalState == "checking" && !awaitingTask { return "正在核对任务目标" }
     if status == "classifying" { return "正在判断任务状态" }
     if awaitingTask { return "等待新任务" }
-    if assessmentHeld { return "判断待核对" }
+    if assessmentHeld { return backgroundWaiting ? "等待后台结果" : "判断待核对" }
     if outcome == .completed { return currentDecisions.last?.assessment == nil ? "本轮任务已完成" : "本轮据报告完成" }
     if outcome == .blocked { return "需要你处理" }
     return "正在监听"
@@ -48,7 +49,7 @@ extension TaskWatch {
     return "等待 Agent 的最终回复，需要继续时自动问询进展。"
   }
   var needsAttention: Bool {
-    enabled && (assessmentHeld || goalState == "needs_review" || waitingFor != nil || pauseReason == "continuation_limit"
+    enabled && ((assessmentHeld && !backgroundWaiting) || goalState == "needs_review" || waitingFor != nil || pauseReason == "continuation_limit"
       || pauseReason == "delivery_unknown" || status == "error" || status == "paused" || outcome == .blocked)
   }
   var statusColor: Color { !enabled ? .secondary : needsAttention ? .orange : TerminalAppearance.accent }
@@ -68,7 +69,7 @@ extension TaskWatch {
     if goalState == "checking" && !awaitingTask { return "核对目标中" }
     if status == "classifying" { return "判断中" }
     if awaitingTask { return "等待新任务" }
-    if assessmentHeld { return "判断待核对" }
+    if assessmentHeld { return backgroundWaiting ? "等待后台结果" : "判断待核对" }
     if outcome == .completed { return currentDecisions.last?.assessment == nil ? "本轮已完成" : "据报告完成" }
     if outcome == .blocked { return "需要处理" }
     return "监控中"

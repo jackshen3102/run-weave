@@ -36,5 +36,5 @@ func mergeSuijiRecord(_ old: SuijiRecord, _ new: SuijiRecord) -> SuijiRecord {
 }
 func suijiHandoff(endpoint: String, info: ServiceInfo, recordID: String) throws -> String {
   let data = try JSONSerialization.data(withJSONObject: ["format": "suiji-handoff-v1", "endpoint": endpoint, "serverId": info.serverId, "ownerId": info.ownerId, "recordId": recordID], options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes])
-  return "使用随记 Skill 处理这条记录。先读取最新原文、全部跟进和相关附件，按我本次要求执行；成功后只追加最终成果，不记录过程或失败。未经我确认，不标记完成。\n" + String(decoding: data, as: UTF8.self)
+  return "使用随记 Skill 处理这条记录。先读取最新原文、全部跟进和相关附件，按我本次要求执行。完整结果、图片和文档在当前终端交付；随记只追加简短最终摘要，默认不上传图片、文档或附件，不记录过程或失败。后续问答、补图不自动回写。未经我确认，不标记完成。\n" + String(decoding: data, as: UTF8.self)
 }
