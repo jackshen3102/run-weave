@@ -4,12 +4,19 @@ import { collectAgentEvidence } from './agent-evidence';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { configurationPath, settingText } from '@runweave/config-node';
-import type { AnalysisClaim, AnalysisReceipt, AnalysisResult } from '@runweave/shared/screen-recording';
+import { configuration, configurationPath, settingText } from '@runweave/config-node';
+import type { AnalysisClaim, AnalysisReceipt, AnalysisResult, AnalysisStatus } from '@runweave/shared/screen-recording';
+import { readConfigurationPath } from '@runweave/shared/configuration';
 import { AnalysisCollector } from './collector';
 import { AnalysisProvider } from './provider';
 import { representativeFrames, idleObservation } from './batching';
 import { logger } from '../logging';
+
+export function dailyAnalysisCutoff(now: number): number {
+  const local = new Date(now + 8*3600000);
+  const slot = Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),local.getUTCDate() - Number(local.getUTCHours() < 1)) - 8*3600000;
+  return slot - 1;
+}
 
 export class ScreenRecordingAnalysisRuntime {
   private readonly workerID = randomUUID();
@@ -17,9 +24,16 @@ export class ScreenRecordingAnalysisRuntime {
   private timer?: ReturnType<typeof setTimeout>;
   private active?: Promise<void>;
   private controller?: AbortController;
+  private unregisterConfiguration?: () => void;
   private closed = false;
   constructor(private readonly history: WorkHistoryService) {}
-  start(): void { if (process.platform === 'darwin') this.schedule(0); }
+  start(): void {
+    if (process.platform !== 'darwin') return;
+    this.unregisterConfiguration = configuration().register('screenRecording.analysis', snapshot => {
+      if (readConfigurationPath(snapshot.value, 'screenRecording.analysis.enabled') !== true) this.controller?.abort();
+    });
+    this.schedule(0);
+  }
   private schedule(delay: number): void {
     if (this.closed) return;
     this.timer = setTimeout(() => {
@@ -34,6 +48,15 @@ export class ScreenRecordingAnalysisRuntime {
     const model = settingText('screenRecording.analysis.model')?.trim();
     const effort = settingText('screenRecording.analysis.effort')?.trim();
     if (!deviceID || !Number.isFinite(effectiveFrom) || effectiveFrom > Date.now() || !model || !effort || !['low','medium','high','xhigh','max','ultra'].includes(effort)) return;
+    // The latest 01:00 Asia/Shanghai slot processes only its preceding days.
+    // The owner persists completion, so restarting cannot start another round.
+    const throughMs = dailyAnalysisCutoff(Date.now());
+    if (effectiveFrom > throughMs) return;
+    const status = await this.collector.request<AnalysisStatus>('analysisStatus',{});
+    if (this.closed || settingText('screenRecording.analysis.enabled') !== 'true') return;
+    if (status.deviceID !== deviceID) throw new Error('DEVICE_MISMATCH');
+    if (status.dailyScheduleVersion !== 1) throw new Error('UPDATE_REQUIRED');
+    if ((status.lastDailyRunThroughMs ?? 0) >= throughMs) return;
     const provider = new AnalysisProvider({ binary: settingText('agents.codex.binary')?.trim() || 'codex',model,effort });
     const started = Date.now();
     this.controller = new AbortController();
@@ -41,8 +64,15 @@ export class ScreenRecordingAnalysisRuntime {
     try {
       await collectAgentEvidence(this.history,this.collector,deviceID,effectiveFrom,signal).catch(() => { logger.warn("screen-analysis.agent-source.unavailable",{}); });
       for (let count = 0; count < 4 && Date.now()-started < 600000 && !signal.aborted; count++) {
-        const claim = await this.collector.request<AnalysisClaim | null>('claimAnalysis',{ workerID: this.workerID,expectedDeviceID: deviceID,effectiveFrom },signal);
-        if (!claim) break;
+        const claim = await this.collector.request<AnalysisClaim | null>('claimAnalysis',{ workerID: this.workerID,expectedDeviceID: deviceID,effectiveFrom,throughMs },signal);
+        if (!claim) {
+          const current = await this.collector.request<AnalysisStatus>('analysisStatus',{},signal);
+          if (current.windowThroughMs === throughMs && current.windowDrained) {
+            await this.collector.request('completeAnalysisDay',{ expectedDeviceID: deviceID,throughMs },signal);
+            logger.info('screen-analysis.daily.completed',{ throughMs });
+          }
+          break;
+        }
         await this.execute(claim,provider,signal);
       }
     } finally { this.controller = undefined; }
@@ -103,6 +133,6 @@ export class ScreenRecordingAnalysisRuntime {
   }
   async dispose(): Promise<void> {
     this.closed = true; clearTimeout(this.timer); this.controller?.abort();
-    await this.active; this.collector.dispose();
+    await this.active; this.collector.dispose(); this.unregisterConfiguration?.();
   }
 }

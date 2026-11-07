@@ -34,6 +34,8 @@ struct AnalysisClaim: Codable {
 }
 struct AnalysisReceipt: Codable { let operationID: String; let batchID: String; let revision: Int; let cardIDs: [String] }
 struct AnalysisStatus: Codable {
+    let dailyScheduleVersion = 1
+    var windowThroughMs: Int64? = nil; var windowDrained: Bool? = nil; var lastDailyRunThroughMs: Int64? = nil
     var keywordSearchVersion: Int? = nil
     let analysisVersion = 1; let deviceID: String; let state: String; let revision: Int
     let queueCount: Int; let failedCount: Int; let latestSuccessMs: Int64?; let processedThroughMs: Int64?; let days: [String]

@@ -58,18 +58,45 @@ actor AnalysisCoordinator {
     func status() throws -> AnalysisStatus {
         let reconciled = try store.scalar("SELECT value FROM metadata WHERE key='scanReconciledAt'") != nil
         let through = reconciled ? try store.scalar("SELECT MAX(end_ms) FROM batches WHERE state='complete' AND end_ms < COALESCE((SELECT MIN(start_ms) FROM batches WHERE state!='complete'),9223372036854775807)").flatMap(Int64.init) : nil
-        return AnalysisStatus(keywordSearchVersion: 1, deviceID: deviceID, state: "ready", revision: try revision(),
+        var result = AnalysisStatus(keywordSearchVersion: 1, deviceID: deviceID, state: "ready", revision: try revision(),
             queueCount: Int(try store.scalar("SELECT COUNT(*) FROM batches WHERE state IN ('pending','running')") ?? "0") ?? 0,
             failedCount: Int(try store.scalar("SELECT COUNT(*) FROM batches WHERE state IN ('failed','source-expired')") ?? "0") ?? 0,
             latestSuccessMs: try store.scalar("SELECT MAX(updated) FROM batches WHERE state='complete'").flatMap(Int64.init),
             processedThroughMs: through, days: try store.rows("SELECT DISTINCT day FROM cards UNION SELECT DISTINCT day FROM batches ORDER BY day DESC").compactMap { $0["day"] })
+        if let cutoff = try store.scalar("SELECT value FROM metadata WHERE key='scanThroughMs'").flatMap(Int64.init), cutoff != Int64.max {
+            result.windowThroughMs = cutoff; result.windowDrained = try windowDrained(throughMs: cutoff)
+        }
+        result.lastDailyRunThroughMs = try store.scalar("SELECT value FROM metadata WHERE key='lastDailyRunThroughMs'").flatMap(Int64.init)
+        return result
+    }
+    private func windowDrained(throughMs: Int64) throws -> Bool {
+        try store.scalar("SELECT value FROM metadata WHERE key='scanThroughMs'") == String(throughMs) &&
+            store.scalar("SELECT value FROM metadata WHERE key='scanReconciledAt'") != nil &&
+            store.scalar("SELECT COUNT(*) FROM batches WHERE state IN ('pending','running') AND end_ms<=?", [throughMs]) == "0"
+    }
+    func completeDay(expectedDeviceID: String, throughMs: Int64) throws {
+        guard expectedDeviceID == deviceID, throughMs > 0, throughMs < journalNowMs(),
+              analysisDay(throughMs) != analysisDay(throughMs+1) else { throw JournalReadError("INVALID_ARGUMENT") }
+        let completed = try store.scalar("SELECT value FROM metadata WHERE key='lastDailyRunThroughMs'").flatMap(Int64.init) ?? 0
+        if completed >= throughMs { return }
+        guard try windowDrained(throughMs: throughMs) else { throw JournalReadError("BUSY", retryable: true) }
+        try store.execute("INSERT OR REPLACE INTO metadata VALUES ('lastDailyRunThroughMs',?)", [String(throughMs)])
     }
     // Scan physical insertion order, repeatedly wrapping. A late ready segment is
     // rediscovered even when its wall time is older than already processed work.
-    private func discover(effectiveFrom: Int64, settings: RecordingSettings, captureState: String) async throws {
+    private func discover(effectiveFrom: Int64, throughMs: Int64, settings: RecordingSettings, captureState: String) async throws {
+        let window = "\(effectiveFrom):\(throughMs)"
+        if try store.scalar("SELECT value FROM metadata WHERE key='scanWindow'") != window {
+            try store.transaction {
+                try store.execute("INSERT OR REPLACE INTO metadata VALUES ('scanWindow',?)", [window])
+                try store.execute("INSERT OR REPLACE INTO metadata VALUES ('scanThroughMs',?)", [String(throughMs)])
+                try store.execute("DELETE FROM metadata WHERE key IN ('scanCursor','scanReconciledAt')")
+            }
+        }
         let cursor = Int64(try store.scalar("SELECT value FROM metadata WHERE key='scanCursor'") ?? "0") ?? 0
-        let page = try await engine.analysisPage(after: cursor, settings: settings)
+        let page = try await engine.analysisPage(after: cursor, effectiveFrom: effectiveFrom, throughMs: throughMs, settings: settings)
         let sourceIntervals = try await engine.catalog(settings: settings).intervals
+        guard try store.scalar("SELECT value FROM metadata WHERE key='scanWindow'") == window else { throw JournalReadError("CONFLICT") }
         let breaks = sourceIntervals.flatMap { [$0.startMs,$0.endMs] }.sorted()
         var fresh: [JournalCapture] = []
         for frame in page.frames where frame.capture.capturedAtMs >= effectiveFrom {
@@ -133,8 +160,8 @@ actor AnalysisCoordinator {
             try store.execute("INSERT OR REPLACE INTO agent_cursors VALUES (?,?,?)", [threadID,cursor,coverage])
         }
     }
-    private func discoverAgents() throws {
-        let rows = try store.rows("SELECT id,body FROM agent_events WHERE batch_id IS NULL ORDER BY occurred_ms,id LIMIT 100")
+    private func discoverAgents(throughMs: Int64) throws {
+        let rows = try store.rows("SELECT id,body FROM agent_events WHERE batch_id IS NULL AND occurred_ms<=? ORDER BY occurred_ms,id LIMIT 100", [throughMs])
         var events: [AnalysisAgentEvent] = []; var bytes = 0
         for row in rows {
             let event: AnalysisAgentEvent = try decode(row["body"] ?? "")
@@ -153,13 +180,13 @@ actor AnalysisCoordinator {
             try changed(day: manifest.day)
         }
     }
-    func claim(workerID: String, expectedDeviceID: String, effectiveFrom: Int64, settings: RecordingSettings, captureState: String) async throws -> AnalysisClaim? {
-        guard expectedDeviceID == deviceID, UUID(uuidString: workerID) != nil, effectiveFrom > 0, effectiveFrom <= journalNowMs() else { throw JournalReadError("INVALID_ARGUMENT") }
+    func claim(workerID: String, expectedDeviceID: String, effectiveFrom: Int64, throughMs: Int64 = Int64.max, settings: RecordingSettings, captureState: String) async throws -> AnalysisClaim? {
+        guard expectedDeviceID == deviceID, UUID(uuidString: workerID) != nil, effectiveFrom > 0, effectiveFrom <= journalNowMs(), throughMs >= effectiveFrom else { throw JournalReadError("INVALID_ARGUMENT") }
         try maintain()
         if try store.scalar("SELECT id FROM batches WHERE state='running' AND expires>? LIMIT 1", [journalNowMs()]) != nil { return nil }
         // Discovery awaits the capture actor, so re-check leases after the await.
-        try await discover(effectiveFrom: effectiveFrom, settings: settings, captureState: captureState)
-        try discoverAgents()
+        try await discover(effectiveFrom: effectiveFrom, throughMs: throughMs, settings: settings, captureState: captureState)
+        try discoverAgents(throughMs: throughMs)
         let now = journalNowMs()
         try store.execute("INSERT OR IGNORE INTO metadata VALUES ('effectiveFrom',?)", [String(effectiveFrom)])
         if try store.scalar("SELECT id FROM batches WHERE state='running' AND expires>? LIMIT 1", [now]) != nil { return nil }
@@ -169,7 +196,7 @@ actor AnalysisCoordinator {
             for row in expiredDays { if let day = row["day"] { try changed(day: day) } }
         }
         // Retire expired sources in the same claim pass so they cannot starve ready work.
-        while let row = try store.rows("SELECT * FROM batches WHERE state='pending' AND attempts<3 AND next_attempt<=? ORDER BY start_ms,id LIMIT 1", [now]).first {
+        while let row = try store.rows("SELECT * FROM batches WHERE state='pending' AND attempts<3 AND next_attempt<=? AND end_ms<=? ORDER BY start_ms,id LIMIT 1", [now,throughMs]).first {
             guard let id = row["id"] else { throw JournalReadError("ANALYSIS_UNAVAILABLE") }
             var manifest: AnalysisManifest = try decode(row["manifest"] ?? "")
             if manifest.captures.contains(where: { $0.availableUntilMs <= now }) {

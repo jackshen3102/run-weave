@@ -37,6 +37,7 @@ export interface AnalysisResult {
 }
 export interface AnalysisReceipt { operationID: string; batchID: string; revision: number; cardIDs: string[] }
 export interface AnalysisStatus {
+  dailyScheduleVersion?: 1; windowThroughMs?: number; windowDrained?: boolean; lastDailyRunThroughMs?: number;
   keywordSearchVersion?: 1;
   analysisVersion: 1; deviceID: string; state: 'ready' | 'unavailable'; revision: number;
   queueCount: number; failedCount: number; days?: string[]; latestSuccessMs?: number; processedThroughMs?: number;
@@ -51,7 +52,7 @@ export interface AnalysisExport {
 }
 export type AnalysisMethod = 'analysisSearch' | 'analysisStatus' | 'analysisCards' | 'analysisCard' | 'analysisExport' |
   'claimAnalysis' | 'renewAnalysis' | 'commitAnalysis' | 'analysisReceipt' | 'retryAnalysis' |
-  'analysisAgentCursor' | 'ingestAnalysisEvents' | 'failAnalysis' | 'analysisFrame' | 'resolveAnalysisCapture';
+  'analysisAgentCursor' | 'ingestAnalysisEvents' | 'failAnalysis' | 'analysisFrame' | 'resolveAnalysisCapture' | 'completeAnalysisDay';
 
 export interface AnalysisSearchRequest {
   q: string; from: string; to: string; limit?: number;

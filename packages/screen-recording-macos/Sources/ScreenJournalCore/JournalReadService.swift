@@ -102,9 +102,13 @@ actor JournalReadService {
             guard let q = r.q, let from = r.from, let to = r.to else { throw JournalReadError("INVALID_ARGUMENT") }
             return try json(await owner.search(AnalysisSearchRequest(q: q, from: from, to: to, limit: r.limit), serverEpoch: serverEpoch))
         case "analysisStatus": return try json(await owner.status())
+        case "completeAnalysisDay":
+            guard let through = r.throughMs else { throw JournalReadError("INVALID_ARGUMENT") }
+            try await owner.completeDay(expectedDeviceID: required(r.expectedDeviceID), throughMs: through)
+            return try json(["completed": true])
         case "claimAnalysis":
             guard let from = r.effectiveFrom else { throw JournalReadError("INVALID_ARGUMENT") }
-            return try json(await owner.claim(workerID: required(r.workerID), expectedDeviceID: required(r.expectedDeviceID), effectiveFrom: from, settings: settings, captureState: captureState))
+            return try json(await owner.claim(workerID: required(r.workerID), expectedDeviceID: required(r.expectedDeviceID), effectiveFrom: from, throughMs: r.throughMs ?? Int64.max, settings: settings, captureState: captureState))
         case "renewAnalysis":
             guard let gen = r.generation else { throw JournalReadError("INVALID_ARGUMENT") }
             return try json(["expiresAt": await owner.renew(batchID: required(r.batchID),workerID: required(r.workerID),generation: gen)])
