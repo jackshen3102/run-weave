@@ -573,21 +573,6 @@ final class AppSession: ObservableObject {
     }
   }
 
-  func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
-    guard generation == epoch, !Task.isCancelled, !isRequestCancellation(failure) else { return }
-    if reportFailure { error = displayError(failure) }
-    if case APIError.credentialsUnavailable = failure {
-      authenticated = false
-      overview = nil
-      events?.stop()
-      closeTerminal()
-    } else if case APIError.refreshResultUnknown = failure {
-      await prepareRelogin()
-    } else if failure is URLError {
-      await probe(epoch: epoch)
-    }
-  }
-
   private func stopResources() {
     cancelRouteRecovery()
     attentionRetention.setForeground(false)
