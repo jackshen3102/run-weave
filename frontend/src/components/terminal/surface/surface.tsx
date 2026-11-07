@@ -1,4 +1,4 @@
-import { consumeComposerInsertion } from "./composer-insertion";
+import { consumeComposerInsertion, usePromptInsertionRequest } from "./composer-insertion";
 import { parseTerminalFileReference, type TerminalFileReference, type TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -87,13 +87,7 @@ export function TerminalSurface({
   const activeBrowserProfileId = useTerminalPreviewStore(
     (state) => state.activeBrowserProfileId,
   );
-  const promptInsertionRequest = useTerminalPromptInsertionStore((state) =>
-    active
-      ? (state.requests.find(
-          (request) => request.terminalSessionId === terminalSessionId,
-        ) ?? null)
-      : null,
-  );
+  const promptInsertionRequest = usePromptInsertionRequest(active, terminalSessionId);
   const consumePromptInsertion = useTerminalPromptInsertionStore(
     (state) => state.consumeInsertion,
   );
