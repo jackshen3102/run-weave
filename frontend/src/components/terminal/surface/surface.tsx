@@ -1,3 +1,4 @@
+import { consumeComposerInsertion, usePromptInsertionRequest } from "./composer-insertion";
 import { parseTerminalFileReference, type TerminalFileReference, type TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +49,7 @@ interface TerminalSurfaceProps {
   clientMode?: ClientMode;
   layoutVersion?: string;
   paneWorkspace?: TerminalPanelWorkspace | null;
+  activePanelId?: string | null;
   sessionStatus?: "running" | "exited";
   terminalState?: TerminalState;
   onResizePane?: (
@@ -67,6 +69,7 @@ export function TerminalSurface({
   clientMode = "desktop",
   layoutVersion = "default",
   paneWorkspace = null,
+  activePanelId = null,
   sessionStatus = "running",
   terminalState,
   onResizePane,
@@ -84,13 +87,7 @@ export function TerminalSurface({
   const activeBrowserProfileId = useTerminalPreviewStore(
     (state) => state.activeBrowserProfileId,
   );
-  const promptInsertionRequest = useTerminalPromptInsertionStore((state) =>
-    active
-      ? (state.requests.find(
-          (request) => request.terminalSessionId === terminalSessionId,
-        ) ?? null)
-      : null,
-  );
+  const promptInsertionRequest = usePromptInsertionRequest(active, terminalSessionId);
   const consumePromptInsertion = useTerminalPromptInsertionStore(
     (state) => state.consumeInsertion,
   );
@@ -444,10 +441,13 @@ export function TerminalSurface({
     onTmuxExitCopyModeRequest: floatingComposer.onTmuxExitCopyModeRequest,
   });
 
+  const insertComposerDraft = floatingComposer.insertDraft;
   useEffect(() => {
     if (!active || !promptInsertionRequest) {
       return;
     }
+    if (consumeComposerInsertion(promptInsertionRequest, paneWorkspace?.activePanelId ?? activePanelId,
+      insertComposerDraft, consumePromptInsertion)) return;
     if (!isSupportedFloatingComposerAgent({ activeCommand, terminalState })) {
       consumePromptInsertion(promptInsertionRequest.id);
       return;
@@ -469,7 +469,10 @@ export function TerminalSurface({
   }, [
     active,
     activeCommand,
+    activePanelId,
     consumePromptInsertion,
+    insertComposerDraft,
+    paneWorkspace?.activePanelId,
     promptInsertionRequest,
     requestTmuxExitCopyMode,
     terminalState,

@@ -1,6 +1,6 @@
 import { useMemoizedFn } from "ahooks";
 import { useRef, useState, type RefObject } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, MessageSquarePlus } from "lucide-react";
 import type { OnMount } from "@monaco-editor/react";
 
 type MonacoEditor = Parameters<OnMount>[0];
@@ -112,12 +112,16 @@ interface LineReferenceCopyButtonProps {
   range: LineReferenceRange | null;
   copied: boolean;
   onCopy: () => void;
+  onInsert?: () => void;
+  insertDisabledReason?: string;
 }
 
 export function LineReferenceCopyButton({
   range,
   copied,
   onCopy,
+  onInsert,
+  insertDisabledReason,
 }: LineReferenceCopyButtonProps) {
   if (!range) {
     return null;
@@ -125,10 +129,15 @@ export function LineReferenceCopyButton({
 
   const label = copied ? "Line reference copied" : "Copy line reference";
   return (
+    <div className="absolute right-3 z-20 flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 p-1 text-slate-100 shadow-lg" style={{ top: range.top }} onMouseDown={(event) => event.preventDefault()}>
+    {onInsert ? <button type="button" onClick={onInsert} disabled={Boolean(insertDisabledReason)}
+      title={insertDisabledReason ?? "加入输入框；超过 4 KiB 时仅插入路径和行号"}
+      className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50">
+      <MessageSquarePlus className="h-4 w-4" />加入输入框
+    </button> : null}
     <button
       type="button"
-      className="absolute right-3 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-100 shadow-lg hover:border-slate-500 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-      style={{ top: range.top }}
+      className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
       aria-label={label}
       title={label}
       onMouseDown={(event) => event.preventDefault()}
@@ -140,5 +149,6 @@ export function LineReferenceCopyButton({
         <Copy className="h-4 w-4" />
       )}
     </button>
+    </div>
   );
 }

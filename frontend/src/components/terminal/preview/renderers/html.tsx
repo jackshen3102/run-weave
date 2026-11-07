@@ -15,6 +15,10 @@ interface Props {
   refreshKey: number;
   editable: boolean;
   lineReferencePath: string;
+  canInsertSelection?: boolean;
+  selectionDisabledReason?: string;
+  hasUnsavedChanges?: boolean;
+  onInsertSelection?: (text: string) => void;
   initialRevealPosition?: { line: number; column: number; key: string };
   onContentChange: (content: string) => void;
   change?: { kind: TerminalPreviewChangeKind; version: string };
@@ -54,7 +58,7 @@ export function TerminalHtmlPreview(props: Props) {
       {mode === "preview" && props.content !== props.savedContent && <span className="text-amber-400">Save to update preview</span>}
     </div>
     <div className="min-h-0 flex-1">
-      {mode === "source" ? <TerminalMonacoViewer language="html" content={props.content} editable={props.editable} onContentChange={props.onContentChange} lineReferencePath={props.lineReferencePath} initialRevealPosition={props.initialRevealPosition} />
+      {mode === "source" ? <TerminalMonacoViewer language="html" content={props.content} editable={props.editable} onContentChange={props.onContentChange} lineReferencePath={props.lineReferencePath} initialRevealPosition={props.initialRevealPosition} canInsertSelection={props.canInsertSelection} selectionDisabledReason={props.selectionDisabledReason} hasUnsavedChanges={props.hasUnsavedChanges} onInsertSelection={props.onInsertSelection} />
         : error ? <div className="p-3 text-rose-300">{error}</div>
         : url ? <iframe title="HTML preview" src={url} sandbox="allow-scripts" referrerPolicy="no-referrer" className="h-full w-full border-0 bg-white" />
         : <div className="p-3 text-slate-400">Loading HTML preview...</div>}

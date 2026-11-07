@@ -105,6 +105,7 @@ interface PreviewFileEditor {
 
 interface PreviewFileDisplay {
   canInsertMarkdownReference: boolean;
+  canInsertCodeSelection: boolean;
   markdownReferenceDisabledReason?: string;
   markdownViewMode: TerminalMarkdownViewMode;
   markdownSplitSourceWidthPct: number;
@@ -113,6 +114,7 @@ interface PreviewFileDisplay {
   lineTarget: TerminalPreviewLineTarget | null;
   onMarkdownScrollRatioChange: (ratio: number) => void;
   onInsertMarkdownReference: (reference: string) => void;
+  onInsertCodeSelection: (text: string) => void;
   onRevealMarkdownSourceLine: (line: number) => void;
   onStartMarkdownResize: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
@@ -168,6 +170,7 @@ export function TerminalPreviewFileView({
   } = editor;
   const {
     canInsertMarkdownReference,
+    canInsertCodeSelection,
     lineTarget,
     markdownReferenceDisabledReason,
     markdownScrollRatio,
@@ -175,6 +178,7 @@ export function TerminalPreviewFileView({
     markdownViewMode,
     svgViewMode,
     onInsertMarkdownReference,
+    onInsertCodeSelection,
     onMarkdownScrollRatioChange,
     onRevealMarkdownSourceLine,
     onStartMarkdownResize,
@@ -273,6 +277,7 @@ export function TerminalPreviewFileView({
       editable,
       hasUnsavedChanges: editorContent !== filePreview.content,
       canInsertMarkdownReference,
+      canInsertCodeSelection,
       markdownReferenceDisabledReason,
       onEditorContentChange,
       markdownScrollRatio,
@@ -281,6 +286,7 @@ export function TerminalPreviewFileView({
       onAuthExpired,
       onOpenFilePath,
       onInsertMarkdownReference,
+      onInsertCodeSelection,
       onRevealMarkdownSourceLine,
       initialRevealPosition: revealPosition,
     });
@@ -294,6 +300,10 @@ export function TerminalPreviewFileView({
             editable={editable}
             onContentChange={onEditorContentChange}
             lineReferencePath={filePreview.absolutePath}
+            canInsertSelection={canInsertCodeSelection}
+            selectionDisabledReason={markdownReferenceDisabledReason}
+            hasUnsavedChanges={editorContent !== filePreview.content}
+            onInsertSelection={onInsertCodeSelection}
             initialRevealPosition={revealPosition}
           />
         </Suspense>
@@ -316,6 +326,10 @@ export function TerminalPreviewFileView({
         refreshKey={assetRefreshKey}
         editable={editable}
         lineReferencePath={filePreview.absolutePath}
+        canInsertSelection={canInsertCodeSelection}
+        selectionDisabledReason={markdownReferenceDisabledReason}
+        hasUnsavedChanges={editorContent !== filePreview.content}
+        onInsertSelection={onInsertCodeSelection}
         initialRevealPosition={revealPosition}
         onContentChange={onEditorContentChange}
       />
@@ -329,6 +343,10 @@ export function TerminalPreviewFileView({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          canInsertSelection={canInsertCodeSelection}
+          selectionDisabledReason={markdownReferenceDisabledReason}
+          hasUnsavedChanges={editorContent !== filePreview.content}
+          onInsertSelection={onInsertCodeSelection}
           initialRevealPosition={revealPosition}
         />
       </Suspense>
@@ -386,6 +404,7 @@ interface RenderMarkdownContentArgs {
   editable: boolean;
   hasUnsavedChanges: boolean;
   canInsertMarkdownReference: boolean;
+  canInsertCodeSelection: boolean;
   markdownReferenceDisabledReason?: string;
   onEditorContentChange: (content: string) => void;
   markdownScrollRatio: number;
@@ -394,6 +413,7 @@ interface RenderMarkdownContentArgs {
   onAuthExpired?: () => void;
   onOpenFilePath: (filePath: string) => void;
   onInsertMarkdownReference: (reference: string) => void;
+  onInsertCodeSelection: (text: string) => void;
   onRevealMarkdownSourceLine: (line: number) => void;
   initialRevealPosition?: {
     line: number;
@@ -413,6 +433,7 @@ function renderMarkdownContent({
   editable,
   hasUnsavedChanges,
   canInsertMarkdownReference,
+  canInsertCodeSelection,
   markdownReferenceDisabledReason,
   onEditorContentChange,
   markdownScrollRatio,
@@ -421,6 +442,7 @@ function renderMarkdownContent({
   onAuthExpired,
   onOpenFilePath,
   onInsertMarkdownReference,
+  onInsertCodeSelection,
   onRevealMarkdownSourceLine,
   initialRevealPosition,
 }: RenderMarkdownContentArgs): ReactNode {
@@ -433,6 +455,10 @@ function renderMarkdownContent({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          canInsertSelection={canInsertCodeSelection}
+          selectionDisabledReason={markdownReferenceDisabledReason}
+          hasUnsavedChanges={editorContent !== filePreview.content}
+          onInsertSelection={onInsertCodeSelection}
           initialRevealPosition={initialRevealPosition}
         />
       </Suspense>
@@ -477,6 +503,10 @@ function renderMarkdownContent({
           editable={editable}
           onContentChange={onEditorContentChange}
           lineReferencePath={filePreview.absolutePath}
+          canInsertSelection={canInsertCodeSelection}
+          selectionDisabledReason={markdownReferenceDisabledReason}
+          hasUnsavedChanges={editorContent !== filePreview.content}
+          onInsertSelection={onInsertCodeSelection}
           initialRevealPosition={initialRevealPosition}
         />
       </Suspense>

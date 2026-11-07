@@ -30,6 +30,10 @@ interface TerminalMonacoViewerProps {
   editable?: boolean;
   onContentChange?: (content: string) => void;
   lineReferencePath?: string;
+  canInsertSelection?: boolean;
+  selectionDisabledReason?: string;
+  hasUnsavedChanges?: boolean;
+  onInsertSelection?: (text: string) => void;
   initialRevealPosition?: {
     line: number;
     column: number;
@@ -74,6 +78,10 @@ export function TerminalMonacoViewer({
   editable = false,
   onContentChange,
   lineReferencePath,
+  canInsertSelection = false,
+  selectionDisabledReason,
+  hasUnsavedChanges = false,
+  onInsertSelection,
   initialRevealPosition,
 }: TerminalMonacoViewerProps) {
   const editorRef = useRef<MonacoEditor | null>(null);
@@ -94,6 +102,23 @@ export function TerminalMonacoViewer({
     clearLineReferenceCopiedTimer,
     resetLineReferenceCopied,
   } = useLineReferenceCopy(lineReferencePathRef, lineReferenceRangeRef);
+
+  const insertSelection = useMemoizedFn(() => {
+    if (!canInsertSelection || hasUnsavedChanges || !onInsertSelection || !lineReferencePath) return;
+    const editor = editorRef.current;
+    const selection = editor?.getSelection();
+    const model = editor?.getModel();
+    const range = editor ? getSelectedLineReferenceRange(editor, lineReferencePath) : null;
+    if (!selection || !model || !range) return;
+    const reference = range.startLine === range.endLine
+      ? `${lineReferencePath}:${range.startLine}`
+      : `${lineReferencePath}:${range.startLine}-${range.endLine}`;
+    if (model.getValueLengthInRange(selection) > 4096) { onInsertSelection(reference); return; }
+    const selected = model.getValueInRange(selection);
+    if (new TextEncoder().encode(selected).byteLength > 4096) { onInsertSelection(reference); return; }
+    const fence = "~".repeat(Math.max(3, ...(selected.match(/~+/g) ?? []).map(run => run.length + 1)));
+    onInsertSelection(`${reference}\n${fence}${language}\n${selected}\n${fence}`);
+  });
 
   const revealInitialPosition = useMemoizedFn((): void => {
     if (!initialRevealPosition) {
@@ -249,6 +274,8 @@ export function TerminalMonacoViewer({
     <LineReferenceCopyButton
       range={lineReferenceRange}
       copied={lineReferenceCopied}
+      onInsert={onInsertSelection ? insertSelection : undefined}
+      insertDisabledReason={hasUnsavedChanges ? "保存文件后才能引用代码选区" : !canInsertSelection ? selectionDisabledReason ?? "请先启动支持的 Agent" : undefined}
       onCopy={() => {
         void copyLineReference();
       }}

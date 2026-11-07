@@ -1,3 +1,4 @@
+import { useDraftInsertion } from "./use-draft-insertion";
 import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
 import { useRichPaste } from "../../../features/terminal/input/use-rich-paste";
 import {
@@ -256,6 +257,11 @@ export function useTerminalFloatingDraftController({
     floatingDraftRef.current = value;
     setFloatingDraft(value);
     floatingDraftDirtyRef.current = value !== lastSyncedTuiDraftRef.current;
+  });
+
+  const insertDraft = useDraftInsertion({
+    eligible, draftMirrorSupported, floatingDraftSyncPendingRef, floatingDraftRef,
+    setSendError, setFloatingComposerOpen, handleDraftChange,
   });
 
   const sendDraftToTui = useMemoizedFn(
@@ -573,6 +579,7 @@ export function useTerminalFloatingDraftController({
     eligible,
     handleOutputReceived,
     handleDraftChange,
+    insertDraft,
     handleSend,
     handleQueue,
     queueKey,
