@@ -12447,5 +12447,29 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "仅记录 Backend 注入的真实定时运行身份到私有批次绑定回执，不作为业务配置或凭据来源。"
+  },
+  {
+    "file": "packages/screen-recording-macos/Sources/ScreenJournalApp/AppUsageCollector.swift",
+    "kind": "native-or-shell",
+    "expression": "@Published private(set) var enabled = UserDefaults.standard.bool(forKey: \"appUsageAutomaticCollection\")",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "ScreenJournal 本机自动归档开关，默认关闭，由菜单操作持久化到原生偏好设置。"
+  },
+  {
+    "file": "packages/screen-recording-macos/Sources/ScreenJournalApp/AppUsageCollector.swift",
+    "kind": "native-or-shell",
+    "expression": "UserDefaults.standard.set(value, forKey: \"appUsageAutomaticCollection\")",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "ScreenJournal 本机自动归档开关，默认关闭，由菜单操作持久化到原生偏好设置。"
+  },
+  {
+    "file": "packages/screen-recording-macos/Sources/ScreenJournalApp/AppUsageCollector.swift",
+    "kind": "native-or-shell",
+    "expression": "var environment = ProcessInfo.processInfo.environment",
+    "count": 1,
+    "category": "system",
+    "reason": "继承系统子进程环境并移除 Python 注入变量，供固定路径解释器执行本地归档工具。"
   }
 ]

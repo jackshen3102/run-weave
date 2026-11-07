@@ -5,7 +5,40 @@ import Combine
     @Published var coordinator: CaptureCoordinator?
     @Published var startupError = ""
     @Published var showingSettings = false
+    @Published var exportingAppUsage = false
+    let appUsage = AppUsageCollector()
     var reopenMainWindow: (() -> Void)?
+    func exportAppUsage() {
+        guard !exportingAppUsage else { return }
+        let panel = NSOpenPanel()
+        panel.title = "选择应用使用记录的导出位置"
+        panel.prompt = "导出到此文件夹"
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false; panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let parent = panel.url else { return }
+        let output = parent.appendingPathComponent("ScreenJournal-AppUsage-" + UUID().uuidString)
+        exportingAppUsage = true
+        Task {
+            defer { exportingAppUsage = false }
+            do {
+                let report = try await Task.detached(priority: .utility) { try AppUsageExport().run(to: output) }.value
+                let alert = NSAlert()
+                let collected = report["state"] as? String == "snapshot_collected"
+                let identified = (report["deviceIdentity"] as? [String: Any])?["state"] as? String == "available"
+                alert.messageText = collected ? "应用使用记录已导出" : "应用使用记录未完整导出"
+                alert.informativeText = "仅包含已同步到这台 Mac 的其他设备记录，可能存在延迟或缺失。\n设备信息：\(identified ? "已读取" : "未能读取")。\n\(output.path)"
+                if !collected || !identified {
+                    let identityError = (report["deviceIdentity"] as? [String: Any])?["error"] as? String
+                    alert.informativeText += "\n" + ((report["error"] as? String) ?? identityError ?? "部分记录未能读取，请查看导出结果。")
+                    alert.informativeText += "\n如提示权限不足，请在系统设置的完全磁盘访问权限中允许 ScreenJournal，然后重新导出。"
+                }
+                alert.addButton(withTitle: "打开导出文件夹"); alert.addButton(withTitle: "关闭")
+                if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(output) }
+            } catch {
+                let alert = NSAlert(); alert.messageText = "导出失败"; alert.informativeText = error.localizedDescription; alert.runModal()
+            }
+        }
+    }
     func start() async {
         do {
             umask(0o077)
@@ -40,6 +73,7 @@ import Combine
             let recorder = CaptureCoordinator(paths: paths)
             await recorder.initialize()
             coordinator = recorder
+            if !paths.validation && recorder.status.state != "failed" { appUsage.start() }
             if recorder.status.state == "failed" {
                 fputs("ScreenJournal: \(recorder.status.reason)\n", stderr)
                 if recorder.status.reason.hasPrefix("writer_active") {

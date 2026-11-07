@@ -18,6 +18,89 @@ packages/screen-recording-macos/build.sh --configuration Debug --derived-data-pa
 每次重建的代码哈希可能使既有屏幕权限不匹配，只适合编译和合成材料验证。
 正式安装及固定路径授权独立执行，重签或移动后需核对 macOS 屏幕权限。
 
+### 导出跨设备应用使用记录
+
+菜单栏中的“导出应用使用记录…”复用 ScreenJournal 进程，选择导出位置后生成一个新的
+`ScreenJournal-AppUsage-*` 文件夹。仅只读复制此 Mac 上 Biome `App.InFocus/remote` 的文件，
+同时只读查询 `DevicePeer` 的设备标识、名称和平台，并通过 Knowledge 的 `ZSYNCPEER` 表按 IDS 标识
+补充硬件型号，不按名称猜测。不读取本机 `local` 流、不修改系统源数据、不上传。
+此功能需要 ScreenJournal 的“完全磁盘访问权限”，屏幕录制授权不包含它。
+设备名称和应用使用记录属于个人数据，导出目录权限为 0700、文件为 0600。
+
+Agent 可启动同一个签名 App 的一次性导出模式。导出模式在录屏初始化之前退出，
+不获取录屏 writer 锁、不更改采集开关，允许现有录屏实例继续运行：
+
+```bash
+open -n -W /Applications/ScreenJournal.app --args --export-app-usage /absolute/new-export-directory
+python3 packages/screen-recording-macos/tools/app-usage/parse-snapshot.py /absolute/new-export-directory
+```
+
+导出目标必须是父目录已存在的全新绝对路径，且不能位于 ScreenJournal 录屏数据目录内。
+先检查 `manifest.json`：`state=snapshot_collected` 表示文件复制完成，设备映射另看
+`deviceIdentity.state=available`；权限失败、部分文件失败、大小上限和无文件都有明确状态。
+设备映射使用 immutable 只读模式，不创建系统数据库的 WAL/SHM 文件；未 checkpoint 的新设备映射可能暂时不可见。
+`open` 的退出码不能代替导出结果。单次文件总量上限 128 MiB；导出副本由用户管理，
+不受录屏的保留期限和容量清理影响。
+
+离线解析要求 Python 3.10+，只处理指定导出目录，不需要访问系统数据的权限。
+输出包括 `daily-app-usage.csv`、`daily-usage.json`、`daily-app-counts.json`、
+`parsed-events.json`、`parsed-sessions.json` 和 `summary.json`。默认按上海时区分日，
+可用 `--timezone` 指定 IANA 时区。按设备标识匹配映射，不以同名设备或应用包名猜测设备归属。
+同一时刻先处理失焦再处理聚焦；缺少关闭事件的区间标记为 `inferred_next_open`，未结束区间不计时。
+只读取 Written 且 CRC 有效的 SEGB 记录；解析问题、最新事件时间和未闭合事件计数保留在汇总中。
+
+### 增量归档与按天查询
+
+使用同一离线工具目录中的 `archive.py` 将导出副本增量导入本地 SQLite，再按日期查询：
+
+```bash
+python3 packages/screen-recording-macos/tools/app-usage/archive.py import /absolute/new-export-directory
+python3 packages/screen-recording-macos/tools/app-usage/archive.py day 2026-11-06
+python3 packages/screen-recording-macos/tools/app-usage/archive.py day 2026-11-06 --device DEVICE_DIRECTORY_ID --timezone Asia/Shanghai
+```
+
+默认归档为 `~/Library/Application Support/ScreenJournalAppUsage/archive.sqlite`，与录屏 writer 的
+数据库和清理策略分离；可在子命令前加 `--archive /absolute/archive.sqlite` 使用显式隔离归档。
+只读查询不会创建不存在的归档。归档文件权限为 0600，新建目录为 0700；拒绝符号链接、
+录屏 writer 的数据目录和未知 schema，不自动重置已有数据库。
+
+导入先重读副本中的 SEGB 文件，使用事务持久保存原始事件、设备映射和来源诊断。
+事件按设备、时间、应用标识、聚焦状态去重，重复导入不会累加时长；迟到事件在查询时参与重新配对，
+能够补齐此前未结束的区间。缺失／删除槽位和后续较短的导出不会删除已归档的历史；因此这份归档
+是已观察记录的累积副本，不保证反映 Apple 源数据库后续的删除或更正。权限失败的导出拒绝入库，
+部分导出可保留已读事件并携带诊断，不会把缺失数据当成零使用或覆盖整天。设备映射以较新的
+已读取映射为准；设备名称相同不合并设备。
+
+`day` 输出按设备分组的应用包名、时长秒数、匹配／推断区间秒数、超过四小时的区间秒数、
+应用标识数量、首末事件时间、设备映射采集时间与来源诊断。按请求时区的自然日裁剪区间，
+不会把多台设备合成一个总时长。无记录仍标记为 `observed_only`，不承诺全天完整。
+归档持久保留到用户自行管理，不自动删除或上传；这些命令不会建立定时任务。
+
+这些时长由前台焦点事件计算，不等同于 Apple“屏幕使用时间”的官方汇总。
+应用数量包括系统界面标识，不代表已安装应用数量。数据可能延迟同步、历史缺失或来自旧设备；
+复制成功不能证明当前 iPhone、所有应用、全天完整性或实时更新，也不包含应用内浏览内容。
+当前提供显式导出、增量导入和离线按天查询，不新增 Backend 接口。
+
+### 在 ScreenJournal 运行期间自动归档
+
+菜单栏“自动归档应用使用记录”默认关闭。开启后立即采集一次，此后 App 运行期间每小时
+检查一次；该开关会保存，下一次启动 App 时自动继续。关闭窗口不停止归档，关闭开关或
+退出 App 停止这条采集链路。Mac 录屏的暂停／恢复与此开关独立；没有登录项、LaunchAgent
+或后台服务，App 未运行时不采集。此功能不加快 Apple 的跨设备同步，也不保证全天完整。
+
+自动采集复用 App 内的只读导出器，以及随签名 App 打包的 `AppUsageTools/archive.py`；
+需要本机 `/opt/homebrew/bin/python3`、`/usr/local/bin/python3` 或 `/usr/bin/python3` 中有
+Python 3.10+，不会自动安装解释器。缺失解释器、系统权限或归档失败会在菜单和
+`~/Library/Application Support/ScreenJournalAppUsage/collection-status.json` 中明确显示。
+菜单“立即采集应用使用记录”走同一流程；同一实例串行采集，定时触发不会叠加并行任务。
+仅正常持有录屏目录的 App 启动后台流程；一次性导出和 Debug 隔离实例不启动它。
+
+本地归档仍是上述 `archive.sqlite`。`latest-export/` 保留最近一次成功入库的原始副本及解析结果，
+`collection-pending/` 保留当前／失败尝试，下一次尝试替换它；不无限累积每小时的原始文件副本。
+退出会取消定时等待并终止导入子进程，SQLite 事务保证失败不留下半次导入；子进程运行上限
+120 秒。未知数据库版本拒绝写入，不自动清空归档。状态记录尝试／成功／下次尝试时间、
+新增事件数和源事件的最新时间，成功采集不等同于源数据新鲜。离线查询命令保持不变。
+
 打开 App 默认展示“录屏记录”，“整理事项”为辅助视图；打开主界面不自动开始采集。
 通过主界面的授权提示处理屏幕录制权限，再点击工具栏的“恢复记录”。关闭窗口后
 菜单栏继续运行；手动暂停不会因解锁或唤醒恢复。明确退出会保存停止状态并等待封段；
