@@ -221,12 +221,28 @@ export class AgentThreadStatusReconciler {
         await this.options.codexRolloutLifecycleReader.readLatestLifecycle(
           thread.threadId,
         );
+      // Reassert an already-running projection from its native turn. Backend
+      // state may have been overwritten by an unrelated hidden thread's Stop.
+      // An older start never resurrects a thread whose projection has stopped.
+      if (lifecycle?.status === "running" &&
+          (thread.status === "running" || !isOlderThanThreadProjection(lifecycle.timestamp, thread))) {
+        return {
+          status: "running",
+          lifecycleType: `rollout:${lifecycle.type}`,
+          lifecycleCursor: lifecycle.cursor,
+          detailStatus: null,
+          preview: null,
+          turnId: lifecycle.turnId,
+        };
+      }
       const sameObservedFailure = lifecycle?.error && thread.status === "idle" &&
         thread.lastLifecycleType === `rollout:${lifecycle.type}` &&
         thread.lastLifecycleCursor === lifecycle.cursor;
+      const followsObservedStart = lifecycle && thread.lastLifecycleType === "rollout:task_started" &&
+        newerRolloutCursor(lifecycle.cursor, thread.lastLifecycleCursor);
       if (
         lifecycle?.status === "idle" &&
-        (!isOlderThanThreadProjection(lifecycle.timestamp, thread) || sameObservedFailure) &&
+        (!isOlderThanThreadProjection(lifecycle.timestamp, thread) || sameObservedFailure || followsObservedStart) &&
         // A terminal error is a fact even if a Hook already marked the thread
         // idle, or thread/read still reports active. Never adopt an old turn.
         (lifecycle.error || (thread.status === "running" && status !== "active"))
@@ -377,6 +393,14 @@ export class AgentThreadStatusReconciler {
       eventId: result.event.id,
     });
   }
+}
+
+function newerRolloutCursor(current: string, previous: string | null | undefined): boolean {
+  const currentOrdinal = current.match(/^rollout:(\d+)$/)?.[1];
+  const previousOrdinal = previous?.match(/^rollout:(\d+)$/)?.[1];
+  // New prompt/start hooks clear lifecycle cursors, so this comparison cannot
+  // carry a terminal record across a newer user turn.
+  return Boolean(currentOrdinal && previousOrdinal && BigInt(currentOrdinal) > BigInt(previousOrdinal));
 }
 
 function isOlderThanThreadProjection(

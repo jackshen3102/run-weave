@@ -1,4 +1,5 @@
 import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
+import { recoverCodexToolConversation } from "../../terminal/application/codex-tool-conversation";
 import { resolveHookPanel } from "../../terminal/application/resolve-hook-panel";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { Router } from "express";
@@ -153,10 +154,12 @@ export function createInternalTerminalAgentHookRouter(options: {
       }
       if (parsed.data.agent === "codex") {
         const target = resolveHookPanel(options.terminalSessionManager, session.id, parsed.data.panelId ?? null, parsed.data.tmuxPaneId ?? null);
-        if (!target.ok || (target.panel && !codexHookBelongsToPrimary(target.panel, parsed.data.threadId))) {
+        if (!target.ok || (target.panel && !(await codexHookBelongsToPrimary(target.panel, parsed.data.threadId)))) {
           res.status(202).json({ disposition: "ignored" });
           return;
         }
+        if (target.panel) await recoverCodexToolConversation(options.terminalSessionManager,
+          target.panel, parsed.data.threadId, parsed.data.operationId);
       }
       if (parsed.data.agent === "pi") {
         const result = await processTerminalAgentHook(options, {

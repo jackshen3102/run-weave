@@ -120,7 +120,7 @@ Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent
 
 活动租约同时写入当前 Profile 的 `terminal-session-store.json`。Backend 重启时只恢复仍存在的 Session/Panel：`starting/active` 必须与当前 Panel 事实兼容，`grace` 必须保持原 `clearedAt` 且仍未超过 30 秒；不匹配、过期或孤立记录会被删除。恢复不得刷新 grace 时间，也不得从 Session 聚合状态推测某个多 Pane Agent 的归属。
 
-另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection 的 `task_complete` 或 `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
+另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`；同一原生 rollout 的开始记录也可按下文规则确认运行态。Backend 消费补偿时必须匹配当前会话；当前绑定已清空时，仍不得覆盖另一个最近会话。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection、或比本轮已观察开始记录更新的 `task_complete` / `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
 Backend 还对停留在 `agent_starting` 的 Panel 做受限补偿，入口见
 [StartingPanelStateReconciler](../../backend/src/app-server/starting-panel-reconciler.ts)。仅当 Session/Panel
@@ -225,6 +225,6 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 
 当前状态模型支持 Codex 与 Trae 系列 CLI。Claude、Coco 或普通 shell 命令需要后续扩展 `TerminalAgentKind` 或新增 `shell_running`，不要通过 tail 文本猜测提前混入当前模型。
 
-如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 终态或 Trae lifecycle 终态校正。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。
+如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 生命周期或 Trae lifecycle 终态校正。Codex 的 `task_started` 可重新确认仍为 running 的线程，或恢复不晚于该开始记录的投影；不能用旧开始记录复活已结束的线程。读取从文件尾逐块回溯，最多 64 MiB，每块 1 MiB，避免长任务的开始记录落出最后一块后永久失去恢复依据；超过边界或读取期间文件变化时不推断状态。重新确认开始后，同一 rollout 中更新的终态序号仍可完成该轮；新的 prompt/start hook 会清除上一轮生命周期游标。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。
 
 仍标为 running 的线程不受最近 3 小时活动窗口限制，避免长任务丢失 Stop hook 后永久漏过补偿；其它线程沿用活动窗口，单轮候选仍最多 100 个。

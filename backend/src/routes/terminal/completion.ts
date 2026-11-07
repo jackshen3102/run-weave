@@ -153,7 +153,7 @@ export function createInternalTerminalCompletionRouter(options: {
       ? (options.terminalSessionManager.getPanel(panelId) ?? null)
       : null;
     if (parsed.data.source === "codex" && targetPanel &&
-        !codexHookBelongsToPrimary(targetPanel, parsed.data.threadId)) {
+        !(await codexHookBelongsToPrimary(targetPanel, parsed.data.threadId))) {
       res.status(202).json({ event: null, ignored: true, reason: "codex_context_mismatch" });
       return;
     }

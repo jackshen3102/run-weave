@@ -47,9 +47,13 @@ export async function handleAgentLifecycleEvent(
   const currentThreadId = owner.threadId?.trim() || null;
   const currentProvider =
     owner.threadProvider ?? (currentThreadId ? "codex" : null);
+  const lastOwner = panel?.lastThreadId ? panel : session;
+  const lastThreadId = lastOwner.lastThreadId?.trim() || null;
   const shouldUpdateForeground =
     (!currentThreadId || currentThreadId === threadId) &&
-    (!currentProvider || currentProvider === provider);
+    (!currentProvider || currentProvider === provider) &&
+    // A historical running thread cannot take over an idle, newer conversation.
+    (provider !== "codex" || Boolean(currentThreadId) || !lastThreadId || lastThreadId === threadId);
   const currentThreadIdentityMatched =
     currentThreadId === threadId && currentProvider === provider;
   const foregroundResult = shouldUpdateForeground

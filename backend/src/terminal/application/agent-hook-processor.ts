@@ -139,7 +139,7 @@ export async function processTerminalAgentHook(
   }
   const panel = panelResolution.panel;
   if (panel && input.agent === "codex" &&
-      !codexHookBelongsToPrimary(panel, input.threadId, input.hookEvent === "SessionStart")) {
+      !(await codexHookBelongsToPrimary(panel, input.threadId, input.hookEvent === "SessionStart"))) {
     return {
       status: "ignored", terminalSessionId: session.id, agent: input.agent,
       hookEvent: input.hookEvent, activeCommand: panel.activeCommand,
