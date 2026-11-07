@@ -69,18 +69,18 @@ struct BrowseView: View {
   }
 }
 func browseType(_ type:String) -> String {
-  ["article":"文章","answer":"回答","image":"图片","text":"文字","link":"链接","chat-fragment":"聊天片段","app-usage":"应用记录"][type] ?? (type.isEmpty ? "" : "其他内容")
+  ["article":"文章","answer":"回答","image":"图片","text":"文字","link":"链接","chat-fragment":"聊天片段","app-usage":"App 使用时长"][type] ?? (type.isEmpty ? "" : "其他内容")
 }
 struct BrowseCard: View {
   @ObservedObject var model: BrowseModel; let entry: BrowseEntry
   var body: some View {
     VStack(alignment:.leading,spacing:10) {
-      HStack { Text(entry.source.displayName + " · " + browseType(entry.contentType)); Spacer(); Text(entry.occurredAt == nil ? "保存于" : "浏览过") }.font(.caption).foregroundStyle(.secondary)
+      HStack { Text(entry.source.displayName + (entry.source.displayName == browseType(entry.contentType) ? "" : " · " + browseType(entry.contentType))); Spacer(); Text(entry.contentType == "app-usage" ? "按日统计" : entry.occurredAt == nil ? "保存于" : "浏览过") }.font(.caption).foregroundStyle(.secondary)
       Text(entry.title.isEmpty ? "保存的内容" : entry.title).font(.headline)
       if let image = entry.attachments.first(where: { $0.kind == "image" }) { BrowseThumbnail(model:model,attachment:image) }
       Text(entry.excerpt ?? entry.body ?? "").lineLimit(4)
       if entry.contentState.state != "available" { Text("正文不可用：" + browseReason(entry.contentState.reason)).font(.caption).foregroundStyle(.secondary) }
-      Text(browseTime(entry.occurredAt ?? entry.capturedAt)).font(.caption2).foregroundStyle(.secondary)
+      Text(entry.contentType == "app-usage" ? "统计日期：" + entry.browseDate : browseTime(entry.occurredAt ?? entry.capturedAt)).font(.caption2).foregroundStyle(.secondary)
     }.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(SuijiTheme.surface,in:RoundedRectangle(cornerRadius:16))
   }
 }
@@ -101,7 +101,15 @@ struct BrowseConnectionsView: View {
     List {
       Text("仅显示已绑定的采集连接。停用连接不会删除已保存浏览；登录与绑定在采集所在 Mac 完成。").font(.footnote)
       ForEach(model.connections) { item in
-        VStack(alignment:.leading) { Text((item.provider == "zhihu" ? "知乎" : item.provider) + " · " + (item.state == "active" ? "已启用" : "已停用")); Text(item.machine + " / " + item.profile + " / " + item.group); Text(item.lastSuccessAt.map(browseTime) ?? "尚未成功采集").font(.caption); if let coverage = item.latestCoverage { Text(coverage.state == "complete" ? "最近声明范围读取完成" : "最近采集范围不完整"); ForEach(coverage.errors,id:\.self) { error in Text(browseFailure(error)).font(.caption).foregroundStyle(.orange) } } }
+        VStack(alignment:.leading) {
+          Text((["zhihu":"知乎", "app-usage":"App 使用时长"][item.provider] ?? item.provider) + " · " + (item.state == "active" ? "已启用" : "已停用"))
+          Text(item.provider == "app-usage" ? item.machine + " · 本机归档" : item.machine + " / " + item.profile + " / " + item.group)
+          if item.provider != "app-usage" { Text(item.lastSuccessAt.map(browseTime) ?? "尚未成功采集").font(.caption) }
+          if let coverage = item.latestCoverage {
+            Text(item.provider == "app-usage" ? (coverage.errors.contains("observed-only") ? "最近同步仅覆盖已观察记录" : "最近同步未完成") : coverage.state == "complete" ? "最近声明范围读取完成" : "最近采集范围不完整")
+            ForEach(coverage.errors,id:\.self) { error in Text(error == "observed-only" ? "可能延迟或缺失，不代表全天完整使用情况" : browseFailure(error)).font(.caption).foregroundStyle(.orange) }
+          } else if item.provider == "app-usage" { Text("尚未同步归档").font(.caption) }
+        }
       }
       if model.connections.isEmpty { Text("尚未配置自动采集") }
       if !model.message.isEmpty { Text(model.message) }

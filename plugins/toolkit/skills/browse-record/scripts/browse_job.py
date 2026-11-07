@@ -18,6 +18,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "suiji" / "scripts"))
 import suiji
 import zhihu_http
+import app_usage
 import source_adapter
 
 
@@ -63,7 +64,7 @@ def directory(path):
 
 def config(path):
     c = read(path)
-    require(set(c) - {"scheduledGroup", "transport", "sessionFile", "effectiveFrom"} == {"schemaVersion", "timeZone", "serverId", "ownerId", "connectionId", "externalAccountId", "machine", "profile", "group", "stateDir", "suijiConfig", "tokenFile"}, "INVALID_CONFIG_FIELDS")
+    require(set(c) - {"scheduledGroup", "transport", "sessionFile", "effectiveFrom", "archivePath"} == {"schemaVersion", "timeZone", "serverId", "ownerId", "connectionId", "externalAccountId", "machine", "profile", "group", "stateDir", "suijiConfig", "tokenFile"}, "INVALID_CONFIG_FIELDS")
     require(type(c.get("scheduledGroup", False)) is bool, "INVALID_SCHEDULED_GROUP_POLICY")
     require(c.get("schemaVersion") == 1 and c.get("timeZone") == "Asia/Shanghai", "INVALID_CONFIG")
     for key in ("serverId", "ownerId", "connectionId"):
@@ -73,8 +74,14 @@ def config(path):
         require(Path(c[key]).is_absolute(), "ABSOLUTE_PRIVATE_PATH_REQUIRED")
     connection = read(c["suijiConfig"])
     require(connection.get("mcpPath") == "/mcp/browse" and all(connection.get(k) == c[k] for k in ("serverId", "ownerId")), "BROWSE_CREDENTIAL_IDENTITY_REQUIRED")
-    require(c.get("profile") in ("profile-1", "profile-2", "profile-3") and c.get("group"), "BROWSER_BINDING_REQUIRED")
-    require(c.get("transport", "browser") in ("browser", "http"), "INVALID_TRANSPORT")
+    require(c.get("transport", "browser") in ("browser", "http", "app-usage"), "INVALID_TRANSPORT")
+    if c.get("transport") == "app-usage":
+        require(c.get("profile") == "local-archive" and c.get("group") == "app-usage", "ARCHIVE_BINDING_REQUIRED")
+        require(isinstance(c.get("archivePath"), str) and Path(c["archivePath"]).is_absolute(), "ABSOLUTE_ARCHIVE_PATH_REQUIRED")
+        require(c["externalAccountId"] == app_usage.source_identity(c["archivePath"]), "ARCHIVE_IDENTITY_CHANGED")
+    else:
+        require("archivePath" not in c, "ARCHIVE_REQUIRES_APP_USAGE_TRANSPORT")
+        require(c.get("profile") in ("profile-1", "profile-2", "profile-3") and c.get("group"), "BROWSER_BINDING_REQUIRED")
     if c.get("transport") == "http":
         require(isinstance(c.get("sessionFile"), str) and Path(c["sessionFile"]).is_absolute(), "ABSOLUTE_SESSION_PATH_REQUIRED")
     else:
@@ -183,7 +190,8 @@ def adapter_receipt(c, start, end, result=None, error=None):
         item = {"id": key, "version": digest({k: entry[k] for k in ("title", "body", "sourceUrl", "contentState")}), "occurredAt": observed["readTime"]}
         if key not in items or item["occurredAt"] > items[key]["occurredAt"]:
             items[key] = item
-    return source_adapter.receipt("browse", "browse:zhihu:" + c["connectionId"], begin.isoformat(), finish.isoformat(), c.get("effectiveFrom"),
+    provider = "app-usage" if c.get("transport") == "app-usage" else "zhihu"
+    return source_adapter.receipt("browse", "browse:" + provider + ":" + c["connectionId"], begin.isoformat(), finish.isoformat(), c.get("effectiveFrom"),
                                   dt.datetime.now(dt.timezone.utc).isoformat(), "unavailable" if error else result["coverage"]["state"], list(items.values()),
                                   [error] if error else result["coverage"]["errors"])
 
@@ -220,7 +228,9 @@ def prepare(c, config_path, start, end):
         write(active_file, {"path": str(path), "runId": run})
         try:
             options = {"from": start, "to": end, "externalAccountId": c["externalAccountId"], "connectionId": c["connectionId"]}
-            if c.get("transport") == "http":
+            if c.get("transport") == "app-usage":
+                result = app_usage.collect(c, options)
+            elif c.get("transport") == "http":
                 write(path / "http-binding.json", {"machine": c["machine"], "profile": c["profile"], "transport": "http", "scheduledRunId": os.environ.get("RUNWEAVE_SCHEDULED_TASK_RUN_ID")})
                 result = zhihu_http.collect(c, options)
             else:
@@ -298,6 +308,7 @@ def import_batch(path, reconcile=False):
 
 
 def read_digest(c, config_path, day):
+    require(c.get("transport") != "app-usage", "APP_USAGE_HAS_NO_READING_DIGEST")
     dt.date.fromisoformat(day)
     with lock(c) as root:
         cli = client(c)

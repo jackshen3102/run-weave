@@ -97,6 +97,11 @@ pnpm --filter @runweave/suiji-ios mapping:check
 不会创建记录或使用伪造响应。样例正文只落根 `.runweave/suiji/mapping/`。
 
 原生合同：[ios-capture.testplan.yaml](../../docs/testing/suiji/ios-capture.testplan.yaml)。
+
+浏览支持每日 App 使用时长卡片：按设备和上海日期分组，详情展示各应用前台时长排行、最新设备事件、归档时间及匹配/推断区间。
+数据由 [browse-record](../../plugins/toolkit/skills/browse-record/references/app-usage.md) 查询本机已有 ScreenJournal 归档并使用独立浏览接口导入；
+迟到数据更新原卡，用户备注与回收站状态沿用浏览合同。缺记录不显示为零使用，多设备不合并，不作为 Apple 官方屏幕使用时间、阅读回顾或工作事实。
+
 当前已验证构建与 HTTP DTO；2026-09-07 已用本机开发证书完成 Debug 真机签名，
 并在 USB 连接的 iPhone 17 上安装、启动。签名团队仅通过构建参数传入，没有写入工程默认值。
 已在真机通过局域网 IP 完成登录、真实列表读取和类型筛选，并导出控件树与截图。
