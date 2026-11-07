@@ -6,6 +6,7 @@ description: 在任意 Agent 终端搜索随记待办或读取随记交接指令
 # 随记
 
 用于用户的个人随记和多个 Agent，不要求当前目录是 Runweave 仓库。接入和命令见 [API 与客户端](references/api.md)。脚本只依赖 Python 3 标准库。
+工作及独立浏览采集器的本机来源回执共用[来源适配器合同](references/source-adapter.md)，该合同不授予采集或写入权限。
 
 ## 选择记录
 

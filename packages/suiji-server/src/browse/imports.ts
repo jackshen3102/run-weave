@@ -81,10 +81,23 @@ export async function importEntries(
       throw invalid("导入日期、来源或采集方式不匹配");
     let row = (
       await c.query(
-        "SELECT id,deleted_at,content_hash,occurred_at FROM browse_entries WHERE owner_id=$1 AND connection_id=$2 AND external_content_type=$3 AND external_content_id=$4 AND browse_date=$5",
+        "SELECT id,deleted_at,content_hash,occurred_at,title,body,source_url,content_state FROM browse_entries WHERE owner_id=$1 AND connection_id=$2 AND external_content_type=$3 AND external_content_id=$4 AND browse_date=$5",
         [owner, input.connectionId, o.contentType, o.contentId, day],
       )
     ).rows[0];
+    // A temporary connector failure must not erase a previously captured body.
+    // The run's coverage still records what was actually available this time.
+    const refreshed =
+      row?.content_state?.state === "available" &&
+      entry.contentState.state !== "available"
+        ? {
+            ...entry,
+            title: row.title,
+            body: row.body,
+            sourceUrl: row.source_url,
+            contentState: row.content_state,
+          }
+        : entry;
     if (!row) {
       row = { id: randomUUID() };
       await repo.insertEntry(
@@ -102,7 +115,7 @@ export async function importEntries(
       receipt.created++;
     } else if (row.deleted_at) receipt.unchanged++;
     else if (
-      row.content_hash !== repo.contentHash(entry) ||
+      row.content_hash !== repo.contentHash(refreshed) ||
       !row.occurred_at ||
       Date.parse(o.readTime) > row.occurred_at.valueOf()
     ) {
@@ -112,11 +125,11 @@ export async function importEntries(
         [
           owner,
           row.id,
-          entry.title,
-          entry.body,
-          entry.sourceUrl,
-          JSON.stringify(entry.contentState),
-          repo.contentHash(entry),
+          refreshed.title,
+          refreshed.body,
+          refreshed.sourceUrl,
+          JSON.stringify(refreshed.contentState),
+          repo.contentHash(refreshed),
           o.readTime,
         ],
       );

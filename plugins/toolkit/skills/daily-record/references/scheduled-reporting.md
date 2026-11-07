@@ -2,6 +2,8 @@
 
 每个 Runweave Backend 使用同版 Daily Record Skill 和任务提示词，只读取所在机器的数据，主动上报随记。Mac 可启用本机 Agent、飞书工作消息，devbox 只启用本机 Agent；不需要 Mac 发起 SSH 采集，也不增加采集 daemon。当前不做跨机器自动语义合并。
 
+新增来源遵循[统一来源适配器合同](../../suiji/references/source-adapter.md)。新批次按来源输出 adapter-receipts.json，保留条目原生身份、内容版本和发生时间；某 provider 或飞书读取失败只影响该来源，不中断其它来源。原服务覆盖回执、来源生效区间和导入幂等规则继续沿用。
+
 ## 前置与配置
 
 已有本机任务时，先在 `~/.runweave/daily-record/` 中查找 `*-job.json`；只有一个任务配置时复用它，多个候选时核对当前机器及来源，不能猜测目标。沿用该配置中的日期、来源、collector、随记目标和状态目录，不重新初始化。执行相邻 `scripts/job.py` 前选择本机 Python 3.9+；macOS 优先使用 Homebrew 的 `python3`，并将 `~/.bun/bin` 和 Homebrew 的 `bin` 加入子进程 PATH，保留原 PATH。

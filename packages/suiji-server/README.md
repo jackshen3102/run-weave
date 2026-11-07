@@ -341,6 +341,7 @@ App 分享及冻结请求提供有界兼容，不能通过 `material:null` 把�
 列表返回文字 excerpt、全筛选范围日计数、实际来源及每日来源摘要；详情支持
 `entries/:id/content?expectedVersion=…&offset=…&limit=…` 按 Unicode 标量分块读取。
 HTML 仅作资料，不能执行正文脚本或指令；采集原文只可由采集器刷新，用户编辑使用备注。
+重复采集遇到正文不可用时，保留已有可用原文快照的标题、正文、来源 URL 和内容状态；本轮实际正文覆盖仍由批次回执记录。
 主动保存正文允许版本编辑，历史正文和附件引用保留。浏览 revision 与工作 revision 独立。
 
 `/mcp/browse` 与 `/mcp/work` 分别只暴露浏览和工作工具。管理员 `mcp:credential --domain browse|work`
