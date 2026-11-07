@@ -72,6 +72,9 @@ desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久
 `contextProjectIdByParentProjectId` 恢复每个父 Project 上次选中的 context，`projectSessionIds` 继续按生效 Project ID 恢复 Terminal。Preview store 原本已按 `projectId` 分桶，不增加复合 key。
 
 原生 iOS 不渲染 Web rail。`Contracts/Home.swift` 的 `parentProjectID` 把子 Session 归入父 Project 组，打开 Session 时仍使用原始终端身份。
+首页项目的“＋”先读取该父 Project 的 contexts，展示主项目和 Worktree 的分支、路径，
+再将所选 context 的原始 `projectId` 交给现有 Session create 接口；不可用的子节点禁止创建。
+未配置路径的主项目保留默认主目录行为，读取失败时展示错误并允许重试，不静默改为父项目。
 
 ## 移动终端
 

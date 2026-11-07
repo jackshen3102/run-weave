@@ -203,6 +203,16 @@ public actor APIClient {
       "/api/terminal/session", method: "POST", body: ["projectId": projectID],
       retryUnauthorized: false)
   }
+  func projectContexts(parentProjectID: String) async throws -> [TerminalProjectContext] {
+    let contexts: [TerminalProjectContext] = try await authorized(
+      "/api/terminal/project/\(Self.pathComponent(parentProjectID))/contexts")
+    guard contexts.allSatisfy({ $0.parentProjectId == parentProjectID }),
+      Set(contexts.map(\.id)).count == contexts.count,
+      contexts.filter({ $0.isPrimary }).count == 1,
+      contexts.first(where: { $0.isPrimary })?.id == parentProjectID
+    else { throw APIError.invalidResponse }
+    return contexts
+  }
   func updateTerminal(id: String, change: TerminalMetadataChange) async throws -> UpdatedTerminal {
     let value: UpdatedTerminal = try await authorized(
       "/api/terminal/session/\(Self.pathComponent(id))", method: "PATCH",

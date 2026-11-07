@@ -79,6 +79,8 @@ extension AppSession {
     }
     let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
     guard !payload.isEmpty else { return }
+    let action: MobileAnalytics.Action = queue ? .composerQueue : .composerSend
+    MobileAnalytics.actionEvent(action, .started)
     let epoch = generation
     let agent = overview?.sessions.first { $0.id == terminalID }?.terminalState.agent
     let isSlash = text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
@@ -91,7 +93,9 @@ extension AppSession {
       }
       if draftRevisions[terminalID] == draftRevision { setDraft("", terminalID: terminalID) }
       attachmentDrafts.remove(Set(attachments.map(\.id)), terminalID: terminalID)
+      MobileAnalytics.actionEvent(action, .acknowledged)
     } catch {
+      MobileAnalytics.actionEvent(action, error is CancellationError ? .interrupted : .unconfirmed)
       if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
       throw error
     }
