@@ -155,6 +155,7 @@ struct SupervisionDecision: Decodable, Identifiable {
   var id: String { decisionId }
   var isHeld: Bool { assessment?.disposition == "hold" }
   var outcomeLabel: String {
+    if isHeld && assessment?.holdReason == "background_wait" { return "等待后台结果 · 本次不续接" }
     if isHeld { return "判断待核对 · 候选：\(outcome.label)（未采用）" }
     if assessment != nil && outcome == .completed { return "据报告完成" }
     return outcome.label

@@ -434,7 +434,7 @@ export class TaskSupervisionService {
     });
     if (!accepted || this.forTerminal(target.terminalSessionId)?.watchId !== watch.watchId) return;
     const session = this.manager.getSession(target.terminalSessionId)!;
-    const inputRevision = terminalInputAdmission(session).revision;
+    const inputRevision = terminalInputAdmission(session).inputWriteRevision;
     const controller = new AbortController();
     const promise = this.processReply(
       watch.watchId,

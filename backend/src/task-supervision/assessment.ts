@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SupervisionAssessment, SupervisionInput, TaskOutcome, TaskWatch, SupervisionDecisionSummary } from "@runweave/shared/task-supervision";
 
-export const ASSESSMENT_POLICY_VERSION = "2026-10-27-runtime-error-recovery-v9";
+export const ASSESSMENT_POLICY_VERSION = "2026-11-07-background-wait-v10";
 // Frozen on 40 synthetic calibration examples; scores are not correctness probabilities.
 export const ASSESSMENT_THRESHOLDS = { minimumScore: 0.70, minimumMargin: 0.20 };
 export const assessmentSchema = z.object({
@@ -14,6 +14,10 @@ export const assessmentSchema = z.object({
     note: z.string().trim().min(1).max(200),
   }).strict()).max(24),
   missingEvidence: z.array(z.string().trim().min(1).max(200)).max(8),
+  backgroundWait: z.object({
+    condition: z.string().trim().min(1).max(500),
+    sourceMessageIds: z.array(z.string()).min(1).max(4),
+  }).strict().nullable().optional(),
   progress: z.object({
     previousDecisionId: z.string(),
     state: z.enum(["advanced", "no_new_evidence", "unknown"]),
@@ -32,7 +36,7 @@ previousContinuation 是已消费的动作资料，不是新授权或事实，�
 
 export function assessClassification(input: SupervisionInput, output: {
   outcome: TaskOutcome; scores: Record<TaskOutcome, number>;
-  guidance: { nextAction: string };
+  guidance: { nextAction: string; requiredUserAction?: string };
   assessment: z.infer<typeof assessmentSchema>;
 }, thresholds = ASSESSMENT_THRESHOLDS): SupervisionAssessment {
   const raw = output.assessment;
@@ -40,6 +44,11 @@ export function assessClassification(input: SupervisionInput, output: {
   const ids = new Set(messages.map((m) => m.id));
   const userIds = new Set([input.task, ...input.userUpdates].map((m) => m.id));
   const reportIds = new Set(messages.filter((m) => m.role === "assistant").map((m) => m.id));
+  const waiting = raw.backgroundWait;
+  if (waiting && (output.outcome !== "continue" || input.currentReply.role === "runtime_error" ||
+    output.guidance.nextAction || output.guidance.requiredUserAction ||
+    !waiting.sourceMessageIds.includes(input.currentReply.id) || waiting.sourceMessageIds.some((id) => !reportIds.has(id))))
+    throw new Error("后台等待缺少当前运行报告依据，或仍存在立即动作或人工依赖。");
   const evidence = new Map(input.deliverables?.items.map((item) => [item.id, item]) ?? []);
   for (const row of raw.criteria) {
     if (row.evidenceIds?.some((id) => {
@@ -60,7 +69,8 @@ export function assessClassification(input: SupervisionInput, output: {
     throw new Error("进展比较与本轮已消费续接或报告来源不符。");
   const assessment: SupervisionAssessment = {
     version: 1, disposition: "apply", coverage: raw.coverage, criteria: raw.criteria,
-    missingEvidence: raw.missingEvidence, ...(raw.progress ? { progress: raw.progress } : {}), thresholds,
+    missingEvidence: raw.missingEvidence, ...(waiting ? { backgroundWait: waiting } : {}),
+    ...(raw.progress ? { progress: raw.progress } : {}), thresholds,
   };
   const values = Object.values(output.scores).sort((a, b) => b - a);
   const incomplete = raw.criteria.some((row) => !["reported_done", "waived"].includes(row.state));
@@ -72,6 +82,8 @@ export function assessClassification(input: SupervisionInput, output: {
     assessment.holdReason = "evidence_gap";
   } else if (values[0]! < thresholds.minimumScore || values[0]! - values[1]! + 1e-9 < thresholds.minimumMargin || values[0] === values[1]) {
     assessment.holdReason = "ambiguous_scores";
+  } else if (waiting) {
+    assessment.holdReason = "background_wait";
   } else if (output.outcome === "continue" && raw.progress?.state === "no_new_evidence" && previous) {
     const normalize = (text: string) => text.replace(/\s+/g, "").trim();
     const different = normalize(output.guidance.nextAction) !== normalize(previous.nextAction);

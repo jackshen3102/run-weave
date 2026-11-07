@@ -93,10 +93,12 @@ export type SupervisionCriterionState = "reported_done" | "pending" | "contradic
 export interface SupervisionAssessment {
   version: 1;
   disposition: "apply" | "hold";
-  holdReason?: "evidence_gap" | "ambiguous_scores" | "no_progress";
+  holdReason?: "evidence_gap" | "ambiguous_scores" | "no_progress" | "background_wait";
   coverage: "complete" | "partial";
   criteria: Array<{ text: string; state: SupervisionCriterionState; sourceMessageIds: string[]; evidenceIds?: string[]; note: string }>;
   missingEvidence: string[];
+  /** A reported running job whose result must arrive before any authorized next action. */
+  backgroundWait?: { condition: string; sourceMessageIds: string[] };
   progress?: {
     previousDecisionId: string;
     state: "advanced" | "no_new_evidence" | "unknown";
@@ -176,7 +178,8 @@ export function supervisionDecisionSummary(decision: SupervisionDecision): Super
   return { ...summary, ...(assessment ? { assessment: {
     version: assessment.version, disposition: assessment.disposition, holdReason: assessment.holdReason,
     coverage: assessment.coverage, thresholds: assessment.thresholds, counts,
-    note: (assessment.holdReason === "ambiguous_scores" ? "选项评分接近，暂不采用候选判断。" :
+    note: (assessment.holdReason === "background_wait" ? assessment.backgroundWait?.condition ?? "等待后台结果；本次不自动续接。" :
+      assessment.holdReason === "ambiguous_scores" ? "选项评分接近，暂不采用候选判断。" :
       assessment.missingEvidence[0] ?? assessment.progress?.note ?? (assessment.holdReason === "evidence_gap" ? "完成条件与候选结果不一致，当前资料不足。" : "逐项核对报告，不构成独立验收")).slice(0, 200),
   } } : {}), currentReplyId: input.currentReply.id, goalPreview: supervisionGoalPreview(input.goal) };
 }
@@ -238,8 +241,9 @@ export function currentSupervisionDecisions(watch: TaskWatch) {
       (!decision.threadId || decision.threadId === watch.target.threadId),
   );
 }
-export function supervisionDecisionLabel(decision: { outcome: TaskOutcome; assessment?: { disposition: "apply" | "hold" } }) {
+export function supervisionDecisionLabel(decision: { outcome: TaskOutcome; assessment?: { disposition: "apply" | "hold"; holdReason?: SupervisionAssessment["holdReason"] } }) {
   const label = { completed: "任务已完成", blocked: "需要你处理", continue: "任务可以继续" }[decision.outcome];
+  if (decision.assessment?.disposition === "hold" && decision.assessment.holdReason === "background_wait") return "等待后台结果 · 本次不续接";
   if (decision.assessment?.disposition === "hold") return `判断待核对 · 候选：${label}（未采用）`;
   return decision.assessment && decision.outcome === "completed" ? "据报告完成" : label;
 }

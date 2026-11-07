@@ -55,7 +55,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 ## 随记
 
-[`suiji`](./skills/suiji/SKILL.md) 支持在任意终端搜索随记或读取交接指令，成功后只追加最终成果；用户确认后可完成待办。该目录可单独安装，Python 客户端不依赖本仓库或 Runweave Backend。
+[`suiji`](./skills/suiji/SKILL.md) 支持在任意终端搜索随记或读取交接指令，完整结果在当前终端交付，随记只追加简短最终摘要，默认不上传图片或文档；用户确认后可完成待办。该目录可单独安装，Python 客户端不依赖本仓库或 Runweave Backend。
 
 ## 验证
 
