@@ -1,3 +1,4 @@
+import { useDraftInsertion } from "./use-draft-insertion";
 import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
 import { useRichPaste } from "../../../features/terminal/input/use-rich-paste";
 import {
@@ -258,15 +259,9 @@ export function useTerminalFloatingDraftController({
     floatingDraftDirtyRef.current = value !== lastSyncedTuiDraftRef.current;
   });
 
-  const insertDraft = useMemoizedFn((text: string) => {
-    if (!eligible || !draftMirrorSupported || floatingDraftSyncPendingRef.current) {
-      setSendError("输入框暂不可用，未插入选区，请稍后重试。");
-      setFloatingComposerOpen(true);
-      return;
-    }
-    const current = floatingDraftRef.current;
-    handleDraftChange(`${current}${current && !current.endsWith("\n") ? "\n" : ""}${text}\n`);
-    setFloatingComposerOpen(true);
+  const insertDraft = useDraftInsertion({
+    eligible, draftMirrorSupported, floatingDraftSyncPendingRef, floatingDraftRef,
+    setSendError, setFloatingComposerOpen, handleDraftChange,
   });
 
   const sendDraftToTui = useMemoizedFn(

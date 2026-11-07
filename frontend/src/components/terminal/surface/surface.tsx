@@ -1,3 +1,4 @@
+import { consumeComposerInsertion } from "./composer-insertion";
 import { parseTerminalFileReference, type TerminalFileReference, type TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -451,13 +452,8 @@ export function TerminalSurface({
     if (!active || !promptInsertionRequest) {
       return;
     }
-    if (promptInsertionRequest.target?.destination === "composer") {
-      if (promptInsertionRequest.target.panelId === (paneWorkspace?.activePanelId ?? activePanelId)) {
-        insertComposerDraft(promptInsertionRequest.text);
-      }
-      consumePromptInsertion(promptInsertionRequest.id);
-      return;
-    }
+    if (consumeComposerInsertion(promptInsertionRequest, paneWorkspace?.activePanelId ?? activePanelId,
+      insertComposerDraft, consumePromptInsertion)) return;
     if (!isSupportedFloatingComposerAgent({ activeCommand, terminalState })) {
       consumePromptInsertion(promptInsertionRequest.id);
       return;
