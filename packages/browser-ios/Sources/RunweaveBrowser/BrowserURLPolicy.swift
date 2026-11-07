@@ -46,7 +46,7 @@ enum BrowserURLPolicy {
   static func classify(_ raw: String, allowLocal: Bool = false) -> Decision {
     guard !raw.isEmpty, !raw.contains(where: { $0.isWhitespace || $0.isNewline }),
       !raw.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-      let components = URLComponents(string: raw), let url = components.url,
+      var components = URLComponents(string: raw),
       let scheme = components.scheme?.lowercased(),
       components.user == nil, components.password == nil
     else { return .denied("链接无效或包含不支持的用户密码。") }
@@ -56,7 +56,9 @@ enum BrowserURLPolicy {
     guard scheme == "http" || scheme == "https" else {
       return .denied("此链接无法在内置浏览器打开。可从右上角“…”在默认浏览器继续。")
     }
-    guard let host = url.host?.lowercased(), !host.isEmpty,
+    // WebKit adds '/' to an empty HTTP path. Match it before comparing a reopened link.
+    if components.percentEncodedPath.isEmpty { components.percentEncodedPath = "/" }
+    guard let url = components.url, let host = url.host?.lowercased(), !host.isEmpty,
       components.port.map({ (1...65535).contains($0) }) ?? true
     else { return .denied("链接缺少有效的网站地址。") }
     if isLocalHost(host) && !allowLocal {

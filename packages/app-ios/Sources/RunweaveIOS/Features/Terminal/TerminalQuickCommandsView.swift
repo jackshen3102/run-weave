@@ -231,8 +231,7 @@ struct TerminalQuickCommandsView: View {
         try await send(item)
         MobileAnalytics.actionEvent(.quickCommandSend, .acknowledged)
         await model.markUsed(session, id: item.id)
-      }
-      catch {
+      } catch {
         MobileAnalytics.actionEvent(.quickCommandSend, error is CancellationError ? .interrupted : .unconfirmed)
         if !(error is CancellationError), session.generation == epoch {
           failure = "发送未确认，请核对终端结果；不会自动重发。\n" + displayError(error)
@@ -245,16 +244,13 @@ struct TerminalQuickCommandsView: View {
     guard active, currentTerminal else { return }
     failure = nil; notice = nil
     let epoch = session.generation
-    MobileAnalytics.actionEvent(.quickCommandBackground, .started)
     Task {
       do {
         guard epoch == session.generation, currentTerminal else { throw CancellationError() }
         _ = try await model.start(session, item: item, projectId: projectId)
-        MobileAnalytics.actionEvent(.quickCommandBackground, .acknowledged)
         guard epoch == session.generation else { return }
         notice = "已提交后台运行"
       } catch {
-        MobileAnalytics.actionEvent(.quickCommandBackground, error is CancellationError ? .interrupted : .unconfirmed)
         if !(error is CancellationError), epoch == session.generation { failure = displayError(error) }
       }
     }

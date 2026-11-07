@@ -91,7 +91,7 @@ struct ConversationReaderView: View {
       .fullScreenCover(isPresented: Binding(
         get: { browser.state == .presented },
         set: { if !$0 { browser.collapse() } }
-      )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
+      )) { BrowserScreen(browser: browser, returnLabel: "返回阅读").clarityMask().mobileAnalyticsScreen(.browser) }
       .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented))
       .overlay(alignment: .top) {
         if let status = browser.dataStatus {

@@ -10,7 +10,8 @@ context 的 scope 是不透明身份组件数组，generation 是业务生命周
 宿主注册实时 `isAvailable` 查询，再把用户意图交给 `open`。检查会在初次操作和异步卸载后分别执行，
 不可呈现时不排队重放。宿主提供 fullScreenCover、非网页状态下的 BrowserPromptPresenter，以及收起页面的恢复入口。
 
-`BrowserScreen` 提供默认工具栏、网页加载/错误 UI 和页面提示。返回标签、宿主名称与清理说明由配置传入，
+`BrowserScreen` 提供默认工具栏、网页加载/错误 UI 和页面提示。返回标签、宿主名称与清理说明由配置传入。
+单次呈现可通过 `returnLabel` 显示返回目的地文字；会话阅读使用“返回阅读”，其他宿主默认沿用图标及配置中的辅助功能标签。
 WebView/Page 内部实现不对业务 App 暴露。真实调用方：
 
 - [Runweave TerminalScreen](../app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalScreen.swift)：连接/终端身份及输入、媒体呈现互斥。
@@ -24,6 +25,7 @@ WebView/Page 内部实现不对业务 App 暴露。真实调用方：
 ## 会话与网站数据
 
 收起保留页面、网页历史和未提交表单；相同完整 URL 恢复页面，不刷新；不同 URL 先确认再替换。
+HTTP(S) 根地址的空路径统一为 `/`，避免 WebKit 补全末尾斜杠后将同一链接误判成替换；其他路径、查询与片段仍分别比较。
 收起只改变本地呈现，不依赖来源连接仍有效；恢复、导航和业务操作仍校验来源身份。
 关闭和业务失效同步使旧回调不可用，随后卸载旧文档。清网站数据必须先完成卸载，失败时停止清理。
 网页运行时不持久化；重启只保留网站自身的持久 Cookie/存储，不恢复页面或表单。

@@ -227,8 +227,16 @@ final class BackendQuickInputModel: ObservableObject {
     let keyID = item.id + "\u{0}" + projectId
     let key = runKeys[keyID] ?? UUID().uuidString
     runKeys[keyID] = key
-    let run = try await session.withConnection(reportFailure: false) {
-      try await QuickInputService(api: $0).start(currentItem, projectId: projectId, key: key)
+    MobileAnalytics.actionEvent(.quickCommandBackground, .started)
+    let run: ScheduledRun
+    do {
+      run = try await session.withConnection(reportFailure: false) {
+        try await QuickInputService(api: $0).start(currentItem, projectId: projectId, key: key)
+      }
+      MobileAnalytics.actionEvent(.quickCommandBackground, .acknowledged)
+    } catch {
+      MobileAnalytics.actionEvent(.quickCommandBackground, error is CancellationError ? .interrupted : .unconfirmed)
+      throw error
     }
     guard current(session), generation == expected else { throw CancellationError() }
     runKeys[keyID] = nil
