@@ -258,6 +258,17 @@ export function useTerminalFloatingDraftController({
     floatingDraftDirtyRef.current = value !== lastSyncedTuiDraftRef.current;
   });
 
+  const insertDraft = useMemoizedFn((text: string) => {
+    if (!eligible || !draftMirrorSupported || floatingDraftSyncPendingRef.current) {
+      setSendError("输入框暂不可用，未插入选区，请稍后重试。");
+      setFloatingComposerOpen(true);
+      return;
+    }
+    const current = floatingDraftRef.current;
+    handleDraftChange(`${current}${current && !current.endsWith("\n") ? "\n" : ""}${text}\n`);
+    setFloatingComposerOpen(true);
+  });
+
   const sendDraftToTui = useMemoizedFn(
     async (
       options: { submit?: boolean; submitKey?: TerminalPromptSubmitKey } = {},
@@ -573,6 +584,7 @@ export function useTerminalFloatingDraftController({
     eligible,
     handleOutputReceived,
     handleDraftChange,
+    insertDraft,
     handleSend,
     handleQueue,
     queueKey,

@@ -109,6 +109,7 @@ export function useTerminalFloatingComposerController({
     instantReplyOpen: draft.instantReplyOpen,
     onClose: handleClose,
     onDraftChange: draft.handleDraftChange,
+    insertDraft: draft.insertDraft,
     onInstantReplyClose: handleInstantReplyClose,
     onInstantReplyOpen: draft.onInstantReplyOpen,
     onInstantReplySend: draft.onInstantReplySend,

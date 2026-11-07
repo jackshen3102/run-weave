@@ -203,6 +203,7 @@ export function TerminalPreviewPanel({
   });
   const markdownReference = useTerminalMarkdownReferenceActions({
     activeSession,
+    activePanelId,
     projectId,
     selectedFilePath,
     setMarkdownViewMode: setMarkdownViewModeInStore,
@@ -384,6 +385,7 @@ export function TerminalPreviewPanel({
         }}
         display={{
           canInsertMarkdownReference: markdownReference.canInsert,
+          canInsertCodeSelection: markdownReference.canInsertCode,
           lineTarget: markdownReference.lineTarget,
           markdownReferenceDisabledReason: markdownReference.disabledReason,
           markdownScrollRatio,
@@ -391,6 +393,7 @@ export function TerminalPreviewPanel({
           markdownViewMode,
           svgViewMode,
           onInsertMarkdownReference: markdownReference.insert,
+          onInsertCodeSelection: markdownReference.insertCode,
           onMarkdownScrollRatioChange: setMarkdownScrollRatio,
           onRevealMarkdownSourceLine: markdownReference.revealSourceLine,
           onStartMarkdownResize: startMarkdownResize,

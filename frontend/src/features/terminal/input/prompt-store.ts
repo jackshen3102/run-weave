@@ -1,14 +1,20 @@
 import { create } from "zustand";
 
+interface ComposerInsertionTarget {
+  destination: "composer";
+  panelId: string | null;
+}
+
 interface TerminalPromptInsertionRequest {
   id: number;
   terminalSessionId: string;
   text: string;
+  target?: ComposerInsertionTarget;
 }
 
 interface TerminalPromptInsertionStore {
   requests: TerminalPromptInsertionRequest[];
-  requestInsertion: (terminalSessionId: string, text: string) => void;
+  requestInsertion: (terminalSessionId: string, text: string, target?: ComposerInsertionTarget) => void;
   consumeInsertion: (id: number) => void;
 }
 
@@ -17,7 +23,7 @@ let nextPromptInsertionId = 1;
 export const useTerminalPromptInsertionStore =
   create<TerminalPromptInsertionStore>((set) => ({
     requests: [],
-    requestInsertion: (terminalSessionId, text) =>
+    requestInsertion: (terminalSessionId, text, target) =>
       set((state) => ({
         requests: [
           ...state.requests,
@@ -25,6 +31,7 @@ export const useTerminalPromptInsertionStore =
             id: nextPromptInsertionId++,
             terminalSessionId,
             text,
+            target,
           },
         ],
       })),

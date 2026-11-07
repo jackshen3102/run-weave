@@ -263,6 +263,7 @@ export function TerminalWorkspaceStage({
                         paneWorkspace={
                           panelWorkspaceBySessionId[session.terminalSessionId] ?? null
                         }
+                        activePanelId={activePanelIdBySessionId[session.terminalSessionId] ?? session.activePanelId ?? null}
                         onResizePane={
                           !isMobileMonitor && session.panelSplitEnabled
                             ? (panelId, direction, cells) => {

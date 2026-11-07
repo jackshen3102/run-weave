@@ -9,6 +9,7 @@ import type { TerminalPreviewLineTarget } from "../preview/files/view";
 
 interface UseTerminalMarkdownReferenceActionsArgs {
   activeSession: TerminalSessionListItem | null;
+  activePanelId: string | null;
   projectId: string | null;
   selectedFilePath?: string;
   setMarkdownViewMode: (
@@ -19,6 +20,7 @@ interface UseTerminalMarkdownReferenceActionsArgs {
 
 export function useTerminalMarkdownReferenceActions({
   activeSession,
+  activePanelId,
   projectId,
   selectedFilePath,
   setMarkdownViewMode,
@@ -31,6 +33,9 @@ export function useTerminalMarkdownReferenceActions({
   const requestPromptInsertion = useTerminalPromptInsertionStore(
     (state) => state.requestInsertion,
   );
+  const panelWorkspace = useTerminalWorkspaceStore((state) => activeSession
+    ? state.panelWorkspaceBySessionId[activeSession.terminalSessionId] : undefined);
+  const panel = panelWorkspace?.panels.find((item) => item.panelId === activePanelId);
   const [lineTarget, setLineTarget] =
     useState<TerminalPreviewLineTarget | null>(null);
   const lineTargetSequenceRef = useRef(0);
@@ -49,10 +54,18 @@ export function useTerminalMarkdownReferenceActions({
       : !canInsert
         ? "Start a supported Agent before adding a reference"
         : undefined;
+  const canInsertCode = canInsert && (!panelWorkspace || Boolean(panel?.status === "running" &&
+    isSupportedFloatingComposerAgent({ activeCommand: panel.activeCommand, terminalState: panel.terminalState }) &&
+    (panel.codexContext === undefined || panel.codexContext?.inputReady)));
 
   const insert = useMemoizedFn((reference: string): void => {
     if (activeSession && canInsert) {
       requestPromptInsertion(activeSession.terminalSessionId, ` ${reference} `);
+    }
+  });
+  const insertCode = useMemoizedFn((text: string): void => {
+    if (activeSession && canInsertCode) {
+      requestPromptInsertion(activeSession.terminalSessionId, text, { destination: "composer", panelId: activePanelId });
     }
   });
   const setTarget = useMemoizedFn(
@@ -79,8 +92,10 @@ export function useTerminalMarkdownReferenceActions({
 
   return {
     canInsert,
+    canInsertCode,
     disabledReason,
     insert,
+    insertCode,
     lineTarget,
     revealSourceLine,
     setTarget,

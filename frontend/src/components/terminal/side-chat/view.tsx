@@ -5,6 +5,7 @@ import { Button } from "../../ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../ui/alert-dialog";
 import { SideChatComposer } from "./composer";
 import { SideChatContext } from "./context";
+import { SideChatMarkdown } from "./markdown";
 const turnLabels: Record<string, string> = { accepted: "正在回答…", running: "正在回答…", stopping: "正在停止…", stopped: "已停止回答", failed: "回答失败，请重新提问", unknown: "执行结果不明，请查询状态或结束旁聊" };
 export function SideChatView({ model, title, mainStatus }: { model: SideChatModel; title: string; mainStatus: string }) {
   const { snapshot, stale, error, pending } = model.state;
@@ -41,7 +42,7 @@ export function SideChatView({ model, title, mainStatus }: { model: SideChatMode
       {snapshot?.beforeSequence ? <Button variant="ghost" size="sm" onClick={() => { void model.older(); }}>加载更早消息</Button> : null}
       {!snapshot?.messages.length ? <p className="m-auto text-center text-sm text-muted-foreground">在这里就当前任务独立提问。<br />返回后仍可继续。</p> : null}
       {snapshot?.messages.map(message => <article key={message.id} data-message-id={message.id} className={cn("flex min-w-0 flex-col gap-2", message.role === "user" ? "max-w-[80%] self-end" : "w-full self-stretch")}>
-        <p className={cn("whitespace-pre-wrap break-words text-sm leading-relaxed", message.role === "user" ? "rounded-2xl bg-primary px-4 py-3 text-primary-foreground" : "text-foreground")}>{message.text}</p>
+        {message.role === "assistant" ? <SideChatMarkdown text={message.text} /> : <p className="whitespace-pre-wrap break-words rounded-2xl bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground">{message.text}</p>}
         {message.role === "user" && message.turnId !== turn?.id && ["stopped", "failed", "unknown"].includes(message.turnState ?? "") ? <span className="text-xs text-muted-foreground">{turnLabels[message.turnState!]}</span> : null}
       </article>)}
       {turn && turnLabels[turn.state] ? <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground"><span>{turnLabels[turn.state]}</span>{["accepted", "running"].includes(turn.state) ? <Button variant="outline" size="sm" disabled={stale || Boolean(pending)} onClick={() => { void model.stop(); }}>停止</Button> : null}</div> : null}

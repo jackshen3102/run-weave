@@ -48,6 +48,7 @@ interface TerminalSurfaceProps {
   clientMode?: ClientMode;
   layoutVersion?: string;
   paneWorkspace?: TerminalPanelWorkspace | null;
+  activePanelId?: string | null;
   sessionStatus?: "running" | "exited";
   terminalState?: TerminalState;
   onResizePane?: (
@@ -67,6 +68,7 @@ export function TerminalSurface({
   clientMode = "desktop",
   layoutVersion = "default",
   paneWorkspace = null,
+  activePanelId = null,
   sessionStatus = "running",
   terminalState,
   onResizePane,
@@ -444,8 +446,16 @@ export function TerminalSurface({
     onTmuxExitCopyModeRequest: floatingComposer.onTmuxExitCopyModeRequest,
   });
 
+  const insertComposerDraft = floatingComposer.insertDraft;
   useEffect(() => {
     if (!active || !promptInsertionRequest) {
+      return;
+    }
+    if (promptInsertionRequest.target?.destination === "composer") {
+      if (promptInsertionRequest.target.panelId === (paneWorkspace?.activePanelId ?? activePanelId)) {
+        insertComposerDraft(promptInsertionRequest.text);
+      }
+      consumePromptInsertion(promptInsertionRequest.id);
       return;
     }
     if (!isSupportedFloatingComposerAgent({ activeCommand, terminalState })) {
@@ -469,7 +479,10 @@ export function TerminalSurface({
   }, [
     active,
     activeCommand,
+    activePanelId,
     consumePromptInsertion,
+    insertComposerDraft,
+    paneWorkspace?.activePanelId,
     promptInsertionRequest,
     requestTmuxExitCopyMode,
     terminalState,
