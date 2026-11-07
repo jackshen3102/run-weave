@@ -427,7 +427,8 @@ struct TerminalScreen: View {
         if session.isCommandActive(details.id) {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
-        TerminalComposerButton(hasDraft: hasComposerDraft, open: openComposer)
+        TerminalComposerButton(hasDraft: hasComposerDraft,
+          unconfirmedInput: session.unconfirmedInputDrafts.contains(details.id), open: openComposer)
           .accessibilityFocused($composerTriggerFocused)
         TerminalNextCompletionButton(session: session)
       }

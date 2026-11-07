@@ -9,9 +9,11 @@ final class ConnectionDraftArchive {
     let schemaVersion: Int
     let text: [String: String]
     let suppressedQuickInputs: Set<String>
+    let unconfirmedInputs: Set<String>?
   }
   typealias Snapshot = (
-    text: [String: String], attachments: [String: [TerminalDraftAttachment]], suppressedQuickInputs: Set<String>
+    text: [String: String], attachments: [String: [TerminalDraftAttachment]], suppressedQuickInputs: Set<String>,
+    unconfirmedInputs: Set<String>
   )
   struct Attachment: Codable {
     let preview: Data?
@@ -39,9 +41,9 @@ final class ConnectionDraftArchive {
   }
   func save(
     scope: String, text: [String: String], attachments: [String: [TerminalDraftAttachment]],
-    suppressedQuickInputs: Set<String>
+    suppressedQuickInputs: Set<String>, unconfirmedInputs: Set<String>
   ) throws {
-    memory[scope] = (text, attachments, suppressedQuickInputs)
+    memory[scope] = (text, attachments, suppressedQuickInputs, unconfirmedInputs)
     let destination = try file(scope)
     if text.isEmpty && attachments.isEmpty {
       try remove(scope)
@@ -49,7 +51,8 @@ final class ConnectionDraftArchive {
     }
     try JSONEncoder().encode(TextArchive(
       schemaVersion: 1, text: text,
-      suppressedQuickInputs: suppressedQuickInputs.intersection(text.keys)
+      suppressedQuickInputs: suppressedQuickInputs.intersection(text.keys),
+      unconfirmedInputs: unconfirmedInputs.intersection(Set(text.keys).union(attachments.keys))
     )).write(
       to: destination.appendingPathExtension("text"),
       options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
@@ -87,6 +90,7 @@ final class ConnectionDraftArchive {
     let attachmentsURL = source.appendingPathExtension("images")
     var text: [String: String] = [:]
     var suppressedQuickInputs = Set<String>()
+    var unconfirmedInputs = Set<String>()
     if FileManager.default.fileExists(atPath: textURL.path) {
       let data = try Data(contentsOf: textURL)
       let decoder = JSONDecoder()
@@ -97,6 +101,7 @@ final class ConnectionDraftArchive {
         guard archive.schemaVersion == 1 else { throw APIError.invalidResponse }
         text = archive.text
         suppressedQuickInputs = archive.suppressedQuickInputs.intersection(text.keys)
+        unconfirmedInputs = archive.unconfirmedInputs ?? []
       }
     }
     let storedAttachments =
@@ -111,7 +116,8 @@ final class ConnectionDraftArchive {
           failure: value.path == nil ? "上传已暂停，请重试" : nil)
       }
     }
-    return (text, attachments, suppressedQuickInputs)
+    return (text, attachments, suppressedQuickInputs,
+      unconfirmedInputs.intersection(Set(text.keys).union(attachments.keys)))
   }
   func remove(_ scope: String) throws {
     memory.removeValue(forKey: scope)

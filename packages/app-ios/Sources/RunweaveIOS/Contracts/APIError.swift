@@ -60,13 +60,15 @@ func displayError(_ error: Error) -> String {
   return error.localizedDescription
 }
 
-func displayInputError(_ error: Error) -> String {
-  let uncertain: Bool
+func isInputResultUncertain(_ error: Error) -> Bool {
   switch error {
-  case is URLError, APIError.invalidResponse, APIError.inputResultUnknown: uncertain = true
-  case APIError.http(let status): uncertain = status >= 500
-  default: uncertain = false
+  case is URLError, APIError.invalidResponse, APIError.inputResultUnknown: return true
+  case APIError.http(let status): return status >= 500
+  default: return false
   }
-  guard uncertain else { return displayError(error) }
+}
+
+func displayInputError(_ error: Error) -> String {
+  guard isInputResultUncertain(error) else { return displayError(error) }
   return "发送结果未确认，草稿已保留。请先核对终端结果，再决定是否重新发送。\n" + displayError(error)
 }

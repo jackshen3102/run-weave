@@ -62,7 +62,7 @@ struct ComposerView: View {
   @ScaledMetric private var minimumVisibleInput: CGFloat = 32
 
   private var hasAccessories: Bool {
-    state.snapshot.inputBusy || showingShortcuts || failure != nil || !attachments.isEmpty
+    state.snapshot.inputBusy || state.snapshot.unconfirmedInput || showingShortcuts || failure != nil || !attachments.isEmpty
   }
   private var visibleAccessoryHeight: CGFloat {
     hasAccessories ? min(accessoryHeight, max(0, availableHeight - chromeHeight - minimumVisibleInput)) : 0
@@ -105,8 +105,12 @@ struct ComposerView: View {
       .isEmpty
   }
   private var showStop: Bool { state.snapshot.commandActive && !hasContent }
+  private var showsResend: Bool {
+    state.snapshot.unconfirmedInput && !showStop && !state.snapshot.inputBusy && !stopping
+  }
   private var actionLabel: String {
-    showStop ? (stopping ? "停止中…" : "停止") : (state.snapshot.inputBusy ? "发送中…" : "发送")
+    showStop ? (stopping ? "停止中…" : "停止")
+      : (state.snapshot.inputBusy ? "发送中…" : (state.snapshot.unconfirmedInput ? "重新发送" : "发送"))
   }
 
   var body: some View {
@@ -141,6 +145,9 @@ struct ComposerView: View {
               Button { showingFailure = true } label: {
                 Text(failure).font(.caption).foregroundColor(.red).lineLimit(2)
               }.buttonStyle(.plain).accessibilityHint("查看完整错误")
+            } else if state.snapshot.unconfirmedInput && !state.snapshot.inputBusy {
+              Text("上次发送结果未确认，此草稿可能已送达。请先核对终端或会话结果，再决定是否重新发送。")
+                .font(.caption).foregroundColor(.orange).fixedSize(horizontal: false, vertical: true)
             }
             ComposerAttachments(drafts: attachmentDrafts, session: session, terminalID: terminalID)
           }
@@ -323,11 +330,13 @@ struct ComposerView: View {
       Group {
         if stopping || state.snapshot.inputBusy {
           ProgressView().tint(TerminalAppearance.background)
+        } else if showsResend {
+          Text("重新发送").font(.caption.weight(.semibold))
         } else {
           Image(systemName: showStop ? "stop.fill" : "arrow.up")
         }
       }
-      .frame(width: 44, height: 44)
+      .frame(width: showsResend ? 80 : 44, height: 44)
       .foregroundColor(TerminalAppearance.background)
       .background(TerminalAppearance.accent)
       .clipShape(RoundedRectangle(cornerRadius: 12))
