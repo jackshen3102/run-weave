@@ -9,8 +9,9 @@ export async function readAttachment(
   attachments: AttachmentService,
   owner: string,
   input: z.infer<typeof attachmentInput>,
+  domain: "records" | "browse" = "records",
 ) {
-  const file = await attachments.content(owner, input.attachmentId);
+  const file = await attachments.content(owner, input.attachmentId, false, domain);
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of file.stream) {

@@ -143,13 +143,14 @@ export function SuijiWorkspace({
         ),
       );
       if (!alive.current || sequence !== generation.current) return;
+      const ordinary = info.features?.browse ? page.items.filter(record => !record.material) : page.items;
       setItems((old) =>
         more
           ? [
               ...old,
-              ...page.items.filter((r) => !old.some((o) => o.id === r.id)),
+              ...ordinary.filter((r) => !old.some((o) => o.id === r.id)),
             ]
-          : page.items,
+          : ordinary,
       );
       setCursor(page.nextCursor);
       setPending(
@@ -540,7 +541,8 @@ export function SuijiWorkspace({
             void load();
           }}
           onSaved={(record) => {
-            if (detail) setDetail({ record });
+            if (info.features?.browse && record.material) { setDetail(undefined); setMessage("此素材已保存到浏览，请在新版随记 App 中查看。"); }
+            else if (detail) setDetail({ record });
             models.current.delete(editor.followupRecordId ? "followup:" + editor.followupRecordId : editor.state.draft.id);
             editor.dispose();
             setEditor(undefined);

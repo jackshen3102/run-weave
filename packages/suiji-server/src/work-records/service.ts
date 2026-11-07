@@ -1,3 +1,4 @@
+import { assertWorkImport } from "./isolation";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import { z } from "zod";
@@ -11,7 +12,7 @@ import type {
   ImportWorkFacts,
 } from "@runweave/shared/suiji";
 import { transaction } from "../db/pool";
-import { mutate, type Mutation } from "../records/mutations";
+import { digest, mutate, type Mutation } from "../records/mutations";
 import { invalid } from "../errors";
 import * as repo from "./repository";
 import * as schema from "./schema";
@@ -27,6 +28,7 @@ const cursorSchema = z
     from: schema.workDate.nullable(),
     to: schema.workDate.nullable(),
     view: z.enum(["all", "logs", "reports"]).optional(),
+    includeReviewReports: z.boolean().optional(),
     revision: z.string().regex(/^\d+$/),
     date: schema.workDate,
     created: z.string().datetime(),
@@ -42,8 +44,10 @@ export class WorkRecordService {
   async list(
     owner: string,
     raw: z.input<typeof schema.workList>,
+    includeReviewReports = false,
   ): Promise<WorkFactPage> {
     const input = schema.workList.parse(raw);
+    const reportsTable = includeReviewReports ? "work_reports" : "eligible_work_reports";
     return transaction(this.pool, async (client) => {
       await client.query(
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
@@ -67,12 +71,12 @@ export class WorkRecordService {
           cursor.server !== head.server ||
           cursor.owner !== owner ||
           cursor.from !== (input.from ?? null) ||
-          cursor.to !== (input.to ?? null) || (cursor.view ?? "all") !== input.view
+          cursor.to !== (input.to ?? null) || (cursor.view ?? "all") !== input.view || (cursor.includeReviewReports ?? false) !== includeReviewReports
         )
           throw invalid("游标不属于当前服务、账户或日期范围");
         if (cursor.revision !== head.revision) repo.changed(head.revision);
         const anchor = await client.query(
-          "SELECT 1 FROM work_facts WHERE owner_id=$1 AND id=$2 AND work_date=$3::date AND created_at=$4::timestamptz UNION ALL SELECT 1 FROM work_reports WHERE owner_id=$1 AND id=$2 AND period_to=$3::date AND created_at=$4::timestamptz",
+          `SELECT 1 FROM eligible_work_facts WHERE owner_id=$1 AND id=$2 AND work_date=$3::date AND created_at=$4::timestamptz UNION ALL SELECT 1 FROM ${reportsTable} WHERE owner_id=$1 AND id=$2 AND period_to=$3::date AND created_at=$4::timestamptz`,
           [owner, cursor.id, cursor.date, cursor.created],
         );
         if (!anchor.rowCount) throw invalid("游标位置无效");
@@ -80,8 +84,8 @@ export class WorkRecordService {
       const rows = (
         await client.query<{ id: string; date: string; created: Date; kind: string }>(
           `WITH feed AS (
-            SELECT id,work_date AS day,created_at AS created,'fact' AS kind FROM work_facts WHERE owner_id=$1
-            UNION ALL SELECT id,period_to AS day,created_at AS created,'report' AS kind FROM work_reports WHERE owner_id=$1
+            SELECT id,work_date AS day,created_at AS created,'fact' AS kind FROM eligible_work_facts WHERE owner_id=$1
+            UNION ALL SELECT id,period_to AS day,created_at AS created,'report' AS kind FROM ${reportsTable} WHERE owner_id=$1
           ) SELECT id,day::text AS date,created,kind FROM feed
           WHERE ($8 = 'all' OR ($8 = 'logs' AND kind='fact') OR ($8 = 'reports' AND kind='report')) AND ($2::date IS NULL OR day >= $2) AND ($3::date IS NULL OR day <= $3)
           AND ($4::date IS NULL OR (day,created,id)<($4::date,$5::timestamptz,$6::uuid)) ORDER BY day DESC,created DESC,id DESC LIMIT $7`,
@@ -98,9 +102,9 @@ export class WorkRecordService {
         )
       ).rows;
       const selected = rows.slice(0, input.limit), last = selected.at(-1);
-      const factRows = (await client.query<repo.WorkRow>(`SELECT ${repo.columns} FROM work_facts WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "fact").map(r => r.id)])).rows;
+      const factRows = (await client.query<repo.WorkRow>(`SELECT ${repo.columns} FROM eligible_work_facts WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "fact").map(r => r.id)])).rows;
       const items = selected.flatMap(r => factRows.filter(f => f.id === r.id).map(repo.fact));
-      const reportRows = (await client.query<Parameters<typeof report>[0]>(`SELECT ${reportColumns} FROM work_reports WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "report").map(r => r.id)])).rows;
+      const reportRows = (await client.query<Parameters<typeof report>[0]>(`SELECT ${reportColumns} FROM ${reportsTable} WHERE owner_id=$1 AND id=ANY($2::uuid[])`, [owner, selected.filter(r => r.kind === "report").map(r => r.id)])).rows;
       const reports = selected.flatMap(r => reportRows.filter(f => f.id === r.id).map(report));
       const dates = new Set(selected.map(i => i.date));
       if (input.from && input.to) {
@@ -125,6 +129,7 @@ export class WorkRecordService {
                   to: input.to ?? null,
                   revision: head.revision,
                   view: input.view,
+                  includeReviewReports,
                   date: last.date,
                   created: last.created.toISOString(),
                   id: last.id,
@@ -257,7 +262,16 @@ export class WorkRecordService {
       return { facts };
     });
   }
+  async importReceipt(owner: string, key: string, raw: ImportWorkFacts) {
+    const input = schema.workImport.parse(raw);
+    const hash = digest({ operation: "agent:work:import", input });
+    const row = (await this.pool.query("SELECT request_hash,response FROM mutation_requests WHERE owner_id=$1 AND idempotency_key=$2", [owner, key])).rows[0];
+    if (!row) return { found: false };
+    if (row.request_hash !== hash) throw invalid("原请求身份不匹配");
+    return { found: true, importId: row.response?.importId, feedRevision: row.response?.feedRevision };
+  }
   import(ctx: Mutation, raw: ImportWorkFacts) {
+    assertWorkImport(raw);
     const input = schema.workImport.parse(raw);
     return mutate(this.pool, ctx, "work:import", input, (client) =>
       importFacts(client, ctx, input),

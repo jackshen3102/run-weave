@@ -16,8 +16,9 @@ public struct CaptureConnection: Codable, Equatable, Sendable {
   public let identity: CaptureIdentity
   public let generation: String
   public let materials: Bool
-  public init(identity: CaptureIdentity, materials: Bool) {
-    self.identity = identity; self.materials = materials; generation = UUID().uuidString
+  public let browse: Bool?
+  public init(identity: CaptureIdentity, materials: Bool, browse: Bool = false) {
+    self.identity = identity; self.materials = materials; self.browse = browse; generation = UUID().uuidString
   }
 }
 public enum SharedCaptureStore {

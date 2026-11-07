@@ -9,12 +9,12 @@ struct MaterialEditorFields: View {
     VStack(alignment: .leading, spacing: 10) {
       Picker("记录类型", selection: category) {
         Text("想法").tag("note"); Text("待办").tag("task")
-        if model.materialsSupported { Text("素材").tag("material") }
+
       }.pickerStyle(.segmented)
       if model.draft.material != nil {
         DatePicker("归属日期", selection: Binding(get: { model.draft.material?.date ?? Date() }, set: { model.draft.material?.materialDate = MaterialInput.day($0) }), in: ...Date(), displayedComponents: .date)
           .environment(\.timeZone, TimeZone(identifier: "Asia/Shanghai")!)
-        Text("素材整理不等待 AI。转为想法会停止后续整理；已生成的总结仍会保留。转待办需先选择想法。").font(.footnote).foregroundStyle(.secondary)
+        Text("这是升级前的素材草稿。原请求保留，服务将其保存到浏览；结果未知时请确认原请求。").font(.footnote).foregroundStyle(.secondary)
       }
     }.disabled(!model.editable)
   }
@@ -51,7 +51,7 @@ struct MaterialQueueView: View {
   @ObservedObject var session: SuijiSession
   var body: some View {
     List {
-      Text("仅手动重试。结果待确认时会沿用原请求，不会新建另一份素材。").font(.footnote)
+      Text("仅手动重试。结果待确认时会沿用原请求，不会新建另一份浏览内容。").font(.footnote)
       ForEach(session.pendingCaptures) { item in
         VStack(alignment: .leading, spacing: 8) {
           Text(item.material.materialDate + " · " + (item.state == "queued" ? "待发送" : item.state == "confirmed" ? "已保存，待清理" : "保存结果待确认"))
@@ -61,6 +61,6 @@ struct MaterialQueueView: View {
         }
       }
       if !session.captureMessage.isEmpty { Text(session.captureMessage).foregroundStyle(.orange) }
-    }.clarityMask().navigationTitle("待发送素材").onAppear { session.refreshCaptures() }
+    }.clarityMask().navigationTitle("待发送浏览").onAppear { session.refreshCaptures() }
   }
 }

@@ -12,10 +12,11 @@ public struct SuijiRootView: View {
 }
 struct CaptureHome: View {
   @ObservedObject var session: SuijiSession
+  @StateObject private var browse: BrowseModel
   @StateObject private var work: WorkRecordModel
   @State private var aiPresented = false
   @StateObject private var review: ReviewModel
-  init(session: SuijiSession) { self.session = session; _review = StateObject(wrappedValue: ReviewModel(session: session)); _work = StateObject(wrappedValue: WorkRecordModel(session: session)) }
+  init(session: SuijiSession) { self.session = session; _browse = StateObject(wrappedValue: BrowseModel(session:session)); _review = StateObject(wrappedValue: ReviewModel(session: session)); _work = StateObject(wrappedValue: WorkRecordModel(session: session)) }
   @State private var tab = "records"
   @State private var filter = ""
   @State private var taskStatus = "open"
@@ -25,26 +26,27 @@ struct CaptureHome: View {
   @State private var refreshOnRelease = false
   @FocusState private var searchFocused: Bool
   @State private var settings = false
+  @State private var trashPresented = false
   private var category: String? { tab == "tasks" ? nil : filter.isEmpty ? nil : filter == "note" ? "idea" : filter }
   private var kind: String? { tab == "tasks" ? "task" : session.info?.features?.materials == true ? nil : filter.isEmpty ? nil : filter }
   private var status: String? { tab == "tasks" ? taskStatus : nil }
-  private var visibleRecords: [SuijiRecord] { session.records.filter { ($0.deletedAt != nil) == (tab == "trash") && (session.selectedTag.isEmpty || ($0.tags ?? []).contains(session.selectedTag)) && (status == nil || $0.taskStatus?.rawValue == status) } }
+  private var visibleRecords: [SuijiRecord] { session.records.filter { $0.material == nil && ($0.deletedAt != nil) == (tab == "trash") && (session.selectedTag.isEmpty || ($0.tags ?? []).contains(session.selectedTag)) && (status == nil || $0.taskStatus?.rawValue == status) } }
   private var loadKey: String { "\(tab)|\(filter)|\(taskStatus)|\(query)|\(session.selectedTag)|\(session.returnHomeRequest)|\(session.materialFrom)|\(session.materialTo)" }
   var body: some View {
     TabView(selection: $tab) {
       NavigationStack {
         feed.navigationTitle("随记").navigationBarTitleDisplayMode(.inline).toolbar {
-          ToolbarItem(placement: .topBarTrailing) { Button { settings = true } label: { Image(systemName: "gearshape").accessibilityLabel("连接设置") } }
+          ToolbarItem(placement: .topBarTrailing) { Menu { Button("回收站") { trashPresented = true }; Button("连接设置") { settings = true } } label: { Image(systemName:"ellipsis.circle") }.accessibilityLabel("更多") }
         }
       }.id(session.returnHomeRequest).tabItem { Label("记录", systemImage: "square.and.pencil") }.tag("records")
       NavigationStack { feed.navigationTitle("待办") }.id(session.returnHomeRequest).tabItem { Label("待办", systemImage: "checklist") }.tag("tasks")
-      NavigationStack { feed.navigationTitle("回收站") }.id(session.returnHomeRequest).tabItem { Label("回收站", systemImage: "trash") }.tag("trash")
+      NavigationStack { BrowseView(model:browse) }.tabItem { Label("浏览",systemImage:"globe") }.tag("browse")
       if session.info?.features?.workRecords == true {
         NavigationStack { WorkRecordsView(model: work, onReview: { aiPresented = true }) }.tabItem { Label("工作", systemImage: "briefcase") }.tag("work")
       } else {
         NavigationStack { ReviewView(session: session, model: review) }.id(session.returnHomeRequest).tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
       }
-    }.task(id: loadKey) { if tab != "ai" && tab != "work" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }
+    }.task(id: loadKey) { if tab != "ai" && tab != "work" && tab != "browse" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }
       .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
       .onChange(of: session.returnHomeRequest) { _, _ in
         tab = "records"
@@ -53,6 +55,14 @@ struct CaptureHome: View {
       .onDisappear { review.stopWatching() }
       .sheet(isPresented: $aiPresented) { NavigationStack { ReviewView(session: session, model: review).toolbar { ToolbarItem(placement: .cancellationAction) { Button("返回") { aiPresented = false } } } } }
       .onChange(of: tab) { _, value in if value == "work" { Task { await work.load() } } }
+      .sheet(isPresented:$trashPresented, onDismiss:{ Task { await session.load(kind:kind,status:status,q:query,tag:session.selectedTag,hideClosedTasks:tab == "records",category:category) } }) {
+        NavigationStack { List {
+          NavigationLink("浏览回收站") { BrowseTrashView(model:browse) }
+          Section("记录回收站") { ForEach(session.records.filter { $0.deletedAt != nil }) { record in NavigationLink { RecordDetail(session:session,original:record) } label: { Text(record.body).lineLimit(3) } }
+            if session.nextCursor != nil { Button("加载更多") { Task { await session.load(kind:nil,status:nil,q:"",more:true,trash:true) } } }
+          }
+        }.navigationTitle("回收站").toolbar { Button("关闭") { trashPresented = false } }.task { await session.load(kind:nil,status:nil,q:"",trash:true) } }
+      }
       .sheet(isPresented: $settings) { ConnectionSettingsView(session: session) }
       .modifier(SuijiBrowserHost(session: session, settingsPresented: $settings))
       .mobileAnalyticsScreen(tab == "tasks" ? .tasks : tab == "trash" ? .trash : tab == "ai" ? .aiReview : .records)
@@ -62,7 +72,7 @@ struct CaptureHome: View {
       LazyVStack(spacing: 14) {
         if searchVisible { searchField }
         if tab == "tasks" { FilterBar(values: TaskStatus.allCases.map { ($0.rawValue, $0.label) }, selected: $taskStatus) }
-        else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")] + (session.info?.features?.materials == true ? [("material", "素材")] : []), selected: $filter) }
+        else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")], selected: $filter) }
         if category == "material" { MaterialFeedControls(session: session) }
         TagFilter(available: session.availableTags, selected: $session.selectedTag)
         if !session.message.isEmpty { Text(session.message).clarityMask().foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } } }

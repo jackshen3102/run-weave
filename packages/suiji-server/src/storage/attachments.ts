@@ -95,10 +95,10 @@ export class AttachmentService {
       },
     );
   }
-  async content(owner: string, id: string, includeTrash = false) {
+  async content(owner: string, id: string, includeTrash = false, domain: "records" | "browse" = "records") {
     const row = (
       await this.pool.query(
-        `SELECT object_key,mime_type,byte_size,file_name FROM attachments a WHERE owner_id=$1 AND id=$2 ${includeTrash ? "" : "AND NOT EXISTS (SELECT 1 FROM records r WHERE r.owner_id=a.owner_id AND r.id=a.bound_record_id AND r.deleted_at IS NOT NULL)"}`,
+        `SELECT object_key,mime_type,byte_size,file_name FROM attachments a WHERE owner_id=$1 AND id=$2 AND ${domain === "records" ? "bound_browse_id IS NULL" : "bound_browse_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM browse_entries b WHERE b.owner_id=a.owner_id AND b.id=a.bound_browse_id AND b.deleted_at IS NOT NULL)"} ${includeTrash ? "" : "AND NOT EXISTS (SELECT 1 FROM records r WHERE r.owner_id=a.owner_id AND r.id=a.bound_record_id AND r.deleted_at IS NOT NULL)"}`,
         [owner, id],
       )
     ).rows[0];

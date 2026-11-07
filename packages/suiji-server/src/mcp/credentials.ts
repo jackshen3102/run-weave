@@ -5,6 +5,7 @@ import { transaction } from "../db/pool";
 
 const common = {
   version: z.literal(1),
+  domain: z.enum(["records", "browse", "work"]).default("records"),
   serverId: z.string().uuid(),
   ownerId: z.string().uuid(),
   name: z.string().trim().refine(v => [...v].length >= 1 && [...v].length <= 80),
@@ -35,7 +36,7 @@ export async function registerCredential(pool: pg.Pool, input: unknown, legacy =
     )).rows;
     if (existing.length) {
       const row = existing[0];
-      if (existing.length !== 1 || row.owner_id !== value.ownerId || row.token_sha256 !== value.tokenSha256 ||
+      if (existing.length !== 1 || row.domain !== value.domain || row.owner_id !== value.ownerId || row.token_sha256 !== value.tokenSha256 ||
           row.expires_at.toISOString() !== new Date(value.expiresAt).toISOString() ||
           (!legacy && (row.id !== id || row.name !== value.name || row.source !== "generated")))
         return fail("CREDENTIAL_CONFLICT");
@@ -50,15 +51,15 @@ export async function registerCredential(pool: pg.Pool, input: unknown, legacy =
       if (!valid) return fail("INVALID_INPUT");
     }
     await client.query(
-      "INSERT INTO mcp_credentials(id,owner_id,name,token_sha256,expires_at,source) VALUES($1,$2,$3,$4,$5,$6)",
-      [id, value.ownerId, value.name, value.tokenSha256, value.expiresAt, legacy ? "legacy-import" : "generated"],
+      "INSERT INTO mcp_credentials(id,owner_id,name,token_sha256,expires_at,source,domain) VALUES($1,$2,$3,$4,$5,$6,$7)",
+      [id, value.ownerId, value.name, value.tokenSha256, value.expiresAt, legacy ? "legacy-import" : "generated", value.domain],
     );
     return { id, created: true };
   });
 }
 
 export async function listCredentials(pool: pg.Pool) {
-  return (await pool.query(`SELECT c.id, c.name, c.created_at AS "createdAt", c.expires_at AS "expiresAt",
+  return (await pool.query(`SELECT c.id, c.name, c.domain, c.created_at AS "createdAt", c.expires_at AS "expiresAt",
     c.revoked_at AS "revokedAt", c.last_used_at AS "lastUsedAt", c.source,
     CASE WHEN c.revoked_at IS NOT NULL THEN 'revoked'
          WHEN c.expires_at <= clock_timestamp() THEN 'expired' ELSE 'active' END AS status

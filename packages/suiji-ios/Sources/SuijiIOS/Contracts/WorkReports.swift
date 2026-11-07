@@ -12,6 +12,7 @@ public struct WorkReport: Codable, Identifiable, Equatable, Sendable {
   public let days: [WorkDay]
   public let basedOnFeedRevision: String
   public let version: Int
+  public let needsReview: Bool?
   public let manuallyEdited: Bool
   public let createdAt: String
   public let updatedAt: String

@@ -1,3 +1,4 @@
+import { assertRecordDomain } from "../browse/domain";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import {
@@ -41,6 +42,7 @@ export class FollowupService {
       await client.query(
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
       );
+      await assertRecordDomain(client, owner, recordId);
       const parent = await client.query(
         `SELECT id FROM records WHERE owner_id=$1 AND id=$2 ${includeTrash ? "" : "AND deleted_at IS NULL"}`,
         [owner, recordId],
@@ -81,6 +83,7 @@ export class FollowupService {
       input,
       async (client) => {
         const owner = context.ownerId;
+        await assertRecordDomain(client, owner, recordId);
         const parent = await client.query(
           "SELECT id FROM records WHERE owner_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE",
           [owner, recordId],
@@ -91,13 +94,13 @@ export class FollowupService {
           throw invalid("请输入跟进内容或添加附件");
         if (new Set(ids).size !== ids.length) throw invalid("附件不能重复");
         const files = await client.query(
-          "SELECT id,kind,bound_record_id FROM attachments WHERE owner_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR UPDATE",
+          "SELECT id,kind,bound_record_id,bound_browse_id FROM attachments WHERE owner_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR UPDATE",
           [owner, ids],
         );
         if (files.rows.length !== ids.length) throw missing();
         if (
           files.rows.some(
-            (file) => file.bound_record_id && file.bound_record_id !== recordId,
+            (file) => file.bound_browse_id || (file.bound_record_id && file.bound_record_id !== recordId),
           )
         )
           throw invalid("附件已属于另一条记录");

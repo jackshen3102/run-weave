@@ -17,6 +17,7 @@ import SwiftUI
   @Published var history: CorrectionHistoryPage?
   @Published var feedbackPending = false
   var materialsSupported = false
+  var browseSupported = false
   let correctionAvailable: Bool
   let correctionSupported: Bool
   let historySupported: Bool
@@ -180,9 +181,21 @@ import SwiftUI
         if draft.followupRecordID == nil, let tags = draft.tags { payload["tags"] = tags }
         if draft.followupRecordID == nil, let version = draft.expectedVersion { payload["expectedVersion"] = version }
         draft.pending = PendingOperation(path: draft.followupRecordID.map { "api/suiji/v1/records/" + $0 + "/followups" } ?? ("api/suiji/v1/records" + (draft.recordID.map { "/" + $0 } ?? "")), method: draft.recordID == nil ? "POST" : "PATCH", payload: try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+        if browseSupported, let material = draft.material, draft.followupRecordID == nil {
+          var browsePayload: [String:Any]
+          if draft.recordID != nil { browsePayload = ["body":draft.body,"attachmentIds":ids,"expectedVersion":draft.expectedVersion ?? 1] }
+          else { browsePayload = ["captureId":material.captureId,"browseDate":material.materialDate,"occurredAt":NSNull(),"capturedAt":material.capturedAt,"title":"保存的内容","body":draft.body,"userNote":"", "source":["provider":"unknown","displayName":"未标注","connectionId":NSNull()],"contentType":material.inputType,"captureMethod":"manual","sourceUrl":material.sourceUrl as Any? ?? NSNull(),"contentState":["state":"available","reason":NSNull()],"attachmentIds":ids] }
+          draft.pending = PendingOperation(path:"api/suiji/v1/browse/entries" + (draft.recordID.map { "/" + $0 } ?? ""),method:draft.recordID == nil ? "POST" : "PATCH",payload:try JSONSerialization.data(withJSONObject:browsePayload,options:[.sortedKeys]))
+        }
         draft.revision += 1; try await store.save(draft)
       }
       try checkActive(); guard let operation = draft.pending else { return }
+      if operation.path.contains("/browse/entries") {
+        let value = try await client.request(BrowseEntryResponse.self,path:operation.path,method:operation.method,data:operation.payload,key:operation.key)
+        try checkActive()
+        guard value.entry.body == draft.body, value.entry.attachments.map(\.id) == draft.existing.map(\.id) + draft.local.compactMap({ $0.uploaded?.id }) else { throw MessageError(message:"浏览回执不匹配，请确认原请求") }
+        try await store.remove(draft); confirmed = true; message = "已保存到浏览"; return
+      }
       if let recordID = draft.followupRecordID {
         let result = try await client.request(FollowupResponse.self, path: operation.path, method: operation.method, data: operation.payload, key: operation.key)
         try checkActive()

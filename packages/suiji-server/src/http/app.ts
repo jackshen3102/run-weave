@@ -1,3 +1,6 @@
+import { browseEnabled } from "../browse/domain";
+import { BrowseService } from "../browse/service";
+import { browseRouter } from "./browse";
 import { WorkRecordService } from "../work-records/service";
 import { workRecordRouter } from "./work-records";
 import { workReportRouter } from "./work-reports";
@@ -77,6 +80,8 @@ export function createApp(
       res.json({ ok: true });
     }),
   );
+  app.use("/api/suiji/v1/browse", express.json({ limit: "16mb" }));
+  app.use("/mcp/browse", express.json({ limit: "16mb" }));
   app.use(express.json({ limit: "256kb" }));
   app.use("/mcp", createMcpRouter(pool, records, attachments, config, followups, store, workRecords));
   app.use("/api", webCors(config.SUIJI_WEB_ORIGINS));
@@ -141,7 +146,7 @@ export function createApp(
         schemaVersion: schema.rows[0].version,
         limits: SUIJI_LIMITS,
         ai: reviews.info(),
-        features: { materials: true, workMaterials: true, workRecords: true, workReports: true, workSources: true, workBrowserHistory: true, workScreenTimeline: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
+        features: { browse: await browseEnabled(pool, a.ownerId), materials: !(await browseEnabled(pool, a.ownerId)), workMaterials: false, workRecords: true, workReports: true, workSources: true, workBrowserHistory: false, workScreenTimeline: true, followups: true, changes: true, correction: corrections.info(), correctionHistory: true },
       });
     }),
   );
@@ -152,6 +157,7 @@ export function createApp(
     requestId: res.locals.requestId,
   });
   const root = "/api/suiji/v1";
+  app.use(`${root}/browse`, browseRouter(new BrowseService(pool), attachments));
   app.use(`${root}/work-facts`, workRecordRouter(workRecords));
   app.use(`${root}/work-reports`, workReportRouter(workRecords.reports));
   app.get(`${root}/correction-lexicon`, route(async (_req, res) => {

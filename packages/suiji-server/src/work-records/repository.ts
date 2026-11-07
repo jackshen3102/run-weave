@@ -19,6 +19,7 @@ export type WorkRow = {
   manual_fields: WorkField[];
   source_namespace: string | null;
   external_key: string | null;
+  eligibility: "eligible" | "excluded" | "needs-review";
   source_snapshot: unknown;
   source_hash: string | null;
   source_collected_at: Date | null;
@@ -49,7 +50,7 @@ export async function get(
 ): Promise<WorkRow> {
   const row = (
     await client.query<WorkRow>(
-      `SELECT ${columns} FROM work_facts WHERE owner_id=$1 AND id=$2${lock ? " FOR UPDATE" : ""}`,
+      `SELECT ${columns} FROM eligible_work_facts WHERE owner_id=$1 AND id=$2${lock ? " FOR UPDATE" : ""}`,
       [owner, id],
     )
   ).rows[0];

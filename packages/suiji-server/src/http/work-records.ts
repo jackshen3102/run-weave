@@ -28,6 +28,7 @@ export function workRecordRouter(service: WorkRecordService) {
         await service.list(
           res.locals.auth.ownerId,
           schema.workList.parse(req.query),
+          true,
         ),
       ),
     ),

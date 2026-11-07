@@ -54,6 +54,7 @@ export function WorkReportDetail({ original, model, writable, onClose, onLogs }:
     <div className="flex-1 space-y-4 overflow-y-auto p-5">
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <p className="text-sm text-muted-foreground">{report.from} — {report.to} · 七个自然日</p>
+      {report.needsReview ? <p className="text-sm text-amber-600">来源含历史浏览内容，此周报待人工复核。</p> : null}
       <p className="text-xs text-muted-foreground">根据 {report.sourceFacts.length} 条工作事实整理{report.manuallyEdited ? " · 已人工编辑" : ""}</p>
       {report.days.some(d => d.coverage !== "complete") && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">来源未齐：{report.days.filter(d => d.coverage !== "complete").map(d => d.date).join("、")}。未上报不代表没有工作。</p>}
       {editing && draft ? <><label className="block text-sm">周报标题<Input aria-label="周报标题" value={draft.title} disabled={busy || !!draft.pending} onChange={e => void persist({ ...draft, title: e.target.value }).catch(e => setError(String(e)))} /></label><label className="block text-sm">周报正文<textarea aria-label="周报正文" className="min-h-80 w-full rounded-xl border bg-background p-3" value={draft.body} disabled={busy || !!draft.pending} onChange={e => void persist({ ...draft, body: e.target.value }).catch(e => setError(String(e)))} /></label>

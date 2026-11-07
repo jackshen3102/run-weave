@@ -224,7 +224,7 @@ class State:
             require(self.migrating or not journal.exists(), "SOURCE_MIGRATION_IN_PROGRESS: resume migrate-sources")
             self.data = read(self.file) if self.file.exists() else {"schemaVersion": 1, "binding": expected, "days": {}, "identities": {}, "batches": {}, "excludedThreads": []}
             self.original_digest = digest(self.data)
-            if not (self.migrating and journal.exists()):
+            if not (self.migrating and (journal.exists() or (self.root / "work-isolation.json").exists())):
                 require(self.data.get("binding") == expected, "JOB_IDENTITY_OR_SOURCES_CHANGED")
         except Exception:
             self.lock.close()

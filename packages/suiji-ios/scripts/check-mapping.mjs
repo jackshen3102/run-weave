@@ -44,6 +44,17 @@ if (liveInfo.features?.workRecords) {
   const oldInfo = structuredClone(liveInfo); delete oldInfo.features.workRecords; delete oldInfo.features.workReports;
   await writeFile(path.join(artifacts, "old-info.json"), JSON.stringify(oldInfo), { mode: 0o600 });
 }
+let browsePage;
+if (liveInfo.features?.browse) {
+  for (const [name, route] of [["browse-page", "/api/suiji/v1/browse/entries?limit=30"], ["browse-detail", null]]) {
+    const target = route ?? "/api/suiji/v1/browse/entries/" + encodeURIComponent(browsePage.items[0].id);
+    const response = await fetch(endpoint + target, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`${name} HTTP ${response.status}`);
+    const body = await response.text();
+    if (name === "browse-page") { browsePage = JSON.parse(body); if (!browsePage.items.length) throw new Error("Real browse entries required"); }
+    await writeFile(path.join(artifacts, name + ".json"), body, { mode: 0o600 });
+  }
+}
 // Compile the SAME DTO definitions consumed by the iOS app, decode and re-encode actual HTTP JSON.
 await writeFile(
   path.join(artifacts, "main.swift"),
@@ -68,6 +79,11 @@ try JSONEncoder().encode(workPage).write(to: URL(fileURLWithPath: root + "/work-
 try JSONEncoder().encode(workDetail).write(to: URL(fileURLWithPath: root + "/work-detail-roundtrip.json"))` : ""}
 ${followupRecordId ? `let followups = try JSONDecoder().decode(FollowupPage.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/followups.json")))
 try JSONEncoder().encode(followups).write(to: URL(fileURLWithPath: root + "/followups-roundtrip.json"))` : ""}
+${browsePage ? `let browsePage = try JSONDecoder().decode(BrowsePage.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/browse-page.json")))
+let browseDetail = try JSONDecoder().decode(BrowseEntryResponse.self, from: Data(contentsOf: URL(fileURLWithPath: root + "/browse-detail.json")))
+guard info.features?.browse == true, !browsePage.items.isEmpty else { fatalError("Browse capability mapping mismatch") }
+try JSONEncoder().encode(browsePage).write(to: URL(fileURLWithPath: root + "/browse-page-roundtrip.json"))
+try JSONEncoder().encode(browseDetail).write(to: URL(fileURLWithPath: root + "/browse-detail-roundtrip.json"))` : ""}
 print("Decoded actual HTTP info and \\(page.items.count) records with production Swift DTOs")
 `,
 );
@@ -85,6 +101,7 @@ run([
   path.join(pkg, "Sources/SuijiIOS/Contracts/Contracts.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Reviews.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/Followups.swift"),
+  path.join(pkg, "Sources/SuijiIOS/Contracts/Browse.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/WorkRecords.swift"),
   path.join(pkg, "Sources/SuijiIOS/Contracts/WorkReports.swift"),
   path.join(artifacts, "main.swift"),
@@ -196,4 +213,18 @@ if (workPage) {
     if (JSON.stringify(canonical(before)) !== JSON.stringify(canonical(after))) throw new Error("Work fact mapping mismatch: " + name);
   }
   console.log("Actual work HTTP page/detail, business dates, nullable projects, statuses, counts, coverage and cursor match production Swift DTOs; old optional capability decodes");
+}
+
+if (browsePage) {
+  const roundtrip = JSON.parse(await readFile(path.join(artifacts, "browse-page-roundtrip.json"), "utf8"));
+  const detailBefore = JSON.parse(await readFile(path.join(artifacts, "browse-detail.json"), "utf8"));
+  const detailAfter = JSON.parse(await readFile(path.join(artifacts, "browse-detail-roundtrip.json"), "utf8"));
+  const canonicalBrowse = v => Array.isArray(v) ? v.map(canonicalBrowse) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).filter(k => v[k] !== null).sort().map(k => [k,canonicalBrowse(v[k])])) : v;
+  const fields = ["id","captureId","version","browseDate","occurredAt","capturedAt","title","userNote","source","contentType","captureMethod","sourceUrl","contentState","contentHash","deletedAt","attachments"];
+  for (const item of browsePage.items) {
+    const actual = roundtrip.items.find(e => e.id === item.id);
+    for (const key of fields) if (JSON.stringify(canonicalBrowse(item[key] ?? null)) !== JSON.stringify(canonicalBrowse(actual?.[key] ?? null))) throw new Error("Browse mapping mismatch: " + key);
+  }
+  if (detailBefore.entry.body !== detailAfter.entry.body) throw new Error("Browse body Unicode mismatch");
+  console.log("Real browse HTTP -> production Swift Codable roundtrip passed");
 }

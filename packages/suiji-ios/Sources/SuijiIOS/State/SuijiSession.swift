@@ -108,7 +108,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
       store = drafts; info = identity; message = ""
       do {
         let connection = CaptureConnection(identity: CaptureIdentity(environment: target, endpoint: url.absoluteString,
-          serverId: identity.serverId, ownerId: identity.ownerId), materials: identity.features?.materials == true)
+          serverId: identity.serverId, ownerId: identity.ownerId), materials: identity.features?.materials == true || identity.features?.browse == true, browse: identity.features?.browse == true)
         try await SharedCaptureStore.setConnection(connection, ifCurrent: { self.generation == current })
         guard generation == current else { return }
         captureConnection = connection; refreshCaptures()
@@ -196,7 +196,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
         draft.material = record?.material?.input ?? (material ? MaterialInput() : nil)
         if draft.material != nil { draft.kind = .note }
       }
-      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory); model.materialsSupported = info.features?.materials == true; editingModels[draft.id] = model; editor = model
+      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory); model.materialsSupported = info.features?.materials == true; model.browseSupported = info.features?.browse == true; editingModels[draft.id] = model; editor = model
       await model.persist()
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
@@ -209,7 +209,7 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
   func retryCapture(_ item: QueuedCapture) async {
     guard !captureBusy, let captureConnection, let client else { return }
     captureBusy = true; captureMessage = ""; defer { captureBusy = false; refreshCaptures() }
-    do { try await CaptureQueue.send(item, connection: captureConnection, api: client.transport); captureMessage = "已保存，请刷新素材列表" }
+    do { try await CaptureQueue.send(item, connection: captureConnection, api: client.transport); captureMessage = "已保存，请刷新浏览列表" }
     catch { captureMessage = "待发送或保存结果待确认：" + error.localizedDescription }
   }
   func acceptFollowupRecord(_ record: SuijiRecord) {

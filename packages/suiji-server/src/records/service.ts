@@ -1,3 +1,5 @@
+import { browseEnabled, assertRecordDomain } from "../browse/domain";
+import { createLegacy } from "../browse/legacy";
 import { materialValue, materialReceipt, saveMaterial, validateMaterial } from "../materials/service";
 import { listChanges } from "./changes";
 import { followupSummaries } from "../followups/repository";
@@ -41,7 +43,7 @@ export class RecordService {
   async tags(owner: string): Promise<{ items: string[] }> {
     const result = await this.pool.query<{ tag: string }>(
       `SELECT tag FROM records CROSS JOIN LATERAL unnest(tags) AS tag
-       WHERE owner_id=$1 AND deleted_at IS NULL
+       WHERE owner_id=$1 AND deleted_at IS NULL AND migrated_browse_id IS NULL
        GROUP BY tag ORDER BY max(updated_at) DESC, tag COLLATE "C"`,
       [owner],
     );
@@ -68,6 +70,7 @@ export class RecordService {
     const values: unknown[] = [owner];
     const where = [
       "owner_id=$1",
+      "migrated_browse_id IS NULL",
       query.trash === "true" ? "deleted_at IS NOT NULL" : "deleted_at IS NULL",
     ];
     const add = (sql: string, value: unknown) => {
@@ -143,12 +146,14 @@ export class RecordService {
     });
   }
   create(context: Mutation, input: CreateRecord) {
+    if (context.actor === "agent" && input.material) throw invalid("素材已归属浏览，请使用独立浏览入口");
     return mutate(
       this.pool,
       context,
       "create",
       { ...input, attachmentIds: input.attachmentIds ?? [] },
       async (client) => {
+        if (input.material && await browseEnabled(client, context.ownerId)) return createLegacy(client, context, input);
         const id = randomUUID();
         validateMaterial(input.kind, input.material);
         this.checkContent(input.body, input.attachmentIds ?? []);
@@ -175,7 +180,9 @@ export class RecordService {
       },
     );
   }
-  edit(context: Mutation, id: string, input: EditRecord) {
+  async edit(context: Mutation, id: string, input: EditRecord) {
+    if (context.actor === "agent") await assertRecordDomain(this.pool, context.ownerId, id);
+    if (input.material && await browseEnabled(this.pool, context.ownerId)) throw invalid("请在浏览中编辑素材");
     return mutate(this.pool, context, `edit:${id}`, input, async (client) => {
       const old = await getRecord(client, context.ownerId, id, true);
       this.version(old, input.expectedVersion);
@@ -261,12 +268,12 @@ export class RecordService {
     // Deterministic lock order also covers competing attempts to first-bind an upload.
     const rows = (
       await client.query(
-        "SELECT id,kind,bound_record_id FROM attachments WHERE owner_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR UPDATE",
+        "SELECT id,kind,bound_record_id,bound_browse_id FROM attachments WHERE owner_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR UPDATE",
         [owner, ids],
       )
     ).rows;
     if (rows.length !== ids.length) throw missing();
-    if (rows.some((r) => r.bound_record_id && r.bound_record_id !== id))
+    if (rows.some((r) => r.bound_browse_id || (r.bound_record_id && r.bound_record_id !== id)))
       throw invalid("附件已属于另一条记录");
     if (
       rows.filter((r) => r.kind === "image").length >
