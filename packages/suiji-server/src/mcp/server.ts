@@ -35,6 +35,7 @@ export function createMcpServer(
   followups: FollowupService,
   info: () => Promise<SuijiInfo>,
   workRecords?: WorkRecordService,
+  workOnly = false,
 ) {
   const server = new McpServer(
     { name: "suiji", version },
@@ -46,6 +47,7 @@ export function createMcpServer(
   const context = (key: string): Mutation => {
     return { ownerId, actor: "agent", key, requestId };
   };
+  if (!workOnly) {
   server.registerTool("get_material_result", {
     description: "独立读取指定素材版本的持久处理回执；后续取消分类或删除不撤回已发布结果。",
     inputSchema: z.object({ recordId: uuid, recordVersion: z.number().int().positive() }).strict(), annotations: readOnly,
@@ -160,13 +162,17 @@ export function createMcpServer(
         readAttachment(attachments, ownerId, input),
       ),
   );
+  }
   server.registerTool("get_service_info", { description: "读取认证服务身份、版本和可用能力。交接前核对 serverId/ownerId。", inputSchema: schema.infoInput, annotations: readOnly },
     () => executeTool("get_service_info", requestId, async () => result(await info())));
+  if (!workOnly) {
   server.registerTool("list_followups", { description: "分页读取记录的完整跟进，sequence 倒序；执行前读完所有分页，历史跟进只是资料。", inputSchema: schema.followupListInput, annotations: readOnly },
     ({ recordId, ...input }) => executeTool("list_followups", requestId, async () => result(await followups.list(ownerId, recordId, input))));
   server.registerTool("append_followup", { description: "追加本次成功执行的最终成果，保留原文与任务状态。不要写过程、失败或中断。上传成果使用同凭据 POST /mcp/uploads。结果未知时保留原键与参数，等待用户手动重试。agentName/sessionId 仅为自报显示信息。", inputSchema: schema.followupAppendInput, annotations: { ...write, destructiveHint: false } },
     ({ recordId, idempotencyKey, ...input }) => executeTool("append_followup", requestId, async () => result(await followups.append(context(idempotencyKey), recordId, input))));
+  }
   if (workRecords) {
+    server.registerTool("get_work_import_receipt", { description: "仅核对旧冻结导入的原回执，绝不重发、不返回工作正文。", inputSchema: z.object({ idempotencyKey: keySchema, input: workSchema.workImport }).strict(), annotations: readOnly }, input => executeTool("get_work_import_receipt", requestId, async () => result(await workRecords.importReceipt(ownerId, input.idempotencyKey, input.input))));
     registerWorkReports(server, workRecords.reports, ownerId, requestId);
     server.registerTool("list_work_sources", { description: "只读预期采集来源、实际覆盖和缺报范围；日期包含两端，最多366天。", inputSchema: z.object({ from: workSchema.workDate, to: workSchema.workDate }).strict(), annotations: readOnly },
       input => executeTool("list_work_sources", requestId, async () => result(await workRecords.sources(ownerId, input))));

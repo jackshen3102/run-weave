@@ -1,6 +1,6 @@
 # 多机器使用同一 Daily Record 定时任务
 
-每个 Runweave Backend 使用同版 Daily Record Skill 和任务提示词，只读取所在机器的数据，主动上报随记。Mac 可启用本机 Agent、飞书聊天及浏览概览，devbox 只启用本机 Agent；不需要 Mac 发起 SSH 采集，也不增加采集 daemon。当前不做跨机器自动语义合并。
+每个 Runweave Backend 使用同版 Daily Record Skill 和任务提示词，只读取所在机器的数据，主动上报随记。Mac 可启用本机 Agent、飞书工作消息，devbox 只启用本机 Agent；不需要 Mac 发起 SSH 采集，也不增加采集 daemon。当前不做跨机器自动语义合并。
 
 ## 前置与配置
 
@@ -40,35 +40,14 @@ Mac 的 feishu 改为 `{"enabled":true,"channels":"messages","accountScope":"固
 
 `home` 指定时忽略继承的 provider HOME 环境变量；省略时沿用本机原生目录。`providers` 明确列出实际需要采集的 Codex/Pi/Claude/Trae，未启用来源不产生不可用回执。
 
-## Mac 浏览来源（可选）
+## 旧浏览来源迁移
 
-旧配置不需要改动，缺省/关闭不检查浏览依赖。仅在 Mac 给 `sources` 增加：
-
-```json
-"browser": {
-  "enabled": true,
-  "effectiveFrom": "实际启用日期",
-  "root": "/absolute/home/.runweave/browser-history",
-  "collectorArgv": ["/absolute/node22", "/absolute/private/runtime/browser-history.cjs"],
-  "expectedSourceIds": ["从本机browser-history status取得的实际UUID"]
-}
-```
-
-日期不早于 job.startDate；生效日前不期待浏览 scope。固定 runtime 与同版 Skill 一起部署，不能依赖临时 worktree。
-配置只消费已落盘日志，不安装扩展或自动改变记录开关。预期来源白名单之外的 Profile 不进入报告。
-
-已有状态不能直接编辑 sources。生成受保护的新配置后执行
-`job.py migrate-sources --config <原配置> --next-config <新配置> --dry-run`，核对受影响日期后用同参数去掉 dry-run 执行。
-迁移仅允许增加 browser，不能改旧机器/目标/来源；有任何未结束批次时先恢复原流程。
-迁移持锁、备份并保存 journal；中断后原样重跑迁移，不能手动删除 journal 或重置 state。
-原事项键、历史回执和 outbox 保留，生效日后的日期重新检查浏览完整性。
-
-服务先升级并声明 `features.workBrowserHistory=true`，再登记机器级 scope
-`browser:<producerId>:observed`，名称“Mac 浏览概览（仅已记录访问）”，producer/namespace 沿用本机，effectiveFrom 与配置一致。
-现存登记日志全部读完可为 complete，但不代表全天浏览覆盖；partial/unavailable 保留补采义务。
-独立浏览主题仅 documented，每天至多 3 条、每条正文至多 160 字；优先合并到原事项，完整依据仅留本地。
-未启用浏览的 devbox 不要求任何浏览 CLI、扩展或配置。浏览验证见
-[浏览接入合同](../../../../../docs/testing/skills/daily-record-browser.testplan.yaml)。
+浏览不再进入工作日报。旧 sources.browser/materials 配置先运行
+`job.py isolate-work --config <私有配置> --dry-run`，检查后以同参数去掉 dry-run。
+入口备份原配置、状态和冻结请求；结果未知时只核对服务端原回执，不重发旧工作 payload。
+迁移后用新 Agent 上下文和 work 领域凭据，随记连接指定 `mcpPath:"/mcp/work"`。
+已登记来源的有效区间由服务端 browse-cutover 在切换日关闭，历史回执保留。
+独立浏览配置见 [browse-record](../../browse-record/SKILL.md)。
 
 ## 随记来源登记
 
@@ -156,43 +135,8 @@ Mac 飞书另登记 `feishu:<accountScope>:messages`，producerId/sourceNamespac
 安装态 CLI、Skill 和 collector 需分别部署；源码修改不表示线上任务已升级。本期隔离实现验证
 不授权更改用户实际任务、迁移个人来源或发布真实随记。
 
-### 主动分享素材（默认关闭）
+### 已退役的素材工作来源
 
-只给一个已指定的日报生产者增加 `sources.materials`，不新增定时任务，不在所有机器默认打开：
-
-```json
-{
-  "enabled": true,
-  "effectiveFrom": "2026-11-07",
-  "accountScope": "<serverId>:<ownerId>"
-}
-```
-
-沿用既有 producerId/sourceNamespace，经 `migrate-sources --next-config ... --dry-run` 检查，
-再迁移配置；服务 work_sources 需登记 `materials:<serverId>:<ownerId>`，绑定同一生产者与生效日期。
-生效日前的素材仅保留查看。变化流扫描与待处理索引原子保存；发布回执确认前不视为消费完成。
-已确认旧日期收到素材或改日期后重新安排，不限最近七天；新旧日期都检查，人工字段继续受保护。
-complete 只表示当前范围中已上传的素材读完，不证明手机全天活动完整或没有离线待发送素材。
-
-`job read` 返回实际图片路径与 SHA256，不会把文字读取算作读图。执行 Agent 必须把每张图片交给
-当前具备读图能力的模型（例如实际调用 view_image 或返回 MCP image 块）。之后写 0600 的阅读回执：
-
-```json
-{
-  "materialId": "material:<recordId>",
-  "sourceHash": "<服务返回hash>",
-  "reader": "<实际模型>",
-  "toolCallId": "<真实读图调用标识>",
-  "images": [{ "attachmentId": "<UUID>", "sha256": "<实际图片hash>" }],
-  "observation": "实际看见的内容；与用户备注分开"
-}
-```
-
-运行 `job.py image-read --config ... --batch ... --run-id ... --generation ... --id material:<recordId> --image-receipt ...`。
-没有读图能力、读取失败或不支持附件时，在 facts 文件 `materialReviews` 中使用 deferred，保持 partial/待整理；
-不能只凭文件名、正文备注或哈希确认图片已读。启用前必须在实际日报执行模型验证一次真实图像输入。
-
-候选文件除原 days 外可包含 `materialReviews`，每条为 `{id,outcome,reason}`，outcome 为 included、merged、
-no-new-fact 或 deferred。每份素材都需审阅，no-new-fact 不生成虚假事实。validate 绑定版本/hash/实际读图回执，
-publish 前再读当前版本，服务导入事务最终校验。链接只证明收到了链接，不自动抓取或声称读过全文。
-返回 VERSION_CONFLICT 后重新 prepare --recollect/read/validate；未知写结果继续原冻结请求。
+不再启用 `sources.materials`、登记 materials 工作来源或生成 materialResults。
+与旧 browser 来源相同，使用 `isolate-work` 保留备份、核对未知原请求并隔离旧上下文。
+主动保存及知乎资料进入独立浏览；图片只在浏览任务中阅读，不作为工作成果依据。

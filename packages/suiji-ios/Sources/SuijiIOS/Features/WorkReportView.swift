@@ -34,6 +34,7 @@ struct WorkReportView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
           Text("\(report.from) — \(report.to) · 七个自然日").font(.subheadline).foregroundStyle(.secondary)
+          if report.needsReview == true { Text("来源含历史浏览内容，此周报待人工复核").foregroundStyle(.orange) }
           Text("根据 \(report.sourceFacts.count) 条工作事实整理" + (report.manuallyEdited ? " · 已人工编辑" : "")).font(.caption).foregroundStyle(.secondary)
           let missing = report.days.filter { $0.coverage != "complete" }.map(\.date)
           if !missing.isEmpty { Text("来源未齐：" + missing.joined(separator: "、") + "。未上报不代表没有工作。").font(.callout).foregroundStyle(.orange) }

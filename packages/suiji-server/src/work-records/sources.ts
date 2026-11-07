@@ -1,3 +1,4 @@
+import { blockedScope } from "./isolation";
 import type pg from "pg";
 import { z } from "zod";
 import type { WorkSource, WorkSourcePage, WorkReceipt } from "@runweave/shared/suiji";
@@ -20,6 +21,7 @@ const columns = `source_scope AS "sourceScope",producer_id AS "producerId",sourc
 
 export async function registerSource(pool: pg.Pool, owner: string, raw: unknown) {
   const input = sourceInput.parse(raw);
+  if (blockedScope(input.sourceScope)) throw invalid("浏览来源已移至独立浏览采集");
   return transaction(pool, async client => {
     await repo.lockHead(client, owner);
     const overlaps = await client.query<WorkSource>(
@@ -52,8 +54,8 @@ export async function stopSource(pool: pg.Pool, owner: string, raw: unknown) {
 
 export async function listSources(client: pg.PoolClient, owner: string, raw: unknown): Promise<WorkSourcePage> {
   const range = sourceRange.parse(raw);
-  const items = (await client.query<WorkSource>(`SELECT ${columns} FROM work_sources WHERE owner_id=$1 AND effective_from<=$3::date AND (effective_to IS NULL OR effective_to>$2::date) ORDER BY source_scope,effective_from`, [owner,range.from,range.to])).rows;
-  const receipts = (await client.query<WorkReceipt & { date: string }>(`SELECT work_date::text AS date,source_scope AS "sourceScope",status,collected_at AS "collectedAt",window_from AS "from",window_to AS "to" FROM work_day_coverage WHERE owner_id=$1 AND work_date BETWEEN $2::date AND $3::date`, [owner,range.from,range.to])).rows;
+  const items = (await client.query<WorkSource>(`SELECT ${columns} FROM work_sources WHERE owner_id=$1 AND source_scope !~ '^(browser|materials|browse):' AND effective_from<=$3::date AND (effective_to IS NULL OR effective_to>$2::date) ORDER BY source_scope,effective_from`, [owner,range.from,range.to])).rows;
+  const receipts = (await client.query<WorkReceipt & { date: string }>(`SELECT work_date::text AS date,source_scope AS "sourceScope",status,collected_at AS "collectedAt",window_from AS "from",window_to AS "to" FROM work_day_coverage WHERE owner_id=$1 AND source_scope !~ '^(browser|materials|browse):' AND work_date BETWEEN $2::date AND $3::date`, [owner,range.from,range.to])).rows;
   const days: WorkSourcePage["days"] = [];
   for (let t = Date.parse(range.from); t <= Date.parse(range.to); t += 86400000) {
     const date = new Date(t).toISOString().slice(0,10);
@@ -67,10 +69,10 @@ export async function listSources(client: pg.PoolClient, owner: string, raw: unk
 /** Dates come from one list page, plus an explicitly bounded requested range. */
 export async function coverageDays(client: pg.PoolClient, owner: string, dates: string[]) {
   return (await client.query(`WITH dates AS (SELECT unnest($2::date[]) AS day)
-    SELECT d.day::text AS date,(SELECT count(*)::int FROM work_facts f WHERE f.owner_id=$1 AND f.work_date=d.day) AS count,
+    SELECT d.day::text AS date,(SELECT count(*)::int FROM eligible_work_facts f WHERE f.owner_id=$1 AND f.work_date=d.day) AS count,
     CASE WHEN count(s.source_scope)=0 THEN 'unknown'
          WHEN bool_and(coalesce(c.status='complete',false)) THEN 'complete' ELSE 'partial' END AS coverage
-    FROM dates d LEFT JOIN work_sources s ON s.owner_id=$1 AND s.effective_from<=d.day AND (s.effective_to IS NULL OR s.effective_to>d.day)
+    FROM dates d LEFT JOIN work_sources s ON s.owner_id=$1 AND s.source_scope !~ '^(browser|materials|browse):' AND s.effective_from<=d.day AND (s.effective_to IS NULL OR s.effective_to>d.day)
     LEFT JOIN work_day_coverage c ON c.owner_id=$1 AND c.work_date=d.day AND c.source_scope=s.source_scope
     GROUP BY d.day ORDER BY d.day DESC`, [owner,dates])).rows;
 }

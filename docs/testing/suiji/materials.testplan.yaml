@@ -1,32 +1,12 @@
 version: 1
-name: 随记素材分类与手机分享
+name: 旧浏览内容分享兼容与队列不变量
 description: >
-  面向待实现的素材功能。验证记录内分类、手机分享持久化与既有日报消费闭环；
+  记录内浏览内容分类已退役，使用 browse-domain.testplan.yaml；这里仅保留无冲突的分享、队列与身份合同。
+  面向待实现的浏览内容功能。验证记录内分类、手机分享持久化与既有日报消费闭环；
   各用例独立建立材料和账号。格式通过不代表实现或行为通过，不新增单元测试。
 cases:
   - id: MATERIAL-001
-    name: 分类保留原入口并隔离素材
-    required: true
-    description: 素材是记录内分类，全部包含素材，想法和待办不误收素材。
-    preconditions:
-      - 隔离服务与已安装新版随记连接正常，服务声明 materials 能力。
-      - 当前 owner 独立准备一条普通想法、一条未完成待办和一条素材。
-    steps:
-      - 使用 toolkit:agent-device 进入记录；确认全部、想法、待办、素材四个筛选及原有底部 Tab 存在，没有回顾 Tab。
-      - 分别切换筛选；确认全部包含三条，想法只含普通想法，待办只含待办，素材只含素材。
-  - id: MATERIAL-002
-    name: 历史素材按归属日期分页
-    required: true
-    description: 上传时间不替代归属日期，历史数据跨页可完整查看。
-    preconditions:
-      - 新版随记连接隔离服务，当前 owner 的素材均有唯一正文标记。
-      - 独立准备超过一页的素材，含今天上传但归属昨天和更早日期的记录。
-    steps:
-      - 使用 toolkit:agent-device 打开素材全部日期并翻页；对照服务列表确认按归属日期倒序且无重复漏项。
-      - 筛选昨天及一个历史日期范围；确认只出现范围内素材，改筛选后旧游标不混入。
-      - 查看昨天补记的详情；确认归属日期为昨天，实际保存时间仍为今天。
-  - id: MATERIAL-003
-    name: 真机截图分享成功保存原图和备注
+    name: 真机截图分享成功保存原图和备注到浏览
     required: true
     description: 用户在系统分享扩展中完成保存，服务器收到原材料后才显示成功。
     preconditions:
@@ -34,18 +14,18 @@ cases:
       - 本用例自行准备一张含唯一短语的无敏感数据聊天截图，网络可用。
     steps:
       - 使用 toolkit:agent-device 从截图的系统分享菜单选择随记，填写备注并点击记入今日；确认保存无需等待 AI 且成功后返回来源页面。
-      - 进入记录的素材分类，打开刚保存项；确认原图、备注和日期一致，状态为待整理。
-      - 独立通过同 owner 的服务接口回读，确认只有一条素材且图片可解码。
-  - id: MATERIAL-004
+      - 进入记录的浏览迁移兼容，打开刚保存项；确认原图、备注和日期一致，状态为待整理。
+      - 独立通过同 owner 的服务接口回读，确认只有一条浏览内容且图片可解码。
+  - id: MATERIAL-002
     name: 文字和链接保留实际收到的内容
     required: true
     description: 等价的文字或链接分享不伪造网页正文，也不默认生成待办。
     preconditions:
       - 新版分享扩展已登录隔离服务，真机存在可分享文字和 HTTP 链接的来源应用。
     steps:
-      - 使用 toolkit:agent-device 分别分享唯一标记文字和一个需要登录的 HTTP(S) 链接至随记；确认两次保存均产生素材 note。
-      - 回读正文和 metadata；确认文字、链接与用户备注保留，未收到的网页内容没有出现在素材中。
-  - id: MATERIAL-005
+      - 使用 toolkit:agent-device 分别分享唯一标记文字和一个需要登录的 HTTP(S) 链接至随记；确认两次保存均产生浏览内容 note。
+      - 回读正文和 metadata；确认文字、链接与用户备注保留，未收到的网页内容没有出现在浏览内容中。
+  - id: MATERIAL-003
     name: 不支持或超限输入不静默丢弃
     required: true
     description: 输入无法按首版限制保存时明确提示并不产生虚假成功。
@@ -55,7 +35,7 @@ cases:
       - 使用 toolkit:agent-device 分别提交多图、不支持文件、超长文字；确认明确提示限制，不默默只保存第一张或截断文字。
       - 对允许转换的单张图片验证转换后不超过服务限额且仍可读；无法降到限额时确认保存被阻止。
       - 独立检查服务，确认被拒绝的输入没有伪成功记录。
-  - id: MATERIAL-006
+  - id: MATERIAL-004
     name: 连续分享不覆盖普通草稿
     required: true
     description: 每次捕获拥有独立持久身份，且不占用普通新记录草稿。
@@ -63,9 +43,9 @@ cases:
       - 新版主 App 已保存一份未提交的普通新记录草稿，包含唯一正文。
       - 同一真机和 owner 准备两份不同标记的分享材料。
     steps:
-      - 使用 toolkit:agent-device 连续分享并保存两份材料；确认素材列表各有一项。
+      - 使用 toolkit:agent-device 连续分享并保存两份材料；确认浏览内容列表各有一项。
       - 返回普通新增编辑器；确认原草稿正文和附件未被分享材料覆盖。
-  - id: MATERIAL-007
+  - id: MATERIAL-005
     name: 离线队列跨重启恢复且只手动发送
     required: true
     description: 离线已落盘材料在进程结束后仍在，联网及启动不自动产生业务写入。
@@ -74,9 +54,9 @@ cases:
     steps:
       - 使用 toolkit:agent-device 在断网下保存唯一标记截图；确认显示待发送而非云端保存成功。
       - 结束宿主进程后重新打开，重新取得设备与 UI 状态；确认待发送材料和图片完整。
-      - 恢复网络并重新进入前台；确认服务器没有自动新增素材。
+      - 恢复网络并重新进入前台；确认服务器没有自动新增浏览内容。
       - 点击手动重试；确认服务器只产生一条记录，本机待发送项在确认后清除。
-  - id: MATERIAL-008
+  - id: MATERIAL-006
     name: 丢响应后沿用原请求确认结果
     required: true
     description: 服务已提交但客户端未知时不能重复创建或更换请求内容。
@@ -86,16 +66,16 @@ cases:
     steps:
       - 使用 toolkit:agent-device 保存材料并触发丢响应；确认界面显示结果待确认，不能改写冻结内容后重发。
       - 通过手动重试确认；检查沿用原幂等键和完整 payload，服务中同 captureId 只有一条记录。
-  - id: MATERIAL-009
+  - id: MATERIAL-007
     name: 身份切换不发送旧账号材料
     required: true
     description: 队列与凭据按环境和账号隔离，旧材料不会写入新账号。
     preconditions:
-      - 真机有本用例独立的两个已验证身份或正式与开发连接，以及属于第一个身份的待发送素材。
+      - 真机有本用例独立的两个已验证身份或正式与开发连接，以及属于第一个身份的待发送浏览内容。
     steps:
       - 使用 toolkit:agent-device 切换到第二个身份；确认不展示第一个身份的私有预览且不能将其队列发送到当前账号。
-      - 回到第一个身份并手动重试；确认仅第一个账号收到记录，第二个账号没有该素材及附件。
-  - id: MATERIAL-010
+      - 回到第一个身份并手动重试；确认仅第一个账号收到记录，第二个账号没有该浏览内容及附件。
+  - id: MATERIAL-008
     name: 宿主与扩展协调令牌刷新
     required: true
     description: 两个进程共用会话时不因并发轮换凭据丢失登录或产生重复业务写入。
@@ -105,33 +85,22 @@ cases:
     steps:
       - 使用 toolkit:agent-device 在主 App 读取列表的同时发起分享保存，触发两个进程需要有效凭据。
       - 确认刷新跨进程串行并重新读取共享凭据；任一操作有界失败可手动恢复，不无限等待或清掉另一个进程的登录。
-      - 回读素材与队列，确认没有重复记录、跨账号内容或丢失材料。
-  - id: MATERIAL-011
-    name: 旧客户端编辑保留素材元数据
+      - 回读浏览内容与队列，确认没有重复记录、跨账号内容或丢失材料。
+  - id: MATERIAL-009
+    name: 旧服务隐藏未支持的浏览内容功能
     required: true
-    description: 不知道 material 字段的客户端仍可修改正文而不清掉分类日期或破坏旧幂等键。
-    preconditions:
-      - 新隔离服务中存在一条素材及一条迁移前普通记录的冻结请求。
-      - 已准备旧格式 HTTP payload 和旧版客户端或真实 Web 页面。
-    steps:
-      - 使用旧格式省略 material 的 PATCH 更新素材正文；确认分类、captureId、采集时间和归属日期保留。
-      - 重放迁移前相同幂等键和原 payload；确认回执一致，不报请求摘要变更。
-      - 若通过 Web 验证，使用 toolkit:playwright-cli 操作真实页面保存后独立回读，确认新 metadata 没有被序列化清空。
-  - id: MATERIAL-012
-    name: 旧服务隐藏未支持的素材功能
-    required: true
-    description: 新客户端不把旧服务保存的普通笔记误报为已接入日报的素材。
+    description: 新客户端不把旧服务保存的普通笔记误报为已接入日报的浏览内容。
     preconditions:
       - 新版主 App 和扩展连接本用例的旧能力服务，info 不含 materials。
     steps:
-      - 使用 toolkit:agent-device 进入记录；确认旧分类和原录入可用，新素材入口隐藏。
-      - 从系统分享进入随记；确认明确提示服务不支持且不静默保存普通记录并显示素材成功。
-  - id: MATERIAL-013
-    name: 跨账号素材与处理回执不可访问
+      - 使用 toolkit:agent-device 进入记录；确认旧分类和原录入可用，新浏览内容入口隐藏。
+      - 从系统分享进入随记；确认明确提示服务不支持且不静默保存普通记录并显示浏览内容成功。
+  - id: MATERIAL-010
+    name: 跨账号浏览内容与处理回执不可访问
     required: true
-    description: App、附件接口和日报导入均不能操作其他 owner 的素材。
+    description: App、附件接口和日报导入均不能操作其他 owner 的浏览内容。
     preconditions:
-      - 隔离服务中两个 owner 各有独立凭据，第一 owner 已创建素材及附件。
+      - 隔离服务中两个 owner 各有独立凭据，第一 owner 已创建浏览内容及附件。
     steps:
       - 使用第二 owner 的 App 凭据请求第一 owner 的记录与附件；确认被拒绝且响应不包含原文。
-      - 使用第二 owner 的 MCP 凭据提交引用第一 owner 素材的处理回执；确认整个事务拒绝，第一 owner 状态未变化。
+      - 使用第二 owner 的 MCP 凭据提交引用第一 owner 浏览内容的处理回执；确认整个事务拒绝，第一 owner 状态未变化。

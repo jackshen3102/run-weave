@@ -42,5 +42,5 @@ export type ChangeTaskStatus = {
   targetStatus: TaskStatus;
 };
 export type ChangeRecordTrash = { expectedVersion: number; trashed: boolean };
-export type RecordResponse = { record: SuijiRecord };
+export type RecordResponse = { record: SuijiRecord; migrated?: boolean; browseEntryId?: string };
 export type RecordPage = { items: SuijiRecord[]; nextCursor: string | null };

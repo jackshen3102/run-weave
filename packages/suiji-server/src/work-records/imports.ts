@@ -83,6 +83,7 @@ export async function importFacts(
           [ctx.ownerId, input.sourceNamespace, source.externalKey],
         )
       ).rows[0];
+      if (row?.eligibility !== undefined && row.eligibility !== "eligible") sourceError("SOURCE_REQUIRES_HUMAN_REVIEW");
       if (row) {
         // Moving a material must not move progress independently evidenced on the old day.
         if (repo.fact(row).workDate !== day.date && refs.some(ref => ref.channel === "suiji-material")) {

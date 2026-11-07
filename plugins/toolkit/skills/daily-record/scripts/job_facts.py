@@ -3,8 +3,6 @@ import copy
 import json
 from pathlib import Path
 import uuid
-import job_browser
-import job_materials
 
 from job_state import Failure, date, digest, read, require, scopes, stamp, window, write
 
@@ -12,6 +10,7 @@ from job_state import Failure, date, digest, read, require, scopes, stamp, windo
 def evidence(path, meta):
     value = read(path / "evidence.json")
     require(digest(value) == meta["evidenceHash"], "MATERIALS_CHANGED")
+    require(all(m.get("ref", {}).get("channel") not in ("browser-visit", "suiji-material") and not any(m.get("ref", {}).get("sourceScope", "").startswith(p) for p in ("browser:", "materials:", "browse:")) for m in value), "BROWSING_INPUT_REJECTED: start a new work context")
     return value
 
 
@@ -71,14 +70,11 @@ def validate(path, meta, candidate_path, state, work_records):
     read_ids = meta.get("read", {})
     require(all(read_ids.get(m["id"], 0) >= len(m["text"]) for m in materials if m["role"] != "tool"), "UNREAD_MESSAGES: use job read, including all continuation chunks")
     identities = copy.deepcopy(state.data["identities"])
-    exported, browser_index = [], {}
+    exported = []
     for day in candidates["days"]:
         require(set(day) == {"date", "items"} and isinstance(day["items"], list), "INVALID_FACT_DAY")
         date(day["date"])
-        pure_browser = [item for item in day["items"] if isinstance(item, dict) and isinstance(item.get("sourceIds"), list) and item["sourceIds"] and all(isinstance(i, str) and by_id.get(i, {}).get("ref", {}).get("channel") == "browser-visit" for i in item["sourceIds"])]
-        require(len(pure_browser) <= job_browser.MAX_THEMES, "TOO_MANY_BROWSER_THEMES: merge into at most 3 themes per day")
-        facts, used, used_browser = [], set(), set()
-        browser_themes = 0
+        facts, used = [], set()
         for item in day["items"]:
             require(isinstance(item, dict) and set(item) >= {"title", "statement", "status", "project", "sourceIds"} and not set(item) - {"title", "statement", "status", "project", "sourceIds", "eventKey"}, "INVALID_CANDIDATE_FIELDS")
             ids = item["sourceIds"]
@@ -86,18 +82,6 @@ def validate(path, meta, candidate_path, state, work_records):
             sources = [by_id[i] for i in ids]
             require(all(m["day"] == day["date"] for m in sources), "FACT_DAY_MISMATCH")
             require(all(read_ids.get(m["id"], 0) >= len(m["text"]) for m in sources), "UNREAD_FACT_SOURCE")
-            browser = [m for m in sources if m["ref"]["channel"] == "browser-visit"]
-            independent = [m for m in sources if m["ref"]["channel"] != "browser-visit"]
-            if browser:
-                browser_ids = {m["id"] for m in browser}
-                require(not used_browser.intersection(browser_ids), "BROWSER_EVIDENCE_REPEATED: merge the same visits into one fact")
-                used_browser.update(browser_ids)
-                if not independent:
-                    browser_themes += 1
-                    require(browser_themes <= job_browser.MAX_THEMES, "TOO_MANY_BROWSER_THEMES: merge into at most 3 themes per day")
-                    require(item["status"] == "documented" and item["project"] is None, "BROWSER_ONLY_IS_OBSERVATION")
-                    require(isinstance(item["statement"], str) and len(item["statement"]) <= job_browser.MAX_THEME_CHARS, "BROWSER_THEME_TOO_VERBOSE: use at most 160 characters")
-                    require(item["title"].startswith("浏览概览"), "BROWSER_OVERVIEW_TITLE_REQUIRED")
             if all(m["ref"]["channel"] == "screen-timeline" for m in sources):
                 require(item["status"] in ("documented", "discussed"), "SCREEN_ONLY_IS_OBSERVATION")
             if item["status"] == "verified":
@@ -107,7 +91,7 @@ def validate(path, meta, candidate_path, state, work_records):
                 expected = next(iter(projects)) if len(projects) == 1 else None
                 require(item["project"] == expected, "PROJECT_SOURCE_MISMATCH")
             anchors = {m["anchor"] for m in sources}
-            matching = {key for key, old in identities.items() if (old["date"] == day["date"] or (set(old["anchors"]) <= anchors and all(a.startswith("materials:") for a in old["anchors"]))) and anchors.intersection(old["anchors"])}
+            matching = {key for key, old in identities.items() if old["date"] == day["date"] and anchors.intersection(old["anchors"])}
             if item.get("eventKey"):
                 matching.update(k for k, old in identities.items() if old["date"] == day["date"] and old["eventKey"] == item["eventKey"])
             require(len(matching) <= 1, "AMBIGUOUS_FACT_MERGE")
@@ -118,28 +102,21 @@ def validate(path, meta, candidate_path, state, work_records):
             event = old["eventKey"] if old else item.get("eventKey") or str(uuid.uuid4())
             require(not item.get("eventKey") or item["eventKey"] == event, "EVENT_IDENTITY_CHANGED")
             identities[key] = {"date": day["date"], "eventKey": event, "externalKey": old["externalKey"] if old else str(uuid.uuid4()), "anchors": sorted(anchors | set(old["anchors"] if old else []))}
-            refs = {digest(m["ref"]): m["ref"] for m in independent}
-            if browser:
-                ref, index = job_browser.compact_ref(browser)
-                refs[digest(ref)] = ref
-                browser_index[day["date"] + ":" + event] = index
+            refs = {digest(m["ref"]): m["ref"] for m in sources}
             facts.append({k: item[k] for k in ("title", "statement", "status", "project")} | {"eventKey": event, "externalKey": identities[key]["externalKey"], "sourceRefs": list(refs.values())})
-        old_keys = {k for k, v in state.data["identities"].items() if v["date"] == day["date"] and not all(a.startswith("materials:") for a in v["anchors"])}
+        old_keys = {k for k, v in state.data["identities"].items() if v["date"] == day["date"]}
         # An omission cannot silently leave an earlier, now contradictory fact behind.
         require(not all(r["status"] == "complete" for r in meta["receipts"][day["date"]]) or old_keys <= used, "OMITTED_PRIOR_FACT: preserve or explicitly resolve existing fact identities")
         receipts = meta["receipts"][day["date"]]
         exported.append({"date": day["date"], "requestedScopes": scopes(state.c, day["date"]), "receipts": receipts, "facts": facts})
     payload = {"schemaVersion": 1, "sourceNamespace": state.c["sourceNamespace"], "sourceCollectedAt": max(r["collectedAt"] for d in exported for r in d["receipts"]), "days": exported}
-    if any(m["ref"]["channel"] == "suiji-material" for m in materials) or "materialReviews" in candidates:
-        payload["materialResults"] = job_materials.results(materials, candidates, meta, exported)
-        meta["materialDates"] = {m["ref"]["nativeId"]: m["day"] for m in materials if m["ref"]["channel"] == "suiji-material"}
+    require(not candidates.get("materialReviews"), "BROWSING_IS_NOT_WORK")
     work_records.validate(payload, Failure, enforce_limits=False)
     for day in exported:
         single = {**payload, "days": [day], "sourceCollectedAt": max(r["collectedAt"] for r in day["receipts"])}
         if "materialResults" in payload:
             single["materialResults"] = [r for r in payload["materialResults"] if meta["materialDates"][r["recordId"]] == day["date"]]
         work_records.validate(single, Failure)
-    write(path / "browser-evidence-index.json", browser_index)
     write(path / "export.json", payload)
     state.data["identities"] = identities
     meta.update(phase="validated", exportHash=digest(payload), identitySnapshot=identities)

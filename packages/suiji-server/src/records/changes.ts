@@ -64,8 +64,8 @@ export async function listChanges(
     const rows = await client.query<SuijiChange>(
       `SELECT c.sequence::text, c.record_id AS "recordId", c.kind, c.actor,
        c.record_version AS "recordVersion", c.followup_id AS "followupId",
-       c.followup_sequence AS "followupSequence", c.deleted,
-       (r.deleted_at IS NOT NULL) AS "currentlyDeleted"
+       c.followup_sequence AS "followupSequence", (c.deleted OR r.migrated_browse_id IS NOT NULL) AS deleted,
+       (r.deleted_at IS NOT NULL OR r.migrated_browse_id IS NOT NULL) AS "currentlyDeleted"
        FROM record_changes c JOIN records r ON r.owner_id=c.owner_id AND r.id=c.record_id
        WHERE c.owner_id=$1 AND c.sequence>$2::bigint AND c.sequence<=$3::bigint
        ORDER BY c.sequence LIMIT $4`,

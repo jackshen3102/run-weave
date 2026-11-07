@@ -29,7 +29,7 @@ public enum ConnectionEnvironment: String, Codable, CaseIterable, Identifiable, 
 public struct CaptureError: LocalizedError { public let message: String; public init(_ message: String) { self.message = message }; public var errorDescription: String? { message } }
 
 public struct CaptureServiceInfo: Decodable, Sendable {
-  public struct Features: Decodable, Sendable { public let materials: Bool? }
+  public struct Features: Decodable, Sendable { public let browse: Bool?; public let materials: Bool? }
   public let protocolVersion: Int
   public let serverId: String
   public let ownerId: String

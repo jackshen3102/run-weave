@@ -89,7 +89,7 @@ export function SuijiEditor({
         : null}
         {!model.followupRecordId && draft.id !== "new" ? (
           <p className="text-sm text-muted-foreground">
-            {draft.material ? `素材归属日期：${draft.material.materialDate}。此编辑保留素材分类；转换类型请在新版随记中操作。` : "切换为待办时设为未完成；切换为想法时清除待办状态。"}
+            {draft.material ? `旧素材归属日期：${draft.material.materialDate}。服务切换后保存到浏览；原冻结请求保持不变，请在新版随记中查看。` : "切换为待办时设为未完成；切换为想法时清除待办状态。"}
           </p>
         ) : null}
         <label className="flex flex-col gap-2">

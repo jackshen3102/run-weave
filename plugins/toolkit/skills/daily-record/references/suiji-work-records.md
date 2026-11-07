@@ -51,18 +51,7 @@ import 在联网前将精确身份、操作键和 payload 写入0600请求文件
 
 读取覆盖不完整不能写“没有”；只有所声明范围全部 complete 且事实为空，才可说明该范围无记录。不推断其他机器或渠道。事实导入与旧待办状态无关，不标记交接待办完成。
 
-Mac 浏览概览使用 `browser-visit` 引用，要求服务声明 `features.workBrowserHistory=true`。
-状态沿用 documented（已记录），不增加手机状态枚举。每个主题的访问身份集合和全部修订保留本地，
-上报 nativeId 为 `visits:<身份集合SHA256>`，hash 为完整 observation 集合摘要；不含 URL 或路径。
-重复访问与工作事项必须先合并，独立浏览主题每日最多3条、正文每条最多160字；不因引用数量拆条。
-来源 `browser:<producerId>:observed` 的 complete 只表示所登记现存日志读取完整，不表示全天活动覆盖。
-
-### 素材结果回执
-
-服务支持 workMaterials 时，导入可附加 materialResults。每条含 recordId、recordVersion、sourceHash、
-outcome（included/merged/no-new-fact）和 eventKeys；省略时旧导入合同不变。
-来源 channel 为 suiji-material，scope 为 materials:<serverId>:<ownerId>，nativeId 为 recordId，
-revision 为 record.version，hash 使用服务返回 sourceHash；不把原文、URL 或本机路径放入 sourceRef。
-处理回执与事实在同一个事务提交，成功后独立回读事实和素材 processedVersion/processedAt。
-原始素材和回执保留，编辑后需要处理新版本；取消分类/删除不自动删除过去成果。
-跨日仅移动由该素材单独证明的事实；多来源旧事实保留，不能把其他来源的当日进展一并移动。
+浏览原文、截图和摘要不属于工作事实，`browser-visit`、`suiji-material`、
+`browser:`/`materials:`/`browse:` 来源及 materialResults 均由服务拒绝。
+旧未知请求仅通过 get_work_import_receipt 核对原回执；不能重发旧浏览 payload。
+使用 `/mcp/work` 的独立工作凭据；旧配置按[定时报送](scheduled-reporting.md)隔离。

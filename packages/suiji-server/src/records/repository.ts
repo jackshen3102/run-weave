@@ -1,3 +1,4 @@
+import { assertRecordDomain } from "../browse/domain";
 import { followupSummaries } from "../followups/repository";
 import type pg from "pg";
 import type { SuijiRecord, SuijiAttachment } from "@runweave/shared/suiji";
@@ -11,6 +12,7 @@ export async function getRecord(
   includeTrash = false,
   includeSummary = true,
 ): Promise<SuijiRecord> {
+  await assertRecordDomain(client, ownerId, id);
   const row = (
     await client.query(
       `SELECT * FROM records WHERE owner_id=$1 AND id=$2 ${includeTrash ? "" : "AND deleted_at IS NULL"} ${lock ? "FOR UPDATE" : ""}`,

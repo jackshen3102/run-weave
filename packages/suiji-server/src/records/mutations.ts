@@ -34,6 +34,7 @@ export async function mutate<T>(
   const sourceOperation = context.actor === "agent" ? `agent:${operation}` : operation;
   const requestHash = digest({ operation: sourceOperation, input });
   return transaction(pool, async (client) => {
+    await client.query("SELECT id FROM owners WHERE id=$1 FOR UPDATE", [context.ownerId]);
     const inserted = await client.query(
       `INSERT INTO mutation_requests(owner_id,idempotency_key,request_hash,operation,request_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING owner_id`,
       [context.ownerId, context.key, requestHash, sourceOperation, context.requestId],

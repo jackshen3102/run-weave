@@ -31,7 +31,7 @@ final class ShareViewController: UIViewController {
   func load() async {
     ready = false
     do {
-      guard let connection = try SharedCaptureStore.connection(), connection.materials else { throw CaptureError("请先打开随记，登录支持素材的服务") }
+      guard let connection = try SharedCaptureStore.connection(), (connection.browse == true || connection.materials) else { throw CaptureError("请先打开随记，登录支持浏览的服务") }
       self.connection = connection
       // A host-verified identity permits offline queueing. No login or business retry is implicit.
       api = try CaptureAPI(endpoint: URL(string: connection.identity.endpoint)!, environment: connection.identity.environment)
@@ -121,7 +121,7 @@ struct SharePanel: View {
       }.navigationTitle("随记 · 素材").toolbar {
         ToolbarItem(placement: .cancellationAction) { Button(model.queued == nil ? "取消" : "稍后处理") { model.close() }.disabled(model.busy) }
         ToolbarItem(placement: .confirmationAction) {
-          Button(model.busy ? "保存中…" : model.queued != nil ? "重试确认" : MaterialInput.day(model.date) == MaterialInput.day(Date()) ? "记入今日" : "保存素材") { Task { await model.save() } }.disabled(!model.ready || model.busy)
+          Button(model.busy ? "保存中…" : model.queued != nil ? "重试确认" : MaterialInput.day(model.date) == MaterialInput.day(Date()) ? "记入今日" : "保存到浏览") { Task { await model.save() } }.disabled(!model.ready || model.busy)
         }
       }
     }

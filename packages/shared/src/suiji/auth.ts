@@ -8,6 +8,7 @@ export type SuijiTokens = SuijiIdentity & {
 };
 export type SuijiInfo = SuijiIdentity & {
   features?: {
+    browse?: boolean;
     materials?: boolean;
     workMaterials?: boolean;
     followups: boolean;

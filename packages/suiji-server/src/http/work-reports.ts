@@ -6,7 +6,7 @@ import * as schema from "../work-reports/schema";
 export function workReportRouter(service: WorkReportService) {
   const router = Router();
   router.get("/:id", (req,res,next) => {
-    void service.get(res.locals.auth.ownerId, uuid.parse(req.params.id)).then(report => res.json({ report }), next);
+    void service.get(res.locals.auth.ownerId, uuid.parse(req.params.id), true).then(report => res.json({ report }), next);
   });
   router.patch("/:id", (req,res,next) => {
     try {

@@ -1,0 +1,193 @@
+version: 1
+name: 随记浏览领域重构与工作隔离
+description: >
+  对应 docs/plans/2026-11-07-suiji-browse.md 的待实现合同。
+  每条用例自行建立隔离 owner、客户端和数据，不依赖上一条遗留状态。
+  只编写验收计划，格式通过不代表功能已实现；不得在生产数据上制造失败。
+cases:
+  - id: BROWSEDOMAIN-001
+    name: 独立底栏与低频入口符合新导航
+    required: true
+    description: 浏览独占第三个 Tab，记录不再包含素材，搜索和日期仅从右上角展开。
+    preconditions:
+      - 新版随记连接声明 browse 与 workRecords 能力的隔离服务，已创建普通记录、待办和浏览条目各一条。
+      - 本用例已按共享设备规则取得模拟器或真机控制权。
+    steps:
+      - 使用 $toolkit:agent-device 打开首页；确认底部只有记录、待办、浏览、工作四项，没有回收站或素材 Tab。
+      - 打开记录的全部；确认普通记录存在而浏览条目不存在，没有素材分类。
+      - 打开浏览；确认首屏没有展开的搜索框及日期筛选行，点击右上角搜索和日期分别出现对应面板。
+      - 从更多进入回收站并返回；确认仍处于原 Tab，浏览末尾卡片在小屏和大字体下可滚动查看且不被加号遮挡。
+  - id: BROWSEDOMAIN-002
+    name: 浏览筛选分页保持结果范围一致
+    required: true
+    description: 来源、日期、类型和已保存文字的组合查询完整且无旧分页串入。
+    preconditions:
+      - 隔离 owner 有超过一页的浏览条目，包含今天、昨天、历史日期、未知来源及多种类型；每项有唯一标记。
+      - 部分条目只在图片中包含检索词，正文不包含该词。
+    steps:
+      - 使用 $toolkit:agent-device 按来源、日期和类型组合筛选并翻页；与同 owner 的 API 独立回读结果比较，确认无重复漏项且计数不随已加载页数变化。
+      - 发起下一页读取后切换条件；确认旧响应不会混入新列表，未知来源显示未标注而非猜成微信。
+      - 搜索正文标记；确认命中已保存文字，不声称匹配仅图片中的文字；清除条件后恢复全部日期。
+  - id: BROWSEDOMAIN-003
+    name: 主动保存进入浏览而不生成普通笔记
+    required: true
+    description: 单图、文字和链接按真实收到的内容保存，普通记录草稿不被覆盖。
+    preconditions:
+      - 真机已安装新版主 App 与分享扩展并连接本用例隔离账号。
+      - 独立准备可分享的单图、文字、链接及一份未提交的普通记录草稿。
+    steps:
+      - 使用 $toolkit:agent-device 分别通过分享扩展保存单图、文字和链接；确认成功后浏览可见对应条目。
+      - 在浏览加号中手动选择照片保存；确认照片缩略图可打开，没有自动编造拍摄地点或用户意图。
+      - 独立读取服务，确认只有浏览条目及对应附件，没有新 note、task 或 work_fact；普通草稿仍保持原内容。
+  - id: BROWSEDOMAIN-004
+    name: 旧素材迁移保持数据及附件完整
+    required: true
+    description: 一对一迁移保留有效和删除条目的语义，未知来源不被猜测，重复迁移不增加条目。
+    preconditions:
+      - 本用例独立的旧 schema 数据库备份含有效素材、删除素材、附件、修订和跟进，以及不相关普通记录。
+      - 已保存源数据计数、captureId、版本、日期、附件字节 hash 和顺序的对照清单。
+    steps:
+      - 在恢复出来的隔离服务执行迁移 dry-run 和正式迁移；对照清单逐项回读浏览对象、历史和附件，确认语义与字节完整。
+      - 查询 records、标签及变化流；确认迁出对象不再作为普通记录返回，旧索引可以接收到失效信息，普通记录保持原值。
+      - 重复执行迁移入口；确认已迁移对象通过稳定映射跳过，条目和附件数量不增加。
+  - id: BROWSEDOMAIN-005
+    name: 迁移切换期间素材写入不丢失
+    required: true
+    description: 迁移锁或事务切换能保证并发旧分享请求只落到一个有效领域。
+    preconditions:
+      - 本用例隔离服务具备可控的迁移切换暂停点，普通旧分享客户端能够提交唯一 captureId。
+    steps:
+      - 在复制与切换期间提交旧格式素材写入，再完成切换；确认请求成功落到浏览或明确可恢复失败，不出现静默丢失。
+      - 按原 captureId 和幂等键独立核对；确认至多一个有效浏览对象，没有同时可写的普通 note 副本。
+  - id: BROWSEDOMAIN-006
+    name: 升级保留离线草稿且联网不自动发送
+    required: true
+    description: 旧 queued 草稿升级后归浏览，身份和附件保留，需用户手动发送。
+    preconditions:
+      - 本用例真机旧版存在已落盘但尚未发送的 queued 素材及普通记录草稿，已备份其身份和附件 hash。
+      - 新版安装包可覆盖升级，本用例隔离服务可观察实际业务写入。
+    steps:
+      - 升级并用 $toolkit:agent-device 重新获取 App 状态；确认浏览待发送队列和普通草稿各自完整。
+      - 恢复网络并重开 App；确认未自动新增服务端条目。
+      - 手动发送；确认原 captureId 在浏览中只出现一次，附件与升级前 hash 一致。
+  - id: BROWSEDOMAIN-007
+    name: 升级保留未知提交结果的原请求身份
+    required: true
+    description: 旧服务已提交但响应丢失的请求不会因升级改键或转换 payload 重复创建。
+    preconditions:
+      - 本用例独立旧分享请求在隔离服务已提交但响应被受控丢弃，本机保持 sending 或 unknown 冻结意图。
+      - 已保存原操作键、请求摘要及 captureId，随后完成浏览服务与客户端升级。
+    steps:
+      - 使用 $toolkit:agent-device 打开待确认项并手动核对；确认先按原请求身份取得兼容回执，不先更换 payload。
+      - 独立检查兼容映射与浏览列表；确认只有一个目标对象，本机仅在回执核实后清除待确认项。
+  - id: BROWSEDOMAIN-008
+    name: 旧客户端不能把迁出对象变回普通记录
+    required: true
+    description: 兼容旧分享不等于继续暴露普通笔记读写，迁出对象有明确升级提示。
+    preconditions:
+      - 本用例隔离服务有已迁移素材及其旧 recordId，并准备旧版读写 payload 和独立新 captureId。
+    steps:
+      - 使用旧记录 get、edit 及 material 为 null 的请求访问迁出对象；确认明确返回迁移或升级错误，不把浏览转换成 note。
+      - 提交旧格式的新素材分享；确认兼容适配只写浏览，并保持原操作幂等语义。
+      - 使用 $toolkit:playwright-cli 在真实 Web 随记页面查看记录列表和旧详情入口；确认没有浏览冒充笔记且错误可理解。
+  - id: BROWSEDOMAIN-009
+    name: 浏览对象附件和游标按账号隔离
+    required: true
+    description: 已知其他 owner 的 ID 或游标也不能读取其条目、摘要、附件或采集回执。
+    preconditions:
+      - 本用例隔离服务有 A、B 两个账号，各自建立浏览条目、附件、摘要及采集回执。
+    steps:
+      - 用 B 的身份请求 A 的各类资源及分页游标；确认拒绝且错误不带 A 的正文或附件内容。
+      - 使用 $toolkit:agent-device 从 A 切换到 B；确认缓存、搜索结果和待发送预览没有泄漏，A 的队列不能发送给 B。
+  - id: BROWSEDOMAIN-010
+    name: 浏览删除与恢复保持归属且重采不复活
+    required: true
+    description: 本地删除不删除知乎历史，同身份重采保持 tombstone，手动恢复回浏览。
+    preconditions:
+      - 本用例隔离 owner 有一条带附件的采集浏览条目及固定导入 payload，保存前后外部历史基线。
+    steps:
+      - 使用 $toolkit:agent-device 将条目移入回收站；确认普通浏览列表与默认附件读取不再返回它，外部历史不被修改。
+      - 重放同身份的采集 payload；确认删除状态保持，不生成替代 ID 绕过删除。
+      - 从更多的回收站手动恢复；确认只回到浏览，附件完整，记录和工作中没有新增项。
+  - id: BROWSEDOMAIN-011
+    name: 工作 Agent 输入在模型调用前排除全部浏览
+    required: true
+    description: 隔离必须发生在工作材料组装和工具返回阶段，不能只检查最终回答措辞。
+    preconditions:
+      - 本用例隔离 owner 有一条真实工作依据，以及各含唯一串的文章、截图、照片、文字、聊天片段和阅读摘要。
+      - 已配置可检查最终模型请求及工具返回的隔离工作运行器，证据文件有私有权限且不记录凭据。
+    steps:
+      - 运行真实工作 prepare、检索与模型生成流程；在模型调用前的最终输入和实际工具响应中逐项检查浏览唯一串、ID、附件和 URL 均不存在。
+      - 检查工作任务可用工具；确认没有浏览查询或通用附件绕过接口，真实工作依据仍被读入。
+      - 回读输出；确认生成正常工作记录，但最终回答未提及浏览本身不能代替上述输入检查。
+  - id: BROWSEDOMAIN-012
+    name: 工作导入拒绝浏览及混合来源绕过
+    required: true
+    description: 浏览引用不能通过 documented、空项目或混合工作证据进入新工作事实。
+    preconditions:
+      - 本用例隔离服务已部署新工作导入校验，保存导入前工作事实及 feedRevision。
+      - 独立准备纯 browser-visit、纯 suiji-material、新 browse 引用及混合有效工作来源的请求。
+    steps:
+      - 逐一提交上述请求；确认服务拒绝且没有部分事实、来源回执或计数变更。
+      - 提交只含有效独立工作依据的请求；确认允许成功，避免通过禁用所有工作导入伪造隔离。
+  - id: BROWSEDOMAIN-013
+    name: 浏览变化不影响工作计数和周报来源
+    required: true
+    description: 浏览创建、摘要更新和删除不改变有效工作集合、feedRevision 或周报 sourceFacts。
+    preconditions:
+      - 本用例隔离 owner 已有明确七日范围的有效工作事实和可回读的日报计数、工作 feedRevision。
+      - 已按当前工作版本生成一份待发布周报请求，没有其他并发工作修改。
+    steps:
+      - 创建浏览记录和摘要，再修改及删除浏览记录；逐次回读工作列表、日计数和 feedRevision，确认与基线一致。
+      - 使用原工作来源集合发布隔离周报；确认成功且来源只含工作事实，没有浏览 ID 或摘要。
+  - id: BROWSEDOMAIN-014
+    name: 历史混入工作事实可审计隔离而不丢原文
+    required: true
+    description: 纯浏览排除、混合来源待复核，人工字段和历史报告不被静默删除改写。
+    preconditions:
+      - 本用例旧数据库有纯浏览事实、混合来源事实、独立工作事实及引用前两者的人工编辑周报。
+      - 已保存全部对象正文、人工字段、来源和历史周报版本基线。
+    steps:
+      - 执行隔离迁移审计；确认纯浏览标为 excluded，混合标为 needs-review，独立工作仍 eligible。
+      - 回读新的工作输入和计数；确认前两类被排除，原文及人工字段可从审计路径回查且没有删除。
+      - 回读历史周报；确认正文保持原样并标注需复核，不作为下一次工作总结的依据。
+  - id: BROWSEDOMAIN-015
+    name: 普通 AI 回顾不能通过直接 ID 或附件读浏览
+    required: true
+    description: all 范围与单记录范围均遵守领域边界，直接提供旧素材 ID 也不能绕过。
+    preconditions:
+      - 本用例隔离服务有普通记录、浏览条目及迁出旧 ID，浏览附件含唯一串。
+      - 已准备实际 ReviewContext 工具连接及可观察的工具返回。
+    steps:
+      - 通过回顾工具执行 list、search、直接 get 和附件读取尝试；确认普通记录可读而浏览及其附件不可读。
+      - 检查回顾模型最终输入；确认没有浏览唯一串、缓存正文或旧映射返回的材料。
+  - id: BROWSEDOMAIN-016
+    name: 旧工作批次恢复不能重新送入浏览材料
+    required: true
+    description: 切换时旧 evidence、priorFacts 和未知发布结果不会继续污染新 Agent 上下文。
+    preconditions:
+      - 本用例拥有独立旧日报状态目录，包含浏览材料的 active batch、缓存和一次结果未知的冻结请求。
+      - 隔离服务能确认冻结请求已提交或未提交，测试运行器可记录新会话实际输入。
+    steps:
+      - 执行工作来源配置迁移和恢复；确认旧未知请求仅核对原回执，没有再次提交旧浏览 payload。
+      - 重新生成可执行批次并启动新上下文；确认旧材料及 priorFacts 中的浏览内容不进入模型请求。
+      - 检查旧来源区间和工作 coverage；确认切换后的工作完整性不再等待浏览来源，历史回执没有被伪造重写。
+  - id: BROWSEDOMAIN-017
+    name: 已支持的工作流程不因浏览拆分失效
+    required: true
+    description: 独立工作事实、任务和人工周报保护仍按原合同运行。
+    preconditions:
+      - 本用例新隔离服务和新版 App 有一条普通待办、一条独立工作事实和一份人工编辑周报。
+    steps:
+      - 使用 $toolkit:agent-device 编辑待办和工作事实，独立回读版本与状态；确认仅修改目标对象。
+      - 尝试自动覆盖人工编辑周报；确认仍按原规则拒绝，浏览拆分没有移除人工保护。
+  - id: BROWSEDOMAIN-018
+    name: 新库恢复演练保留切换后浏览写入
+    required: true
+    description: 恢复路径必须保护数据库与附件，不能直接启动不理解新 schema 的旧版本。
+    preconditions:
+      - 本用例独立环境有迁移前完整备份、迁移后新写入浏览及附件，并保存两阶段清单。
+      - 已准备声明支持新 schema 的恢复版本和可检查 schema 拒绝行为的旧版本。
+    steps:
+      - 在隔离环境演练暂停采集及使用新 schema 兼容版本恢复；确认已有和切换后浏览条目、附件均能回读。
+      - 验证不支持新 schema 的旧版本被阻止启动；确认恢复文档没有将丢弃切换后数据作为默认回退步骤。

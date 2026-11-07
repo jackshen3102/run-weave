@@ -16,6 +16,7 @@ export type WorkReport = Omit<WorkReportInput, "expectedVersion"> & {
   days: WorkDay[];
   version: number;
   manuallyEdited: boolean;
+  needsReview?: boolean;
   createdAt: string;
   updatedAt: string;
 };

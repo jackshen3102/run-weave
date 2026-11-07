@@ -85,6 +85,9 @@ class Client:
     def __init__(self, config):
         self.config = config
         self.base = endpoint(config["endpoint"])
+        self.mcp_path = config.get("mcpPath", "/mcp")
+        if self.mcp_path not in ("/mcp", "/mcp/work", "/mcp/browse"):
+            raise Failure("INVALID_MCP_PATH")
         for key in ("serverId", "ownerId"):
             uuid.UUID(config[key])
         self.token = os.environ.get(config["tokenEnv"])
@@ -111,7 +114,7 @@ class Client:
 
     def rpc(self, method, params):
         payload = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
-        value = self.request("/mcp", json.dumps(payload).encode())
+        value = self.request(self.mcp_path, json.dumps(payload).encode())
         if "error" in value:
             raise Failure("MCP_PROTOCOL_ERROR: " + str(value["error"].get("code")))
         return value["result"]
@@ -130,11 +133,11 @@ class Client:
     def verify(self):
         initialization = self.rpc("initialize", {"protocolVersion": self.protocol, "capabilities": {}, "clientInfo": {"name": "suiji-skill", "version": "1.0"}})
         self.protocol = initialization["protocolVersion"]
-        self.request("/mcp", json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}).encode())
+        self.request(self.mcp_path, json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}).encode())
         info = self.call("get_service_info", {})
         if any(info.get(key) != self.config[key] for key in ("serverId", "ownerId")):
             raise Failure("SERVICE_IDENTITY_MISMATCH")
-        if not info.get("features", {}).get("followups"):
+        if self.mcp_path == "/mcp" and not info.get("features", {}).get("followups"):
             raise Failure("FOLLOWUPS_UNAVAILABLE")
         return info
 

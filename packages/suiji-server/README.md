@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 13，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 16，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,7 +66,7 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
-每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 13；
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 16；
 `SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
 
 ```bash
@@ -329,21 +329,41 @@ HTTP `GET/PATCH /api/suiji/v1/work-reports/:id` 用于阅读和人工编辑；MC
 
 ## 用户主动提交的素材
 
-schema 13 增加 `features.materials` / `features.workMaterials`。素材仍为 `kind=note`，
-`material` 包含 captureId、capturedAt、Asia/Shanghai materialDate、inputType 和可选 HTTP(S) sourceUrl。
-`sourceHash` 与 processedVersion/processedAt 由服务生成，不能由客户端写入。
-编辑省略 material 保留原值，null 取消分类；素材不能直接改为 task。captureId 按 owner 唯一，
-取消分类也不释放已用身份；同一次保存必须沿用原幂等键。归属日期不改变创建或采集时间。
+schema 13 的记录内素材与工作消费已退役。schema 16 使用独立浏览领域；旧 material 请求仅为
+App 分享及冻结请求提供有界兼容，不能通过 `material:null` 把迁出对象重新变成普通记录。
+迁出 ID 的普通读写返回 `RECORD_MOVED_TO_BROWSE`。旧已提交幂等响应保持原摘要和内容，
+工作导入则在重放前拒绝 browser-visit、suiji-material 及对应 scope，旧工作请求只能读取原回执元数据。
 
-列表可传 `category=idea|task|material`；idea 排除素材，未传 category 的旧列表仍包含所有记录。
-`materialFrom/materialTo` 仅用于 material 分类，包含两端；from/to 仍为创建时间范围。
-素材按归属日期、采集时间、ID 倒序；游标绑定所有筛选条件。搜索只覆盖正文及保存于正文的备注。
+## 独立浏览与迁移（schema 16）
 
-工作事实导入可附带 `materialResults`（recordId、recordVersion、sourceHash、outcome、eventKeys）。
-服务锁定素材并校验版本/hash，再在同一个事实导入事务写回执。included/merged 需指向含有
-当前素材 sourceRef 的同 owner 事实；no-new-fact 不强行新增事实。sourceScope 格式为
-`materials:<serverId>:<ownerId>`，channel 为 suiji-material。回执不递增记录版本，不写内容变化流。
-编辑后的版本重新待整理；删除或取消素材不撤回既有工作事实或人工周报。
+合同见 [`browse.ts`](../shared/src/suiji/browse.ts)，业务入口为 [`BrowseService`](src/browse/service.ts)。
+`/api/suiji/v1/browse` 提供条目、来源连接、固定批次导入与回执、摘要、只读迁移历史和独立变化流。
+列表返回文字 excerpt、全筛选范围日计数、实际来源及每日来源摘要；详情支持
+`entries/:id/content?expectedVersion=…&offset=…&limit=…` 按 Unicode 标量分块读取。
+HTML 仅作资料，不能执行正文脚本或指令；采集原文只可由采集器刷新，用户编辑使用备注。
+主动保存正文允许版本编辑，历史正文和附件引用保留。浏览 revision 与工作 revision 独立。
 
-先迁移并升级兼容服务，再更新 App/分享扩展，最后显式启用一个日报生产者。
-回滚先关闭新建入口和消费，保留表、附件、冻结请求和处理回执；不得直接运行不支持 schema 13 的旧服务。
+`/mcp/browse` 与 `/mcp/work` 分别只暴露浏览和工作工具。管理员 `mcp:credential --domain browse|work`
+生成相应领域凭据，沿用既有登记流程；旧凭据默认 records，三个领域禁止互访。
+任务连接文件分别指定 `mcpPath`；工作任务不装配通用记录、附件或浏览凭据。
+App 浏览附件经 `/browse/attachments/:id/content` 读取；普通附件入口拒绝浏览绑定，
+同一附件不能同时绑定两个领域。删除条目阻止当前及归档附件读取，恢复保留原领域。
+
+迁移入口 [`browse:cutover`](scripts/browse-cutover.ts) 从 stdin 接收 `{ownerId}` 输出 dry-run 计数与 hash，
+核对隔离备份恢复结果后，以 `{ownerId,expectedHash}` 执行。使用 MIGRATION_DATABASE_URL；
+容器管理员入口为 `browse-cutover`。先部署兼容新 schema 的服务，完成账号切换，再更新 App 和采集器。
+切换事务锁住账号及旧记录写入，保留原记录、修订、跟进、附件顺序和字节映射；变化流发删除失效元数据。
+只有当前存在 material 的对象迁移，未知来源保留 unknown，事件时间缺失保持 null。
+
+切换同时审计历史工作事实：纯浏览为 excluded，混合为 needs-review，原文、来源与人工字段不删除。
+有效视图统一约束工作工具、计数与周报来源；受影响历史周报标记 needsReview，不进入工作 Agent 输入，
+App 仍可查看并人工复核。管理员仅在有独立工作依据且人工核对后恢复 eligibility；不得把隔离原文送回工作模型判断。
+旧浏览来源以切换日关闭有效区间，历史回执保留。Daily Record 本机批次迁移见
+[定时报送](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md#旧浏览来源迁移)。
+
+`features.browse` 仅在该 owner 完成切换后为 true。浏览采集失败可保存独立失败回执，不生成零条成功；
+连接读取包含最近覆盖与错误，完整仅指该次声明范围。正式运行需使用配套 schema 16 产物；
+回滚先关闭采集和入口，保留新库、附件与后续写入备份，不把旧镜像直接接到新库。
+
+采集及独立阅读回顾使用 [browse-record](../../plugins/toolkit/skills/browse-record/SKILL.md)。
+真实手机、正式部署及自然调度分别验收；本机隔离服务、模拟器和手动运行不能替代它们。
