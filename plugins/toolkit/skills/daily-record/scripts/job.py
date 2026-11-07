@@ -13,10 +13,11 @@ from types import SimpleNamespace
 import uuid
 
 sys.dont_write_bytecode = True
-from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write, browser_enabled, screen_enabled, migrate_sources
+from job_state import Failure, State, config, date, digest, directory, process_identity, read, require, scopes, stamp, window, write, browser_enabled, screen_enabled, materials_enabled, migrate_sources
 import job_facts
 import job_browser
 import job_screen
+import job_materials
 
 
 def suiji_module():
@@ -96,14 +97,18 @@ def collect(state, path, meta):
                 meta.setdefault("screenRevisions", {})[day] = revision
             except (Failure, OSError, ValueError, KeyError):
                 receipts.append(job_screen.unavailable(day, c))
+        if materials_enabled(c, day):
+            material, receipt = job_materials.rows(state, day, day_root / "materials", suiji_module())
+            rows.extend(material)
+            receipts.append(receipt)
         meta["receipts"][day] = receipts
     write(path / "evidence.json", rows)
-    meta.update(phase="reviewed", evidenceHash=digest(rows), read={})
+    meta.update(phase="reviewed", evidenceHash=digest(rows), read={}, imageReads={})
     template(path, meta)
 
 
 def template(path, meta):
-    write(path / "facts.template.json", {"batchId": meta["id"], "generation": meta["generation"], "evidenceHash": meta["evidenceHash"], "days": [{"date": d, "items": []} for d in meta["days"]]})
+    write(path / "facts.template.json", {"batchId": meta["id"], "generation": meta["generation"], "evidenceHash": meta["evidenceHash"], "days": [{"date": d, "items": []} for d in meta["days"]], "materialReviews": []})
 
 
 def prepare(state, args):
@@ -131,6 +136,7 @@ def prepare(state, args):
                 template(path, meta)
     else:
         job_screen.reconcile_revisions(state)
+        job_materials.reconcile(state, suiji_module())
         days = state.missing()[:state.c["maxDaysPerRun"]]
         if days:
             days = [d for d in days if (date(d) - date(days[0])).days < 366]
@@ -143,6 +149,7 @@ def prepare(state, args):
         state.data["active"] = batch
     if args.recollect:
         require(not meta.get("pending") and not meta["sentDays"], "PUBLISHED_OR_PENDING_BATCH_CANNOT_BE_RECOLLECTED")
+        job_materials.reconcile(state, suiji_module())
         meta.update(phase="prepared", generation=meta["generation"] + 1)
     if args.thread_id not in state.data["excludedThreads"]:
         state.data["excludedThreads"].append(args.thread_id)
@@ -181,10 +188,15 @@ def confirm(state, path, meta, suiji):
         try:
             suiji.work_records.reconcile(client, str(request), frozen, suiji.Failure, suiji.run_intent)
         except suiji.Failure as error:
-            if str(error) == "WORK_FEED_CHANGED":
+            if str(error) in ("WORK_FEED_CHANGED", "VERSION_CONFLICT"):
                 os.rename(request, str(request) + ".rejected")
                 meta["pending"] = None
-                meta["phase"] = "validated"
+                if str(error) == "VERSION_CONFLICT":
+                    meta["days"] = [d for d in meta["days"] if d not in meta["sentDays"]]
+                    meta["sentDays"] = []
+                    meta["phase"] = "collection-failed"
+                else:
+                    meta["phase"] = "validated"
                 state.save_batch(path, meta)
             raise
     result = read(receipt)
@@ -218,6 +230,9 @@ def publish(state, path, meta):
         require(info.get("features", {}).get("workBrowserHistory"), "BROWSER_HISTORY_UNAVAILABLE")
     if any(scope.startswith("screen:") for day in payload["days"] for scope in day["requestedScopes"]):
         require(info.get("features", {}).get("workScreenTimeline"), "SCREEN_TIMELINE_UNAVAILABLE")
+    if materials_enabled(state.c):
+        require(info.get("features", {}).get("workMaterials"), "WORK_MATERIALS_UNAVAILABLE")
+    job_materials.verify_versions(state.c, payload, suiji)
     source_page = client.call("list_work_sources", {"from": meta["days"][0], "to": meta["days"][-1]})
     for day in meta["days"]:
         for scope in scopes(state.c, day):
@@ -225,6 +240,8 @@ def publish(state, path, meta):
     conflicts = 0
     while len(meta["sentDays"]) < len(meta["days"]):
         remaining = {**payload, "days": [d for d in payload["days"] if d["date"] not in meta["sentDays"]]}
+        if "materialResults" in payload:
+            remaining["materialResults"] = [r for r in payload["materialResults"] if meta["materialDates"][r["recordId"]] not in meta["sentDays"]]
         remaining["sourceCollectedAt"] = max((r["collectedAt"] for d in remaining["days"] for r in d["receipts"]), key=lambda v: dt.datetime.fromisoformat(v.replace("Z", "+00:00")))
         attempt = directory(path / ("publish-" + str(uuid.uuid4())))
         write(attempt / "input.json", remaining)
@@ -295,10 +312,11 @@ def context(state, path, meta, args):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["prepare", "review", "read", "context", "validate", "publish", "reconcile", "status", "migrate-sources"])
+    parser.add_argument("command", choices=["prepare", "review", "read", "context", "validate", "publish", "reconcile", "status", "migrate-sources", "image-read"])
     parser.add_argument("--config", required=True)
     for name in ("batch", "facts", "run-id", "thread-id", "recover-run-id", "id", "date", "message-id", "next-config"):
         parser.add_argument("--" + name)
+    parser.add_argument("--image-receipt")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verify-source", action="store_true")
     parser.add_argument("--recollect", action="store_true")
@@ -325,7 +343,7 @@ def main():
         path, meta = state.batch(args)
         if args.command == "context":
             return context(state, path, meta, args)
-        if args.command in ("review", "read"):
+        if args.command in ("review", "read", "image-read"):
             materials = job_facts.evidence(path, meta)
             require(args.offset >= 0 and 1 <= args.limit <= 100 and 1 <= args.max_chars <= 100000, "INVALID_READ_RANGE")
             if args.command == "review":
@@ -333,6 +351,11 @@ def main():
                 return {"total": len(selected), "items": [{k: v for k, v in m.items() if k not in ("text", "browserVisits", "browserBundle")} | {"preview": m["text"][:500], "truncated": len(m["text"]) > 500} for m in selected[args.offset:args.offset + args.limit]], "nextOffset": args.offset + args.limit if len(selected) > args.offset + args.limit else None}
             m = next((m for m in materials if m["id"] == args.id), None)
             require(m, "MATERIAL_NOT_FOUND")
+            if args.command == "image-read":
+                require(args.image_receipt, "IMAGE_READ_RECEIPT_REQUIRED")
+                result = job_materials.acknowledge_image(path, meta, m, args.image_receipt)
+                state.save_batch(path, meta)
+                return result
             if args.verify_source:
                 require(m["ref"]["channel"] == "browser-visit", "VERIFY_SOURCE_REQUIRES_BROWSER_MATERIAL")
                 job_browser.verify(m, c, command)

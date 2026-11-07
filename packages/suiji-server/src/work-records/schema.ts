@@ -155,6 +155,7 @@ const sourceRef = z
       "feishu-document",
       "browser-visit",
       "screen-timeline",
+      "suiji-material",
     ]),
     sourceScope: scope,
     nativeId,
@@ -178,6 +179,14 @@ const imported = z
   .strict();
 export const workImport = z
   .object({
+    materialResults: z.array(z.object({
+      recordId: uuid,
+      recordVersion: z.number().int().positive(),
+      sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+      outcome: z.enum(["included", "merged", "no-new-fact"]),
+      eventKeys: z.array(stableKey).max(100),
+    }).strict().refine(v => v.outcome === "no-new-fact" ? v.eventKeys.length === 0 : v.eventKeys.length > 0,
+      "纳入或合并必须关联事实；无新增事实不关联 eventKeys")).max(100).optional(),
     schemaVersion: z.literal(1),
     sourceNamespace: z
       .string()
@@ -209,6 +218,7 @@ export const workImport = z
       v.days.reduce((n, d) => n + d.facts.length, 0) > 100
     )
       issue("单包最多100条且不超过200KiB；按完整日期分包");
+    if (new Set(v.materialResults?.map(r => r.recordId)).size !== (v.materialResults?.length ?? 0)) issue("素材回执不得重复");
     const dates = new Set<string>(),
       keys = new Set<string>();
     let collected = -Infinity;
@@ -235,6 +245,7 @@ export const workImport = z
       }
       for (const f of d.facts) {
         if (f.sourceRefs.every(ref => ref.channel === "screen-timeline") && !["documented", "discussed"].includes(f.status)) issue("纯屏幕来源不能独立证明执行结果");
+        if (f.status === "verified" && f.sourceRefs.every(ref => ["screen-timeline", "suiji-material"].includes(ref.channel))) issue("屏幕与素材不能独立证明执行成功");
         if (keys.has(f.externalKey)) issue("externalKey 不得重复");
         keys.add(f.externalKey);
         if (

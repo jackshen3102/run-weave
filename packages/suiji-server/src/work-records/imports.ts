@@ -1,9 +1,11 @@
+import { lockMaterials, confirmMaterials } from "../materials/service";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type {
   ImportWorkFacts,
   WorkFactInput,
   WorkImportResult,
+  WorkSourceRef,
 } from "@runweave/shared/suiji";
 import { digest, type Mutation } from "../records/mutations";
 import { ServiceError } from "../errors";
@@ -24,6 +26,7 @@ export async function importFacts(
 ): Promise<WorkImportResult> {
   const head = await repo.lockHead(client, ctx.ownerId);
   if (head !== input.basedOnFeedRevision) repo.changed(head);
+  await lockMaterials(client, ctx.ownerId, input.materialResults);
   const result: WorkImportResult = {
     importId: randomUUID(),
     feedRevision: head,
@@ -81,6 +84,12 @@ export async function importFacts(
         )
       ).rows[0];
       if (row) {
+        // Moving a material must not move progress independently evidenced on the old day.
+        if (repo.fact(row).workDate !== day.date && refs.some(ref => ref.channel === "suiji-material")) {
+          const oldRefs = (row.source_snapshot as { sourceRefs?: WorkSourceRef[] } | null)?.sourceRefs ?? [];
+          if (oldRefs.some(ref => ref.channel !== "suiji-material" || !refs.some(next => next.channel === ref.channel && next.sourceScope === ref.sourceScope && next.nativeId === ref.nativeId)))
+            sourceError("MATERIAL_MOVE_HAS_OTHER_SOURCES");
+        }
         if (row.event_key !== source.eventKey)
           sourceError("EVENT_IDENTITY_CHANGED");
         const oldTime = row.source_collected_at!.valueOf();
@@ -197,6 +206,7 @@ export async function importFacts(
       );
     }
   }
+  await confirmMaterials(client, ctx.ownerId, result.importId, input);
   if (changed) result.feedRevision = await repo.bump(client, ctx.ownerId);
   await client.query(
     "UPDATE work_import_runs SET receipt=$3 WHERE owner_id=$1 AND id=$2",

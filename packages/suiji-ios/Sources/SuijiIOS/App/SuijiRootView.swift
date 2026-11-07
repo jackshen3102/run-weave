@@ -25,10 +25,11 @@ struct CaptureHome: View {
   @State private var refreshOnRelease = false
   @FocusState private var searchFocused: Bool
   @State private var settings = false
-  private var kind: String? { tab == "tasks" ? "task" : filter.isEmpty ? nil : filter }
+  private var category: String? { tab == "tasks" ? nil : filter.isEmpty ? nil : filter == "note" ? "idea" : filter }
+  private var kind: String? { tab == "tasks" ? "task" : session.info?.features?.materials == true ? nil : filter.isEmpty ? nil : filter }
   private var status: String? { tab == "tasks" ? taskStatus : nil }
   private var visibleRecords: [SuijiRecord] { session.records.filter { ($0.deletedAt != nil) == (tab == "trash") && (session.selectedTag.isEmpty || ($0.tags ?? []).contains(session.selectedTag)) && (status == nil || $0.taskStatus?.rawValue == status) } }
-  private var loadKey: String { "\(tab)|\(filter)|\(taskStatus)|\(query)|\(session.selectedTag)|\(session.returnHomeRequest)" }
+  private var loadKey: String { "\(tab)|\(filter)|\(taskStatus)|\(query)|\(session.selectedTag)|\(session.returnHomeRequest)|\(session.materialFrom)|\(session.materialTo)" }
   var body: some View {
     TabView(selection: $tab) {
       NavigationStack {
@@ -43,8 +44,8 @@ struct CaptureHome: View {
       } else {
         NavigationStack { ReviewView(session: session, model: review) }.id(session.returnHomeRequest).tabItem { Label("AI", systemImage: "sparkles") }.tag("ai")
       }
-    }.task(id: loadKey) { if tab != "ai" && tab != "work" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
-      .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
+    }.task(id: loadKey) { if tab != "ai" && tab != "work" { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }
+      .sheet(item: $session.editor, onDismiss: { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }) { RecordEditorSheet(model: $0, availableTags: session.availableTags) }
       .onChange(of: session.returnHomeRequest) { _, _ in
         tab = "records"
       }
@@ -61,12 +62,17 @@ struct CaptureHome: View {
       LazyVStack(spacing: 14) {
         if searchVisible { searchField }
         if tab == "tasks" { FilterBar(values: TaskStatus.allCases.map { ($0.rawValue, $0.label) }, selected: $taskStatus) }
-        else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")], selected: $filter) }
+        else { FilterBar(values: [("", "全部"), ("note", "想法"), ("task", "待办")] + (session.info?.features?.materials == true ? [("material", "素材")] : []), selected: $filter) }
+        if category == "material" { MaterialFeedControls(session: session) }
         TagFilter(available: session.availableTags, selected: $session.selectedTag)
-        if !session.message.isEmpty { Text(session.message).clarityMask().foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } } }
+        if !session.message.isEmpty { Text(session.message).clarityMask().foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } } }
         if session.loading && visibleRecords.isEmpty { ProgressView("正在读取") }
-        else if visibleRecords.isEmpty { EmptyState(title: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或正文关键词。") }
+        else if visibleRecords.isEmpty { EmptyState(title: category == "material" ? "当前日期与筛选下没有素材" : (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或正文关键词。") }
         ForEach(visibleRecords) { record in
+          if category == "material", let material = record.material,
+            visibleRecords.first(where: { $0.material?.materialDate == material.materialDate })?.id == record.id {
+            Text(material.materialDate).font(.headline).frame(maxWidth: .infinity, alignment: .leading)
+          }
           RecordCard(record: record, pending: session.pendingStatuses.contains(record.id), busy: session.statusBusy.contains(record.id), onStatusChange: { target in
             Task { await session.changeRecord(record, action: .status(target)) }
           }, onTag: { session.selectedTag = $0 }) {
@@ -104,14 +110,14 @@ struct CaptureHome: View {
         }
         if previous == .interacting && phase != .interacting && phase != .tracking && refreshOnRelease {
           refreshOnRelease = false
-          if !session.loading { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records") } }
+          if !session.loading { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } }
         }
       }
       .scrollDismissesKeyboard(.interactively)
-      .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor() } }.padding(20) } }
+      .overlay(alignment: .bottomTrailing) { if tab != "trash" { CaptureButton { Task { await session.openEditor(material: category == "material") } }.padding(20) } }
   }
   private func loadNextPage() {
-    Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, more: true, trash: tab == "trash", hideClosedTasks: tab == "records") }
+    Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, more: true, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) }
   }
   private var searchField: some View {
     HStack(spacing: 12) {

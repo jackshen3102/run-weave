@@ -1,7 +1,14 @@
+import SuijiCaptureCore
 import SwiftUI
 import RunweaveBrowser
 enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
 @MainActor final class SuijiSession: ObservableObject {
+  @Published var captureConnection: CaptureConnection?
+  @Published var pendingCaptures: [QueuedCapture] = []
+  @Published var captureBusy = false
+  @Published var captureMessage = ""
+  @Published var materialFrom = ""
+  @Published var materialTo = ""
   @Published var endpoint: String
   @Published var username: String
   @Published private(set) var environment: ConnectionEnvironment
@@ -34,6 +41,9 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
   }
   private var listGeneration = UUID()
   private struct ListScope: Equatable {
+    let category: String?
+    let materialFrom: String
+    let materialTo: String
     let kind: String?
     let status: String?
     let query: String
@@ -53,14 +63,19 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
     profiles[environment] = ConnectionProfile(endpoint: endpoint, username: username)
     profiles.active = environment; profiles.save()
   }
-  private func resetConnection() -> APIClient? {
+  private func resetConnection(preserveShared: Bool = false) async -> (client: APIClient?, generation: UUID) {
     browser.invalidate()
-    let previous = client; generation = UUID(); listGeneration = UUID()
+    captureConnection = nil; pendingCaptures = []; materialFrom = ""; materialTo = ""
+    let previous = client; generation = UUID(); let resetGeneration = generation; listGeneration = UUID()
     editingModels.values.forEach { $0.cancel() }; editingModels = [:]; editor = nil; lastChangedRecord = nil
     records = []; info = nil; store = nil; client = nil; pendingStatuses = []; statusBusy = []
     availableTags = []; selectedTag = ""
     loading = false; nextCursor = nil; loadMoreError = nil; listScope = nil; message = ""; connecting = false
-    return previous
+    await previous?.cancel()
+    if !preserveShared {
+      do { try await SharedCaptureStore.setConnection(nil, ifCurrent: { self.generation == resetGeneration }) } catch { captureMessage = error.localizedDescription }
+    }
+    return (previous, resetGeneration)
   }
   func switchEnvironment(_ target: ConnectionEnvironment) async {
     guard target != environment else { return }
@@ -70,15 +85,18 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
   }
   func editConnection() async {
     rememberConnection()
-    let previous = resetConnection(); await previous?.cancel()
+    _ = await resetConnection()
   }
   func connect(username: String? = nil, password: String? = nil) async {
     if let username { self.username = username }
     rememberConnection()
     let address = endpoint, target = environment
-    let previous = resetConnection(); let current = generation; connecting = true
+    let savedCapture = try? SharedCaptureStore.connection()
+    let preserveShared = username == nil && savedCapture?.identity.environment == target
+      && savedCapture?.identity.endpoint == (try? APIClient.normalize(address).absoluteString)
+    let reset = await resetConnection(preserveShared: preserveShared); let current = reset.generation
+    guard generation == current else { return }; connecting = true
     defer { if generation == current { connecting = false } }
-    await previous?.cancel()
     guard generation == current, !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     do {
       let url = try APIClient.normalize(address); let api = try APIClient(endpoint: url, environment: target); client = api
@@ -88,23 +106,37 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
       guard generation == current else { await api.cancel(); return }
       let drafts = try DraftStore(endpoint: url, info: identity, environment: target)
       store = drafts; info = identity; message = ""
+      do {
+        let connection = CaptureConnection(identity: CaptureIdentity(environment: target, endpoint: url.absoluteString,
+          serverId: identity.serverId, ownerId: identity.ownerId), materials: identity.features?.materials == true)
+        try await SharedCaptureStore.setConnection(connection, ifCurrent: { self.generation == current })
+        guard generation == current else { return }
+        captureConnection = connection; refreshCaptures()
+      } catch { captureMessage = error.localizedDescription }
     } catch { if generation == current { message = error.localizedDescription } }
   }
   func isCurrent(_ api: APIClient) -> Bool { client === api && info != nil }
   func logout() async {
     rememberConnection()
-    let old = resetConnection(), current = generation
+    let reset = await resetConnection(); let current = reset.generation
+    let old = reset.client
     do { try await old?.logout() } catch { if generation == current { message = error.localizedDescription } }
   }
-  func load(kind: String?, status: String?, q: String, tag: String = "", more: Bool = false, trash: Bool = false, hideClosedTasks: Bool = false) async {
+  func load(kind: String?, status: String?, q: String, tag: String = "", more: Bool = false, trash: Bool = false, hideClosedTasks: Bool = false, category: String? = nil) async {
     guard let client, info != nil else { return }
-    let scope = ListScope(kind: kind, status: status, query: q, tag: tag, trash: trash, hideClosedTasks: hideClosedTasks)
+    let scope = ListScope(category: category, materialFrom: materialFrom, materialTo: materialTo, kind: kind, status: status, query: q, tag: tag, trash: trash, hideClosedTasks: hideClosedTasks)
     if more && (loading || nextCursor == nil || listScope != scope) { return }
     let current = generation, request = UUID(); listGeneration = request
     loading = true; loadMoreError = nil
     if !more { records = []; nextCursor = nil; listScope = scope }
     defer { if listGeneration == request { loading = false } }
     var query = URLComponents(); var items: [URLQueryItem] = []
+    if let category { items.append(URLQueryItem(name: "category", value: category)) }
+    if category == "material" {
+      if !materialFrom.isEmpty { items.append(URLQueryItem(name: "materialFrom", value: materialFrom)) }
+      if !materialTo.isEmpty { items.append(URLQueryItem(name: "materialTo", value: materialTo)) }
+      refreshCaptures()
+    }
     if trash { items.append(URLQueryItem(name: "trash", value: "true")) }
     if let kind { items.append(URLQueryItem(name: "kind", value: kind)) }
     if let status { items.append(URLQueryItem(name: "taskStatus", value: status)) }
@@ -142,12 +174,12 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
         if more { loadMoreError = error.localizedDescription }
         else { message = error.localizedDescription }
         if let apiError = error as? APIError, apiError.error.code == "UNAUTHENTICATED" {
-          _ = resetConnection(); message = error.localizedDescription; await client.cancel()
+          _ = await resetConnection(); message = error.localizedDescription; await client.cancel()
         }
       }
     }
   }
-  func openEditor(record: SuijiRecord? = nil, kind: RecordKind = .task, body: String = "") async {
+  func openEditor(record: SuijiRecord? = nil, kind: RecordKind = .task, body: String = "", material: Bool = false) async {
     guard let client, let store, let info else { return }; let current = generation
     guard record?.deletedAt == nil else { return }
     do {
@@ -159,11 +191,26 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
       }
       let restored = try await store.load(record?.id ?? "new")
       guard generation == current else { return }
-      let draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, tags: record?.tags ?? [], recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
-      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory); editingModels[draft.id] = model; editor = model
+      var draft = restored ?? Draft(kind: record?.kind ?? kind, body: record?.body ?? body, tags: record?.tags ?? [], recordID: record?.id, expectedVersion: record?.version, existing: record?.attachments ?? [])
+      if restored == nil {
+        draft.material = record?.material?.input ?? (material ? MaterialInput() : nil)
+        if draft.material != nil { draft.kind = .note }
+      }
+      let model = EditorModel(draft: draft, client: client, store: store, limits: info.limits, correctionCapability: info.features?.correction, historyCapability: info.features?.correctionHistory); model.materialsSupported = info.features?.materials == true; editingModels[draft.id] = model; editor = model
       await model.persist()
       if restored != nil { await model.prepareForCapture(kind: kind, body: body) }
     } catch { if generation == current { message = error.localizedDescription } }
+  }
+  func refreshCaptures() {
+    guard let captureConnection else { return }
+    do { pendingCaptures = try CaptureQueue.list(captureConnection.identity) }
+    catch { captureMessage = error.localizedDescription }
+  }
+  func retryCapture(_ item: QueuedCapture) async {
+    guard !captureBusy, let captureConnection, let client else { return }
+    captureBusy = true; captureMessage = ""; defer { captureBusy = false; refreshCaptures() }
+    do { try await CaptureQueue.send(item, connection: captureConnection, api: client.transport); captureMessage = "已保存，请刷新素材列表" }
+    catch { captureMessage = "待发送或保存结果待确认：" + error.localizedDescription }
   }
   func acceptFollowupRecord(_ record: SuijiRecord) {
     records = records.map { $0.id == record.id ? mergeSuijiRecord($0, record) : $0 }

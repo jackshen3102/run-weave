@@ -44,5 +44,9 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>SuijiAppGroup</key>
+	<string>group.com.runweave.suiji</string>
+	<key>SuijiKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)com.runweave.suiji.shared</string>
 </dict>
 </plist>

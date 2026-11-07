@@ -17,6 +17,8 @@ struct PendingOperation: Codable, Sendable {
 }
 struct Draft: Codable, Identifiable, Sendable {
   var id: String { followupRecordID ?? recordID ?? "new" }
+  var material: MaterialInput?
+  var materialChanged: Bool?
   var followupRecordID: String?
   var kind: RecordKind = .task
   var body = ""

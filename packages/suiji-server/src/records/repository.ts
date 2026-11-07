@@ -1,6 +1,7 @@
 import { followupSummaries } from "../followups/repository";
 import type pg from "pg";
 import type { SuijiRecord, SuijiAttachment } from "@runweave/shared/suiji";
+import { getMaterial } from "../materials/repository";
 import { missing } from "../errors";
 export async function getRecord(
   client: Pick<pg.Pool, "query"> | pg.PoolClient,
@@ -23,7 +24,7 @@ export async function getRecord(
       [ownerId, id],
     )
   ).rows as SuijiAttachment[];
-  return {
+  const record: SuijiRecord = {
     ...(includeSummary ? { followupSummary: (await followupSummaries(client, ownerId, [id])).get(id)! } : {}),
     id: row.id,
     kind: row.kind,
@@ -37,4 +38,6 @@ export async function getRecord(
     deletedAt: row.deleted_at?.toISOString() ?? null,
     attachments,
   };
+  record.material = await getMaterial(client, ownerId, record);
+  return record;
 }

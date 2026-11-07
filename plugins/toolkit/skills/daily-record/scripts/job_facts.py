@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import uuid
 import job_browser
+import job_materials
 
 from job_state import Failure, date, digest, read, require, scopes, stamp, window, write
 
@@ -63,7 +64,7 @@ def validate(path, meta, candidate_path, state, work_records):
     require(meta["phase"] not in ("pending", "confirmed"), "BATCH_FROZEN")
     materials = evidence(path, meta)
     candidates = read(candidate_path)
-    require(isinstance(candidates, dict) and set(candidates) == {"batchId", "generation", "evidenceHash", "days"}, "INVALID_FACTS_FIELDS")
+    require(isinstance(candidates, dict) and set(candidates) >= {"batchId", "generation", "evidenceHash", "days"} and not set(candidates) - {"batchId", "generation", "evidenceHash", "days", "materialReviews"}, "INVALID_FACTS_FIELDS")
     require(candidates["batchId"] == meta["id"] and candidates["generation"] == meta["generation"] and candidates["evidenceHash"] == meta["evidenceHash"], "FACTS_BATCH_CHANGED")
     require([d["date"] for d in candidates["days"]] == meta["days"], "FACT_DAYS_MISMATCH")
     by_id = {m["id"]: m for m in materials}
@@ -106,7 +107,7 @@ def validate(path, meta, candidate_path, state, work_records):
                 expected = next(iter(projects)) if len(projects) == 1 else None
                 require(item["project"] == expected, "PROJECT_SOURCE_MISMATCH")
             anchors = {m["anchor"] for m in sources}
-            matching = {key for key, old in identities.items() if old["date"] == day["date"] and anchors.intersection(old["anchors"])}
+            matching = {key for key, old in identities.items() if (old["date"] == day["date"] or (set(old["anchors"]) <= anchors and all(a.startswith("materials:") for a in old["anchors"]))) and anchors.intersection(old["anchors"])}
             if item.get("eventKey"):
                 matching.update(k for k, old in identities.items() if old["date"] == day["date"] and old["eventKey"] == item["eventKey"])
             require(len(matching) <= 1, "AMBIGUOUS_FACT_MERGE")
@@ -116,22 +117,27 @@ def validate(path, meta, candidate_path, state, work_records):
             old = identities.get(key)
             event = old["eventKey"] if old else item.get("eventKey") or str(uuid.uuid4())
             require(not item.get("eventKey") or item["eventKey"] == event, "EVENT_IDENTITY_CHANGED")
-            identities[key] = {"date": day["date"], "eventKey": event, "externalKey": old["externalKey"] if old else day["date"] + ":" + str(uuid.uuid4()), "anchors": sorted(anchors | set(old["anchors"] if old else []))}
+            identities[key] = {"date": day["date"], "eventKey": event, "externalKey": old["externalKey"] if old else str(uuid.uuid4()), "anchors": sorted(anchors | set(old["anchors"] if old else []))}
             refs = {digest(m["ref"]): m["ref"] for m in independent}
             if browser:
                 ref, index = job_browser.compact_ref(browser)
                 refs[digest(ref)] = ref
                 browser_index[day["date"] + ":" + event] = index
             facts.append({k: item[k] for k in ("title", "statement", "status", "project")} | {"eventKey": event, "externalKey": identities[key]["externalKey"], "sourceRefs": list(refs.values())})
-        old_keys = {k for k, v in state.data["identities"].items() if v["date"] == day["date"]}
+        old_keys = {k for k, v in state.data["identities"].items() if v["date"] == day["date"] and not all(a.startswith("materials:") for a in v["anchors"])}
         # An omission cannot silently leave an earlier, now contradictory fact behind.
         require(not all(r["status"] == "complete" for r in meta["receipts"][day["date"]]) or old_keys <= used, "OMITTED_PRIOR_FACT: preserve or explicitly resolve existing fact identities")
         receipts = meta["receipts"][day["date"]]
         exported.append({"date": day["date"], "requestedScopes": scopes(state.c, day["date"]), "receipts": receipts, "facts": facts})
     payload = {"schemaVersion": 1, "sourceNamespace": state.c["sourceNamespace"], "sourceCollectedAt": max(r["collectedAt"] for d in exported for r in d["receipts"]), "days": exported}
+    if any(m["ref"]["channel"] == "suiji-material" for m in materials) or "materialReviews" in candidates:
+        payload["materialResults"] = job_materials.results(materials, candidates, meta, exported)
+        meta["materialDates"] = {m["ref"]["nativeId"]: m["day"] for m in materials if m["ref"]["channel"] == "suiji-material"}
     work_records.validate(payload, Failure, enforce_limits=False)
     for day in exported:
         single = {**payload, "days": [day], "sourceCollectedAt": max(r["collectedAt"] for r in day["receipts"])}
+        if "materialResults" in payload:
+            single["materialResults"] = [r for r in payload["materialResults"] if meta["materialDates"][r["recordId"]] == day["date"]]
         work_records.validate(single, Failure)
     write(path / "browser-evidence-index.json", browser_index)
     write(path / "export.json", payload)

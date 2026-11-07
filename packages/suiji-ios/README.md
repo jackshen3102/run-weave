@@ -142,3 +142,29 @@ mapping:check 可附加 `SUIJI_VERIFY_FOLLOWUP_RECORD_ID`，核对真实跟进�
 
 服务声明 `features.workReports` 时，工作页增加全部/日志/总结筛选；周报按结束日期混排，提供详情、原始日志范围和人工编辑。
 详情保留生成时的事实数量与缺报日期；人工保存后标记已人工编辑，自动生成不能覆盖。周报草稿与未知请求仍按连接身份隔离，重启不自动重发。
+
+## 素材与系统分享
+
+服务声明 materials 后，记录页在全部、想法、待办之后追加素材分类；素材属于 note，
+保留四个 Tab、标签和正文搜索。支持全部日期、今天、昨天及起止日期，归属日期按 Asia/Shanghai，
+与上传时间分开。编辑器可显式将想法转为素材；退出素材后才能转待办。删除/取消分类不撤回已生成总结。
+普通新建仍默认待办，分享不会覆盖普通 `new` 草稿。
+
+`SuijiShare` 是独立系统分享扩展，只依赖 `SuijiCaptureCore`，不导入 Clarity 或主 App 生命周期。
+支持一张图片加文字、纯文字、HTTP(S) 链接及可选备注。图片转 JPEG，最多 5 MiB；多图、
+不支持格式和超限明确失败，不静默丢弃。先保存本机独立 UUID 队列，再上传；成功后结束扩展回到来源 App。
+断网/进程中断保留队列，主 App 素材页可查看并手动重试。前台、登录和网络恢复不重发业务请求。
+
+宿主和扩展需使用同一签名团队，并启用 App Group `group.com.runweave.suiji` 与
+Keychain Access Group `$(AppIdentifierPrefix)com.runweave.suiji.shared`。工程不内置个人团队。
+升级时复制旧私有凭据到共享组并回读验证；共享目录不含 token。环境、规范端点、serverId、ownerId
+隔离队列，切换账号后不能提交原账号队列。刷新与每项提交均使用有界等待的跨进程文件锁。
+未知结果使用原附件、原 payload 和原幂等键；成功先持久化 confirmed，再清理文件。
+
+构建、安装、Simulator 交互、真机分享与正式环境上线须分别取证。仅编译通过不证明设备签名权限已开通。
+
+2026-11-07 当前源码的真机分享验收被签名阻塞：Apple 返回 `PLA Update available`，
+现有宿主及扩展 profile 均缺少 App Groups entitlement。需由开发者账号持有人处理新版
+Program License Agreement，再通过正常签名流程生成描述文件；不能删除共享权限来绕过。
+设备已通过连接、解锁和 Developer Mode 预检，但本轮未安装当前包或完成系统分享交互。
+详细状态见 [素材实施记录](../../docs/plans/2026-11-07-suiji-materials.md)。

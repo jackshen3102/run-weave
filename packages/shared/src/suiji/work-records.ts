@@ -62,6 +62,7 @@ export type WorkSourceRef = {
     | "feishu-message"
     | "feishu-document"
     | "browser-visit"
+    | "suiji-material"
     | "screen-timeline";
   sourceScope: string;
   nativeId: string;
@@ -81,6 +82,7 @@ export type ImportedWorkFact = Omit<WorkFactInput, "workDate"> & {
   sourceRefs: WorkSourceRef[];
 };
 export type ImportWorkFacts = {
+  materialResults?: import("./materials").MaterialResult[];
   schemaVersion: 1;
   sourceNamespace: string;
   sourceCollectedAt: string;

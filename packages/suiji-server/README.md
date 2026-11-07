@@ -45,7 +45,7 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
-标签最初引入于 schema 4；当前运行版本要求 schema 10，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
+标签最初引入于 schema 4；当前运行版本要求 schema 13，先迁移并更新服务，再更新客户端。每条允许 0–2 个标签，标签名称去首尾空白后为 1–20 个 Unicode 标量，不能重复或包含控制字符；大小写敏感。创建省略 tags 默认为空，编辑省略保留原值，`[]` 清空。标签属于记录，随草稿、修订和回收站恢复保留；目录只汇总未删除记录，标签总数不限制。目录不受记录分页影响，筛选和其他条件取交集。旧服务严格校验 schema，不能直接回退二进制或删除标签列。验收见[标签测试计划](../../docs/testing/suiji/tags.testplan.yaml)。
 
 省略附件保留原关联，`[]` 显式清空；不 trim 正文。正文上限 20,000 标量，附件每个 5 MiB，
 每条最多一张图片和一个 Markdown。图片完整解码校验额外限制为 40,000,000 像素，避免小文件解压耗尽内存。
@@ -66,7 +66,7 @@ HTTP、修订与幂等结果在一个 PostgreSQL 事务提交。同键唯一约�
 `/mcp` 使用 Streamable HTTP，默认关闭。与 App 共用记录服务，但使用独立 Bearer 凭据；
 不接受 App access/refresh token，不向 Agent 提供数据库或登录密码。每次请求校验有效期。
 
-每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 9；
+每台设备独立生成 token，只把摘要登记到服务端。当前运行时要求 schema 13；
 `SUIJI_MCP_ENABLED=true` 开启 MCP，默认 false。注册、撤销不重启服务；App 会话不受影响。
 
 ```bash
@@ -326,3 +326,24 @@ HTTP `GET/PATCH /api/suiji/v1/work-reports/:id` 用于阅读和人工编辑；MC
 发布校验周期内全部事实版本及 feedRevision，保存覆盖快照和修订，同周期唯一，人工编辑禁止自动覆盖。
 默认周五04:00按上海时间统计上周五至本周四七个自然日，补跑仍沿用原定周五；调度在 Runweave Backend，不在随记进程内增加时钟。
 准备/冻结/回读入口见 [随记技能](../../plugins/toolkit/skills/suiji/SKILL.md#工作周报)。
+
+## 用户主动提交的素材
+
+schema 13 增加 `features.materials` / `features.workMaterials`。素材仍为 `kind=note`，
+`material` 包含 captureId、capturedAt、Asia/Shanghai materialDate、inputType 和可选 HTTP(S) sourceUrl。
+`sourceHash` 与 processedVersion/processedAt 由服务生成，不能由客户端写入。
+编辑省略 material 保留原值，null 取消分类；素材不能直接改为 task。captureId 按 owner 唯一，
+取消分类也不释放已用身份；同一次保存必须沿用原幂等键。归属日期不改变创建或采集时间。
+
+列表可传 `category=idea|task|material`；idea 排除素材，未传 category 的旧列表仍包含所有记录。
+`materialFrom/materialTo` 仅用于 material 分类，包含两端；from/to 仍为创建时间范围。
+素材按归属日期、采集时间、ID 倒序；游标绑定所有筛选条件。搜索只覆盖正文及保存于正文的备注。
+
+工作事实导入可附带 `materialResults`（recordId、recordVersion、sourceHash、outcome、eventKeys）。
+服务锁定素材并校验版本/hash，再在同一个事实导入事务写回执。included/merged 需指向含有
+当前素材 sourceRef 的同 owner 事实；no-new-fact 不强行新增事实。sourceScope 格式为
+`materials:<serverId>:<ownerId>`，channel 为 suiji-material。回执不递增记录版本，不写内容变化流。
+编辑后的版本重新待整理；删除或取消素材不撤回既有工作事实或人工周报。
+
+先迁移并升级兼容服务，再更新 App/分享扩展，最后显式启用一个日报生产者。
+回滚先关闭新建入口和消费，保留表、附件、冻结请求和处理回执；不得直接运行不支持 schema 13 的旧服务。

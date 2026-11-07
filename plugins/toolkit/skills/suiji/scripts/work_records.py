@@ -29,12 +29,25 @@ def validate(payload, fail, enforce_limits=True):
     def timestamp(value):
         require(isinstance(value, str) and bool(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)", value)), "INVALID_SOURCE_TIME")
         return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    exact(payload, {"schemaVersion", "sourceNamespace", "sourceCollectedAt", "days"}, {"basedOnFeedRevision"})
+    exact(payload, {"schemaVersion", "sourceNamespace", "sourceCollectedAt", "days"}, {"basedOnFeedRevision", "materialResults"})
     require(payload["schemaVersion"] == 1, "INVALID_WORK_SCHEMA")
     scope(payload["sourceNamespace"])
     if "basedOnFeedRevision" in payload:
         require(bool(re.fullmatch(r"0|[1-9][0-9]{0,18}", payload["basedOnFeedRevision"])), "INVALID_FEED_REVISION")
     require(isinstance(payload["days"], list) and 1 <= len(payload["days"]) <= 100, "INVALID_WORK_DAYS")
+    results = payload.get("materialResults", [])
+    require(isinstance(results, list) and (not enforce_limits or len(results) <= 100), "INVALID_MATERIAL_RESULTS")
+    seen = set()
+    for item in results:
+        exact(item, {"recordId", "recordVersion", "sourceHash", "outcome", "eventKeys"})
+        uuid.UUID(item["recordId"])
+        require(item["recordId"] not in seen and type(item["recordVersion"]) is int and item["recordVersion"] > 0, "INVALID_MATERIAL_VERSION")
+        seen.add(item["recordId"])
+        require(bool(re.fullmatch(r"[a-f0-9]{64}", item["sourceHash"])), "INVALID_MATERIAL_HASH")
+        require(item["outcome"] in {"included", "merged", "no-new-fact"} and isinstance(item["eventKeys"], list) and len(item["eventKeys"]) <= 100, "INVALID_MATERIAL_OUTCOME")
+        require(bool(item["eventKeys"]) == (item["outcome"] != "no-new-fact"), "MATERIAL_EVENT_KEYS_REQUIRED")
+        for key in item["eventKeys"]:
+            identity(key)
     dates, keys, times, count = set(), set(), [], 0
     for day in payload["days"]:
         exact(day, {"date", "requestedScopes", "receipts", "facts"})
@@ -80,7 +93,7 @@ def validate(payload, fail, enforce_limits=True):
                 require(fact["status"] in {"documented", "discussed"}, "SCREEN_ONLY_IS_OBSERVATION")
             for ref in fact["sourceRefs"]:
                 exact(ref, {"channel", "sourceScope", "nativeId"}, {"revision", "hash"})
-                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document", "browser-visit", "screen-timeline"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
+                require(ref["channel"] in {"local-agent", "feishu-message", "feishu-document", "browser-visit", "screen-timeline", "suiji-material"} and ref["sourceScope"] in receipts and receipts[ref["sourceScope"]]["status"] != "unavailable", "SOURCE_NOT_READ")
                 for field in ("nativeId", "revision"):
                     if field in ref:
                         identity(ref[field])
@@ -133,16 +146,28 @@ def atomic_private(path, data):
 def prepare(client, args, fail, private_read, exclusive_write):
     payload = validate(json.loads(private_read(args.input)), fail, enforce_limits=False)
     original = payload
+    material_dates = {}
+    for item in payload.get("materialResults", []):
+        record = client.call("get_record", {"recordId": item["recordId"]})["record"]
+        if not record.get("material") or record["material"]["sourceHash"] != item["sourceHash"] or record["version"] != item["recordVersion"]:
+            raise fail("MATERIAL_VERSION_CHANGED")
+        material_dates[item["recordId"]] = record["material"]["materialDate"]
+    def select_materials(value):
+        if "materialResults" in value:
+            dates = {d["date"] for d in value["days"]}
+            value["materialResults"] = [r for r in original["materialResults"] if material_dates[r["recordId"]] in dates]
+        return value
     kept = []
     for day in original["days"]:
-        trial = {**original, "days": kept + [day]}
+        trial = select_materials({**original, "days": kept + [day]})
         trial["sourceCollectedAt"] = max((r["collectedAt"] for d in trial["days"] for r in d["receipts"]), key=lambda v: dt.datetime.fromisoformat(v.replace("Z", "+00:00")))
-        if sum(len(d["facts"]) for d in trial["days"]) > 100 or len(json.dumps(trial, ensure_ascii=False, separators=(",", ":")).encode()) > 200 * 1024:
+        if len(trial.get("materialResults", [])) > 100 or sum(len(d["facts"]) for d in trial["days"]) > 100 or len(json.dumps(trial, ensure_ascii=False, separators=(",", ":")).encode()) > 200 * 1024:
             if not kept:
                 raise fail("SINGLE_DAY_PACKAGE_LIMIT; refuse to truncate a day")
             break
         kept.append(day)
     payload = {**original, "days": kept, "sourceCollectedAt": max((r["collectedAt"] for d in kept for r in d["receipts"]), key=lambda v: dt.datetime.fromisoformat(v.replace("Z", "+00:00")))}
+    payload = select_materials(payload)
     remaining = original["days"][len(kept):]
     validate(payload, fail)
     page = list_all(client, {}, fail)
@@ -174,6 +199,7 @@ def prepare(client, args, fail, private_read, exclusive_write):
     if remaining:
         remainder = {k: v for k, v in original.items() if k != "basedOnFeedRevision"}
         remainder["days"] = remaining
+        select_materials(remainder)
         remainder["sourceCollectedAt"] = max((r["collectedAt"] for d in remaining for r in d["receipts"]), key=lambda v: dt.datetime.fromisoformat(v.replace("Z", "+00:00")))
         exclusive_write(out / "remaining.json", json.dumps(remainder, ensure_ascii=False).encode())
     exclusive_write(out / "prepared.json", json.dumps(frozen, ensure_ascii=False).encode())
@@ -202,6 +228,10 @@ def verify_result(client, intent, result, fail):
                 if current.get("id") != actual["id"] or current.get("eventKey") != actual["eventKey"] or current.get("version", 0) <= actual["version"]:
                     raise fail("IMPORT_READBACK_MISMATCH; original request retained")
                 result.setdefault("changedSinceReceipt", []).append(row["id"])
+        for item in args["input"].get("materialResults", []):
+            receipt = client.call("get_material_result", {"recordId": item["recordId"], "recordVersion": item["recordVersion"]})
+            if receipt.get("sourceHash") != item["sourceHash"] or not receipt.get("processedAt"):
+                raise fail("MATERIAL_READBACK_MISMATCH; original request retained")
     elif operation == "reclassify_work_facts":
         facts = result.get("facts", [])
         expected = {i["id"]: i for i in args["input"]["items"]}
@@ -269,12 +299,15 @@ def recovery_intent(args, config, fail, private_read):
         allowed.add("feishu:" + job["sources"]["feishu"]["accountScope"] + ":messages")
     browser = job["sources"].get("browser", {})
     screen = job["sources"].get("screen", {})
+    materials = job["sources"].get("materials", {})
     for day in payload["days"]:
         expected = set(allowed)
         if browser.get("enabled") and day["date"] >= browser["effectiveFrom"]:
             expected.add("browser:" + job["producerId"] + ":observed")
         if screen.get("enabled") and day["date"] >= screen["effectiveFrom"]:
             expected.add("screen:" + job["producerId"] + ":" + screen["expectedDeviceID"] + ":observed")
+        if materials.get("enabled") and day["date"] >= materials["effectiveFrom"]:
+            expected.add("materials:" + materials["accountScope"])
         if set(day["requestedScopes"]) != expected:
             raise fail("JOB_SCOPE_MISMATCH")
     return intent

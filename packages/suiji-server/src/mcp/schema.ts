@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { materialInput, materialFilters } from "../materials/schema";
 import { body, keySchema, uuid, listSchema, followupFields, sourceLabel } from "../schema";
 
 const filters = {
+  ...materialFilters,
   tag: listSchema.shape.tag,
   kind: z.enum(["note", "task"]).optional(),
   taskStatus: z.enum(["open", "done", "archived"]).optional(),
@@ -25,6 +27,7 @@ export const searchInput = z
 export const getInput = z.object({ recordId: uuid }).strict();
 export const createInput = z
   .object({
+    material: materialInput.nullable().optional(),
     kind: z.enum(["note", "task"]),
     body,
     idempotencyKey: keySchema,

@@ -1,12 +1,7 @@
+import SuijiCaptureCore
 import Foundation
 
-enum ConnectionEnvironment: String, Codable, CaseIterable, Identifiable {
-  case production, development
-  var id: String { rawValue }
-  var label: String { self == .production ? "正式" : "开发" }
-  // Preserve the existing production credential and draft keys when upgrading.
-  func scoped(_ value: String) -> String { self == .production ? value : "development\n" + value }
-}
+typealias ConnectionEnvironment = SuijiCaptureCore.ConnectionEnvironment
 
 struct ConnectionProfile: Codable {
   var endpoint = ""

@@ -243,6 +243,7 @@ export function SuijiWorkspace({
           const draft = restored ?? {
             id,
             kind: record?.kind ?? defaultKind,
+            material: record?.material,
             body: record?.body ?? body,
             tags: record?.tags ?? [],
             version: record?.version,

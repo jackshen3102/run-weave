@@ -1,3 +1,8 @@
+import SuijiCaptureCore
+public typealias Tokens = SuijiCaptureCore.Tokens
+public typealias APIError = SuijiCaptureCore.APIError
+public typealias MaterialInput = SuijiCaptureCore.MaterialInput
+public typealias MaterialMetadata = SuijiCaptureCore.MaterialMetadata
 import Foundation
 public enum RecordKind: String, Codable, CaseIterable, Sendable { case note, task }
 public enum TaskStatus: String, Codable, CaseIterable, Sendable { case open, done, archived }
@@ -10,6 +15,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Sendable {
   public var position: Int?
 }
 public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
+  public var material: MaterialMetadata? = nil
   public var followupSummary: FollowupSummary? = nil
   public let id: String
   public let kind: RecordKind
@@ -38,14 +44,6 @@ enum SuijiTags {
 }
 public struct UploadResponse: Codable, Sendable { public let attachment: Attachment }
 public struct RecordPage: Codable, Sendable { public let items: [SuijiRecord]; public let nextCursor: String? }
-public struct Tokens: Codable, Sendable {
-  public let accessToken: String
-  public let refreshToken: String
-  public let expiresIn: Int
-  public let sessionId: String
-  public let ownerId: String
-  public let serverId: String
-}
 public struct Limits: Codable, Sendable {
   public let bodyScalars: Int
   public let attachmentBytes: Int
@@ -63,16 +61,6 @@ public struct ServiceInfo: Codable, Sendable {
   public let serverId: String
   public let limits: Limits
   let ai: ReviewCapability?
-}
-public struct APIError: Error, Decodable, LocalizedError, Sendable {
-  public struct Detail: Decodable, Sendable { public let currentVersion: Int?; public let currentFeedRevision: String? }
-  public struct Body: Decodable, Sendable {
-    public let code: String; public let message: String; public let retryable: Bool; public let details: Detail?
-  }
-  public let error: Body
-  public let requestId: String
-  public var errorDescription: String? { error.message }
-  public var uncertain: Bool { ["DEPENDENCY_UNAVAILABLE", "IDEMPOTENCY_KEY_REUSED", "UNAUTHENTICATED", "RATE_LIMITED"].contains(error.code) }
 }
 struct MessageError: LocalizedError { let message: String; var errorDescription: String? { message } }
 struct EmptyResponse: Decodable {}

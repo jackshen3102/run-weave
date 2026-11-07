@@ -94,7 +94,7 @@ def config(path):
     scope(c["producerId"])
     scope(c["sourceNamespace"])
     date(c["startDate"])
-    exact(c["sources"], {"localAgent", "feishu"}, {"browser", "screen"})
+    exact(c["sources"], {"localAgent", "feishu"}, {"browser", "screen", "materials"})
     local, feishu = c["sources"]["localAgent"], c["sources"]["feishu"]
     exact(local, {"providers"}, {"home"})
     require(isinstance(local["providers"], list) and all(p in ("codex", "pi", "claude", "trae") for p in local["providers"]) and len(set(local["providers"])) == len(local["providers"]), "INVALID_PROVIDERS")
@@ -132,7 +132,18 @@ def config(path):
     else:
         exact(screen, {"enabled"})
         c["sources"].pop("screen", None)
-    require(local["providers"] or feishu["enabled"] or (browser["enabled"] and browser["effectiveFrom"] == c["startDate"]), "NO_ENABLED_SOURCE_FOR_START_DATE")
+    materials = c["sources"].get("materials", {"enabled": False})
+    require(type(materials.get("enabled")) is bool, "INVALID_MATERIALS_ENABLED")
+    if materials["enabled"]:
+        exact(materials, {"enabled", "effectiveFrom", "accountScope"})
+        date(materials["effectiveFrom"])
+        require(materials["effectiveFrom"] >= c["startDate"], "MATERIALS_BEFORE_JOB_START")
+        connection = read(c["suiji"]["configPath"])
+        require(materials["accountScope"] == connection["serverId"] + ":" + connection["ownerId"], "MATERIAL_ACCOUNT_MISMATCH")
+    else:
+        exact(materials, {"enabled"})
+        c["sources"].pop("materials", None)
+    require(local["providers"] or feishu["enabled"] or (browser["enabled"] and browser["effectiveFrom"] == c["startDate"]) or (materials["enabled"] and materials["effectiveFrom"] == c["startDate"]), "NO_ENABLED_SOURCE_FOR_START_DATE")
     require(isinstance(c["collectorArgv"], list) and c["collectorArgv"] and all(isinstance(v, str) and v and "\0" not in v for v in c["collectorArgv"]), "INVALID_COLLECTOR_ARGV")
     exact(c["suiji"], {"configPath", "tokenFile", "autoPublish"})
     require(type(c["suiji"]["autoPublish"]) is bool, "INVALID_AUTO_PUBLISH")
@@ -155,6 +166,11 @@ def screen_enabled(c, day=None):
     return bool(screen.get("enabled") and (day is None or day >= screen["effectiveFrom"]))
 
 
+def materials_enabled(c, day=None):
+    value = c["sources"].get("materials", {})
+    return bool(value.get("enabled") and (day is None or day >= value["effectiveFrom"]))
+
+
 def binding(c):
     connection = read(c["suiji"]["configPath"])
     value = {k: c[k] for k in ("producerId", "sourceNamespace", "startDate", "sources")}
@@ -170,6 +186,8 @@ def scopes(c, day=None):
         values.append("browser:" + c["producerId"] + ":observed")
     if screen_enabled(c, day):
         values.append("screen:" + c["producerId"] + ":" + c["sources"]["screen"]["expectedDeviceID"] + ":observed")
+    if materials_enabled(c, day):
+        values.append("materials:" + c["sources"]["materials"]["accountScope"])
     for value in values:
         scope(value)
     return values
@@ -261,7 +279,7 @@ def migrate_sources(state, current_path, next_path, dry_run):
         require(journal["configPath"] == target and journal["newConfig"] == next_c, "MIGRATION_TARGET_CHANGED")
         require(state.data["binding"] in (journal["oldBinding"], journal["newState"]["binding"]) and state.c in (journal["oldConfig"], journal["newConfig"]), "MIGRATION_IDENTITY_CHANGED")
     else:
-        added = [name for name, enabled in (("browser", browser_enabled), ("screen", screen_enabled)) if enabled(next_c) and not enabled(state.c)]
+        added = [name for name, enabled in (("browser", browser_enabled), ("screen", screen_enabled), ("materials", materials_enabled)) if enabled(next_c) and not enabled(state.c)]
         require(len(added) == 1, "ADDITIVE_SOURCE_MIGRATION_ONLY")
         source = added[0]
         old_base, new_base = copy.deepcopy(state.c), copy.deepcopy(next_c)

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { materialInput, materialFilters } from "./materials/schema";
 import { SUIJI_LIMITS, normalizeSuijiTags } from "@runweave/shared/suiji";
 const tags = z.array(z.string()).transform((values, ctx) => {
   try {
@@ -31,6 +32,7 @@ export const attachmentIds = z
   .max(SUIJI_LIMITS.imagesPerRecord + SUIJI_LIMITS.markdownPerRecord);
 export const createSchema = z
   .object({
+    material: materialInput.nullable().optional(),
     kind: z.enum(["note", "task"]),
     body,
     attachmentIds: attachmentIds.optional(),
@@ -39,6 +41,7 @@ export const createSchema = z
   .strict();
 export const editSchema = z
   .object({
+    material: materialInput.nullable().optional(),
     expectedVersion: z.number().int().positive(),
     kind: z.enum(["note", "task"]).optional(),
     body: body.optional(),
@@ -48,6 +51,7 @@ export const editSchema = z
   .strict()
   .refine(
     (v) =>
+      v.material !== undefined ||
       v.kind !== undefined ||
       v.body !== undefined ||
       v.tags !== undefined ||
@@ -68,6 +72,7 @@ export const trashSchema = z
   .strict();
 export const listSchema = z
   .object({
+    ...materialFilters,
     kind: z.enum(["note", "task"]).optional(),
     taskStatus: z.enum(["open", "done", "archived"]).optional(),
     trash: z.literal("true").optional(),
