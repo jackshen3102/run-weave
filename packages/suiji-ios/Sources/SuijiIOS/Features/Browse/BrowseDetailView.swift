@@ -9,8 +9,8 @@ struct BrowseDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment:.leading,spacing:16) {
-        Text(entry.title).font(.title2.bold()); Text(entry.source.displayName + " · " + browseType(entry.contentType)).font(.subheadline)
-        Text((entry.occurredAt == nil ? "保存于 " : "浏览过 ") + browseTime(entry.occurredAt ?? entry.capturedAt)).font(.caption).foregroundStyle(.secondary)
+        Text(entry.title).font(.title2.bold()); Text(entry.source.displayName + (entry.source.displayName == browseType(entry.contentType) ? "" : " · " + browseType(entry.contentType))).font(.subheadline)
+        Text(entry.contentType == "app-usage" ? "统计日期：" + entry.browseDate : (entry.occurredAt == nil ? "保存于 " : "浏览过 ") + browseTime(entry.occurredAt ?? entry.capturedAt)).font(.caption).foregroundStyle(.secondary)
         if entry.contentState.state != "available" { Text("正文范围：" + browseReason(entry.contentState.reason)).foregroundStyle(.orange) }
         RecordBody(text:entry.body ?? entry.excerpt ?? "")
         ForEach(entry.attachments) { file in Button(file.fileName) { attachment = file } }
