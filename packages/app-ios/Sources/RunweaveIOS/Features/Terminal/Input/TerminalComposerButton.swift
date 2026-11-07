@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TerminalComposerButton: View {
   let hasDraft: Bool
+  var unconfirmedInput = false
   let open: () -> Void
 
   var body: some View {
@@ -17,7 +18,7 @@ struct TerminalComposerButton: View {
         }
     }
     .accessibilityLabel("打开终端输入")
-    .accessibilityValue(hasDraft ? "有未发送草稿" : "无草稿")
+    .accessibilityValue(unconfirmedInput ? "草稿的发送结果未确认" : (hasDraft ? "有未发送草稿" : "无草稿"))
     .accessibilityIdentifier("terminal-composer-open")
   }
 }

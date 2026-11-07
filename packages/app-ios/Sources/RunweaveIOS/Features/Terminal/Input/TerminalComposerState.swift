@@ -10,6 +10,7 @@ final class TerminalComposerState: ObservableObject {
     let canWrite: Bool
     let canSend: Bool
     let inputBusy: Bool
+    let unconfirmedInput: Bool
     let commandActive: Bool
     let queueKey: TerminalPromptSubmitKey?
 
@@ -24,6 +25,7 @@ final class TerminalComposerState: ObservableObject {
       canWrite = session.canWrite
       canSend = controller.canSend
       inputBusy = controller.inputBusy
+      unconfirmedInput = session.unconfirmedInputDrafts.contains(terminalID)
       commandActive = session.isCommandActive(terminalID)
       queueKey = session.composerQueueKey(terminalID: terminalID)
     }

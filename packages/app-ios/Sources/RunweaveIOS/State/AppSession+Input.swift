@@ -79,6 +79,7 @@ extension AppSession {
     }
     let payload = ([text].filter { !$0.isEmpty } + paths).joined(separator: " ")
     guard !payload.isEmpty else { return }
+    setDraftSendUnconfirmed(true, terminalID: terminalID)
     let action: MobileAnalytics.Action = queue ? .composerQueue : .composerSend
     MobileAnalytics.actionEvent(action, .started)
     let epoch = generation
@@ -93,8 +94,12 @@ extension AppSession {
       }
       if draftRevisions[terminalID] == draftRevision { setDraft("", terminalID: terminalID) }
       attachmentDrafts.remove(Set(attachments.map(\.id)), terminalID: terminalID)
+      setDraftSendUnconfirmed(false, terminalID: terminalID)
       MobileAnalytics.actionEvent(action, .acknowledged)
     } catch {
+      if generation == epoch, !isInputResultUncertain(error) {
+        setDraftSendUnconfirmed(false, terminalID: terminalID)
+      }
       MobileAnalytics.actionEvent(action, error is CancellationError ? .interrupted : .unconfirmed)
       if generation == epoch, !(error is CancellationError) { await handle(error, epoch: epoch) }
       throw error

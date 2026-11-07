@@ -31,6 +31,7 @@ final class AppSession: ObservableObject {
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
   @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
   @Published private(set) var suppressedQuickInputDrafts = Set<String>()
+  @Published private(set) var unconfirmedInputDrafts = Set<String>()
   private(set) var draftRevisions: [String: UUID] = [:]
   let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
     applicationName: "Runweave", returnLabel: "回终端",
@@ -90,6 +91,7 @@ final class AppSession: ObservableObject {
     guard connection?.scope == value.scope else { return }
     changingDraftScope = true
     suppressedQuickInputDrafts.removeAll()
+    unconfirmedInputDrafts.removeAll()
     draftRevisions.removeAll()
     terminalDrafts.removeAll()
     attachmentDrafts.clear()
@@ -116,6 +118,7 @@ final class AppSession: ObservableObject {
     let drafts = archivedDrafts(connection)
     terminalDrafts = drafts.text
     suppressedQuickInputDrafts = drafts.suppressedQuickInputs
+    unconfirmedInputDrafts = drafts.unconfirmedInputs
     draftRevisions.removeAll()
     attachmentDrafts.restore(drafts.attachments)
     changingDraftScope = false
@@ -184,6 +187,7 @@ final class AppSession: ObservableObject {
     attentionRetention.forget()
     changingDraftScope = true
     suppressedQuickInputDrafts.removeAll()
+    unconfirmedInputDrafts.removeAll()
     draftRevisions.removeAll()
     terminalDrafts.removeAll()
     attachmentDrafts.clear()
@@ -400,6 +404,7 @@ final class AppSession: ObservableObject {
   }
 
   func setDraft(_ text: String, terminalID: String, suppressQuickInputHistory: Bool = false) {
+    if (terminalDrafts[terminalID] ?? "") != text { unconfirmedInputDrafts.remove(terminalID) }
     draftRevisions[terminalID] = UUID()
     if text.isEmpty {
       suppressedQuickInputDrafts.remove(terminalID)
@@ -408,6 +413,13 @@ final class AppSession: ObservableObject {
       if suppressQuickInputHistory { suppressedQuickInputDrafts.insert(terminalID) }
       terminalDrafts[terminalID] = text
     }
+  }
+
+  func setDraftSendUnconfirmed(_ value: Bool, terminalID: String) {
+    if value { unconfirmedInputDrafts.insert(terminalID) }
+    else { unconfirmedInputDrafts.remove(terminalID) }
+    // Persist before dispatch and after acknowledgement, including a cold start during the request.
+    saveDraftsNow()
   }
 
   func withConnection<T>(
