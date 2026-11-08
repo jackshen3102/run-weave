@@ -123,6 +123,7 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
         if (request.action === "stop") {
           const { terminateSessions } = z.object({ terminateSessions: z.boolean() }).parse(request.body);
           if (!terminateSessions && [...sessions.values()].some(session => session.info.status === "running")) throw new Error("HOST_SESSIONS_ACTIVE");
+          frozen = true;
           reply({ ok: true });
           setTimeout(() => { void shutdown(); }, 100);
           return;
