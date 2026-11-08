@@ -12483,6 +12483,14 @@
   {
     "file": "packages/runweave-cli/src/commands/server.ts",
     "kind": "file-io",
+    "expression": "writeFileSync(path.join(ctx.home, \"rw.cjs\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Bind the installed CLI in a UTF-8 Node launcher so Windows batch encoding cannot corrupt its path; not business configuration."
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
     "expression": "writeFileSync(path.join(ctx.home, \"rw.cmd\"))",
     "count": 1,
     "category": "distribution",
