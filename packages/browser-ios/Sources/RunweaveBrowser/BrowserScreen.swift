@@ -4,6 +4,8 @@ import UIKit
 public struct BrowserScreen: View {
   @ObservedObject var browser: BrowserSession
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.colorSchemeContrast) private var contrast
   private let returnLabel: String?
   public init(browser: BrowserSession, returnLabel: String? = nil) {
     self.browser = browser
@@ -18,7 +20,10 @@ public struct BrowserScreen: View {
         navigationBar(page)
           .zIndex(1)
         webContent(page)
-        navigationControls(page)
+          .overlay(alignment: .bottom) {
+            navigationControls(page)
+              .padding(.horizontal, 16).padding(.vertical, 12)
+          }
       }
     }
     .background(chrome.ignoresSafeArea())
@@ -32,15 +37,17 @@ public struct BrowserScreen: View {
   }
 
   private func navigationBar(_ page: BrowserPage) -> some View {
-    HStack(spacing: 4) {
+    HStack(spacing: 8) {
       Button { browser.collapse() } label: {
         HStack(spacing: 4) {
           Image(systemName: "chevron.down").font(.system(size: 18, weight: .medium))
-          if let returnLabel { Text(returnLabel).font(.subheadline) }
+          Text(returnLabel ?? browser.configuration.returnLabel)
+            .font(.subheadline.weight(.medium)).lineLimit(1)
         }
-        .frame(minWidth: 44, minHeight: 48)
+        .padding(.horizontal, 10).frame(minWidth: 44, minHeight: 44)
         .contentShape(Rectangle())
       }
+      .background(chrome.opacity(0.65), in: Capsule())
       .accessibilityLabel(returnLabel ?? browser.configuration.returnLabel)
       .accessibilityIdentifier("browser-collapse")
 
@@ -52,31 +59,25 @@ public struct BrowserScreen: View {
             Image(systemName: page.exportURL.scheme == "http" ? "exclamationmark.shield" : "globe")
               .foregroundStyle(page.exportURL.scheme == "http" ? Color.orange : Color.secondary)
           }
-          VStack(spacing: 2) {
-            Text(page.exportURL.host ?? "网页")
-              .font(.subheadline.weight(.semibold))
-              .foregroundStyle(.primary)
-            if page.title != page.exportURL.host {
-              Text(page.title).font(.caption2).foregroundStyle(.secondary)
-                .accessibilityIdentifier("browser-title")
-            }
-          }
+          Text(page.exportURL.host ?? "网页")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
           .lineLimit(1).truncationMode(.middle)
           .frame(maxWidth: .infinity)
-          Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 12).frame(minHeight: 44)
-        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(minHeight: 44)
       }
       .accessibilityLabel("网页地址")
       .accessibilityValue(page.exportURL.absoluteString)
-      .accessibilityHint("查看完整链接")
+      .accessibilityHint("\(page.title)，查看完整链接")
       .accessibilityIdentifier("browser-address")
       pageMenu(page)
     }
     .buttonStyle(.plain)
     .foregroundStyle(.primary)
-    .padding(.horizontal, 6).padding(.vertical, 8)
+    .padding(6)
+    .modifier(BrowserChromeSurface(reduceTransparency: reduceTransparency || contrast == .increased))
+    .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
     .overlay(alignment: .bottom) {
       if page.webView.isLoading && page.failure == nil {
         ProgressView(value: page.webView.estimatedProgress)
@@ -96,7 +97,7 @@ public struct BrowserScreen: View {
     Menu {
       Section {
         Button { perform(page, action: .link) } label: {
-          Label("链接", systemImage: "link")
+          Label("查看完整链接", systemImage: "link")
         }
         Button { perform(page, action: .externalOpen) } label: {
           Label("在默认浏览器打开", systemImage: "safari")
@@ -114,14 +115,15 @@ public struct BrowserScreen: View {
         Button(role: .destructive) {
           browser.request(.clear, message: browser.configuration.clearDataMessage)
         } label: {
-          Label("清除网页数据", systemImage: "trash")
+          Label("清除全部网站数据", systemImage: "trash")
         }
       }
     } label: {
       Image(systemName: "ellipsis")
         .font(.system(size: 22, weight: .medium))
-        .frame(width: 44, height: 48)
+        .frame(width: 44, height: 44)
         .contentShape(Rectangle())
+        .background(chrome.opacity(0.65), in: Circle())
     }
     .accessibilityLabel("更多")
     .accessibilityIdentifier("browser-more")
@@ -129,7 +131,7 @@ public struct BrowserScreen: View {
 
   private func webContent(_ page: BrowserPage) -> some View {
     ZStack {
-      BrowserWebView(page: page)
+      BrowserWebView(page: page, bottomContentInset: 76)
       if let failure = page.failure {
         VStack(spacing: 16) {
           Image(systemName: "globe")
@@ -184,37 +186,41 @@ public struct BrowserScreen: View {
   }
 
   private func navigationControls(_ page: BrowserPage) -> some View {
-    HStack(spacing: 0) {
-      Button { page.back() } label: {
-        toolbarIcon("chevron.left")
+    HStack(spacing: 12) {
+      HStack(spacing: 0) {
+        Button { page.back() } label: { toolbarIcon("chevron.left") }
+          .disabled(!page.webView.canGoBack)
+          .accessibilityLabel("网页后退")
+          .accessibilityIdentifier("browser-back")
+        if page.webView.canGoForward {
+          Button { page.forward() } label: { toolbarIcon("chevron.right") }
+            .accessibilityLabel("网页前进")
+            .accessibilityIdentifier("browser-forward")
+        }
       }
-      .disabled(!page.webView.canGoBack)
-      .accessibilityLabel("网页后退")
-      .accessibilityIdentifier("browser-back")
-      Button { page.forward() } label: {
-        toolbarIcon("chevron.right")
+      .modifier(BrowserChromeSurface(reduceTransparency: reduceTransparency || contrast == .increased))
+      Spacer(minLength: 0)
+      HStack(spacing: 0) {
+        Button { browser.shareCurrentPage() } label: { toolbarIcon("square.and.arrow.up") }
+          .accessibilityLabel("分享网页")
+          .accessibilityIdentifier("browser-share")
+        Button { page.reload() } label: { toolbarIcon("arrow.clockwise") }
+          .accessibilityLabel("刷新网页")
+          .accessibilityIdentifier("browser-reload")
+        Button { perform(page, action: .externalOpen) } label: { toolbarIcon("safari") }
+          .accessibilityLabel("在默认浏览器打开")
+          .accessibilityIdentifier("browser-external-open")
       }
-      .disabled(!page.webView.canGoForward)
-      .accessibilityLabel("网页前进")
-      .accessibilityIdentifier("browser-forward")
-      Button { page.reload() } label: {
-        toolbarIcon("arrow.clockwise")
-      }
-      .accessibilityLabel("刷新网页")
-      .accessibilityIdentifier("browser-reload")
+      .modifier(BrowserChromeSurface(reduceTransparency: reduceTransparency || contrast == .increased))
     }
     .font(.system(size: 21, weight: .regular))
     .buttonStyle(.plain)
     .foregroundStyle(.primary)
-    .frame(height: 48)
-    .background(chrome)
-    .overlay(alignment: .top) { Divider() }
   }
 
   private func toolbarIcon(_ name: String) -> some View {
     Image(systemName: name)
-      .frame(maxWidth: .infinity)
-      .frame(height: 48)
+      .frame(width: 52, height: 52)
       .contentShape(Rectangle())
   }
 
@@ -224,6 +230,23 @@ public struct BrowserScreen: View {
         target: page.exportURL.absoluteString, origin: .page,
         action: action, sessionIdentity: page.id), source: page.source,
       presentationAvailable: true)
+  }
+}
+
+private struct BrowserChromeSurface: ViewModifier {
+  let reduceTransparency: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .background {
+        if reduceTransparency {
+          Capsule().fill(Color(uiColor: .secondarySystemBackground))
+        } else {
+          Capsule().fill(.regularMaterial)
+        }
+      }
+      .overlay { Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5).allowsHitTesting(false) }
+      .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
   }
 }
 
@@ -246,7 +269,12 @@ public struct BrowserPromptPresenter: ViewModifier {
       // availability and the session validates the original source and lifetime.
       if active, browser.prompt == nil, let pending { browser.confirm(pending) }
     }) { prompt in
-      if #available(iOS 16.0, *) {
+      if case .share(let url) = prompt.kind, #available(iOS 16.0, *) {
+        shareSheet(url, prompt: prompt)
+          .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+      } else if case .share(let url) = prompt.kind {
+        shareSheet(url, prompt: prompt)
+      } else if #available(iOS 16.0, *) {
         linkSheet(prompt).presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
       } else {
         linkSheet(prompt)
@@ -274,8 +302,14 @@ public struct BrowserPromptPresenter: ViewModifier {
   private var linkPrompt: BrowserSession.Prompt? {
     guard let prompt = browser.prompt else { return nil }
     switch prompt.kind {
-    case .open, .address: return prompt
+    case .open, .address, .share: return prompt
     default: return nil
+    }
+  }
+
+  private func shareSheet(_ url: URL, prompt: BrowserSession.Prompt) -> some View {
+    BrowserShareSheet(url: url) {
+      if browser.prompt?.id == prompt.id { browser.prompt = nil }
     }
   }
 
@@ -351,6 +385,7 @@ public struct BrowserPromptPresenter: ViewModifier {
     case .close: return "关闭网页"
     case .clear: return "清除全部网站数据"
     case .address: return "复制链接"
+    case .share: return "分享网页"
     case .application(let link): return "打开\(link.name)"
     case .message: return "好"
     }
