@@ -90,9 +90,12 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
 | 镜像待解析数据 / 操作 | 512 KiB / 8,192；未闭合控制串也有 512 KiB 上限                     |
 | 镜像尺寸              | 2～500 列、1～200 行，与对应 PTY resize 一起校验                   |
 | 快照                  | 同流 singleflight、全局最多两个工作、2 秒、512 KiB；失败关闭本连接 |
-| WS 待发送队列         | 现有 bufferedAmount 加本次 JSON 的 UTF-8 字节不能超过 512 KiB      |
+| WS 待发送队列         | 现有 bufferedAmount 加本次 JSON 的 UTF-8 字节不能超过 4 MiB        |
 | 断线客户端 lease      | 每 runtime 最多 8 个、全局 64 个，定时过期                         |
 | idle attach           | 最多 60 秒、全局 8 个，淘汰不删除 tmux pane                        |
+
+快照的 512 KiB 上限按原始 UTF-8 内容计算；ANSI 控制字符经过 JSON 转义后会增大消息，因此 WS
+发送上限单独设为 4 MiB。续传缓存与快照原始内容的上限仍为 512 KiB。
 
 慢客户端使用 1013 关闭，立即退订并在 1 秒内强制结束未完成的 close handshake；Web/iOS 对此停止
 自动重试，网络稳定后由用户手动重连。镜像自身超限时释放该 attach，连接明确停止，tmux 任务仍保留。

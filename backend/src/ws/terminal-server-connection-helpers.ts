@@ -20,6 +20,8 @@ import {
 
 export const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
 export const TMUX_METADATA_SYNC_DELAY_MS = 100;
+// JSON escaping can expand a bounded 512 KiB ANSI snapshot beyond its raw size.
+const TERMINAL_WS_MAX_PENDING_BYTES = 4 * 1024 * 1024;
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
 export function delay(ms: number): Promise<void> {
@@ -80,7 +82,10 @@ export function sendEvent(
   }
 
   const payload = JSON.stringify(event);
-  if (socket.bufferedAmount + Buffer.byteLength(payload, "utf8") > 512 * 1024) {
+  if (
+    socket.bufferedAmount + Buffer.byteLength(payload, "utf8") >
+    TERMINAL_WS_MAX_PENDING_BYTES
+  ) {
     closeSlowTerminalSocket(socket);
     return false;
   }
