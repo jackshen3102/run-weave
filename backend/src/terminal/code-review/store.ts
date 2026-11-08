@@ -82,6 +82,9 @@ export class CodeReviewStore {
       if (typeof ledger.backendIdentity === "string") this.backendIdentity = ledger.backendIdentity;
       for (const record of ledger.records as ReviewRecord[]) {
         if (!/^[a-f0-9-]{36}$/.test(record.run.reviewId) || this.records.has(record.run.reviewId)) throw new Error("Invalid code review ID");
+        record.run.caseId ??= record.run.reviewId;
+        record.run.round ??= 1;
+        record.run.caseStatus ??= record.run.phase === "completed" && record.run.findingCount === 0 ? "passed" : "open";
         record.recovered = true;
         if (record.run.delivery === "writing") { record.run.delivery = "unknown"; record.run.deliveryError = "Backend 重启前回传结果不确定，不自动重复注入"; }
         this.records.set(record.run.reviewId, record);

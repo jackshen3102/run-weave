@@ -25,6 +25,9 @@ export function registerTerminalCodeReviewRoutes(router: Router, service?: CodeR
   router.get("/code-reviews/:reviewId", async (req, res) => {
     try { res.json(await ready().detail(req.params.reviewId)); } catch (caught) { error(res, caught); }
   });
+  router.post("/code-reviews/:reviewId/close", async (req, res) => {
+    try { res.json(await ready().close(req.params.reviewId)); } catch (caught) { error(res, caught); }
+  });
   router.get("/code-reviews/:reviewId/artifacts/:artifactId", async (req, res) => {
     try {
       const artifact = await ready().artifact(req.params.reviewId, req.params.artifactId);

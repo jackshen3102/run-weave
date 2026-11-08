@@ -6,7 +6,7 @@ struct TerminalCodeReviewStrip: View {
   @ObservedObject var model: TerminalCodeReviewModel
   @ObservedObject var session: AppSession
   var body: some View {
-    VStack(spacing: 0) { if model.latest != nil || model.writing || model.actionFailure != nil {
+    VStack(spacing: 0) { if model.statusVisible {
       VStack(alignment: .leading, spacing: 4) {
         HStack {
           Text(model.writing ? "准备审查" : model.actionFailure ?? model.latest?.status ?? "")
@@ -14,6 +14,10 @@ struct TerminalCodeReviewStrip: View {
           Spacer(minLength: 0)
           if model.latest != nil { Button("查看报告") { model.showingReport = true }.font(.caption) }
           if let id = model.latest?.reviewerTerminalId { Button("评审终端") { Task { await session.openTerminal(id) } }.font(.caption) }
+          if model.canDismissStatus {
+            Button(action: model.dismissStatus) { Image(systemName: "xmark").padding(6) }
+              .accessibilityLabel("结束审查事项").accessibilityIdentifier("code-review-status-dismiss")
+          }
         }
         if let error = model.latest?.deliveryError { Text(error).font(.caption2).foregroundStyle(.secondary) }
         if model.failure != nil && model.latest != nil { Text("显示上次状态，刷新失败").font(.caption2) }
@@ -73,6 +77,7 @@ struct TerminalCodeReviewView: View {
           Section {
             Text(detail.run.status)
             Text(detail.run.createdAt).font(.caption).foregroundStyle(.secondary)
+            if let round = detail.run.round { Text("第 \(round) 轮审查").font(.caption).foregroundStyle(.secondary) }
             if detail.run.stale { Text("审查期间代码已变化，结论仅对应原快照。").foregroundColor(.orange) }
             if let fingerprint = detail.snapshot?.fingerprint { Text(fingerprint).font(.caption.monospaced()).textSelection(.enabled) }
           }

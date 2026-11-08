@@ -108,13 +108,20 @@ Dots 可通过现有 MCP run_command 调用这些命令并有界等待。command
 
 桌面 / Web 与原生 iOS 的终端「更多 → 代码 Review」直接请求 Backend 创建独立的可见
 Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执行能力，但**不调用
-`task review` 登记验收**；完成仅表示独立报告已保存，不表示需求符合、无缺陷或可发布。
+`task review` 登记验收**；单轮执行结束表示独立报告已保存，事项是否结束另由审查结果或用户决定，不表示需求符合或可发布。
 
 [共享合同](../../packages/shared/src/terminal/code-review.ts)与
 [Backend owner](../../backend/src/terminal/code-review/service.ts)定义当前协议。
-`POST /api/terminal/session/:id/code-reviews` 按 requestId 去重，同来源的活跃运行复用；
+`POST /api/terminal/session/:id/code-reviews` 按 requestId 去重，同来源正在执行的一轮不会重复派发；
 GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
+每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 时 caseStatus 为 passed，
+事项自动结束、状态条隐藏；有 Bug 时事项保持 open，结果回传来源终端供处理。
+此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
+仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
+`POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；
+不修改问题结论，不代表 Bug 已修复。结束后再次发起 Review 必须新建事项和 Reviewer。
+正在执行或等待回传的一轮不能开始复审或关闭事项；跨端共享 Backend 状态，报告仍可从菜单读取。
 产物通过该路径下 `artifacts/:artifactId` 鉴权读取，客户端不提交文件系统绝对路径。
 旧 Backend 的 404/501 显示能力不支持，不回退为向来源 Agent 发指令。
 
@@ -127,6 +134,8 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 本轮编号、代码路径、冻结快照、通用规则和自有输出目录，不读取来源历史、目标或交接。
 新 Reviewer 使用现有 Codex provider 和用户模型配置；缺少原生 thread/final 或工具环境时
 明确阻塞或记录未执行，不切换模型制造通过。本功能没有新增文件系统安全沙箱。
+Reviewer 专用启动参数显式固定 `--sandbox danger-full-access --ask-for-approval never`，
+不依赖本机 Codex 权限默认值；通用启动器同时传入 `-c check_for_update_on_startup=false`。
 
 数据保存在 Backend 数据目录的 `terminal-code-reviews/`。冻结输入和保存报告分目录，
 原生完成轮次、完整 final 与执行侧 idle 必须同时成立，才校验并保存报告；证据复制到
@@ -143,6 +152,7 @@ Backend 管理的白名单目录。文件存在及 JSON 合法不证明语义正
 启动等待上限 120 秒，审查观察上限 30 分钟，超时不强杀 Reviewer。
 
 验收入口为 [独立 Review 计划](../testing/terminal/independent-code-review.testplan.yaml)。
+事项闭环见 [Review 生命周期](../testing/terminal/independent-code-review-lifecycle.testplan.yaml)。
 构建、API、浏览器与 iOS 交互、真实 Reviewer、自动回传、重启与草稿保护需分别取证；
 格式校验通过不代表该计划的 20 个用例已经执行。
 

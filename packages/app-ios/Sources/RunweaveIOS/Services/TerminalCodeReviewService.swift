@@ -13,6 +13,9 @@ struct TerminalCodeReviewService {
   func detail(_ reviewID: String) async throws -> TerminalCodeReviewDetail {
     try await api.authorized("/api/terminal/code-reviews/\(APIClient.pathComponent(reviewID))")
   }
+  func close(_ reviewID: String) async throws -> TerminalCodeReviewRun {
+    try await api.authorized("/api/terminal/code-reviews/\(APIClient.pathComponent(reviewID))/close", method: "POST", retryUnauthorized: false)
+  }
   func artifact(reviewID: String, artifact: TerminalCodeReviewReport.Artifact) async throws -> URL {
     struct Saved: Decodable { let url: URL }
     let value: Saved = try await api.authorized("/api/terminal/code-reviews/\(APIClient.pathComponent(reviewID))/artifacts/\(APIClient.pathComponent(artifact.artifactId))", download: { source in

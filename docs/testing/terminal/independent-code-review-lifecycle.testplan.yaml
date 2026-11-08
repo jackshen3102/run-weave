@@ -1,0 +1,59 @@
+version: 1
+name: 独立 Review 事项生命周期
+description: 验证无 Bug 自动结束、有 Bug 待复审、用户结束与新事项的执行器隔离；每例使用自有项目和终端，保留各轮快照与报告。
+cases:
+  - id: ICL-001
+    name: 无 Bug 的报告自动结束事项
+    required: true
+    description: 本轮报告有效且 findings 为空时事项标为 passed，状态条消失，历史报告仍可读取。
+    preconditions:
+      - 自有 Backend 和客户端来自当前源码，隔离项目有可审文本改动，Reviewer 可返回有效的无 Bug 报告。
+    steps:
+      - 使用 toolkit:playwright-cli 在来源终端发起 Review，记录 caseId 和 Reviewer 终端；等待有效报告保存，确认 caseStatus 为 passed，状态条消失。
+      - 从更多菜单打开审查报告，确认仍能读取该轮报告、覆盖缺口与回传状态；清理本例资源。
+  - id: ICL-002
+    name: 有 Bug 的复审沿用事项 Reviewer
+    required: true
+    description: 新一轮沿用同一 Reviewer 和会话，但重新冻结全部当前变更，并生成独立轮次和报告。
+    preconditions:
+      - 自有项目的第一轮有效报告含 Bug，已记录快照与报告内容，回传已经结束且 Reviewer 保持原会话与自动控制权。
+    steps:
+      - 修改本例受审代码，用 toolkit:playwright-cli 从来源菜单点击重新 Review；确认 caseId、Reviewer 终端和 thread 未变，reviewId、快照和派发标识均为新值，round 增加一。
+      - 让第二轮返回有效报告，确认旧快照和旧报告内容未变；若仍有 Bug，状态为 open 并显示待修复／复审；清理资源。
+  - id: ICL-003
+    name: 用户结束事项不修改问题结论
+    required: true
+    description: 用户点状态条的 × 后，Backend 持久保存 closed，两端状态条隐藏，问题仍保留在历史报告。
+    preconditions:
+      - 自有事项已保存含 Bug 的报告且回传结束，桌面和本例租约模拟器已构建安装并连接同一 Backend。
+    steps:
+      - 使用 toolkit:agent-device 在来源终端点结束审查事项，确认请求成功后状态条隐藏；用 toolkit:playwright-cli 读取同一来源，确认状态同步隐藏。
+      - 读取历史报告，确认 caseStatus 为 closed，findings 内容未变；清理模拟器租约与本例资源。
+  - id: ICL-004
+    name: 已结束事项之后新建独立 Reviewer
+    required: true
+    description: 无 Bug 通过或用户结束后再发起 Review 都创建新事项、新任务和新 Reviewer，不恢复旧会话。
+    preconditions:
+      - 自有来源有已结束事项和一份可审文本改动，旧 caseId、任务、Reviewer 终端与 thread 已记录。
+    steps:
+      - 使用 toolkit:playwright-cli 从原来源终端再次发起 Review，确认 caseId 为新值且 round 为一，创建新的任务、终端和 thread，未向旧 Reviewer 发送输入。
+      - 读取旧报告确认内容保留；分别验证 passed 与用户 closed 的等价结束状态后清理资源。
+  - id: ICL-005
+    name: 活跃轮次与过期关闭请求不破坏复审
+    required: true
+    description: 同一次请求重试只执行一次，旧轮次关闭请求不能结束正在执行的新轮次。
+    preconditions:
+      - 自有事项有含 Bug 的旧轮次，能够延迟第二轮完成并记录创建与派发次数。
+    steps:
+      - 发起第二轮并重发相同 requestId，确认返回同一 reviewId，只有一次新轮次派发；执行期间再次点击不产生并行 Reviewer。
+      - 对旧轮次请求关闭，确认返回 review_changed；对当前执行中或等待回传的一轮请求关闭，确认被拒绝且事项仍为 open；清理资源。
+  - id: ICL-006
+    name: 重启保留事项结论和历史轮次
+    required: true
+    description: Backend 重启后 passed、closed 和待复审 open 以及各轮报告不丢失，不自动重新派发或恢复控制权。
+    preconditions:
+      - 自有 Backend 分别存在 passed、closed 和含 Bug 待复审事项，已记录状态、Reviewer 输入计数和各轮报告。
+    steps:
+      - 停止并重启本例 Backend，重新解析端点并读取事项，确认状态和各轮报告与重启前一致，没有自动新建 Reviewer 或重复输入。
+      - 使用 toolkit:playwright-cli 重新打开来源终端，确认已结束事项隐藏、open 事项仍显示待复审。
+      - 明确发起 open 事项的复审，确认保留 caseId，但为已失去自动控制权的原 Reviewer 创建新终端，没有夺回旧终端控制权；清理本例资源。

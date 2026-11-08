@@ -1,4 +1,4 @@
-import { useStartCodeReview, useCodeReviewActionState } from "../../../features/terminal/queries/code-review";
+import { useStartCodeReview, useCodeReviewActionState, useCodeReviews } from "../../../features/terminal/queries/code-review";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
@@ -171,6 +171,9 @@ export function TerminalWorkspaceHeader({
     : null;
   const startCodeReview = useStartCodeReview(activeSession);
   const codeReviewAction = useCodeReviewActionState(activeSessionId);
+  const codeReviews = useCodeReviews(activeSessionId);
+  const latestReview = codeReviews.data?.runs[0];
+  const reviewBusy = !!latestReview && (["preparing", "starting", "reviewing"].includes(latestReview.phase) || ["pending", "writing"].includes(latestReview.delivery));
   const previousProject = projectNavigationHistory[projectNavigationIndex - 1];
   const nextProject = projectNavigationHistory[projectNavigationIndex + 1];
   const projectHistoryLabel = (entry: ProjectNavigationEntry): string => {
@@ -355,7 +358,10 @@ export function TerminalWorkspaceHeader({
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40">
               <DropdownMenuGroup>
-                <DropdownMenuItem disabled={loading || !activeSession || codeReviewAction?.pending} onSelect={() => void startCodeReview()}>代码 Review</DropdownMenuItem>
+                <DropdownMenuItem disabled={loading || !activeSession || codeReviewAction?.pending || reviewBusy} onSelect={() => void startCodeReview()}>
+                  {latestReview?.caseStatus === "open" && latestReview.reportId ? "重新 Review" : "代码 Review"}
+                </DropdownMenuItem>
+                {latestReview ? <DropdownMenuItem onSelect={() => useTerminalPreviewStore.getState().openCodeReview({ scope, reviewId: latestReview.reviewId })}>审查报告</DropdownMenuItem> : null}
               </DropdownMenuGroup>
               {tunnelBindingItems}
               {window.electronAPI?.isElectron && <DropdownMenuItem onSelect={() => useTunnelStore.getState().setOpen(true)}>端口与隧道</DropdownMenuItem>}

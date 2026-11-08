@@ -2,6 +2,7 @@ import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPrev
 
 export type CodeReviewPhase = "preparing" | "starting" | "reviewing" | "completed" | "blocked" | "failed" | "cancelled";
 export type CodeReviewDeliveryState = "not_ready" | "pending" | "writing" | "written" | "target_changed" | "unavailable" | "unknown";
+export type CodeReviewCaseStatus = "open" | "passed" | "closed";
 export interface CodeReviewExpectedTarget {
   projectId: string;
   threadId: string | null;
@@ -75,6 +76,10 @@ export interface CodeReviewReport {
 }
 export interface CodeReviewRun {
   reviewId: string;
+  /** One case can contain multiple immutable snapshot/report rounds. */
+  caseId: string;
+  caseStatus: CodeReviewCaseStatus;
+  round: number;
   requestId: string;
   projectId: string;
   phase: CodeReviewPhase;

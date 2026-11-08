@@ -90,7 +90,7 @@ cases:
   - id: ICR-009
     name: 同一次请求和重复点击不重复创建
     required: true
-    description: 网络重试和活跃运行中的重复点击都复用同一 Review，不产生重复执行器。
+    description: 网络重试和本轮仍在执行时的重复点击返回同一轮；有 Bug 的已结束轮次再次发起时创建新轮次，沿用本事项的 Reviewer。
     preconditions:
       - 本例来源有可审变更，能够延迟首个 HTTP 响应并观察持久记录与终端创建计数。
     steps:
