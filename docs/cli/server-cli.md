@@ -48,7 +48,7 @@ rw.cmd server start
 默认终端是 PowerShell；Agent CLI 可单独安装并在终端手工启动。涉及 Git 仓库时另装 Git for Windows。
 
 支持输入输出、调整尺寸、Ctrl+C 中断、关闭终端及 Backend 重启后的重连；不支持 tmux 分屏、Fork/Recover Agent、定时任务或系统服务托管。
-Windows standalone 使用独立 PTY Host。`server stop` 或 Backend 重启只断开连接，显式删除终端才关闭 PTY；系统注销、重启和 Host 崩溃仍会丢失进程。
+Server 0.1.7 / CLI 0.10.8 测试候选中的 Windows standalone 使用独立 PTY Host。`server stop` 或 Backend 重启只断开连接，显式删除终端才关闭 PTY；系统注销、重启和 Host 崩溃仍会丢失进程。
 `server service` 仍拒绝。`rw server update --channel next` 把升级交给现有前台管理进程，接管后发起终端退出不取消升级。
 接管请求和最终状态保存在 `<configRoot>/server/updates/<request-id>.json`，阶段保存在 `server/update.json`；可用 `--request-id <UUID>` 查询同一次提交，不能把超时当成未执行。
 首次从直接 PTY 版本迁移，在系统 PowerShell 执行以下步骤，旧终端会中断一次；之后的兼容 Server 更新保留原 PTY：
