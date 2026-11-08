@@ -92,12 +92,18 @@ try {
   assert.equal(delivered.size, 0, 'offline gateway did not retain event');
   await second.request('setUpstreams', { backendUrl: url, backendToken: 'fixture', appServerUrl: url, appServerToken: 'fixture' });
   await wait(() => delivered.has(event.dedupeKey), 'outbox drained');
+  // Prune the detailed operation window. Expired structured IDs must remain non-replayable.
+  for (let sequence = 2; sequence <= 10002; sequence++) await second.request('writeInput', {
+    ...nextTarget, input: { operationId: `raw:${sessionInstanceId}:${sequence}`, sequence, steps: [] },
+  });
+  await assert.rejects(second.request('getInputOperation', { ...nextTarget, operationId }), /HOST_INPUT_EXPIRED/);
+  await assert.rejects(second.request('writeInput', { ...nextTarget, input: { operationId, sequence: 10003, steps: [] } }), /HOST_INPUT_EXPIRED/);
   await second.request('closeSession', nextTarget);
   await wait(async () => true, 'close');
   await sleep(400);
   assert.equal((await second.request('listSessions'))[0].status, 'exited');
   console.log(JSON.stringify({ platform: process.platform, hostPid: host.pid, shellPid: info.pid, counterPid, hostIdentityPreserved: true,
-    inputSurvivedDisconnect: true, writerFencing: true, outputStreamPreserved: true, eventOutboxDrained: true, explicitClose: true }));
+    inputSurvivedDisconnect: true, writerFencing: true, outputStreamPreserved: true, eventOutboxDrained: true, expiredInputCannotReplay: true, explicitClose: true }));
 } finally {
   client?.close(); second?.close();
   try { observer ??= await PtyHostClient.connect(scope); await observer.request('stop', { terminateSessions: true }); } catch { /* Fixture only. */ }

@@ -14,6 +14,8 @@ export class InputOperations {
   private readonly sequences = new Map<number, string>();
   private retiredThrough = 0;
   private highest = 0;
+  private structuredCount = 0;
+  private readonly expiredIds = new Set<string>();
   private pending = 0;
   private pendingBytes = 0;
   private tail: Promise<unknown> = Promise.resolve();
@@ -24,6 +26,7 @@ export class InputOperations {
 
   get(operationId: string): PtyHostInputResult | null {
     this.prune();
+    if (this.expiredIds.has(this.key(operationId)) || this.rawSequence(operationId) <= this.retiredThrough) throw new Error("HOST_INPUT_EXPIRED");
     return this.operations.get(operationId)?.result ?? null;
   }
 
@@ -38,6 +41,8 @@ export class InputOperations {
       else throw new Error("HOST_INPUT_INVALID");
     }
     if (bytes > 1024 * 1024 || delay > 5000) throw new Error("HOST_INPUT_INVALID");
+    const rawSequence = this.rawSequence(input.operationId);
+    if (rawSequence !== Infinity && rawSequence !== input.sequence) throw new Error("HOST_INPUT_INVALID");
     const digest = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     this.prune();
     const previous = this.operations.get(input.operationId);
@@ -45,10 +50,12 @@ export class InputOperations {
       if (previous.digest !== digest) throw new Error("HOST_INPUT_CONFLICT");
       return previous;
     }
-    if (input.sequence <= this.retiredThrough) throw new Error("HOST_INPUT_EXPIRED");
+    if (this.expiredIds.has(this.key(input.operationId)) || input.sequence <= this.retiredThrough) throw new Error("HOST_INPUT_EXPIRED");
     if (input.sequence <= this.highest || this.sequences.has(input.sequence)) throw new Error("HOST_INPUT_CONFLICT");
     if (input.sequence !== this.highest + 1) throw new Error("HOST_INPUT_SEQUENCE_GAP");
+    if (rawSequence === Infinity && this.structuredCount >= 65536) throw new Error("HOST_INPUT_HISTORY_FULL");
     if (this.pending >= 128 || this.pendingBytes + bytes > 4 * 1024 * 1024) throw new Error("HOST_BUSY");
+    if (rawSequence === Infinity) this.structuredCount++;
     this.highest = input.sequence;
     this.pending++;
     this.pendingBytes += bytes;
@@ -77,12 +84,18 @@ export class InputOperations {
     return operation;
   }
 
+  private key(id: string): string { return createHash("sha256").update(id).digest("hex").slice(0, 32); }
+  private rawSequence(id: string): number {
+    const value = /^raw:[a-f0-9-]{36}:(\d+)$/.exec(id)?.[1];
+    return value ? Number(value) : Infinity;
+  }
   private prune(): void {
     for (const [sequence, id] of this.sequences) {
       const entry = this.operations.get(id)!;
       if (entry.result.state === "accepted") break;
       if (this.operations.size <= 10000 && Date.now() - entry.acceptedAt < 86_400_000) break;
       this.retiredThrough = sequence;
+      if (this.rawSequence(id) === Infinity) this.expiredIds.add(this.key(id));
       this.operations.delete(id);
       this.sequences.delete(sequence);
     }

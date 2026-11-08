@@ -191,7 +191,7 @@ sudo /usr/local/bin/rw server status --json
 ## Windows PTY Host 与测试升级
 
 Windows npm standalone 的 PTY 由独立 Host 持有。兼容的 `rw server update --channel next` 由外层 `rw server start` 管理进程执行，Backend/App Server 可替换，Host 与终端继续运行。
-首次从直接 PTY 版本迁移需要在系统 PowerShell 停止服务、安装 next CLI/Server 并重新启动；该次旧终端不能迁移。
+首次从直接 PTY 版本迁移需要在系统 PowerShell 停止服务、安装 next CLI/Server、在停止态运行 `rw server update --channel next` 激活新版，再重新启动；该次旧终端不能迁移。
 普通 Server 更新不更新全局 CLI，也不覆盖活跃 Host 的 DLL。协议不兼容时在停止服务前拒绝，先结束终端后安排维护。
 `rw server host status` 可核对运行 Host 与已安装发行目录，`host update` 有存活终端时拒绝。
 升级请求回执位于 `server/updates/<request-id>.json`，阶段回执位于 `server/update.json`；管理进程异常退出留下的请求标记为 interrupted，恢复前核对实际指针与配置，不盲目重复提交。

@@ -68,14 +68,15 @@ export async function createHostedPty(options: {
   for (const event of early) receive(event);
   let tail: Promise<unknown> = Promise.resolve();
   let pendingInputs = 0, pendingBytes = 0;
-  const writeSteps = (steps: PtyHostInputStep[], operationId = randomUUID()): Promise<void> => {
+  const writeSteps = (steps: PtyHostInputStep[], operationId = randomUUID(), raw = false): Promise<void> => {
     const bytes = steps.reduce((total, step) => total + (step.type === "text" ? Buffer.byteLength(step.data) : 0), 0);
     if (pendingInputs >= 128 || pendingBytes + bytes > 4 * 1024 * 1024) return Promise.reject(new Error("HOST_BUSY"));
     pendingInputs++; pendingBytes += bytes;
     const job = tail.then(async () => {
-      const previous = await client.request<PtyHostInputResult | null>("getInputOperation", { ...target, operationId });
+      const previous = raw ? null : await client.request<PtyHostInputResult | null>("getInputOperation", { ...target, operationId });
       const current = previous ? undefined : (await client.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === options.terminalSessionId);
-      const input = { operationId, sequence: previous?.sequence ?? current?.nextSequence ?? 0, steps };
+      const sequence = previous?.sequence ?? current?.nextSequence ?? 0;
+      const input = { operationId: raw ? `raw:${target.sessionInstanceId}:${sequence}` : operationId, sequence, steps };
       // Reserve once; an uncertain request is queried by ID, never blindly resent with a new ID.
       const result = await client.request<PtyHostInputResult>("writeInput", { ...target, input });
       if (result.state !== "written") throw new Error(result.error ?? "HOST_INPUT_UNCERTAIN");
@@ -88,7 +89,7 @@ export async function createHostedPty(options: {
     pid: attached.session.pid,
     onData(listener) { dataListeners.add(listener); },
     onExit(listener) { exitListeners.add(listener); if (exited !== undefined) listener({ exitCode: exited }); },
-    write(data) { void writeSteps([{ type: "text", data }]).catch(notifyFailure); },
+    write(data) { void writeSteps([{ type: "text", data }], undefined, true).catch(notifyFailure); },
     resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(notifyFailure); },
     signal(signal) { void client.request("signal", { ...target, signal }).catch(notifyFailure); },
     dispose() { client.events.delete(receive); client.disconnected.delete(disconnected); },

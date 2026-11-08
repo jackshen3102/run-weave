@@ -292,7 +292,7 @@ export async function runServerCommand(
       ),
       terminalReady: !runtimeError && (process.platform === "win32" || tools.tmux?.installed),
       terminalRuntime: process.platform === "win32" ? "pty" : "tmux",
-      terminalRecovery: process.platform === "win32" ? "independent-pty-host" : "tmux",
+      terminalRecovery: process.platform === "win32" ? ctx.manifest.ptyHost ? "independent-pty-host" : "while-backend-running" : "tmux",
       tools,
       agents: {
         codex: { authenticated: codexAuthenticated },
@@ -412,6 +412,7 @@ export async function runServerCommand(
   const channel = getStringOption(parsed.options, "channel") ?? "latest";
   if (channel !== "latest" && channel !== "next") throw new Error("--channel must be latest or next");
   if (command === "update" && process.platform === "win32" && identity(ctx, "foreground") && !parsed.options["dry-run"]) {
+    if (!ctx.manifest.ptyHost) throw new Error("HOST_MIGRATION_REQUIRED: stop the old Server from system PowerShell, update while stopped, then start; existing direct PTYs will end once");
     output(await submitForegroundUpdate(ctx, { version: getStringOption(parsed.options, "version"),
       sourcePackage: getStringOption(parsed.options, "server-package"), force: parsed.options.force === true, channel }, getStringOption(parsed.options, "request-id")));
     return;

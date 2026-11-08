@@ -248,6 +248,7 @@ export async function sendInputToSession(
   submitKey: TerminalPromptSubmitKey = "Enter",
   expectedThreadId?: string,
 ): Promise<SendTerminalInputResponse> {
+  operationId ??= buildTerminalInputOperationId();
   if (!options?.runtimeRegistry || !options.ptyService) {
     throw new Error("Terminal runtime service unavailable");
   }
@@ -462,7 +463,7 @@ export async function sendInputToSession(
             ensured.runtime.write("\r");
           }
         } else {
-          ensured.runtime.write(
+          const value = (
             codexSlashCommand
               ? buildCodexSlashCommandPtyInput(
                   codexSlashCommand,
@@ -470,8 +471,10 @@ export async function sendInputToSession(
                 )
               : mode === "prompt_paste"
                 ? buildPromptPastePtyInput(data, composerSubmitKey, attachClipboardImages)
-                : (dispatchData ?? ""),
+                : (dispatchData ?? "")
           );
+          if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([{ type: "text", data: value }], operationId);
+          else ensured.runtime.write(value);
         }
       }
     }

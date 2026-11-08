@@ -197,9 +197,15 @@ export async function runChecked(
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const windowsNpm = process.platform === "win32" && command === "npm";
-    if (windowsNpm && args.some(arg => /["%\r\n&|<>^]/.test(arg))) return reject(new Error("Unsupported npm argument"));
-    const child = spawn(windowsNpm ? "cmd.exe" : command, windowsNpm ? ["/d", "/s", "/c", `npm.cmd ${args.map(arg => `"${arg}"`).join(" ")}`] : args, {
+    // .cmd is a shell program; invoke npm's JS entry directly so Unicode and quoted
+    // prefixes remain argv, rather than passing through cmd.exe parsing.
+    if (process.platform === "win32" && command === "npm") {
+      const entry = path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js");
+      if (!existsSync(entry)) return reject(new Error("NPM_CLI_NOT_FOUND: install Node 22 with its bundled npm"));
+      command = process.execPath;
+      args = [entry, ...args];
+    }
+    const child = spawn(command, args, {
       ...options,
       stdio: ["ignore", "ignore", "pipe"],
     });

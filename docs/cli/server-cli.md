@@ -47,12 +47,19 @@ rw.cmd server start
 保存初始化显示的密码，保持启动窗口打开，在浏览器访问 `http://127.0.0.1:5001` 登录并创建终端。
 默认终端是 PowerShell；Agent CLI 可单独安装并在终端手工启动。涉及 Git 仓库时另装 Git for Windows。
 
-支持输入输出、调整尺寸、Ctrl+C 中断、关闭终端，以及 Backend 仍运行时的网页断线重连。
-关闭启动窗口、停止或重启服务会结束终端进程；不支持跨 Backend 重启恢复、tmux 分屏、Fork/Recover Agent、定时任务或系统服务托管。
+支持输入输出、调整尺寸、Ctrl+C 中断、关闭终端及 Backend 重启后的重连；不支持 tmux 分屏、Fork/Recover Agent、定时任务或系统服务托管。
 Windows standalone 使用独立 PTY Host。`server stop` 或 Backend 重启只断开连接，显式删除终端才关闭 PTY；系统注销、重启和 Host 崩溃仍会丢失进程。
 `server service` 仍拒绝。`rw server update --channel next` 把升级交给现有前台管理进程，接管后发起终端退出不取消升级。
 接管请求和最终状态保存在 `<configRoot>/server/updates/<request-id>.json`，阶段保存在 `server/update.json`；可用 `--request-id <UUID>` 查询同一次提交，不能把超时当成未执行。
-从旧版直接 PTY 首次迁移需要在系统 PowerShell 中停止旧服务、安装测试包并重启，已有终端会中断一次。之后的兼容 Server 更新保留原 PTY。
+首次从直接 PTY 版本迁移，在系统 PowerShell 执行以下步骤，旧终端会中断一次；之后的兼容 Server 更新保留原 PTY：
+
+```powershell
+rw.cmd server stop
+npm.cmd install -g @runweave/cli@next @runweave/server@next
+rw.cmd server update --channel next
+rw.cmd server start
+```
+
 `rw server host status` 显示运行和已安装的 Host 发行目录；`host stop` / `host update` 仅在所有终端已退出时允许。普通更新不替换活跃 Host 或全局 CLI。
 配置默认位于当前用户的 `.runweave`，使用 Windows ACL 校验：只允许当前用户、SYSTEM 和 Administrators 访问。
 共享目录或宽松 ACL 的 `--config-dir` / `--auth-file` 会被拒绝，不通过放宽权限绕过。
