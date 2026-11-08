@@ -52,7 +52,12 @@ function materialize(installed, home) {
     fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
     const stage = fs.mkdtempSync(path.join(releases, ".stage-"));
     try {
-      fs.cpSync(path.join(native, "payload"), stage, { recursive: true });
+      fs.cpSync(path.join(native, "payload"), stage, {
+        recursive: true,
+        // Node 22's native recursive copy can abort on Windows Unicode paths.
+        // A filter selects Node's JS traversal while retaining copy semantics.
+        ...(process.platform === "win32" ? { filter: () => true } : {}),
+      });
       const archive = path.join(native, "native.tar.gz");
       const entries = execFileSync("tar", ["-tzf", archive], {
         encoding: "utf8",

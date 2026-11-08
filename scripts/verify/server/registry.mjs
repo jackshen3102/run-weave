@@ -28,13 +28,7 @@ mkdirSync(home, { mode: 0o700 });
 const preloader = path.join(fixture, "home.cjs");
 writeFileSync(
   preloader,
-  `const os=require('node:os');const actual=os.userInfo();os.userInfo=()=>({...actual,homedir:${JSON.stringify(home)}});os.homedir=()=>${JSON.stringify(home)};
-if(process.env.RW_VERIFY_TRACE==='1'){
- const fs=require('node:fs');const write=fs.writeSync;
- for(const name of ['openSync','closeSync','fstatSync','fsyncSync','readFileSync','writeFileSync','mkdirSync','realpathSync','cpSync','renameSync','symlinkSync']){
-  const original=fs[name];fs[name]=function(...args){write(2,'TRACE '+name+' '+String(args[0])+'\\n');const result=original.apply(this,args);write(2,'DONE '+name+'\\n');return result;};
- }
-}`,
+  `const os=require('node:os');const actual=os.userInfo();os.userInfo=()=>({...actual,homedir:${JSON.stringify(home)}});os.homedir=()=>${JSON.stringify(home)};`,
 );
 const env = {
   ...process.env,
@@ -103,7 +97,7 @@ try {
   if (process.platform === "win32") {
     console.log("Verify Windows native file lock");
     const nativeLock = path.join(prefix, "node_modules/@runweave/cli/node_modules/fs-native-extensions");
-    await run(process.execPath, ["-e", `const fs=require('node:fs'); const lock=require(${JSON.stringify(nativeLock)}); const fd=fs.openSync('probe.lock','a+'); console.log('locking',fd); console.log('locked',lock.tryLock(fd)); fs.closeSync(fd); console.log('closed');`]);
+    await run(process.execPath, ["-e", `const fs=require('node:fs'); const lock=require(${JSON.stringify(nativeLock)}); const fd=fs.openSync('probe.lock','a+'); if (!lock.tryLock(fd)) throw new Error('Native file lock unavailable'); fs.closeSync(fd);`]);
   }
   const auth = {
     username: "registry-verification",
@@ -116,7 +110,6 @@ try {
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
   console.log("Verify Server initialization");
-  if (process.platform === "win32") env.RW_VERIFY_TRACE = "1";
   await rw(
     "init",
     "--auth-file",
@@ -126,7 +119,6 @@ try {
     "--port",
     String(port),
   );
-  delete env.RW_VERIFY_TRACE;
   console.log("Verify native runtime loading");
   assert(
     JSON.parse(await rw("doctor", "--json")).runtimeReady,
