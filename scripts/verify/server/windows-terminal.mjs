@@ -78,6 +78,18 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     const sessions = await api("session", undefined, "GET");
     assert(!sessions.some(item => item.terminalSessionId === id), "Closed terminal remains listed");
     id = null;
+    if (lifecycle) {
+      const before = JSON.parse(await lifecycle.rw("host", "status"));
+      await lifecycle.rw("host", "update");
+      const after = JSON.parse(await lifecycle.rw("host", "status"));
+      assert(after.hostInstanceId !== before.hostInstanceId, "Host maintenance did not replace its identity");
+      id = (await api("session", { projectId: project.projectId })).terminalSessionId;
+      socket = await connect();
+      socket.send({ type: "input", data: "$r=$null; for($i=0;$i -lt 10;$i++){try{$r=Invoke-WebRequest -UseBasicParsing ($env:RUNWEAVE_APP_SERVER_URL+'/readyz') -Headers @{Authorization=('Bearer '+$env:RUNWEAVE_APP_SERVER_TOKEN)};break}catch{Start-Sleep -Seconds 1}}; Write-Output ('GATEWAY_'+[int]$r.StatusCode)\r" });
+      await socket.waitOutput("GATEWAY_200");
+      await api(`session/${id}`, undefined, "DELETE"); id = null;
+      continuity.hostMaintenance = true;
+    }
     return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true, continuity };
   } finally {
     socket?.ws.close();

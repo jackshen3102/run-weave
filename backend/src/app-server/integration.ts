@@ -53,8 +53,12 @@ export async function initializeAppServerEventIntegration(
   const panelReconciler = new StartingPanelStateReconciler(services);
 
   const syncTerminalConnection = async (): Promise<void> => {
-    if (!terminalsNeedConnection || stopped) return;
+    if (stopped) return;
     try {
+      // A maintained Host may have changed while this App Server stayed connected.
+      if (connection) await syncPtyHostUpstreams({ backendUrl: backendBaseUrl, backendToken: process.env.RUNWEAVE_HOOK_TOKEN ?? "",
+        appServerUrl: connection.baseUrl, appServerToken: connection.token });
+      if (!terminalsNeedConnection) return;
       // Startup recovery may still be writing the previous launch environment.
       await services.terminalEnvironmentSync;
       if (stopped) return;
@@ -132,8 +136,6 @@ export async function initializeAppServerEventIntegration(
         RUNWEAVE_APP_SERVER_URL: next.baseUrl,
         RUNWEAVE_APP_SERVER_TOKEN: next.token,
       });
-      await syncPtyHostUpstreams({ backendUrl: backendBaseUrl, backendToken: process.env.RUNWEAVE_HOOK_TOKEN ?? "",
-        appServerUrl: next.baseUrl, appServerToken: next.token });
       terminalsNeedConnection = true;
       await syncTerminalConnection();
     } catch (error) {
