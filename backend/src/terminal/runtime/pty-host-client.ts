@@ -40,9 +40,11 @@ export async function createHostedPty(options: {
   const frameListeners = new Set<(frame: TerminalOutputFrame) => void>();
   const exitListeners = new Set<(event: { exitCode: number }) => void>();
   const disconnectListeners = new Set<() => void>();
+  const resizeListeners = new Set<(cols: number, rows: number) => void>();
   const pending: TerminalOutputFrame[] = [];
   let exited: number | undefined;
   let cursor: TerminalOutputCursor = { streamId: "", offset: 0 };
+  let grid = { cols: 80, rows: 24 };
   const emitFrame = (frame: TerminalOutputFrame) => {
     cursor = { streamId: frame.range.streamId, offset: frame.range.toOffset };
     if (!frameListeners.size) pending.push(frame);
@@ -55,6 +57,7 @@ export async function createHostedPty(options: {
     if (event.terminalSessionId !== options.terminalSessionId) return;
     if (initializing) { early.push(event); return; }
     if (event.type === "output") emitFrame(event);
+    if (event.type === "resize") { grid = { cols: event.cols, rows: event.rows }; for (const listener of resizeListeners) listener(event.cols, event.rows); }
     if (event.type === "exit") { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
   };
   const disconnected = () => { for (const listener of disconnectListeners) listener(); };
@@ -63,6 +66,7 @@ export async function createHostedPty(options: {
   try { attached = await client.request("attachSession", target); }
   catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); throw error; }
   cursor = attached.snapshot.cursor;
+  grid = { cols: attached.snapshot.cols, rows: attached.snapshot.rows };
   for (const frame of attached.frames) emitFrame(frame);
   initializing = false;
   for (const event of early) receive(event);
@@ -94,10 +98,12 @@ export async function createHostedPty(options: {
     signal(signal) { void client.request("signal", { ...target, signal }).catch(notifyFailure); },
     dispose() { client.events.delete(receive); client.disconnected.delete(disconnected); },
     hosted: {
+      get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },
       snapshot: () => client.request("getSnapshot", target),
       onFrame(listener) { frameListeners.add(listener); for (const frame of pending.splice(0)) listener(frame); },
       onDisconnect(listener) { disconnectListeners.add(listener); },
+      onResize(listener) { resizeListeners.add(listener); },
       writeSteps,
       async close() { await client.request("closeSession", target); },
     },

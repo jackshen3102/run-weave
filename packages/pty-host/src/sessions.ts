@@ -16,6 +16,7 @@ export class HostSession {
   readonly createDigest: string;
   readonly outputListeners = new Set<(frame: TerminalOutputFrame) => void>();
   readonly exitListeners = new Set<(exitCode: number) => void>();
+  readonly resizeListeners = new Set<(cols: number, rows: number) => void>();
   degraded = false;
   private readonly terminal: IPty;
 
@@ -68,9 +69,10 @@ export class HostSession {
     if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 2 || cols > 500 || rows < 1 || rows > 200)
       throw new Error("HOST_SIZE_INVALID");
     if (!this.degraded) this.screen.resize(cols, rows);
-    this.terminal.resize(cols, rows);
     this.info.cols = cols;
     this.info.rows = rows;
+    for (const listener of this.resizeListeners) listener(cols, rows);
+    this.terminal.resize(cols, rows);
   }
 
   signal(signal: string): void {

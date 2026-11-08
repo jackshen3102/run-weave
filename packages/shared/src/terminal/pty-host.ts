@@ -74,6 +74,7 @@ export interface PtyHostWireRequest {
   body: unknown;
 }
 export type PtyHostEvent =
+  | { type: "resize"; terminalSessionId: string; cols: number; rows: number; cursor: TerminalOutputCursor }
   | { type: "output"; terminalSessionId: string; data: string; cursor: TerminalOutputCursor; range: TerminalOutputRange }
   | { type: "exit"; terminalSessionId: string; exitCode: number }
   | { type: "gap"; terminalSessionId: string };

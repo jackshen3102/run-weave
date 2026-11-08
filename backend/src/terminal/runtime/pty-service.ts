@@ -33,10 +33,12 @@ export interface SpawnTerminalSessionOptions {
 
 export interface PtyRuntime {
   hosted?: {
+    readonly grid: { cols: number; rows: number };
     output: import("./output-recovery").TerminalOutputSource;
     snapshot(): Promise<import("./output-screen").TerminalScreenSnapshot>;
     onFrame(listener: (frame: import("./output-recovery").TerminalOutputFrame) => void): void;
     onDisconnect(listener: () => void): void;
+    onResize(listener: (cols: number, rows: number) => void): void;
     writeSteps(steps: import("@runweave/shared/terminal/pty-host").PtyHostInputStep[], operationId?: string): Promise<void>;
     close(): Promise<void>;
   };

@@ -33,6 +33,8 @@ export function createTerminalOutputRecovery(options: {
   const buffer = registry.getOutputRecovery(runtimeId);
   const screen = registry.getOutputScreen(runtimeId);
   if (!buffer || !screen) return undefined;
+  let grid = registry.getRuntime(runtimeId)?.hosted?.grid;
+  let gridRevision = 0;
   let ready = false;
   const pending: TerminalOutputFrame[] = [];
   let pendingBytes = 0;
@@ -64,6 +66,10 @@ export function createTerminalOutputRecovery(options: {
       }
     },
     onResize(cols: number, rows: number) {
+      if (grid) {
+        if (grid.cols !== cols || grid.rows !== rows) gridRevision++;
+        grid = { cols, rows };
+      }
       if (!ready || disposed || !orderedResize) return;
       batcher.flush();
       sendEvent(socket, { type: "resize", cols, rows, cursor: buffer.cursor });
@@ -75,6 +81,7 @@ export function createTerminalOutputRecovery(options: {
     },
     async start(): Promise<void> {
       try {
+        let capturedGridRevision = gridRevision;
         let reason: TerminalRecoveryReason = cursor
           ? "cursor_missing"
           : "initial";
@@ -114,6 +121,8 @@ export function createTerminalOutputRecovery(options: {
         else if (includeSnapshot) {
           const snapshot = await screen.snapshot();
           if (disposed || socket.readyState !== 1) return;
+          if (grid && (snapshot.cols !== grid.cols || snapshot.rows !== grid.rows)) throw new Error("Snapshot grid changed");
+          capturedGridRevision = gridRevision;
           if (
             !sendEvent(socket, {
               type: "snapshot",
@@ -131,6 +140,7 @@ export function createTerminalOutputRecovery(options: {
         // The Host read is asynchronous. Queue live frames until its captured boundary arrives.
         const tail = await buffer.read(head);
         if (disposed || socket.readyState !== 1) return;
+        if (capturedGridRevision !== gridRevision) throw new Error("Terminal grid changed during recovery");
         if (!tail.ok) throw new Error("Snapshot output boundary evicted");
         for (const frame of tail.frames) {
           if (

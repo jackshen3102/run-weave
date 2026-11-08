@@ -23,13 +23,14 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     assert(!session.tmuxSessionName, "Windows unexpectedly created tmux");
     async function connect() {
       const { ticket } = await api(`session/${id}/ws-ticket`, {});
-      const ws = new WebSocket(`${url.replace("http", "ws")}/ws/terminal?terminalSessionId=${id}&token=${encodeURIComponent(ticket)}`);
-      let output = "", connected = false, failure;
+      const ws = new WebSocket(`${url.replace("http", "ws")}/ws/terminal?terminalSessionId=${id}&token=${encodeURIComponent(ticket)}&resizeMode=ordered`);
+      let output = "", connected = false, failure, size;
       ws.addEventListener("message", event => {
         const message = JSON.parse(event.data);
         if (["output", "snapshot"].includes(message.type)) output += message.data;
         if (message.type === "connected") connected = message.runtimeKind === "pty";
         if (message.type === "error") failure = message.message;
+        if (message.type === "resize") size = `${message.cols}x${message.rows}`;
       });
       ws.addEventListener("error", () => { failure = "WebSocket error"; });
       async function wait(predicate, label, timeout = 15_000) {
@@ -44,6 +45,7 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
       return {
         ws,
         send: message => ws.send(JSON.stringify(message)),
+        waitResize: expected => wait(() => size === expected, `ordered resize ${expected}`),
         // eslint-disable-next-line no-control-regex -- Strip terminal ANSI controls before checking visible output.
         waitOutput: marker => wait(() => output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "").includes(marker), marker),
       };
@@ -53,7 +55,7 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     socket.send({ type: "input", data: `$rwProbe='${nonce}'; Write-Output ('READY_'+$rwProbe)\r` });
     await socket.waitOutput(`READY_${nonce}`);
     socket.send({ type: "resize", cols: 112, rows: 35 });
-    await sleep(300);
+    await socket.waitResize("112x35");
     socket.send({ type: "input", data: "Write-Output ('SIZE_'+$Host.UI.RawUI.WindowSize.Width+'x'+$Host.UI.RawUI.WindowSize.Height)\r" });
     await socket.waitOutput("SIZE_112x35");
     socket.send({ type: "input", data: "Write-Output ('WAIT_'+$rwProbe); Start-Sleep -Seconds 60\r" });

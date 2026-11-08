@@ -158,9 +158,13 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
             if (ready) sendJson(socket, { type: "output", terminalSessionId: session.info.terminalSessionId, data: frame.data, cursor: session.buffer.cursor, range: frame.range });
           };
           const exited = (exitCode: number) => { sendJson(socket, { type: "exit", terminalSessionId: session.info.terminalSessionId, exitCode }); };
+          const resized = (cols: number, rows: number) => {
+            if (ready) sendJson(socket, { type: "resize", terminalSessionId: session.info.terminalSessionId, cols, rows, cursor: session.buffer.cursor });
+          };
           session.outputListeners.add(output);
           session.exitListeners.add(exited);
-          subscriptions.set(session.info.terminalSessionId, () => { session.outputListeners.delete(output); session.exitListeners.delete(exited); });
+          session.resizeListeners.add(resized);
+          subscriptions.set(session.info.terminalSessionId, () => { session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized); });
           const snapshot = await session.snapshot();
           const tail = session.buffer.read(snapshot.cursor);
           if (!tail.ok) throw new Error("HOST_OUTPUT_GAP");
