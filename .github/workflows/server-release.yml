@@ -57,6 +57,7 @@ jobs:
         run: pnpm server:verify-installed
       - name: Verify Windows installation, login and PowerShell terminal
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         run: node scripts/verify/server/registry.mjs --local
       - name: Pack verified packages
         shell: bash
@@ -128,6 +129,7 @@ jobs:
         with:
           node-version: "22.23.2"
       - name: Install public packages and verify native runtime and login
+        timeout-minutes: 10
         run: node scripts/verify/server/registry.mjs
   promote:
     needs: verify-registry

@@ -53,6 +53,7 @@ function run(command, args) {
       env,
       cwd: fixture,
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120_000,
     });
     let stdout = "",
       stderr = "";
@@ -133,6 +134,7 @@ try {
     "Native runtime not ready",
   );
   log = openSync(path.join(fixture, "foreground.log"), "a");
+  console.log("Verify foreground startup and health");
   foreground = spawn(cliCommand[0], [...cliCommand.slice(1), "server", "start"], {
     env,
     cwd: fixture,
@@ -143,7 +145,8 @@ try {
     spawnError = error;
   });
   let status;
-  for (let i = 0; i < 100; i++) {
+  const healthDeadline = Date.now() + 120_000;
+  while (Date.now() < healthDeadline) {
     if (spawnError) throw spawnError;
     assert(foreground.exitCode === null, "Foreground exited; see fixture log");
     status = JSON.parse(await rw("status", "--json"));
@@ -154,21 +157,25 @@ try {
     status?.healthy &&
       status.runningVersion === serverVersion &&
       status.installedVersion === serverVersion,
-    "Wrong/unhealthy running release",
+    `Wrong/unhealthy running release: ${JSON.stringify(status)}`,
   );
   const url = `http://127.0.0.1:${port}`;
-  assert((await fetch(url)).ok, "Bundled web page unavailable");
+  console.log("Verify bundled web and login");
+  assert((await fetch(url, { signal: AbortSignal.timeout(30_000) })).ok, "Bundled web page unavailable");
   const response = await fetch(`${url}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-auth-client": "app" },
     body: JSON.stringify(auth),
+    signal: AbortSignal.timeout(30_000),
   });
   assert(response.ok, `Login failed (${response.status})`);
   const session = await response.json();
   const verified = await fetch(`${url}/api/auth/verify`, {
     headers: { authorization: `Bearer ${session.accessToken}` },
+    signal: AbortSignal.timeout(30_000),
   });
   assert(verified.ok, "Authenticated request failed");
+  console.log("Login verified; verify terminal runtime");
   const terminal = process.platform === "win32"
     ? await verifyWindowsTerminal(url, session.accessToken, home) : null;
   console.log(
