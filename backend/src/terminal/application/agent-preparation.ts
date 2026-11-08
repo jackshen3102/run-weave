@@ -484,7 +484,7 @@ function buildAgentLaunchCommand(
         .filter(Boolean)
         .join(" ")
     : [
-        command,
+        shellQuote(command),
         ...args.map(shellQuote),
         skipInitialPrompt ? null : shellQuote(request.prompt),
       ]

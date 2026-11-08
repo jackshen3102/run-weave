@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 import { settingText } from "@runweave/config-node";
 import { z } from "zod";
+import { resolveExecutableFromPath } from "../tmux/internals";
 import { CodeReviewError } from "./store";
 
 const hookList = z.object({ data: z.array(z.object({
@@ -10,8 +12,8 @@ const hookList = z.object({ data: z.array(z.object({
 })) });
 
 /** Metadata only: never starts a thread, reads history or persists hook trust. */
-async function listReviewerHooks(cwd: string): Promise<unknown> {
-  const child = spawn(settingText("agents.codex.binary") ?? "codex", ["app-server", "--listen", "stdio://"], {
+async function listReviewerHooks(cwd: string, command: string): Promise<unknown> {
+  const child = spawn(command, ["app-server", "--listen", "stdio://"], {
     cwd, env: process.env, stdio: ["pipe", "pipe", "pipe"],
   });
   // Drain diagnostics without placing local config, hook commands or credentials in logs.
@@ -72,12 +74,16 @@ async function listReviewerHooks(cwd: string): Promise<unknown> {
 /** Codex 0.166 prompts even for disabled, changed plugin hooks. Skip that UI only
  * after proving that every enabled hook is already trusted or administrator-managed.
  * The flag never enables the disabled hooks and does not persist trust decisions. */
-export async function reviewerHookArgs(cwd: string): Promise<string[]> {
-  const parsed = hookList.safeParse(await listReviewerHooks(cwd));
+export async function prepareReviewerLaunch(cwd: string): Promise<{ command: string; args: string[] }> {
+  const resolved = resolveExecutableFromPath(settingText("agents.codex.binary")?.trim() || "codex", process.env);
+  if (!resolved.includes(path.sep))
+    throw new CodeReviewError(503, "reviewer_hooks_unavailable", "无法解析 Reviewer 的 Codex 可执行文件，未启动交互进程");
+  const command = path.resolve(cwd, resolved);
+  const parsed = hookList.safeParse(await listReviewerHooks(cwd, command));
   if (!parsed.success || parsed.data.data.length !== 1 || parsed.data.data[0]!.cwd !== cwd ||
       parsed.data.data[0]!.errors.length || parsed.data.data[0]!.warnings.length)
     throw new CodeReviewError(503, "reviewer_hooks_unavailable", "Reviewer Hooks 配置不完整，未启动交互进程");
   const unsafe = parsed.data.data[0]!.hooks.some((hook) => hook.enabled && !hook.isManaged && hook.trustStatus !== "trusted");
   if (unsafe) throw new CodeReviewError(409, "reviewer_hooks_untrusted", "存在已启用但尚未信任的 Hooks，未自动授权或启动 Reviewer");
-  return ["--dangerously-bypass-hook-trust"];
+  return { command, args: ["--dangerously-bypass-hook-trust"] };
 }
