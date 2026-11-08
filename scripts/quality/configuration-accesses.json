@@ -12751,5 +12751,13 @@
     "count": 1,
     "category": "test",
     "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(serverHome, \"active-release.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "读取隔离 Windows 安装夹具的私有发行指针，验证无兼容父管理进程时组件拒绝启动，不读取用户实例或业务配置。"
   }
 ]

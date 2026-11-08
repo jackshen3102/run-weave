@@ -1,7 +1,7 @@
 import type { ConfigurationStatus } from "./configuration/types";
 
 export type ServerConfigurationObservation = Pick<ConfigurationStatus, "savedRevision" | "digest" | "diskError" | "consumers">;
-export const SERVER_CLI_CAPABILITIES = { configurationUpgrade: 1, updateDryRun: true } as const;
+export const SERVER_CLI_CAPABILITIES = { configurationUpgrade: 1, updateDryRun: true, foregroundProtocolVersion: 1, ptyHostProtocolVersion: 1 } as const;
 
 /** Local installation management; independent of web login credentials. */
 export interface ServerMaintenanceLease {
@@ -13,6 +13,7 @@ export interface ServerMaintenanceLease {
 export interface ServerReleaseManifest {
   schemaVersion: 1;
   managementApiVersion: 1;
+  foregroundProtocolVersion?: 1;
   ptyHost?: { protocolVersion: 1; entry: "pty-host/index.cjs" };
   version: string;
   sourceRevision: string;

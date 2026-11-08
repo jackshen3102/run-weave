@@ -149,6 +149,14 @@ try {
     JSON.parse(await rw("doctor", "--json")).runtimeReady,
     "Native runtime not ready",
   );
+  if (process.platform === "win32") {
+    const serverHome = path.join(home, ".runweave/server");
+    const pointer = JSON.parse(readFileSync(path.join(serverHome, "active-release.json"), "utf8"));
+    let rejected = false;
+    try { await run(process.execPath, [path.join(serverHome, pointer.release, "server/index.cjs"), "component", "app-server"]); }
+    catch (error) { rejected = error.message.includes("SERVER_CLI_INCOMPATIBLE"); }
+    assert(rejected, "Unmanaged/legacy Windows component must require the compatible outer CLI");
+  }
   log = openSync(path.join(fixture, "foreground.log"), "a");
   console.log("Verify foreground startup and health");
   foreground = spawn(cliCommand[0], [...cliCommand.slice(1), "server", "start"], {

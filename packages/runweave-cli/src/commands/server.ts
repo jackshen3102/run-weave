@@ -412,7 +412,7 @@ export async function runServerCommand(
   const channel = getStringOption(parsed.options, "channel") ?? "latest";
   if (channel !== "latest" && channel !== "next") throw new Error("--channel must be latest or next");
   if (command === "update" && process.platform === "win32" && identity(ctx, "foreground") && !parsed.options["dry-run"]) {
-    if (!ctx.manifest.ptyHost) throw new Error("HOST_MIGRATION_REQUIRED: stop the old Server from system PowerShell, update while stopped, then start; existing direct PTYs will end once");
+    if (!ctx.manifest.ptyHost || identity(ctx, "foreground")?.foregroundProtocolVersion !== 1) throw new Error("HOST_MIGRATION_REQUIRED: stop the old Server from system PowerShell, update while stopped, then start; existing direct PTYs will end once");
     output(await submitForegroundUpdate(ctx, { version: getStringOption(parsed.options, "version"),
       sourcePackage: getStringOption(parsed.options, "server-package"), force: parsed.options.force === true, channel }, getStringOption(parsed.options, "request-id")));
     return;

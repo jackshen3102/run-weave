@@ -59,6 +59,7 @@ export interface ProcessIdentity {
   version: string;
   release: string;
   configuration?: unknown;
+  foregroundProtocolVersion?: number;
 }
 
 export function controlSocket(ctx: ServerContext): string {
@@ -226,6 +227,7 @@ export function verifyRelease(root: string): ServerReleaseManifest {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.managementApiVersion !== 1 ||
+    manifest.foregroundProtocolVersion !== undefined && manifest.foregroundProtocolVersion !== 1 ||
     !/^\d+\.\d+\.\d+$/.test(manifest.version) ||
     manifest.platform !== process.platform ||
     manifest.arch !== process.arch ||

@@ -6,6 +6,7 @@ macOS/Linux 默认继续使用原来的 tmux 或直接 PTY。Host 不依赖 Back
 
 ## 所有权与发现
 
+Windows 组件启动前核对父进程创建身份和 foreground 协议；旧 CLI 或无管理者的启动会在组件就绪前明确拒绝。
 外层 `rw server start` 管理 Backend/App Server，并启动或发现独立 Host。Host 使用 detached Node 进程、
 独立日志和无父进程 IPC 的启动方式；Backend、网页和管理连接退出均不关闭终端。用户显式删除终端才发送 close。
 原来正在运行的直接 PTY 不能转移到另一个进程，首次迁移允许中断一次，见 [CLI 迁移步骤](../cli/server-cli.md)。

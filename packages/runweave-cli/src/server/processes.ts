@@ -45,6 +45,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
   const socket = controlSocket(ctx);
   if (process.platform !== "win32") rmSync(socket, { force: true });
   writeJson(path.join(ctx.home, "foreground.json"), {
+    foregroundProtocolVersion: 1,
     configuration: CONFIGURATION_COMPATIBILITY,
     pid: process.pid,
     startedAt: processStart(process.pid),
@@ -113,7 +114,8 @@ export async function foreground(ctx: ServerContext): Promise<void> {
       await waitHealthy(next, name);
     }
     writeJson(path.join(ctx.home, "foreground.json"), {
-      configuration: CONFIGURATION_COMPATIBILITY, pid: process.pid, startedAt: processStart(process.pid),
+      foregroundProtocolVersion: 1,
+    configuration: CONFIGURATION_COMPATIBILITY, pid: process.pid, startedAt: processStart(process.pid),
       version: next.manifest.version, release,
     });
   };

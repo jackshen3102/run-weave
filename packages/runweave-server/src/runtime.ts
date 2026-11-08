@@ -63,6 +63,13 @@ export async function runComponent(
   name: Component,
 ): Promise<void> {
   if (process.platform === "win32") {
+    // An old CLI does not own a Host or upgrade executor. Fail before any component
+    // becomes healthy rather than accepting logins with unusable terminals.
+    let owner: { pid: number; startedAt: string; foregroundProtocolVersion?: number };
+    try { owner = readJson(path.join(ctx.home, "foreground.json")); }
+    catch { throw new Error("SERVER_CLI_INCOMPATIBLE: start this Windows Server with @runweave/cli >=0.10.8"); }
+    if (owner.foregroundProtocolVersion !== 1 || owner.pid !== process.ppid || processStartIdentity(owner.pid) !== owner.startedAt)
+      throw new Error("SERVER_CLI_INCOMPATIBLE: start this Windows Server with @runweave/cli >=0.10.8");
     // Windows kill(SIGTERM) terminates immediately; use the parent's private IPC channel.
     const shutdown = () => {
       // Before the component registers cleanup, losing the owner must still stop startup.

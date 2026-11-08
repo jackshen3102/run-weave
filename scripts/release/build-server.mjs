@@ -150,6 +150,7 @@ const legacyConfigurations = JSON.parse(readFileSync(path.join(repo, "scripts/re
 const manifest = {
   schemaVersion: 1,
   managementApiVersion: 1,
+  foregroundProtocolVersion: 1,
   ptyHost: { protocolVersion: 1, entry: "pty-host/index.cjs" },
   version,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], {
