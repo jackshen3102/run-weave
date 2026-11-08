@@ -10,6 +10,7 @@ public final class BrowserSession: ObservableObject {
       case open(URL)
       case close, clear
       case address(String)
+      case share(URL)
       case application(BrowserURLPolicy.ApplicationLink)
       case message
     }
@@ -213,6 +214,7 @@ public final class BrowserSession: ObservableObject {
     // Navigation and resume still validate the page's source independently.
     state = page == nil ? .empty : .collapsed
     cancelApplicationRequest()
+    if case .share = prompt?.kind { prompt = nil }
     page?.cancelJavaScriptDialog()
     page?.webView.endEditing(true)
   }
@@ -273,6 +275,18 @@ public final class BrowserSession: ObservableObject {
     setPrompt(kind, message: message, source: page.source)
   }
 
+  func shareCurrentPage() {
+    guard let page, isCurrent(page), state == .presented, prompt == nil else { return }
+    guard page.localPreview == nil else {
+      message("电脑本地预览地址仅当前连接可用，不能分享为网页链接。", source: page.source)
+      return
+    }
+    guard case .web(let url) = BrowserURLPolicy.classify(page.exportURL.absoluteString) else { return }
+    page.cancelJavaScriptDialog()
+    page.webView.endEditing(true)
+    setPrompt(.share(url), message: "分享当前网页链接", source: page.source)
+  }
+
   func cancelApplicationRequest() {
     if case .application = prompt?.kind { prompt = nil }
   }
@@ -294,7 +308,7 @@ public final class BrowserSession: ObservableObject {
     prompt = nil
     switch value.kind {
     case .close, .clear: break  // A page cannot defeat these actions by continuously changing URL.
-    case .replace, .open, .address, .message, .application:
+    case .replace, .open, .address, .share, .message, .application:
       guard page?.navigationRevision == value.navigationRevision else {
         dataStatus = "网页地址已变化，请重新选择操作。"
         return
@@ -308,6 +322,7 @@ public final class BrowserSession: ObservableObject {
     case .close: invalidate()
     case .clear: clearData()
     case .address(let target): UIPasteboard.general.string = target
+    case .share: break  // The system activity sheet owns completion; no navigation is performed.
     case .application(let link): page?.openApplication(link)
     case .message: break
     }

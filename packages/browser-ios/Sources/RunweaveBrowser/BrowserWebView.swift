@@ -540,6 +540,13 @@ final class BrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKUIDeleg
 
 struct BrowserWebView: UIViewRepresentable {
   let page: BrowserPage
+  var bottomContentInset: CGFloat = 0
   func makeUIView(context: Context) -> WKWebView { page.webView }
-  func updateUIView(_ view: WKWebView, context: Context) {}
+  func updateUIView(_ view: WKWebView, context: Context) {
+    // Keep the document scrollable above floating controls without modifying the website.
+    if view.scrollView.contentInset.bottom != bottomContentInset {
+      view.scrollView.contentInset.bottom = bottomContentInset
+      view.scrollView.verticalScrollIndicatorInsets.bottom = bottomContentInset
+    }
+  }
 }
