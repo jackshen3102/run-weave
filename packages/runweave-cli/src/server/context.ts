@@ -1,4 +1,4 @@
-import { configurationOption } from "@runweave/config-node";
+import { configurationOption, processStartIdentity } from "@runweave/config-node";
 import {
   activateServer,
   findInstallation,
@@ -20,7 +20,7 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { tryLock } from "fs-native-extensions";
 
@@ -62,6 +62,8 @@ export interface ProcessIdentity {
 }
 
 export function controlSocket(ctx: ServerContext): string {
+  if (process.platform === "win32")
+    return `\\\\.\\pipe\\runweave-${createHash("sha256").update(ctx.home.toLowerCase()).digest("hex").slice(0, 24)}`;
   // sockaddr_un has a small path limit (104 bytes on macOS), regardless of config path length.
   const directory = path.join("/tmp", `runweave-server-${process.getuid?.()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -91,16 +93,7 @@ export function writeJson(file: string, value: unknown): void {
   renameSync(temporary, file);
 }
 export function processStart(pid: number): string | null {
-  try {
-    return (
-      execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim() || null
-    );
-  } catch {
-    return null;
-  }
+  return processStartIdentity(pid);
 }
 export function identity(
   ctx: ServerContext,
@@ -111,7 +104,7 @@ export function identity(
   const record = readJson<ProcessIdentity>(file);
   return Number.isSafeInteger(record.pid) &&
     record.pid > 1 &&
-    processStart(record.pid) === record.startedAt
+    typeof record.startedAt === "string" && record.startedAt.length > 0 && processStart(record.pid) === record.startedAt
     ? record
     : null;
 }

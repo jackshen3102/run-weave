@@ -121,7 +121,11 @@ export function installAppServerRuntimeRelease(options: {
   cpSync(sourceEntry, targetEntry);
   const nativeModules = path.join(path.dirname(sourceEntry), "node_modules");
   if (!existsSync(nativeModules)) throw new Error("CONFIG_NATIVE_LOCK_RUNTIME_MISSING");
-  cpSync(nativeModules, path.join(path.dirname(targetEntry), "node_modules"), { recursive: true });
+  cpSync(nativeModules, path.join(path.dirname(targetEntry), "node_modules"), {
+    recursive: true,
+    // Avoid Node 22's native recursive-copy crash on Windows Unicode paths.
+    ...(process.platform === "win32" ? { filter: () => true } : {}),
+  });
 
   const manifest = {
     configuration: capability,

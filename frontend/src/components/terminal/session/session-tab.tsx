@@ -447,12 +447,12 @@ export function TerminalSessionTab({
             <MessageCircle className="size-4" />
             旁聊{sideChat.state.unread ? " · 新回复" : ""}
           </ContextMenuItem>
-          <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
+          {session.tmuxSessionName && <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>
             <GitFork className="h-4 w-4" />
             {forking ? "正在 Fork Codex…" : "Fork Thread"}
-          </ContextMenuItem>
+          </ContextMenuItem>}
           <ContextMenuItem
             className="gap-2"
             onSelect={() => {
@@ -480,7 +480,7 @@ export function TerminalSessionTab({
               </ContextMenuGroup>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem
+          {session.tmuxSessionName && <ContextMenuItem
             aria-disabled={disablePanelSplitToggle ? true : undefined}
             className={[
               "gap-2",
@@ -503,7 +503,7 @@ export function TerminalSessionTab({
           >
             <PanelsTopLeft className="h-4 w-4" />
             {panelSplitEnabled ? "Disable Panel Split" : "Enable Panel Split"}
-          </ContextMenuItem>
+          </ContextMenuItem>}
         </ContextMenuContent>
       </ContextMenu>
       {detailsCard}

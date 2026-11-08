@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { constants, closeSync, existsSync, fstatSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertWindowsPrivatePath, syncDirectory } from "@runweave/config-node";
 
 const KEYCHAIN_SERVICE = "com.runweave.activity";
 const KEYCHAIN_ACCOUNT = "content-key-v1";
@@ -16,9 +17,10 @@ function loadFileKey(activityHome: string, allowCreate: boolean): Buffer {
     const fd = openSync(keyPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const info = fstatSync(fd);
-      if (!info.isFile() || (info.mode & 0o777) !== 0o600 || info.uid !== process.getuid?.()) {
+      if (!info.isFile() || process.platform !== "win32" && ((info.mode & 0o777) !== 0o600 || info.uid !== process.getuid?.())) {
         throw new Error("activity_content_key_permissions_invalid");
       }
+      assertWindowsPrivatePath(keyPath);
       return decodeKey(readFileSync(fd, "utf8"));
     } finally {
       closeSync(fd);
@@ -48,12 +50,7 @@ function loadFileKey(activityHome: string, allowCreate: boolean): Buffer {
   } finally {
     unlinkSync(temporary);
   }
-  const directory = openSync(activityHome, constants.O_RDONLY);
-  try {
-    fsyncSync(directory);
-  } finally {
-    closeSync(directory);
-  }
+  syncDirectory(activityHome);
   return read();
 }
 

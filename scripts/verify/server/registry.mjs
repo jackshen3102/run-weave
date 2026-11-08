@@ -12,6 +12,8 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { localRegistry, npmCommand } from "./local-registry.mjs";
+import { verifyWindowsTerminal } from "./windows-terminal.mjs";
 
 const serverVersion = JSON.parse(
   readFileSync("packages/runweave-server/package.json"),
@@ -19,7 +21,7 @@ const serverVersion = JSON.parse(
 const cliVersion = JSON.parse(
   readFileSync("packages/runweave-cli/package.json"),
 ).version;
-const fixture = mkdtempSync(path.join(os.tmpdir(), "rw-registry-"));
+const fixture = mkdtempSync(path.join(process.platform === "win32" ? os.homedir() : os.tmpdir(), "rw registry 中文-"));
 const home = path.join(fixture, "home"),
   prefix = path.join(fixture, "prefix");
 mkdirSync(home, { mode: 0o700 });
@@ -31,7 +33,8 @@ writeFileSync(
 const env = {
   ...process.env,
   HOME: home,
-  NODE_OPTIONS: `--require=${preloader}`,
+  ...(process.platform === "win32" ? { USERPROFILE: home } : {}),
+  NODE_OPTIONS: `--require=${JSON.stringify(preloader)}`,
   npm_config_registry: "https://registry.npmjs.org/",
 };
 for (const key of Object.keys(env))
@@ -50,6 +53,7 @@ function run(command, args) {
       env,
       cwd: fixture,
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120_000,
     });
     let stdout = "",
       stderr = "";
@@ -64,16 +68,23 @@ function run(command, args) {
       code === 0
         ? resolve(stdout)
         : reject(
-            new Error(`${command} failed (${code}): ${stderr.slice(-2000)}`),
+            new Error(`${command} ${args.slice(0, 3).join(" ")} failed (${code}): ${stdout.slice(-2000)} ${stderr.slice(-4000)}`),
           ),
     );
   });
 }
-const rw = (...args) => run(path.join(prefix, "bin/rw"), ["server", ...args]);
+const cliCommand = process.platform === "win32"
+  ? [process.execPath, path.join(prefix, "node_modules/@runweave/cli/dist/index.js")]
+  : [path.join(prefix, "bin/rw")];
+const rw = (...args) => run(cliCommand[0], [...cliCommand.slice(1), "server", ...args]);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let foreground, log;
+let foreground, log, registry;
 try {
-  await run("npm", [
+  if (process.argv.includes("--local")) {
+    registry = await localRegistry(path.resolve(".runtime-artifacts/server"), fixture);
+    env.npm_config_registry = registry.url;
+  }
+  await run(npmCommand[0], [...npmCommand.slice(1),
     "install",
     "-g",
     "--prefix",
@@ -84,6 +95,11 @@ try {
     `@runweave/cli@${cliVersion}`,
     `@runweave/server@${serverVersion}`,
   ]);
+  if (process.platform === "win32") {
+    console.log("Verify Windows native file lock");
+    const nativeLock = path.join(prefix, "node_modules/@runweave/cli/node_modules/fs-native-extensions");
+    await run(process.execPath, ["-e", `const fs=require('node:fs'); const lock=require(${JSON.stringify(nativeLock)}); const fd=fs.openSync('probe.lock','a+'); if (!lock.tryLock(fd)) throw new Error('Native file lock unavailable'); fs.closeSync(fd);`]);
+  }
   const auth = {
     username: "registry-verification",
     password: randomBytes(24).toString("hex"),
@@ -94,6 +110,7 @@ try {
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
+  console.log("Verify Server initialization");
   await rw(
     "init",
     "--auth-file",
@@ -103,12 +120,22 @@ try {
     "--port",
     String(port),
   );
+  if (process.platform === "win32") {
+    console.log("Verify PowerShell .cmd entry points");
+    for (const shim of [path.join(prefix, "rw.cmd"), path.join(home, ".runweave/server/rw.cmd")]) {
+      const command = `& '${shim.replaceAll("'", "''")}' --version\nexit $LASTEXITCODE`;
+      const version = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")]);
+      assert(version.trim() === cliVersion, `Wrong CLI version from ${shim}`);
+    }
+  }
+  console.log("Verify native runtime loading");
   assert(
     JSON.parse(await rw("doctor", "--json")).runtimeReady,
     "Native runtime not ready",
   );
   log = openSync(path.join(fixture, "foreground.log"), "a");
-  foreground = spawn(path.join(prefix, "bin/rw"), ["server", "start"], {
+  console.log("Verify foreground startup and health");
+  foreground = spawn(cliCommand[0], [...cliCommand.slice(1), "server", "start"], {
     env,
     cwd: fixture,
     stdio: ["ignore", log, log],
@@ -118,7 +145,8 @@ try {
     spawnError = error;
   });
   let status;
-  for (let i = 0; i < 100; i++) {
+  const healthDeadline = Date.now() + 120_000;
+  while (Date.now() < healthDeadline) {
     if (spawnError) throw spawnError;
     assert(foreground.exitCode === null, "Foreground exited; see fixture log");
     status = JSON.parse(await rw("status", "--json"));
@@ -129,21 +157,27 @@ try {
     status?.healthy &&
       status.runningVersion === serverVersion &&
       status.installedVersion === serverVersion,
-    "Wrong/unhealthy running release",
+    `Wrong/unhealthy running release: ${JSON.stringify(status)}`,
   );
   const url = `http://127.0.0.1:${port}`;
-  assert((await fetch(url)).ok, "Bundled web page unavailable");
+  console.log("Verify bundled web and login");
+  assert((await fetch(url, { signal: AbortSignal.timeout(30_000) })).ok, "Bundled web page unavailable");
   const response = await fetch(`${url}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-auth-client": "app" },
     body: JSON.stringify(auth),
+    signal: AbortSignal.timeout(30_000),
   });
   assert(response.ok, `Login failed (${response.status})`);
   const session = await response.json();
   const verified = await fetch(`${url}/api/auth/verify`, {
     headers: { authorization: `Bearer ${session.accessToken}` },
+    signal: AbortSignal.timeout(30_000),
   });
   assert(verified.ok, "Authenticated request failed");
+  console.log("Login verified; verify terminal runtime");
+  const terminal = process.platform === "win32"
+    ? await verifyWindowsTerminal(url, session.accessToken, home) : null;
   console.log(
     JSON.stringify({
       platform: `${process.platform}-${process.arch}`,
@@ -151,9 +185,13 @@ try {
       cliVersion,
       healthy: true,
       loginVerified: true,
+      terminal,
       fixture,
     }),
   );
+} catch (error) {
+  if (log !== undefined) process.stderr.write(readFileSync(path.join(fixture, "foreground.log"), "utf8").slice(-16000));
+  throw error;
 } finally {
   if (foreground?.exitCode === null) {
     await rw("stop").catch(() => foreground.kill("SIGTERM"));
@@ -165,4 +203,5 @@ try {
     );
   }
   if (log !== undefined) closeSync(log);
+  await registry?.close();
 }

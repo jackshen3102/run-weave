@@ -6,12 +6,12 @@ import {
   ConfigurationStore,
   ConfigurationError,
   configurationOption,
+  processStartIdentity,
 } from "@runweave/config-node";
 import { supportsConfiguration } from "@runweave/shared/configuration";
 import { installAppServerRuntimeRelease } from "@runweave/config-node/app-server/runtime-release";
 import type { ServerReleaseManifest } from "@runweave/shared/server-management";
 import { createRequire } from "node:module";
-import { execFileSync } from "node:child_process";
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -32,9 +32,9 @@ function writeJson(file: string, value: unknown): void {
   renameSync(temporary, file);
 }
 function processStart(pid: number): string {
-  return execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-    encoding: "utf8",
-  }).trim();
+  const identity = processStartIdentity(pid);
+  if (!identity) throw new Error("Cannot identify Server process start time");
+  return identity;
 }
 async function waitForAppServer(): Promise<void> {
   const deadline = Date.now() + 30_000;
@@ -62,6 +62,18 @@ export async function runComponent(
   ctx: RuntimeContext,
   name: Component,
 ): Promise<void> {
+  if (process.platform === "win32") {
+    // Windows kill(SIGTERM) terminates immediately; use the parent's private IPC channel.
+    const shutdown = () => {
+      // Before the component registers cleanup, losing the owner must still stop startup.
+      if (process.listenerCount("SIGTERM") === 0) process.exit(0);
+      process.emit("SIGTERM");
+    };
+    process.on("message", (message) => {
+      if (message === "runweave:shutdown") shutdown();
+    });
+    process.once("disconnect", shutdown);
+  }
   // A server launched inside another Runweave terminal must discover its own singleton,
   // not reuse the parent's hook connection or Browser endpoint.
   delete process.env.RUNWEAVE_APP_SERVER_URL;
@@ -112,7 +124,7 @@ export async function runComponent(
       "node_modules/node-pty",
     );
     process.env.RUNWEAVE_RUNTIME_RELEASE_ID = ctx.manifest.version;
-    process.env.RUNWEAVE_CLI_BIN = path.join(ctx.home, "rw");
+    process.env.RUNWEAVE_CLI_BIN = path.join(ctx.home, process.platform === "win32" ? "rw.cmd" : "rw");
     nativeRequire(path.join(backend, "index.cjs"));
   } else {
     const entry = path.join(ctx.release, "app-server/index.cjs");

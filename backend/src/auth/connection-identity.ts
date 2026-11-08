@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 import { lstat, mkdir, open, readFile, link, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { assertWindowsPrivatePath } from "@runweave/config-node";
 import { connectionProbeMessage, type ConnectionIdentity, type ConnectionProbeResponse } from "@runweave/shared/connection-identity";
 
 /** Failure disables only identity discovery; it never silently replaces a damaged key. */
@@ -33,7 +34,8 @@ export class ConnectionIdentityService {
         }
       }
       const stat = await lstat(file);
-      if (!stat.isFile() || (stat.mode & 0o077) !== 0 || stat.size > 4096) throw new Error("Invalid identity file");
+      if (!stat.isFile() || process.platform !== "win32" && (stat.mode & 0o077) !== 0 || stat.size > 4096) throw new Error("Invalid identity file");
+      assertWindowsPrivatePath(file);
       const stored = JSON.parse(await readFile(file, "utf8"));
       if (stored.schemaVersion !== 1 || stored.privateKey?.crv !== "Ed25519" || !stored.privateKey.d) throw new Error("Invalid identity key");
       const key = createPrivateKey({ key: stored.privateKey, format: "jwk" });

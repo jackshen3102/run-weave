@@ -195,7 +195,7 @@ export function TerminalWorkspaceHeader({
     setHistoryDrawerOpen(true);
   };
   const recoverActiveAgent = useMemoizedFn(async (): Promise<void> => {
-    if (!activeSession || recoveringAgent) {
+    if (!activeSession?.tmuxSessionName || recoveringAgent) {
       return;
     }
     if (
@@ -414,7 +414,7 @@ export function TerminalWorkspaceHeader({
                 <Share2 className="h-4 w-4" />
                 {sharing ? "正在创建快照…" : "分享终端快照"}
               </DropdownMenuItem>
-              <DropdownMenuItem
+              {activeSession?.tmuxSessionName && <DropdownMenuItem
                 disabled={
                   recoveringAgent ||
                   activeSession?.terminalState?.state !== "agent_idle" ||
@@ -428,7 +428,7 @@ export function TerminalWorkspaceHeader({
               >
                 <RefreshCw className="h-4 w-4" />
                 {recoveringAgent ? "Recovering agent…" : "Recover agent"}
-              </DropdownMenuItem>
+              </DropdownMenuItem>}
               <DropdownMenuItem
                 onSelect={() => {
                   setDiagnosticLogOpen(true);

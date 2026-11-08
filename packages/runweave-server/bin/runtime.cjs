@@ -52,11 +52,28 @@ function materialize(installed, home) {
     fs.mkdirSync(releases, { recursive: true, mode: 0o700 });
     const stage = fs.mkdtempSync(path.join(releases, ".stage-"));
     try {
-      fs.cpSync(path.join(native, "payload"), stage, { recursive: true });
+      fs.cpSync(path.join(native, "payload"), stage, {
+        recursive: true,
+        // Node 22's native recursive copy can abort on Windows Unicode paths.
+        // A filter selects Node's JS traversal while retaining copy semantics.
+        ...(process.platform === "win32" ? { filter: () => true } : {}),
+      });
       const archive = path.join(native, "native.tar.gz");
-      const entries = execFileSync("tar", ["-tzf", archive], {
-        encoding: "utf8",
-      })
+      // Windows tar can lose Unicode command-line paths in the active code page.
+      // Node opens the archive and supplies the working directory using Unicode APIs.
+      const tar = (mode) => {
+        const input = fs.openSync(archive, "r");
+        try {
+          return execFileSync("tar", [mode, "-"], {
+            cwd: stage,
+            stdio: [input, "pipe", "pipe"],
+            encoding: "utf8",
+          });
+        } finally {
+          fs.closeSync(input);
+        }
+      };
+      const entries = tar("-tzf")
         .trim()
         .split("\n");
       if (
@@ -65,7 +82,7 @@ function materialize(installed, home) {
         )
       )
         throw new Error("Unsafe native archive");
-      execFileSync("tar", ["-xzf", archive, "-C", stage]);
+      tar("-xzf");
       fs.copyFileSync(
         path.join(native, "manifest.json"),
         path.join(stage, "server-manifest.json"),

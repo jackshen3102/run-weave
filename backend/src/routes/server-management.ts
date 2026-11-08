@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { readFileSync, lstatSync } from "node:fs";
 import path from "node:path";
-import { configuration } from "@runweave/config-node";
+import { configuration, readPrivateFile } from "@runweave/config-node";
 import type { ServerConfigurationObservation } from "@runweave/shared/server-management";
 import { isLocalDirectHttpRequest } from "../server/local-request";
 import { ServerMaintenance } from "../scheduled-tasks/server-maintenance";
@@ -32,14 +31,7 @@ export function createServerManagementRouter(
         "server",
         "management-token",
       );
-      const stat = lstatSync(file);
-      if (
-        !stat.isFile() ||
-        stat.mode & 0o077 ||
-        stat.uid !== process.getuid?.()
-      )
-        throw new Error("Invalid management token file");
-      const expected = Buffer.from(readFileSync(file, "utf8").trim());
+      const expected = Buffer.from(readPrivateFile(file, 4096).trim());
       const actual = Buffer.from(req.header("x-runweave-server-token") ?? "");
       if (
         !expected.length ||

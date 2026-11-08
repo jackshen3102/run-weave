@@ -1,9 +1,11 @@
 # Runweave Server
 
 通过 NPM 安装的独立 Runweave 后台，包含 Backend、App Server 和网页；独立的 `@runweave/cli` 提供唯一的 rw 命令。
-安装机器需要 Node 22；终端需要 tmux，Git 和 Agent CLI 根据所用功能单独安装及认证。
-不需要 Electron、项目源码或编译工具链。当前支持目标为 macOS arm64/x64、Linux glibc arm64/x64；
-每个目标必须先经过实际发布构建与安装验证。Windows、musl 和其他 Node ABI 不在第一阶段范围内。
+安装机器需要 Node 22；macOS/Linux 终端需要 tmux，Git 和 Agent CLI 根据所用功能单独安装及认证。
+不需要 Electron、项目源码或编译工具链。构建目标为 macOS arm64/x64、Linux glibc arm64/x64、Windows x64；
+每个目标必须先经过实际发布构建与安装验证。musl、Windows arm64 和其他 Node ABI 不在支持范围内。
+Windows 仅提供前台服务、网页登录和 PowerShell 终端；安装步骤及限制见
+[Windows CLI 合同](https://github.com/jackshen3102/run-weave/blob/main/docs/cli/server-cli.md#windows-轻量模式)。
 
 ```sh
 npm install -g @runweave/cli @runweave/server
@@ -36,7 +38,7 @@ rw server update --force
 rw server service uninstall     # 注销并停止，保留配置与数据
 ```
 
-后台用 systemd 或 launchd 分别托管两个组件，异常重启限速；前台错误会退出。
+以下系统服务及原地更新命令仅适用于 macOS/Linux。后台用 systemd 或 launchd 分别托管两个组件，异常重启限速；前台错误会退出。
 普通 tmux 任务在重启期间保留，连接暂断；依赖后台 API 的请求仍可能失败。
 有服务托管执行时更新和重启默认拒绝，force 明确取消这些执行后继续。
 排队或已持久化等待记录本身不会阻挡更新。更新失败保留日志和数据，不自动回退。

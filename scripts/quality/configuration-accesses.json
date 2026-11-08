@@ -12471,5 +12471,69 @@
     "count": 1,
     "category": "system",
     "reason": "继承系统子进程环境并移除 Python 注入变量，供固定路径解释器执行本地归档工具。"
+  },
+  {
+    "file": "packages/config-node/src/windows-permissions.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "system",
+    "reason": "Pass the system process environment and a private path to PowerShell for Windows ACL validation; not a source of product settings."
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(ctx.home, \"rw.cjs\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Bind the installed CLI in a UTF-8 Node launcher so Windows batch encoding cannot corrupt its path; not business configuration."
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/server.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(ctx.home, \"rw.cmd\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "Write the Windows batch entry for the installed CLI beside the managed server; runtime launch metadata, not business configuration."
+  },
+  {
+    "file": "scripts/release/build-backend.mjs",
+    "kind": "environment",
+    "expression": "process.env.npm_execpath",
+    "count": 2,
+    "category": "build",
+    "reason": "Use pnpm-provided npm_execpath to invoke the same package manager with Node on Windows where .cmd cannot be spawned directly."
+  },
+  {
+    "file": "scripts/verify/server/local-registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(cwd, \"package.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Read built package manifests and npm tarballs for the isolated loopback registry installation fixture."
+  },
+  {
+    "file": "scripts/verify/server/local-registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(fixture, packed.filename))",
+    "count": 1,
+    "category": "test",
+    "reason": "Read built package manifests and npm tarballs for the isolated loopback registry installation fixture."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "environment",
+    "expression": "env.npm_config_registry",
+    "count": 1,
+    "category": "test",
+    "reason": "Use an isolated registry and child environment, and read only fixture logs and ACL diagnostics for real installed-package verification."
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(fixture, \"foreground.log\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Use an isolated registry and child environment, and read only fixture logs and ACL diagnostics for real installed-package verification."
   }
 ]

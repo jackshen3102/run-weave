@@ -4,6 +4,10 @@ on:
     tags: ["server-v*"]
   workflow_dispatch:
     inputs:
+      windows_only:
+        description: Verify Windows only (never publish)
+        type: boolean
+        default: false
       publish:
         description: Publish verified packages to npm
         type: boolean
@@ -23,15 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            target: darwin-arm64
-          - runner: macos-15-intel
-            target: darwin-x64
-          - runner: ubuntu-24.04
-            target: linux-x64
-          - runner: ubuntu-24.04-arm
-            target: linux-arm64
+        include: ${{ fromJSON(inputs.windows_only && '[{"runner":"windows-2022","target":"win32-x64"}]' || '[{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x64"},{"runner":"ubuntu-24.04","target":"linux-x64"},{"runner":"ubuntu-24.04-arm","target":"linux-arm64"},{"runner":"windows-2022","target":"win32-x64"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +38,7 @@ jobs:
         with:
           version: 10.6.2
       - name: Check target and release tag
+        shell: bash
         env:
           EXPECTED_TARGET: ${{ matrix.target }}
         run: |
@@ -56,8 +53,14 @@ jobs:
       - name: Build distributable
         run: pnpm server:build
       - name: Verify installed tarballs and self-update
+        if: runner.os != 'Windows'
         run: pnpm server:verify-installed
+      - name: Verify Windows installation, login and PowerShell terminal
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: node scripts/verify/server/registry.mjs --local
       - name: Pack verified packages
+        shell: bash
         env:
           SERVER_TARGET: ${{ matrix.target }}
         run: |
@@ -70,6 +73,7 @@ jobs:
           path: .runtime-artifacts/server/*.tgz
           if-no-files-found: error
   validate:
+    if: ${{ !inputs.windows_only }}
     needs: package
     runs-on: ubuntu-24.04
     steps:
@@ -117,7 +121,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2022]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +129,7 @@ jobs:
         with:
           node-version: "22.23.2"
       - name: Install public packages and verify native runtime and login
+        timeout-minutes: 10
         run: node scripts/verify/server/registry.mjs
   promote:
     needs: verify-registry

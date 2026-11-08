@@ -1,9 +1,8 @@
-import { resolveConfigurationContext } from "@runweave/config-node";
+import { assertPrivateDirectory, resolveConfigurationContext } from "@runweave/config-node";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
-  lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -36,15 +35,7 @@ export function serverPaths(args: string[]) {
     throw new Error("The standalone server supports one stable instance");
   const home = path.join(context.configRoot, "server");
   mkdirSync(home, { recursive: true, mode: 0o700 });
-  const stat = lstatSync(home);
-  if (
-    !stat.isDirectory() ||
-    stat.mode & 0o077 ||
-    stat.uid !== process.getuid?.()
-  )
-    throw new Error(
-      "Server directory must be private and owned by the current user",
-    );
+  assertPrivateDirectory(home);
   return {
     context,
     home,
@@ -61,12 +52,12 @@ export function describeInstallation(directory: string): ServerInstallation {
   ) as { name: string; version: string };
   if (pkg.name !== "@runweave/server" || !/^\d+\.\d+\.\d+$/.test(pkg.version))
     throw new Error("Expected an @runweave/server release package");
-  const prefix = path.resolve(packageRoot, "../../../..");
+  const prefix = path.resolve(packageRoot, process.platform === "win32" ? "../../.." : "../../../..");
   return {
     schemaVersion: 1,
     packageRoot,
     npmPrefix:
-      path.join(prefix, "lib/node_modules/@runweave/server") === packageRoot
+      path.join(prefix, process.platform === "win32" ? "node_modules/@runweave/server" : "lib/node_modules/@runweave/server") === packageRoot
         ? prefix
         : null,
   };
@@ -89,7 +80,7 @@ export function findInstallation(
     return describeInstallation(sibling);
   let globalRoot: string;
   try {
-    globalRoot = execFileSync("npm", ["root", "-g"], {
+    globalRoot = execFileSync(process.platform === "win32" ? "cmd.exe" : "npm", process.platform === "win32" ? ["/d", "/s", "/c", "npm.cmd root -g"] : ["root", "-g"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
@@ -128,7 +119,7 @@ export function activateServer(
 ): void {
   const current = path.join(home, "current");
   const temporary = `${current}.${randomUUID()}`;
-  symlinkSync(release, temporary);
+  symlinkSync(release, temporary, process.platform === "win32" ? "junction" : "dir");
   renameSync(temporary, current);
   const record = path.join(home, "installation.json");
   const staged = `${record}.${randomUUID()}`;

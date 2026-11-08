@@ -94,7 +94,11 @@ rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(backendDir, { recursive: true });
 buildResourceSampler(backendDir);
 await buildDevResources(backendDir);
-run("pnpm", ["--filter", "./frontend", "build"]);
+// npm_execpath is the pnpm JS entry when invoked by pnpm server:build.
+if (process.platform === "win32") {
+  if (!process.env.npm_execpath) throw new Error("Build through pnpm server:build on Windows");
+  run(process.execPath, [process.env.npm_execpath, "--filter", "./frontend", "build"]);
+} else run("pnpm", ["--filter", "./frontend", "build"]);
 cpSync(
   path.join(repoRoot, "frontend", "dist"),
   path.join(releaseDir, "frontend", "dist"),

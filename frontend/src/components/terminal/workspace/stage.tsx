@@ -210,7 +210,7 @@ export function TerminalWorkspaceStage({
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
-          {activeSession && !isMobileMonitor && panelSplitEnabled ? (
+          {activeSession?.tmuxSessionName && !isMobileMonitor && panelSplitEnabled ? (
             <TerminalPanelTargetBar
               apiBase={apiBase}
               token={token}
