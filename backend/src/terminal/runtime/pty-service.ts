@@ -170,6 +170,13 @@ function buildPtyEnv(
     delete merged.GOOGLE_API_KEY;
   }
 
+  // Windows PowerShell cannot load modules inherited from a parent PowerShell 7.
+  // Rebuild its standard module paths, as for a fresh powershell.exe process.
+  if (process.platform === "win32" && path.basename(command).toLowerCase() === "powershell.exe") {
+    for (const key of Object.keys(merged)) {
+      if (key.toLowerCase() === "psmodulepath") delete merged[key];
+    }
+  }
   normalizePathForAppImage(merged);
 
   return applyShellIntegration(command, merged);

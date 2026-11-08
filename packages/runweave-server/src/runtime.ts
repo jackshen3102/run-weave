@@ -64,10 +64,15 @@ export async function runComponent(
 ): Promise<void> {
   if (process.platform === "win32") {
     // Windows kill(SIGTERM) terminates immediately; use the parent's private IPC channel.
+    const shutdown = () => {
+      // Before the component registers cleanup, losing the owner must still stop startup.
+      if (process.listenerCount("SIGTERM") === 0) process.exit(0);
+      process.emit("SIGTERM");
+    };
     process.on("message", (message) => {
-      if (message === "runweave:shutdown") process.emit("SIGTERM");
+      if (message === "runweave:shutdown") shutdown();
     });
-    process.once("disconnect", () => process.emit("SIGTERM"));
+    process.once("disconnect", shutdown);
   }
   // A server launched inside another Runweave terminal must discover its own singleton,
   // not reuse the parent's hook connection or Browser endpoint.

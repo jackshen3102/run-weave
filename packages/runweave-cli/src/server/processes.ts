@@ -71,7 +71,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
           clearTimeout(timer);
           resolve();
         });
-        if (process.platform === "win32" && child.connected) child.send("runweave:shutdown");
+        if (process.platform === "win32" && child.connected) child.send("runweave:shutdown", (error) => { if (error) child.kill(); });
         else child.kill("SIGTERM");
       });
     }
