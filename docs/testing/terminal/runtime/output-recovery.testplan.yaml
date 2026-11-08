@@ -1,9 +1,9 @@
 version: 1
 name: Terminal 弱网有界输出恢复验收
 description: >
-  验证 tmux Terminal 在短断线时只补连续缺口，在长断线、缓存淘汰、无效游标和慢客户端场景中
+  验证 tmux Terminal 的游标恢复及 PTY Terminal 的快照重连，在长断线、缓存淘汰、无效游标和慢客户端场景中
   安全降级到当前状态或停止发送，并且 Backend、Web、原生 iOS 和其它客户端都不产生无界资源压力。
-  每例使用自己创建的 Backend、tmux session、客户端和输出 fixture，并只清理自己拥有的资源。
+  每例使用自己创建的 Backend、终端会话、客户端和输出 fixture，并只清理自己拥有的资源。
 
 cases:
   - id: TOR-001
@@ -56,7 +56,7 @@ cases:
       - 一个专用 tmux session 同时连接可暂停读取的慢客户端和持续消费的快客户端，只有测试 fixture 产生输出。
       - Backend 可观测每连接 bufferedAmount、关闭码、subscriber 数和进程 RSS，输出不含敏感内容。
     steps:
-      - 暂停慢客户端读取并持续输出，确认其 bufferedAmount 不超过 512 KiB 后无限增长，而是在阈值处停止发送并请求 1013 关闭；关闭握手 1 秒未完成时强制终止，此时慢端允许观察到 1006。
+      - 暂停慢客户端读取并持续输出，确认现有 bufferedAmount 加本次 JSON 消息的 UTF-8 字节超过 4 MiB 时停止发送并请求 1013 关闭，待发送队列不继续增长；关闭握手 1 秒未完成时强制终止，此时慢端允许观察到 1006。
       - 确认快客户端仍连续收到结束 marker、可执行一次无副作用输入，tmux session 未退出且没有被重新创建。
       - 恢复慢客户端并重新连接；确认它只按有效 cursor 续传或取得当前 snapshot，不会触发 Backend 把此前积压再次整体入队。
 
@@ -168,3 +168,17 @@ cases:
       - 断开其中一端进入 idle 保活，其余保持在线；调用会话级显示通道清理。
       - 等待进程退出事件，确认该会话的所有 attach 均消失，registry 中对应显示条目、镜像、缓存和 idle timer 均已释放。
       - 确认原 tmux pane 和任务 PID 未改变，再显式清理本例创建的 tmux 会话和客户端。
+
+  - id: TOR-013
+    name: PTY 的 ANSI 快照经过 JSON 转义后仍可重连
+    required: true
+    description: >
+      原始内容不超过 512 KiB、JSON 消息超过 512 KiB 且总待发送字节不超过 4 MiB 的合法 PTY 快照
+      必须完整发送，不能误触发慢客户端关闭，重连后仍能输入和接收新输出。
+    preconditions:
+      - 隔离 Backend、专用 PTY Terminal 和持续消费输出的真实 WebSocket 客户端已就绪，本例只清理自己的资源。
+      - PTY 输出 fixture 可产生高密度 ANSI 控制序列，客户端可记录 snapshot 原始内容、JSON 消息 UTF-8 字节、关闭码及唯一 marker。
+    steps:
+      - 使用 fixture 产生输出并断开客户端；从实际最近输出确认原始内容不超过 512 KiB，包含完整 ANSI 控制序列及本例唯一 marker，重连 snapshot 的 JSON 消息超过 512 KiB。
+      - 在客户端正常消费、总待发送字节不超过 4 MiB 时重新连接；确认完整收到 snapshot，内容与该会话实际最近输出一致，连接没有收到 1013，也没有只收到任意输出尾部。
+      - 通过同一连接发送一个新的唯一命令，确认只执行一次并完整收到新 marker；关闭本例客户端并删除本例 PTY 会话。
