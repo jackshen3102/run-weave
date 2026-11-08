@@ -57,7 +57,7 @@ if (mode === "host") {
       try {
         const message = JSON.parse(source.trim());
         if (message.token !== token) return socket.destroy();
-        socket.end(JSON.stringify(state));
+        socket.end(JSON.stringify({ ...state, shellPid: terminal.pid }));
         if (message.action === "close") {
           terminal.kill();
           server.close();
@@ -85,10 +85,10 @@ if (mode === "host") {
     let before;
     for (let attempt = 0; attempt < 100; attempt++) {
       before = await request(pipe, secret).catch(() => null);
-      if (before?.tick >= 2 && before.counterPid) break;
+      if (before?.tick >= 2 && before.counterPid > 1 && before.shellPid > 1) break;
       await sleep(100);
     }
-    assert(before?.tick >= 2 && before.counterPid, "Detached native PTY did not become ready");
+    assert(before?.tick >= 2 && before.counterPid > 1 && before.shellPid > 1, "Detached native PTY did not become ready");
     for (const shutdown of ["normal", "forced"]) {
       const client = spawn(process.execPath, [script, "client", pipe, secret], { stdio: ["ignore", "pipe", "inherit", "ipc"] });
       clients.push(client);
