@@ -12567,5 +12567,29 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "恢复 Backend 自有 Review 运行账本和不确定交付状态，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(directory, \"counter.cjs\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
   }
 ]

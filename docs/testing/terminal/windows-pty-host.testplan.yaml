@@ -1,0 +1,202 @@
+version: 1
+name: Windows PTY Host 运行时与恢复
+description: |
+  待实现功能的验收合同，配合 docs/plans/2026-11-08-windows-pty-host.md。 每例使用自己拥有的 Windows 用户或隔离实例、Host、终端、进程与证据目录；禁止接管真实工作终端。 本轮仅编写并校验格式，不表示以下行为已经实现或通过。重启是被测行为时由同一用例记录前后身份并重新取得连接。 实际升级使用固定源码与真实 npm tarball；Windows CI、真实 Windows、浏览器和手机分别记录覆盖范围。
+cases:
+  - id: PTYHOST-001
+    name: 托管输入保留文本提交与原始键盘语义
+    required: true
+    description: line 请求实际提交给 Traex，raw 输入不被追加回车。
+    preconditions:
+      - 本例拥有安装了候选 tarball 的 Windows x64 实例，Node 22、PowerShell 和已就绪的 Traex 可用。
+      - 本例 Host、Backend 与终端均从该实例创建，能够记录实际 ConPTY 输入和输出。
+    steps:
+      - 在本例托管 PowerShell 中提交唯一标记命令，确认实际执行；切换到 Traex，通过手机相同的 line 请求发送本地无副作用命令，确认无需补 Enter 即执行。
+      - 发送只应编辑输入框的 raw 内容，确认没有被自动提交；保存输入记录和实际输出，清理本例资源。
+  - id: PTYHOST-002
+    name: 调整托管终端尺寸作用于原 ConPTY
+    required: true
+    description: Host 转发 resize，原进程观察到与请求一致的终端网格。
+    preconditions:
+      - 本例拥有安装了候选 tarball 的 Windows x64 实例，Node 22、PowerShell 和已就绪的 Traex 可用。
+      - 本例 Host、Backend 与终端均从该实例创建，能够记录实际 ConPTY 输入和输出。
+    steps:
+      - 在自有 PowerShell 托管终端中调整尺寸并读取实际网格，确认尺寸与请求一致，PID 和会话实例不变。
+      - 保存请求、实际尺寸及进程证据，清理本例资源。
+  - id: PTYHOST-003
+    name: 托管终端的 Ctrl+C 中断实际命令
+    required: true
+    description: signal 请求作用于原 PTY 中的程序，不能结束 Host 或其他会话。
+    preconditions:
+      - 本例拥有安装了候选 tarball 的 Windows x64 实例，Node 22、PowerShell 和已就绪的 Traex 可用。
+      - 本例 Host、Backend 与终端均从该实例创建，能够记录实际 ConPTY 输入和输出。
+    steps:
+      - 在本例 PowerShell 托管终端执行可中断等待命令，发送 Ctrl+C，确认命令结束并回到可输入提示符，Host 与 shell 身份不变。
+      - 发送后续标记命令并确认执行，保存证据后清理本例资源。
+  - id: PTYHOST-004
+    name: 显式关闭只结束目标会话
+    required: true
+    description: 关闭终端是结束 PTY 的显式操作，重复关闭幂等且不会伤及其他终端。
+    preconditions:
+      - 本例拥有一个 Host 和两个活着的独立托管终端，均运行各自的唯一计数器。
+    steps:
+      - 关闭其中一个终端，确认其 shell 和子进程退出，Host 记录该会话退出。
+      - 重复相同关闭请求，确认没有再次创建或替换会话，另一个计数器持续运行；清理本例资源。
+  - id: PTYHOST-005
+    name: 正常重启 Backend 连回原进程
+    required: true
+    description: Backend 退出只断开客户端，不改变 Host、shell、Traex 和后台命令的运行身份。
+    preconditions:
+      - 本例拥有候选 Host 与 Backend，原终端内 Traex 及受控计数器已经运行。
+      - 已记录 Host 实例、会话实例、shell PID、Traex PID、thread 和计数器进程的启动身份。
+    steps:
+      - 正常停止并重新启动本例 Backend，期间从独立观察进程确认 Host 和所有被测终端进程持续存在，计数器持续递增。
+      - 重新获取本例连接并附着，确认所有身份与停止前一致，可以继续给原 Traex 发送输入；保存证据并清理。
+  - id: PTYHOST-006
+    name: Backend 异常退出不会带走 Host
+    required: true
+    description: Windows 上真实进程与 Job 生命周期不会使 Host 随 Backend 的强制结束而退出。
+    preconditions:
+      - 本例拥有通过正式启动方式建立的 Windows Host、Backend 和正在运行的托管计数器。
+      - 本例能够从独立观察进程记录 PID 启动身份和 Host 握手身份。
+    steps:
+      - 强制结束本例 Backend 进程，确认 Host、ConPTY 客户端和计数器仍持续运行，没有进入重建新进程的路径。
+      - 重新启动本例 Backend 并取得新连接，确认附着原会话且计数连续；保存证据并清理。
+  - id: PTYHOST-007
+    name: 窗口内重放不丢失或重复输出
+    required: true
+    description: 相同 Host 输出游标跨 Backend 订阅中断保持连续，包括快照期间新产生的帧。
+    preconditions:
+      - 本例拥有输出带单调编号、中文及 ANSI 控制序列的托管终端，可独立暂停 Backend 订阅并记录 Host 游标。
+      - 本例能够运行窗口内断流和超过缓存窗口的等价样本，并从 Host 获取实际屏幕快照。
+    steps:
+      - 在重放窗口内断开订阅并持续输出带编号、中文和 ANSI 的内容；用原游标重连，确认编号连续且不重复。
+      - 在快照生成期间继续输出，核对快照与后续帧边界没有遗漏或重复；保存游标和输出证据，清理本例资源。
+  - id: PTYHOST-008
+    name: 超过重放窗口时以快照明确恢复缺口
+    required: true
+    description: 窗口外恢复不能伪装为完整历史，必须恢复正确的当前画面并标记缺口。
+    preconditions:
+      - 本例拥有输出带单调编号、中文及 ANSI 控制序列的托管终端，可独立暂停 Backend 订阅并记录 Host 游标。
+      - 本例能够运行窗口内断流和超过缓存窗口的等价样本，并从 Host 获取实际屏幕快照。
+    steps:
+      - 断开订阅并输出到超过有界重放窗口后，使用原游标重连；确认返回历史缺口并转入快照恢复。
+      - 核对画面、网格和光标与 Host 当前状态一致，后续帧连续；保存证据并清理本例资源。
+  - id: PTYHOST-009
+    name: 慢订阅不会阻塞或关闭原 PTY
+    required: true
+    description: 超过订阅队列限制只断开慢订阅，其他订阅与原进程继续工作。
+    preconditions:
+      - 本例拥有输出带单调编号、中文及 ANSI 控制序列的托管终端，可独立暂停 Backend 订阅并记录 Host 游标。
+      - 本例能够运行窗口内断流和超过缓存窗口的等价样本，并从 Host 获取实际屏幕快照。
+    steps:
+      - 在本例同时建立正常和暂停读取的订阅，持续输出到触发慢订阅上限；确认慢订阅被要求重新快照，正常订阅仍收到输出。
+      - 确认 Host 和原终端进程未退出，恢复慢订阅后可以取得当前快照；保存证据并清理本例资源。
+  - id: PTYHOST-010
+    name: 输入确认丢失不会重复执行命令
+    required: true
+    description: 同一 Host 存活期间按 operationId 和序号去重，淘汰水位前的旧操作也不会重新执行。
+    preconditions:
+      - 本例拥有可记录命令执行次数的托管终端，并能在 Host 已写入后丢弃返回给 Backend 的响应。
+      - 本例能够构造相同操作的重试、不同内容冲突，以及已淘汰的旧序号。
+    steps:
+      - 丢弃写入确认并重新查询、重试同一操作，确认命令执行次数为一且可查询 written，不因失去 HTTP 响应而再次写入。
+      - 用相同 operationId 发送不同内容，确认冲突；重试水位前的旧序号，确认 expired 且执行次数不增加。
+      - 保存操作记录与实际执行计数，清理本例资源。
+  - id: PTYHOST-011
+    name: Backend 在文本与 Enter 之间退出仍完成一次提交
+    required: true
+    description: 已接管的完整输入序列由 Host 执行，Backend 定时器退出不会留下半次发送。
+    preconditions:
+      - 本例拥有真实 Traex 托管终端，Host 可观察结构化输入序列的阶段。
+      - 本例使用无副作用的本地命令，并能在文本写入后、延时 Enter 前停止 Backend。
+    steps:
+      - 提交一次 line 操作并在指定窗口停止 Backend，确认 Host 独立执行后续 Enter，命令只执行一次。
+      - 重启 Backend 后取得新连接，查询同一操作为 written，原 Traex 身份不变；保存证据并清理。
+  - id: PTYHOST-012
+    name: Host 失联后不伪装恢复或重发不确定输入
+    required: true
+    description: Host 自身故障是明确的会话边界，无法证明的输入结果必须保留 uncertain。
+    preconditions:
+      - 本例拥有候选 Host 和一个会话，能够在输入已经尝试写入但确认尚未送达时终止 Host。
+      - 本例仅使用自己的无副作用测试命令，能够观察 Backend 的重连与会话投影。
+    steps:
+      - 在指定窗口终止 Host，确认 Backend 显示 unavailable 或已证实的 exited，不自动启动同名替代 Agent。
+      - 启动新 Host，确认 hostInstanceId 不同，旧输入结果没有被标成 written 或自动重发；保存证据并清理。
+  - id: PTYHOST-013
+    name: Host 实例鉴权和发现不串实例
+    required: true
+    description: 错误令牌、不同配置根路径、过期 PID 身份和重复启动不能获得其他实例的终端控制权。
+    preconditions:
+      - 本例拥有两个独立实例及其 Host，会话各含唯一标记，另有仅供本例使用的过期发现记录。
+    steps:
+      - 使用错误令牌、另一个实例根路径或过期 PID 启动身份连接，确认被拒绝且没有输入或关闭发生在对方终端。
+      - 并发启动同实例 Host，确认只有一个通过内核锁并被采用，失败方不杀已有 Host；检查日志及公开 DTO 不含令牌。
+      - 保存握手和会话计数证据，清理本例资源。
+  - id: PTYHOST-014
+    name: writer 代次切换阻止旧 Backend 写入
+    required: true
+    description: 新 Backend 接管后旧 generation 不能继续输入、调整尺寸或结束会话。
+    preconditions:
+      - 本例拥有一个 Host 和可建立前后两个 writer generation 的受控 Backend 客户端。
+      - 原终端持续输出，两个客户端的所有请求和结果可记录。
+    steps:
+      - 让新客户端取得 writer lease，再从旧客户端发送输入、resize 和 close，确认全部拒绝且原进程继续运行。
+      - 从新客户端执行同类授权操作，确认落到原会话而非替代会话；保存证据并清理。
+  - id: PTYHOST-015
+    name: 原 Agent 通过稳定入口连接更换地址的上游
+    required: true
+    description: App Server 更换端口后，活着的 Agent 继续使用原 gateway 地址，普通副作用请求不自动重放。
+    preconditions:
+      - 本例拥有使用 Host 稳定入口启动的 Traex，App Server 和 Backend Hook 消费端均可记录事件 ID。
+      - 本例能够重启上游并改变其本机端口，在断流期间发送本例唯一 Hook 事件。
+    steps:
+      - 重启本例上游并改变端口，在中断期间调用一个本例可计数的普通副作用 API，确认不可用结果明确且请求没有被自动重放。
+      - 发布新上游目标后，从原 Traex 使用相同稳定入口再次调用，确认成功且原 Agent PID、thread 不变；保存证据并清理。
+  - id: PTYHOST-016
+    name: 断流期间确认的 Hook 事件可幂等补投
+    required: true
+    description: Hook 必须先持久接收再确认，上游恢复后原事件仅消费一次。
+    preconditions:
+      - 本例拥有使用 Host 稳定入口启动的 Traex，App Server 和 Backend Hook 消费端均可记录事件 ID。
+      - 本例能够重启上游并改变其本机端口，在断流期间发送本例唯一 Hook 事件。
+    steps:
+      - 停止本例上游，向 gateway 发送唯一事件 ID 的 Hook；确认收到确认前事件已写入私有 outbox。
+      - 启动新上游并发布目标，确认事件仅消费一次且 Agent thread、completion 投影归属正确；重发同事件不产生第二次消费，保存证据并清理。
+  - id: PTYHOST-017
+    name: Hook outbox 满时明确拒绝接收
+    required: true
+    description: 有界 outbox 达到容量后不能静默丢失已确认事件或无限存储。
+    preconditions:
+      - 本例拥有使用 Host 稳定入口启动的 Traex，App Server 和 Backend Hook 消费端均可记录事件 ID。
+      - 本例能够重启上游并改变其本机端口，在断流期间发送本例唯一 Hook 事件。
+    steps:
+      - 在本例上游不可用时填充 outbox 到容量上限，再发送唯一事件，确认明确拒绝，未被确认成已接收，状态显示不完整。
+      - 确认此前已确认的事件仍可读取且未被静默淘汰，恢复上游后补投这些事件；保存证据并清理本例资源。
+  - id: PTYHOST-018
+    name: 稳定入口不成为无鉴权代理
+    required: true
+    description: gateway 仅服务本例获授权会话及显式路由，不能转发任意目标或串写另一会话。
+    preconditions:
+      - 本例拥有两个不同令牌和身份的托管会话，以及可记录请求的自有上游与非白名单测试端点。
+    steps:
+      - 使用缺失或错误令牌、另一会话的身份载荷和非白名单路径请求 gateway，确认拒绝且上游没有收到副作用请求。
+      - 尝试把任意目标 URL 作为代理参数，确认不能访问该目标；检查日志不含凭据，保存证据后清理本例资源。
+  - id: PTYHOST-019
+    name: 屏幕镜像故障不会结束原终端
+    required: true
+    description: 显示恢复失败只标记降级，不能把缓存或镜像故障转换成杀死 PTY。
+    preconditions:
+      - 本例拥有真实 Host 和持续运行的计数器，可以受控触发该会话的屏幕镜像失败。
+    steps:
+      - 触发镜像故障，确认 Host 显示恢复降级，原 shell 与计数器进程身份仍在且计数继续。
+      - 通过仍可用的原始输出和输入确认进程可工作，不自动 spawn 替代终端；保存证据并清理本例资源。
+  - id: PTYHOST-020
+    name: 输入队列和序列边界明确拒绝超限请求
+    required: true
+    description: 超出输入大小、步骤、延时或待执行数量上限的操作不先确认后丢弃。
+    preconditions:
+      - 本例拥有可观察已接受操作与实际执行次数的 Host 会话，能够构造协议边界内外的输入样本。
+    steps:
+      - 分别提交边界内样本和超出每操作字节、步骤、单次或累计延时上限的样本，确认前者按序执行，后者明确拒绝且执行次数不增加。
+      - 让待执行队列达到上限后再提交，确认返回 busy 而没有 accepted 记录；已接受操作仍按序完成，保存证据并清理。

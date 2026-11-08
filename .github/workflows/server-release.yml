@@ -4,6 +4,10 @@ on:
     tags: ["server-v*"]
   workflow_dispatch:
     inputs:
+      pty_spike_only:
+        description: Verify independent Windows ConPTY lifetime only (never publish)
+        type: boolean
+        default: false
       windows_only:
         description: Verify Windows only (never publish)
         type: boolean
@@ -27,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.windows_only && '[{"runner":"windows-2022","target":"win32-x64"}]' || '[{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x64"},{"runner":"ubuntu-24.04","target":"linux-x64"},{"runner":"ubuntu-24.04-arm","target":"linux-arm64"},{"runner":"windows-2022","target":"win32-x64"}]') }}
+        include: ${{ fromJSON((inputs.windows_only || inputs.pty_spike_only) && '[{"runner":"windows-2022","target":"win32-x64"}]' || '[{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x64"},{"runner":"ubuntu-24.04","target":"linux-x64"},{"runner":"ubuntu-24.04-arm","target":"linux-arm64"},{"runner":"windows-2022","target":"win32-x64"}]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -51,15 +55,21 @@ jobs:
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build distributable
+        if: ${{ !inputs.pty_spike_only }}
         run: pnpm server:build
+      - name: Verify independent ConPTY lifetime
+        if: ${{ inputs.pty_spike_only }}
+        timeout-minutes: 3
+        run: node scripts/verify/server/pty-host-spike.mjs
       - name: Verify installed tarballs and self-update
         if: runner.os != 'Windows'
         run: pnpm server:verify-installed
       - name: Verify Windows installation, login and PowerShell terminal
-        if: runner.os == 'Windows'
+        if: ${{ runner.os == 'Windows' && !inputs.pty_spike_only }}
         timeout-minutes: 10
         run: node scripts/verify/server/registry.mjs --local
       - name: Pack verified packages
+        if: ${{ !inputs.pty_spike_only }}
         shell: bash
         env:
           SERVER_TARGET: ${{ matrix.target }}
@@ -68,12 +78,13 @@ jobs:
             (cd ".runtime-artifacts/server/$package" && npm pack --pack-destination ..)
           done
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.pty_spike_only }}
         with:
           name: npm-server-${{ matrix.target }}
           path: .runtime-artifacts/server/*.tgz
           if-no-files-found: error
   validate:
-    if: ${{ !inputs.windows_only }}
+    if: ${{ !inputs.windows_only && !inputs.pty_spike_only }}
     needs: package
     runs-on: ubuntu-24.04
     steps:
@@ -121,7 +132,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2022]
+        runner:
+          [
+            macos-15,
+            macos-15-intel,
+            ubuntu-24.04,
+            ubuntu-24.04-arm,
+            windows-2022,
+          ]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
