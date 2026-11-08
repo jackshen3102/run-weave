@@ -10,7 +10,7 @@ flowchart LR
   I[Suiji SwiftUI App] --> H[独立 HTTP API]
   W[Web / Runweave 终端随记抽屉] --> H
   H --> S[记录 / 身份 / 附件业务服务]
-  A[外部 Agent] --> M[独立凭据的十一工具 MCP]
+  A[外部 Agent] --> M[按领域隔离凭据的 MCP]
   M --> S
   H --> R[手动创建回顾任务]
   R --> C[本地已登录 Codex CLI]
@@ -34,7 +34,8 @@ flowchart LR
 ## 桌面交互与账户
 
 桌面只从终端右上角打开[随记抽屉](../../frontend/src/features/suiji/drawer.tsx)，不创建独立窗口。
-记录、待办、回收站、AI 与手机保持相同结构；详情、编辑和附件在抽屉内导航。
+桌面沿用记录、待办、工作及次级回收站/AI 入口；支持工作能力的原生主导航为记录、待办、浏览、工作，
+回收站位于更多菜单。独立浏览不作为桌面记录中的素材分类；详情、编辑和附件在抽屉内导航。
 关闭抽屉保留当前页面和草稿，终端切换不重建随记会话。原生内嵌浏览器在抽屉打开时隐藏，关闭后恢复。
 
 列表与详情正文的普通链接点击通过[浏览器装配层](../../frontend/src/features/suiji/browser-navigation.ts)
@@ -75,41 +76,22 @@ SDK 只补充固定页面分类与已安装包的五个构建标签，不上传�
 [原生使用分析](../../packages/suiji-ios/README.md#原生使用分析)为准；共享浏览器包不依赖采集 SDK。
 独立随记 Web 接入、按正式/开发连接排除采集不在当前范围。
 
-## 当前验证范围
+## 验证与交付边界
 
-以下为 2026-09-07 的本地分层验收证据，云端生产范围尚未完成。
+记录、MCP、AI、原生及部署验收从[随记测试入口](../testing/README.md)选择对应 YAML，
+运行与恢复遵循[部署合同](../../deploy/suiji/README.md)。证据存放在根 `.runweave/suiji/`；
+不提交凭据、数据库、私人正文、附件或一次性截图。旧本地或生产验证只覆盖当时版本，
+本轮文档整理没有重跑行为验收，不将历史计划中的状态当作当前通过证明。
 
-| 范围             | 结果与合同                                                                                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 服务数据         | [20 条](../testing/suiji/service-records.testplan.yaml)通过，真实 PostgreSQL 18.6、HTTP、文件与受控故障                                               |
-| 外部 MCP         | [13 条](../testing/suiji/mcp-agent.testplan.yaml)通过，含真实 Codex CLI 读改写与独立 HTTP 读回                                                        |
-| 多设备 MCP 凭据  | [13 条](../testing/suiji/mcp-credentials.testplan.yaml)在隔离 PostgreSQL 与真实服务通过；生产发布、Mac 原 token 和异机恢复仍待取证                    |
-| Web / 桌面录入   | [12 条](../testing/suiji/web-capture.testplan.yaml)通过，实际 Beta 独立窗口和同一构建的 HTTP 页面，含附件、断线、草稿、冲突、身份、多标签页及窗口重开 |
-| 本地 AI          | [12 条](../testing/suiji/ai-review.testplan.yaml)通过，真实 Codex 发问、追问、范围与只读验证；非法引用、慢进程等使用明确的故障注入                    |
-| Swift 构建 / DTO | Debug、Release Simulator 构建通过；Debug 已签名安装并启动于 iPhone 17；真实 HTTP 的 63 条记录及已完成 AI 回答通过生产 Codable 字段回编码核对          |
-| 原生体验         | [16 条本地用例](../testing/suiji/ios-capture.testplan.yaml)通过，含草稿、附件、记录与状态幂等、冲突、身份、键盘与大字号；015 云端独立网络延期         |
-| 独立部署         | [前 3 条](../testing/suiji/deployment-recovery.testplan.yaml)通过；异机备份及后续恢复未执行，云部署与恢复按用户要求延期                               |
-| 静态门禁         | 服务与前端 typecheck/lint、服务 build、shared typecheck、架构边界通过；不能替代上述 UI 验收                                                           |
-
-类型切换按钮和完成后自动关窗目前仅通过静态检查，尚未进行新一轮 Web UI 验收。
-
-脱敏执行结果、CLI 工具事件与构建日志放根 `.runweave/suiji/`，本地流程在 `local-flow/`，真机准备在 `physical/`；
-不将运行凭据、数据库、正文、附件或一次性截图加入 Git。
-具体运行方式以包入口为准；后续交付边界见下文，不沿用旧计划中已被本地原生验收覆盖的阻塞结论。
-
-## 后续交付边界
-
-- 云端独立网络的手机验收、异机备份、空目标恢复与正式发布仍待取证，沿用上表现有测试计划。
-  首次发布前需明确目标主机、域名/TLS、异机备份位置、RPO/RTO 与允许停写窗口；
-  配置和发布预检以[部署入口](../../deploy/suiji/README.md)为准。
-- embedding/pgvector、中文召回评测、聊天持久化与私有文档连接器尚未交付；当前关键词回顾不代表这些能力。
-- 原生、Web 和云端分别报告验收结果。本地通过不能替代云端发布与恢复演练，后续 UI 改动也不继承旧构建的通过状态。
+原生、Web、正式部署、异机备份恢复与自然调度分别取证；模拟器和构建不能替代真机系统分享，
+手动采集不能替代到点执行。首次部署或变更备份目标仍需明确主机、域名/TLS、RPO/RTO 与停写窗口。
+embedding/pgvector、中文召回评测、聊天持久化与私有文档连接器尚未交付，当前关键词回顾不代表这些能力。
 
 ## 回收站
 
 记录通过 `deleted_at` 保留删除标记，删除和恢复使用既有版本与幂等事务，不改变待办状态。
 Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通列表与 Agent/AI 检索排除回收站。
-正文、附件和历史修订保留，不提供永久清空或定时清理。回收站最初引入于 schema 3；当前部署需迁移至 schema 9，见[部署入口](../../deploy/suiji/README.md#跟进版本迁移)。
+正文、附件和历史修订保留，不提供永久清空或定时清理。回收站最初引入于 schema 3；当前服务要求 schema 16，见[服务入口](../../packages/suiji-server/README.md#独立浏览与迁移schema-16)。
 
 ## 跟进与外部 Agent 成果
 
@@ -117,7 +99,7 @@ Web 与原生 iOS 提供回收站列表、删除确认和恢复入口；普通�
 
 Web/桌面与 iOS 提供跟进、成果阅读、复制交接；[随记 Skill](../../plugins/toolkit/skills/suiji/SKILL.md) 可在其他电脑读写同一服务，只有最终成功成果回写，用户确认后才由 Agent 完成待办。跟进里的用户补充不会触发 Agent。
 
-服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前实现需要 schema 9，线上启用情况及行为通过范围需要独立验证。
+服务接口与版本合同以 [服务 README](../../packages/suiji-server/README.md#跟进与最终成果) 为准；当前服务要求 schema 16；线上启用情况及行为通过范围需要独立验证。
 
 ### 验收入口与保留缺口
 
@@ -151,35 +133,48 @@ Web使用已有480px抽屉、presence和连接身份隔离的IndexedDB；原生�
 
 ## Daily Record 定时上报
 
-同版 Daily Record Skill 在各 Backend 本机运行，Mac 可启用本人飞书聊天和已落盘的浏览记录，
-devbox 关闭飞书和浏览来源。浏览接入只消费明确选中的本机来源，不安装扩展或自动开启记录。
-现有调度只负责唤醒，逐日补报、固定来源身份和冻结导入恢复由 Daily Record 本地状态管理。
-随记 schema11 新增预期来源登记：缺报来源使日期为 partial，无登记旧日期为 unknown；
-仍复用工作事实导入事务与人工字段保护，不修改普通笔记或待办。
-配置、权限与部署合同见[定时上报](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
-实际双机、飞书和到点调度是否通过，以本次验收证据为准。
+Daily Record 在各 Backend 本机采集 Agent 执行依据及明确授权的本人飞书事项，
+不将浏览、素材、App 使用记录或其摘要装配进工作输入。工作导入与周报来源同样拒绝
+`browser-visit`、`suiji-material` 及对应 scope；项目为空也不能绕过领域隔离。
 
-浏览材料保持 `observed-only`：只证明记录到访问，不能证明本人操作、阅读时长或工作成果。
-同事项优先与 Agent、飞书事实合并；独立浏览概览每天最多 3 条、每条正文最多 160 字，
-只允许 `documented` 且项目为空。云端保存紧凑摘要引用，完整访问依据保留本地并可回查原行。
-浏览来源的 `complete` 仅表示登记日志读完，不代表全天覆盖；缺失或损坏仍保留补采义务。
-
-已有任务复用本机配置与固定 runtime，不依赖临时 worktree。增加浏览来源必须使用
-`migrate-sources`，保留机器身份、事项映射、历史回执与 outbox；生效日前不要求浏览回执。
-服务先声明 `features.workBrowserHistory=true`，再登记与配置生效日一致的浏览 scope；
-来源迁移不能通过重置状态或更换身份绕过。具体配置、迁移及恢复命令沿用上述定时上报合同。
+既有调度只负责唤醒，逐日补报、固定机器身份、事项映射、冻结导入及未知结果恢复由
+Daily Record 本地状态管理。缺报来源使日期为 partial，无登记旧日期为 unknown；
+导入保护人工字段，不修改普通笔记或待办。已有任务复用本机配置与固定 runtime，
+不依赖临时 worktree。旧浏览来源关闭有效区间，保留历史回执，不重放旧浏览工作请求。
+配置与迁移见[定时上报](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md)。
 
 验收入口为[多机器定时上报](../testing/skills/daily-record-reporting.testplan.yaml)、
 [本机采集](../testing/skills/daily-record-local.testplan.yaml)和
 [项目归属](../testing/skills/daily-record-projects.testplan.yaml)。
-浏览来源另按[浏览接入计划](../testing/skills/daily-record-browser.testplan.yaml)核对观察语义、
-来源隔离、迁移与发布边界。
-本机集成验证不替代真实 Mac/飞书、真实 devbox、服务回执与独立回读及到点调度证据；
-手动触发成功也不证明到点运行。旧研究中的远端拉包、随记来源采集与 `get_change`
-不属于当前 Daily Record 合同，不因过程计划曾列出而视为已实现。
+本机集成验证不替代真实 Mac/飞书、真实 devbox、服务独立回读或到点调度；手动触发成功
+也不证明自然运行。浏览资料由下述独立领域处理，不恢复旧工作浏览概览合同。
 
 工作周报固定覆盖七个自然日，默认每周五 04:00（Asia/Shanghai）生成上周五至本周四的结果。
 生成只消费随记已上报工作事实；`report-prepare` 按实际来源覆盖有界等待日报，缺报日期在报告详情保留。
 来源必须包含周期内全部事实 ID/版本，并核对 feedRevision；同周期唯一，业务幂等与修订保护重复提交和并发修改。
 人工修改后的报告禁止自动覆盖。工作页提供全部/日志/总结、报告阅读与编辑、原始日志日期范围入口；
 未知编辑请求沿用隔离草稿冻结，不在启动或联网时重发。生成调度复用 Runweave Backend，不在随记服务内另建采集器或时钟。
+
+## 独立浏览
+
+schema 16 将旧素材迁入独立浏览领域，记录的全部、普通 AI 回顾、工作事实及周报均排除浏览。
+原生浏览入口支持来源、日期、类型与已保存文字检索；浏览、普通记录和分享队列分别保存草稿。
+分享及手动保存进入浏览，冻结未知请求不在联网、启动或前台恢复时自动重发。
+旧 material 请求只保留分享和冻结请求的有界兼容，不能把迁出对象转回普通记录。
+
+浏览原始条目、观察证据、来源连接、批次回执与派生摘要独立保存；事件时间、采集时间和归属日期
+分别表达，缺失事件时间不补造。摘要引用输入条目版本及 hash，原文变化或删除后标记待更新。
+同日知乎计数按不同内容身份去重，不推断访问次数、读完、停留时长或工作成果。失败、缺正文
+与未登录保留明确覆盖和错误，不能写成零活动。
+
+`/mcp/browse` 与 `/mcp/work` 使用独立领域凭据和工具，浏览 revision 不推进工作 revision。
+迁移保留旧修订、跟进及附件归档；历史纯浏览工作事实隔离为 excluded，混合事实为 needs-review，
+不删除原文和人工字段，不进入新的工作输入。账号切换、附件权限和回滚边界以
+[服务合同](../../packages/suiji-server/README.md#独立浏览与迁移schema-16)为准。
+
+采集与阅读回顾使用 [browse-record](../../plugins/toolkit/skills/browse-record/SKILL.md)，
+每日同步与延迟 App 使用窗口见[来源同步合同](../../plugins/toolkit/skills/browse-record/references/daily-reporting.md)。
+该流程不创建调度；任务启用须独立确认完整配置，手动导入不代表自然采集已启用。
+验证入口为[浏览领域与工作隔离](../testing/suiji/browse-domain.testplan.yaml)及
+[知乎采集](../testing/suiji/browse-zhihu.testplan.yaml)。隔离服务、模拟器、正式部署、真实手机和自然调度
+分别取证；本轮文档维护不重新认证旧验收结果。

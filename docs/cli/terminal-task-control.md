@@ -161,4 +161,6 @@ Reviewer 启动先通过原生 `hooks/list` 只读核对该工作区的配置。
 停用但内容变更的插件副本显示的启动审核。停用项继续停用，不写全局信任状态，不更换模型。
 存在已启用且未受信任的 Hook、配置读取不完整或原生能力不可用时，在 Backend 明确阻塞，
 不启动一个等待用户处理 Hooks 弹窗的 Reviewer。这个选项只用于独立 Review 进程。
+预检解析 `agents.codex.binary`（缺省为 PATH 中的 Codex）后，将同一绝对可执行路径用于
+Hooks 查询和 Reviewer 启动，避免预检与实际启动使用不同版本；解析失败时停止启动。
 对应行为验收见 [Reviewer Hooks 启动计划](../testing/terminal/independent-code-review-hooks.testplan.yaml)。

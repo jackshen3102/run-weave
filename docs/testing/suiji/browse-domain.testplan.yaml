@@ -1,7 +1,7 @@
 version: 1
 name: 随记浏览领域重构与工作隔离
 description: >
-  对应 docs/plans/2026-11-07-suiji-browse.md 的待实现合同。
+  浏览领域合同见 docs/architecture/suiji.md 的「独立浏览」。
   每条用例自行建立隔离 owner、客户端和数据，不依赖上一条遗留状态。
   只编写验收计划，格式通过不代表功能已实现；不得在生产数据上制造失败。
 cases:
