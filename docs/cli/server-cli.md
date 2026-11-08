@@ -70,15 +70,15 @@ Host 每实例最多 64 个运行终端，保留最多 256 个会话运行时；
 
 ## 生命周期命令
 
-| 命令                                    | 合同                                                                                |
-| --------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `rw server status --json`               | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执     |
-| `rw server stop`                        | 停止本产品持有的组件，保留 tmux 与数据                                              |
-| `rw server restart [--force]`           | 重启原模式；有受影响后台执行时默认拒绝                                              |
-| `rw server logs [--follow]`             | 系统托管日志末尾或持续跟随；前台日志在原终端                                        |
-| `rw server service install [--dry-run]` | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册 |
-| `rw server service uninstall`           | 注销并停止系统服务，保留配置和数据                                                  |
-| `rw server update [--version X.Y.Z      | --channel latest                                                                    | next] [--dry-run] [--force] [--request-id UUID]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
+| 命令                                                                                                     | 合同                                                                                    |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `rw server status --json`                                                                                | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执         |
+| `rw server stop`                                                                                         | 停止本产品持有的组件，保留 tmux 与数据；Windows 保留独立 PTY Host                       |
+| `rw server restart [--force]`                                                                            | 重启原模式；有受影响后台执行时默认拒绝                                                  |
+| `rw server logs [--follow]`                                                                              | 系统托管日志末尾或持续跟随；前台日志在原终端                                            |
+| `rw server service install [--dry-run]`                                                                  | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册     |
+| `rw server service uninstall`                                                                            | 注销并停止系统服务，保留配置和数据                                                      |
+| `rw server update [--version X.Y.Z \| --channel latest\|next] [--dry-run] [--force] [--request-id UUID]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
 
 注册系统任务需要管理员权限，进程仍以执行命令的服务用户运行。不要用 sudo 把配置账号切换成另一个用户。
 Linux 服务沿用安装命令的 HOME 与 PATH；迁移已有部署时须保留原服务的 HOME，以继续使用原 Agent 登录态和用户目录。

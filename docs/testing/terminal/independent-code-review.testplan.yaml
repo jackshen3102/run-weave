@@ -1,7 +1,7 @@
 version: 1
 name: 终端页面一键独立代码 Review
 description: >
-  待实现功能的验收合同，配合 docs/plans/2026-11-08-independent-code-review.md 使用。
+  功能合同见 docs/cli/terminal-task-control.md 的「终端页面独立代码 Review」。
   验证两端统一从更多菜单直接启动、来源上下文隔离、当前变更快照与安全回传。
   每例使用自己的项目、终端和证据目录，不操作用户工作终端；模型答案不能代替运行事实。
   本文件的格式通过不表示产品已实现或行为通过。

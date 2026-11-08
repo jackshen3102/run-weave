@@ -2,6 +2,8 @@
 
 本文描述当前恢复边界，不保留旧的分阶段改造或新增字段建议。用户任务由 tmux server/pane 承载，
 node-pty 是 Backend 与终端之间的 attach 通道；attach client 或 Backend 退出不等于用户任务退出。
+本文的直接 PTY 回退不包含 Windows standalone 的独立 Host；该模式的进程保活、输入确认和升级边界
+见 [Windows PTY Host](./windows-pty-host.md)。
 
 ## 入口与状态所有者
 
