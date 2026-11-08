@@ -59,9 +59,21 @@ function materialize(installed, home) {
         ...(process.platform === "win32" ? { filter: () => true } : {}),
       });
       const archive = path.join(native, "native.tar.gz");
-      const entries = execFileSync("tar", ["-tzf", archive], {
-        encoding: "utf8",
-      })
+      // Windows tar can lose Unicode command-line paths in the active code page.
+      // Node opens the archive and supplies the working directory using Unicode APIs.
+      const tar = (mode) => {
+        const input = fs.openSync(archive, "r");
+        try {
+          return execFileSync("tar", [mode, "-"], {
+            cwd: stage,
+            stdio: [input, "pipe", "pipe"],
+            encoding: "utf8",
+          });
+        } finally {
+          fs.closeSync(input);
+        }
+      };
+      const entries = tar("-tzf")
         .trim()
         .split("\n");
       if (
@@ -70,7 +82,7 @@ function materialize(installed, home) {
         )
       )
         throw new Error("Unsafe native archive");
-      execFileSync("tar", ["-xzf", archive, "-C", stage]);
+      tar("-xzf");
       fs.copyFileSync(
         path.join(native, "manifest.json"),
         path.join(stage, "server-manifest.json"),
