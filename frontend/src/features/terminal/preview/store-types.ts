@@ -60,6 +60,8 @@ export interface TerminalPreviewProjectState {
 
 export interface TerminalPreviewStore {
   ui: TerminalPreviewUiState;
+  codeReviewTarget: { scope: string; reviewId: string } | null;
+  openCodeReview: (target: { scope: string; reviewId: string }) => void;
   sidecarLayout: SidecarTabLayout;
   sidecarLayoutError: string | null;
   setSidecarTabVisible: (id: SidecarTabId, visible: boolean, available: readonly SidecarTabId[]) => void;

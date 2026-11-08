@@ -154,6 +154,8 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
   conversationTarget: null,
   setConversationTarget: (conversationTarget) => set({ conversationTarget }),
   openConversation: (target) => set((state) => ({ ...revealSidecarTab(state, "conversation"), conversationTarget: target, ui: { ...state.ui, open: true, activeTool: "conversation" } })),
+  codeReviewTarget: null,
+  openCodeReview: (target) => set((state) => ({ ...revealSidecarTab(state, "code-review"), codeReviewTarget: target, ui: { ...state.ui, open: true, activeTool: "code-review" } })),
   projects: {},
   connectionScope: null,
   projectsByConnection: {},

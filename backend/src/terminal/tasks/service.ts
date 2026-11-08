@@ -137,7 +137,7 @@ export class TerminalTaskService {
     });
   }
 
-  start(id: string, request: StartTerminalTaskRequest): Promise<TerminalTask> {
+  start(id: string, request: StartTerminalTaskRequest, internal?: { codexArgs: string[] }): Promise<TerminalTask> {
     return this.exclusive(id, async () => {
       const task = this.get(id);
       // Never replay an uncertain launch, including after a lost HTTP response.
@@ -152,6 +152,7 @@ export class TerminalTaskService {
         await this.touch(task);
         const prepared = await prepareTerminalAgent(this.manager, session, this.options, {
           agent: "codex", panelId: panel.id, cwd: task.cwd,
+          ...(internal ? { args: internal.codexArgs } : {}),
           prompt: `初始化任务终端。只回复 ${this.bootstrap(task)}，不要执行其他工作。`,
           ...(request.commandLine ? { commandLine: request.commandLine } : {}),
         }, { supervisorInput: true, validateSupervisorTarget: () => this.assertControl(task) });

@@ -89,6 +89,7 @@ interface TerminalPreviewPanelShellProps {
   handoffBody?: ReactNode;
   supervisionBody?: ReactNode;
   conversationBody?: ReactNode;
+  codeReviewBody?: ReactNode;
   body: ReactNode;
   layout: SidecarLayout;
   navigation: PreviewNavigation;
@@ -126,6 +127,7 @@ export function TerminalPreviewPanelShell({
   handoffBody,
   supervisionBody,
   conversationBody,
+  codeReviewBody,
   body,
   layout,
   navigation,
@@ -435,6 +437,7 @@ export function TerminalPreviewPanelShell({
           >
             {raceBody}
           </div>
+          {activeTool === "code-review" ? <div className="absolute inset-0 min-h-0">{codeReviewBody}</div> : null}
           {activeTool === "conversation" ? <div className="absolute inset-0 min-h-0">{conversationBody}</div> : null}
           {activeTool === "handoff" ? <div className="absolute inset-0 min-h-0">{handoffBody}</div> : null}
           {activeTool === "task-supervision" ? <div className="absolute inset-0 min-h-0">{supervisionBody}</div> : null}

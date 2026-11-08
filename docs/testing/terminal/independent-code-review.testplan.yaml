@@ -1,0 +1,199 @@
+version: 1
+name: 终端页面一键独立代码 Review
+description: >
+  独立代码 Review 验收合同，以 docs/cli/terminal-task-control.md 的当前产品语义为准。
+  验证两端统一从更多菜单直接启动、来源上下文隔离、当前变更快照与安全回传。
+  每例使用自己的项目、终端和证据目录，不操作用户工作终端；模型答案不能代替运行事实。
+  本文件的格式通过不表示产品已实现或行为通过。
+cases:
+  - id: ICR-001
+    name: 桌面从更多菜单完成可见终端审查闭环
+    required: true
+    description: 点击一次直接启动独立 Reviewer 并把完整报告送回来源，来源 Agent 无需执行调度命令。
+    preconditions:
+      - 自有 Dev Session 已包含实现，有可用 Codex 执行器、空闲来源 Agent 和一份可审文本变更。
+      - 本例来源是已有普通 Codex 终端，未通过任务启动接口启动，没有 launchOperationId；已记录总终端 ID 与工作区，未设置待提交草稿。
+    steps:
+      - 使用 toolkit:playwright-cli 附着本例浏览器，在来源终端打开更多（…）菜单；确认代码 Review 位于菜单内，顶栏无独立发起按钮，仅打开菜单未创建任务。
+      - 点击代码 Review 菜单项；确认菜单关闭，没有确认弹窗，终端输出区上方立即显示准备状态且来源没有收到发起审查的命令。
+      - 确认出现一个可见 Reviewer 终端，thread 与来源不同，页面没有自动切走；记录其真实任务派发和原生最终回复。
+      - 等待完成，确认报告持久可读、来源收到一次结果，Reviewer 终端仍保留；保存页面截图与输入记录，清理本例资源。
+  - id: ICR-002
+    name: iPhone 从更多菜单直接发起并接收结果
+    required: true
+    description: iOS 使用同一后端合同，实际 UI 能发起审查并在来源终端看到报告。
+    preconditions:
+      - 自有 Backend 和来源终端已准备可审变更，App 已构建安装到本例申请的模拟器。
+      - 使用 toolkit:agent-device 建立了准确 UDID 的独立会话，来源 Agent 空闲且无草稿。
+    steps:
+      - 用 toolkit:agent-device 打开终端页面更多（…）操作菜单；确认代码 Review 位于菜单内，顶栏和底部工具条无独立发起按钮，仅打开菜单未创建任务。
+      - 点击代码 Review 菜单项；确认菜单关闭，没有范围确认，在四个分页下方显示运行状态，页面仍停留在来源终端。
+      - 打开 Reviewer 入口观察真实独立终端，再回到来源；等待报告显示与结果回传，保存真实 UI 树及截图。
+      - 明确证据来源为模拟器；清理本例终端与环境，执行设备 stop/finish，恢复本例启动的设备状态。
+  - id: ICR-003
+    name: 来源历史不能进入 Reviewer 上下文
+    required: true
+    description: 当前及历史任务的来源内容不被读取提取或注入，Reviewer 只接收白名单输入。
+    preconditions:
+      - 本例来源有两个历史任务，对话、任务标题和自评结论含唯一标记，标记未写入代码或仓库规则。
+      - 当前工作区只有最后一组改动，创建链路的 history/handoff 调用及 Reviewer 启动输入可审计。
+    steps:
+      - 从真实页面点击代码 Review；检查系统未请求来源消息正文、交接摘要或任务目标提取。
+      - 检查 Reviewer bootstrap、业务 prompt、输入快照和注入上下文，确认不含唯一标记、来源身份、历史结论或来源自动生成上下文。
+      - 检查新 thread 和新 Browser Group 归属，确认未 fork/resume 来源；保存证据并清理本例资源。
+  - id: ICR-004
+    name: 快照保持变更页的两层 Git 语义
+    required: true
+    description: staged 和 working 分开冻结，新增与删除及重命名不被遗漏，也不纳入历史提交任务。
+    preconditions:
+      - 本例 Git 项目包含同文件的 staged 与 working 不同版本、未跟踪文本、删除和重命名项，以及一个无当前改动的历史提交文件。
+    steps:
+      - 从终端启动 Review，读取变更页与本轮快照；逐项核对 changeKind、路径、oldPath、HEAD/index/working 两侧内容和版本。
+      - 确认历史提交文件没有成为受审项，暂存后又回改的文件仍有两层记录；读取快照指纹和产物后清理本例资源。
+  - id: ICR-005
+    name: 空变更不启动 Reviewer
+    required: true
+    description: 干净工作区返回 no_changes，不产生空审查或扩展到分支历史。
+    preconditions:
+      - 本例来源绑定的 Git 工作区干净且存在历史提交，终端创建计数可读取。
+    steps:
+      - 在真实终端页面点击代码 Review；确认提示当前工作区没有待审查改动，无确认框且没有创建 Reviewer。
+      - 确认未把历史提交或对话作为替代范围；保存响应和创建计数，清理资源。
+  - id: ICR-006
+    name: 无法读取的条目必须形成覆盖缺口
+    required: true
+    description: 二进制、大文件、冲突和越界链接不被读成空正文或当作已经审过。
+    preconditions:
+      - 本例项目存在一个普通文本变更及二进制、大于读取限制的文本、冲突项和指向项目外标记文件的链接。
+      - 项目外标记文件内容可用于核对是否发生越界读取。
+    steps:
+      - 发起 Review，核对快照保留所有受审条目和明确状态，项目外标记未出现在输入包。
+      - 等待报告，确认遗漏项与未执行原因可见，coverageComplete 为 false，没有完整通过声明；清理资源。
+  - id: ICR-007
+    name: 捕获期间变化不能产生混合快照
+    required: true
+    description: 快照采集识别并发写入，最多自动重采一次，持续变化时明确失败。
+    preconditions:
+      - 本例自有仓库可在捕获前后校验窗口持续变更同一受审文件，记录每次内容版本。
+    steps:
+      - 启动受控写入和 Review 捕获，保持两次采集都发生版本变化；确认返回 snapshot_unstable，未创建 Reviewer。
+      - 停止写入后用新的请求启动，确认快照的各侧内容与版本一致且可回查；清理本例资源。
+  - id: ICR-008
+    name: 运行中的代码变化使报告标记过期
+    required: true
+    description: Review 继续对应原快照，不把后续改动或环境的验证结果冒充旧版本证据。
+    preconditions:
+      - 本例 Review 已冻结快照并开始执行，可在其完成前修改原工作区受审文件。
+    steps:
+      - 修改自有文件后让 Review 完成；确认快照未变化，报告及回传带 stale 提示，保存的指纹仍为原版本。
+      - 核对运行验证记录，版本不一致的检查被标记未执行或无效，未自动再开审查；清理资源。
+  - id: ICR-009
+    name: 同一次请求和重复点击不重复创建
+    required: true
+    description: 网络重试和活跃运行中的重复点击都复用同一 Review，不产生重复执行器。
+    preconditions:
+      - 本例来源有可审变更，能够延迟首个 HTTP 响应并观察持久记录与终端创建计数。
+    steps:
+      - 点击后重发同 requestId 的相同请求，并在本轮结束前再次点击；确认都返回同一活跃运行且仅创建一个终端。
+      - 用同 requestId 发送不同目标参数，确认返回冲突且没有修改原记录；清理资源。
+  - id: ICR-010
+    name: 关闭页面不停止 Backend 审查
+    required: true
+    description: Review 的执行和结果保存不依赖发起页面或客户端持续轮询。
+    preconditions:
+      - 本例来源无草稿且身份稳定，真实 Reviewer 已运行，Backend 保持在线。
+    steps:
+      - 关闭本例浏览器页面并停止客户端轮询；从 Backend 观察 Reviewer 继续执行直到报告保存。
+      - 重新用 toolkit:playwright-cli 打开原终端，确认读取同一运行与报告且没有重复创建；清理资源。
+  - id: ICR-011
+    name: 发起请求只以总终端 ID 定位
+    required: true
+    description: 客户端不要求 panel、thread、启动操作编号或预先读取目标身份即可发起 Review。
+    preconditions:
+      - 本例自有终端与工作区有可审变更，能够查看本例浏览器发出的 Review HTTP 请求。
+    steps:
+      - 使用 toolkit:playwright-cli 从更多菜单发起 Review，确认 URL 包含来源总终端 ID，正文仅含 requestId，没有其他身份字段或确认步骤。
+      - 确认 Backend 创建一次运行，清理本例资源。
+  - id: ICR-012
+    name: 忙碌来源仍走普通终端发送通道
+    required: true
+    description: 来源有其他任务时，Review 不额外阻止回传，输入或排队行为与普通终端发送相同。
+    preconditions:
+      - 本例来源持续执行一个可结束的无副作用任务，Review 可在来源任务结束前完成。
+    steps:
+      - 等待 Review 完成，确认报告保存后调用普通终端发送通道，delivery 为 written，没有 Review 自身的忙闲等待条件。
+      - 观察普通输入通道的实际投递或原生排队记录，确认只发送一次；清理资源。
+  - id: ICR-013
+    name: 来源切换会话后仍按总终端 ID 回传
+    required: true
+    description: 结果回传固定发起 Review 的总终端 ID，thread 或输入面板变化不阻止回传，界面焦点不会把报告发给其他总终端。
+    preconditions:
+      - 本例有 A、B 两个自有总终端，在 A 发起 Review 后能够切换 A 的 thread，B 保持独立。
+    steps:
+      - 使用 toolkit:playwright-cli 在 A 更多菜单发起 Review；在完成前切换 A 的 thread，再将界面焦点移到 B。
+      - 等待报告完成，确认 A 当前输入会话收到一次完整报告，delivery 为 written，B 没有收到报告；记录输入计数并清理资源。
+  - id: ICR-014
+    name: 无原生终态不能发布完成报告
+    required: true
+    description: commentary、回显、partial history 或临时 interrupted 信号都不能替代关联的 completed final 与 idle。
+    preconditions:
+      - 本例自有 Reviewer 的原生读入口可受控呈现不完整历史，真实执行侧状态可独立观测。
+    steps:
+      - 先让 Reviewer 输出进度并保持执行，依次呈现 partial 和临时 interrupted；确认未标 completed、未回传进度为最终报告。
+      - 恢复完整关联 turn 的 completed final 和 idle，确认仅此后保存并回传报告；清理本例控制与资源。
+  - id: ICR-015
+    name: 重启后不重放结果不确定的写入
+    required: true
+    description: writing 持久化之后的崩溃不能造成第二次结果注入，已保存报告仍可读取。
+    preconditions:
+      - 本例独立 Backend 的 Review 已保存报告，能够在 delivery writing 落盘后、结果确认前重启本例 Backend。
+      - 重启前已记录来源目标身份、报告哈希和实际输入次数。
+    steps:
+      - 在指定窗口重启本例 Backend，重新发现连接和 UI ref；确认报告内容与哈希保留，回传状态为 unknown，未自动再写输入。
+      - 确认通用任务的 human 接管语义没有被后台自动覆盖，保存重启前后证据并清理资源。
+  - id: ICR-016
+    name: 重复完成事件不会重复回传
+    required: true
+    description: 同一已保存报告在重复事件和重复轮询下只对应一次正常回传。
+    preconditions:
+      - 本例来源 idle 且无草稿，Review 有完整最终报告，事件入口可重复投递同一完成事件。
+    steps:
+      - 在首次回传前后重复投递本例相同完成事件并重复观察；确认只有一个 reportId、一个 deliveryId 和一次结果正文写入。
+      - 确认 Reviewer 终端仍保留，报告正文未被重复覆盖；清理本例资源。
+  - id: ICR-017
+    name: 客户端切换电脑不会串用请求结果
+    required: true
+    description: UI 异步结果始终归属点击时的连接和来源终端，不更新随后打开的电脑或终端。
+    preconditions:
+      - 本例原生 App 连接两个自有 Backend，A 有可审变更且可延迟响应，B 的记录可独立观察。
+    steps:
+      - 用 toolkit:agent-device 在 A 的终端发起 Review，响应到达前切换至 B；确认 B 没有显示或启动 A 的 Review，也没有收到回传。
+      - 返回 A 确认读取到原运行且只创建一次；保存原生 UI 证据，清理资源并执行设备 stop/finish。
+  - id: ICR-018
+    name: 不支持入口的旧 Backend 明确降级
+    required: true
+    description: 新客户端收到旧服务的能力缺失响应时不向来源 Agent 发命令作为替代。
+    preconditions:
+      - 本例客户端连接不支持 code-reviews 路由的自有旧 Backend，来源输入次数可观测。
+    steps:
+      - 使用 toolkit:playwright-cli 点击代码 Review，确认展示此电脑尚不支持的提示，无确认框也无来源输入。
+      - 确认没有重复请求循环或另一个终端被创建，保存证据并清理资源。
+  - id: ICR-019
+    name: 产物读取不能越过本轮目录和鉴权
+    required: true
+    description: 结果读取继承 Backend 鉴权，拒绝任意路径与越界链接，报告身份不匹配时不回传。
+    preconditions:
+      - 本例拥有两个独立 Review 目录、一个目录外标记文件和可控的报告写入端。
+    steps:
+      - 通过真实产物路由尝试未登录、路径穿越及指向目录外文件的 artifact；确认请求被拒绝且未泄漏标记内容。
+      - 提交另一轮 reviewId 或错误 fingerprint 的报告，确认校验失败且未回传；恢复正确报告后核对可读性，清理资源。
+  - id: ICR-020
+    name: 没有 Agent 会话身份也按总终端 ID 投递
+    required: true
+    description: Review 不依赖来源 Agent、thread 或启动代次，只使用普通终端发送接口。
+    preconditions:
+      - 本例自有来源终端运行只接收并显示输入的 cat，关联工作区有可审变更，Reviewer 执行器可用。
+      - 来源没有 Agent 会话或启动操作编号，所有输入由本例拥有，不作为 shell 命令执行。
+    steps:
+      - 使用 toolkit:playwright-cli 从更多菜单发起 Review 并等待完成，确认报告持久可读、delivery 为 written。
+      - 确认原总终端的 cat 收到一次报告正文，其他终端没有收到；清理本例资源。

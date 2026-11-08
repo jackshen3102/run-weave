@@ -12535,5 +12535,37 @@
     "count": 1,
     "category": "test",
     "reason": "Use an isolated registry and child environment, and read only fixture logs and ACL diagnostics for real installed-package verification."
+  },
+  {
+    "file": "backend/src/terminal/code-review/report.ts",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "将已校验的 Review 证据复制到 Backend 自有产物目录，不作为实例业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/code-review/snapshot.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "只读 Git 快照命令继承现有进程环境，并固定 literal pathspec 与禁用可选锁，不从环境读取业务配置。"
+  },
+  {
+    "file": "backend/src/terminal/code-review/store.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(JSON.stringify(value))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "以私有临时文件原子保存 Review 快照、报告及运行账本，不作为业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/code-review/store.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(this.directory, \"state.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "恢复 Backend 自有 Review 运行账本和不确定交付状态，不作为实例业务配置来源。"
   }
 ]

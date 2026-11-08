@@ -1,3 +1,4 @@
+import { CodeReviewReportView } from "../../code-review/report";
 import { TerminalConversationSidecar, useConversationTool } from "../../conversation/sidecar";
 import { TerminalHandoffPanel } from "../../handoff/panel";
 import { TerminalTaskSupervisionPanel } from "../../task-supervision/panel";
@@ -454,6 +455,7 @@ export function TerminalPreviewPanel({
   return (
     <>
       <TerminalPreviewPanelShell
+        codeReviewBody={activeTool === "code-review" ? <CodeReviewReportView key={scope} /> : null}
         conversationBody={activeTool === "conversation" ? <TerminalConversationSidecar projectId={activeProject?.projectId ?? ""} title={activeSession?.alias ?? "当前会话"} sessionId={activeSession?.terminalSessionId ?? null} panelId={activePanelId} /> : null}
         layout={{
           expanded,

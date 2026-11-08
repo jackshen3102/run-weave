@@ -328,6 +328,7 @@ function createHttpApp(
       terminalBadges: services.terminalBadges,
       desktopBadgeAccess: services.desktopBadgeAccess,
       terminalTaskService: services.terminalTaskService,
+      codeReviewService: services.codeReviewService,
       textAttachmentDelivery: services.textAttachmentDelivery,
       terminalQuestionsService: services.terminalQuestionsService,
       ptyService: services.ptyService,
