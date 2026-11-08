@@ -98,7 +98,7 @@ export class TerminalRuntimeRegistry {
       entry.cols = runtime.hosted.grid.cols; entry.rows = runtime.hosted.grid.rows;
       entry.outputScreen = { snapshot: () => runtime.hosted!.snapshot(), dispose() {} };
       runtime.hosted.onResize((cols, rows) => {
-        if (cols !== entry.cols || rows !== entry.rows) this.outputClients.forget(runtimeId);
+        if (cols !== entry.cols || rows !== entry.rows) this.outputClients.invalidate(runtimeId);
         entry.cols = cols; entry.rows = rows;
         for (const subscriber of entry.subscribers) subscriber.onResize?.(cols, rows);
       });
