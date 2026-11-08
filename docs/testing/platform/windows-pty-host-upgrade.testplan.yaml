@@ -1,7 +1,7 @@
 version: 1
 name: Windows PTY Host 远程更新与维护
 description: |
-  待实现功能的验收合同，配合 docs/plans/2026-11-08-windows-pty-host.md。 每例使用自己拥有的 Windows 用户或隔离实例、Host、终端、进程与证据目录；禁止接管真实工作终端。 本轮仅编写并校验格式，不表示以下行为已经实现或通过。重启是被测行为时由同一用例记录前后身份并重新取得连接。 实际升级使用固定源码与真实 npm tarball；Windows CI、真实 Windows、浏览器和手机分别记录覆盖范围。
+  Windows 独立 Host 的验收合同，当前实现见 docs/architecture/windows-pty-host.md。 每例使用自己拥有的 Windows 用户或隔离实例、Host、终端、进程与证据目录；禁止接管真实工作终端。 格式校验不代表行为通过；每项结论必须引用对应源码与运行证据。CI 计数器不替代真实 Traex、浏览器或手机验收。重启是被测行为时由同一用例记录前后身份并重新取得连接。 实际升级使用固定源码与真实 npm tarball；Windows CI、真实 Windows、浏览器和手机分别记录覆盖范围。
 cases:
   - id: PTYUP-001
     name: 网页 Agent 发起 npm 更新后原会话继续工作
