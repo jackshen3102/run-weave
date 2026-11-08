@@ -1,3 +1,4 @@
+import { syncPtyHostUpstreams } from "../terminal/runtime/pty-host-client";
 import { settingText } from "@runweave/config-node";
 import path from "node:path";
 import {
@@ -131,6 +132,8 @@ export async function initializeAppServerEventIntegration(
         RUNWEAVE_APP_SERVER_URL: next.baseUrl,
         RUNWEAVE_APP_SERVER_TOKEN: next.token,
       });
+      await syncPtyHostUpstreams({ backendUrl: backendBaseUrl, backendToken: process.env.RUNWEAVE_HOOK_TOKEN ?? "",
+        appServerUrl: next.baseUrl, appServerToken: next.token });
       terminalsNeedConnection = true;
       await syncTerminalConnection();
     } catch (error) {

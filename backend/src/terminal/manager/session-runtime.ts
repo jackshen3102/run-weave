@@ -386,6 +386,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       return undefined;
     }
 
+    session.ptyHost = metadata.ptyHost;
     session.runtimeKind = metadata.runtimeKind;
     session.tmuxSessionName = metadata.tmuxSessionName;
     session.tmuxSocketPath = metadata.tmuxSocketPath;
@@ -393,6 +394,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     session.recoverable = metadata.recoverable;
     await this.sessionStore.updateSessionRuntimeMetadata({
       terminalSessionId,
+      ptyHost: metadata.ptyHost,
       runtimeKind: metadata.runtimeKind,
       tmuxSessionName: metadata.tmuxSessionName,
       tmuxSocketPath: metadata.tmuxSocketPath,

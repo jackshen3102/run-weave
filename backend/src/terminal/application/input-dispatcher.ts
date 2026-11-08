@@ -183,7 +183,21 @@ async function writePromptReplacePtyInput(
   submit: boolean,
   submitKey: TerminalPromptSubmitKey,
   attachClipboardImages = false,
+  operationId?: string,
 ): Promise<void> {
+  if (runtime.hosted) {
+    const paste = (attachClipboardImages ? buildClipboardImagePaste(text) : null)
+      ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text));
+    await runtime.hosted.writeSteps([
+      { type: "text", data: "\x15" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
+      { type: "text", data: "\x01" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
+      { type: "text", data: "\x0b" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
+      ...(text ? [{ type: "text" as const, data: paste }] : []),
+      ...(submit ? [{ type: "delay" as const, ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
+        { type: "text" as const, data: submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r" }] : []),
+    ], operationId);
+    return;
+  }
   runtime.write("\x15");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
   runtime.write("\x01");
@@ -434,12 +448,19 @@ export async function sendInputToSession(
             submit === true,
             submitKey,
             attachClipboardImages,
+            operationId,
           );
         } else if (mode === "line") {
           // Match tmux: a TUI can treat text and Enter in one PTY write as paste.
-          ensured.runtime.write(data);
-          await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
-          ensured.runtime.write("\r");
+          if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([
+            { type: "text", data }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
+            { type: "text", data: "\r" },
+          ], operationId);
+          else {
+            ensured.runtime.write(data);
+            await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
+            ensured.runtime.write("\r");
+          }
         } else {
           ensured.runtime.write(
             codexSlashCommand

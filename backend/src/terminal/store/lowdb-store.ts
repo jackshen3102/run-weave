@@ -349,6 +349,7 @@ export class LowDbTerminalSessionStore
         return;
       }
 
+      session.ptyHost = params.ptyHost;
       session.runtimeKind = params.runtimeKind;
       session.tmuxSessionName = params.tmuxSessionName;
       session.tmuxSocketPath = params.tmuxSocketPath;

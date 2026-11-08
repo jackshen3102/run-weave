@@ -32,6 +32,14 @@ export interface SpawnTerminalSessionOptions {
 }
 
 export interface PtyRuntime {
+  hosted?: {
+    output: import("./output-recovery").TerminalOutputSource;
+    snapshot(): Promise<import("./output-screen").TerminalScreenSnapshot>;
+    onFrame(listener: (frame: import("./output-recovery").TerminalOutputFrame) => void): void;
+    onDisconnect(listener: () => void): void;
+    writeSteps(steps: import("@runweave/shared/terminal/pty-host").PtyHostInputStep[], operationId?: string): Promise<void>;
+    close(): Promise<void>;
+  };
   pid: number;
   onData(listener: (data: string) => void): void;
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): void;
@@ -136,7 +144,7 @@ function normalizePathForAppImage(env: NodeJS.ProcessEnv): void {
   delete env.APPDIR;
 }
 
-function buildPtyEnv(
+export function buildPtyEnv(
   baseEnv: NodeJS.ProcessEnv,
   sessionEnv: NodeJS.ProcessEnv | undefined,
   command: string,

@@ -1,3 +1,4 @@
+import { reconcileHostedTerminals } from "../terminal/runtime/pty-host-runtime";
 import { ScreenRecordingAnalysisRuntime } from "../screen-recording-analysis/runtime";
 import { ScreenRecordingService } from "../screen-recording/service";
 import { SideChatService } from "../side-chat/service";
@@ -60,9 +61,7 @@ import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
 import { EvolutionContextPackBuilder } from "../evolution/context-pack";
-
 import { EvolutionEvidenceReconciler } from "../evolution/knowledge/evidence-reconciler";
-
 import { EvolutionRuntime } from "../evolution/runtime";
 import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
 import { RaceRecordStore } from "../race/race-record-store";
@@ -268,6 +267,7 @@ async function assembleRuntimeServices(
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
   await terminalSessionManager.initialize();
+  await reconcileHostedTerminals(terminalSessionManager, terminalRuntimeRegistry);
   const sideChatStore = new SideChatStore(path.join(storagePaths.browserProfileDir, "side-chats.sqlite"));
   sideChatService = new SideChatService(sideChatStore, terminalSessionManager, storagePaths.browserProfileDir);
   resources.defer("side-chat", () => sideChatService!.dispose());

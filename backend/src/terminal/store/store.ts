@@ -1,3 +1,4 @@
+import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
@@ -51,6 +52,7 @@ export interface PersistedTerminalSessionRecord {
   createdAt: string;
   lastActivityAt?: string;
   exitCode?: number;
+  ptyHost?: PtyHostBinding;
   runtimeKind?: TerminalRuntimeKind;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;
@@ -115,6 +117,7 @@ export type PersistedTerminalSessionMetadataRecord = Omit<
 export type TerminalRuntimeKind = "pty" | "tmux";
 
 export interface TerminalRuntimeMetadata {
+  ptyHost?: PtyHostBinding;
   runtimeKind: TerminalRuntimeKind;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;

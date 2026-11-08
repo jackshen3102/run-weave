@@ -1,3 +1,4 @@
+import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { CodexConversationContext } from "@runweave/shared/terminal/codex-context";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -62,6 +63,7 @@ export interface TerminalSessionRecord {
   lastActivityAt: Date;
   exitCode?: number;
   order?: number;
+  ptyHost?: PtyHostBinding;
   runtimeKind: TerminalRuntimeKind;
   tmuxSessionName?: string;
   tmuxSocketPath?: string;
@@ -189,6 +191,7 @@ export function buildSessionRecord(
     lastActivityAt: new Date(persisted.lastActivityAt ?? persisted.createdAt),
     exitCode: persisted.exitCode,
     ...(persisted.order !== undefined ? { order: persisted.order } : {}),
+    ptyHost: persisted.ptyHost,
     runtimeKind: persisted.runtimeKind ?? "pty",
     tmuxSessionName: persisted.tmuxSessionName,
     tmuxSocketPath: persisted.tmuxSocketPath,
@@ -269,6 +272,7 @@ export function toPersistedSession(
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     exitCode: session.exitCode,
+    ptyHost: session.ptyHost,
     runtimeKind: session.runtimeKind,
     tmuxSessionName: session.tmuxSessionName,
     tmuxSocketPath: session.tmuxSocketPath,

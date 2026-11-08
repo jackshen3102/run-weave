@@ -60,7 +60,9 @@ jobs:
       - name: Verify independent ConPTY lifetime
         if: ${{ inputs.pty_spike_only }}
         timeout-minutes: 3
-        run: node scripts/verify/server/pty-host-spike.mjs
+        run: |
+          node scripts/verify/server/pty-host-spike.mjs
+          node scripts/verify/server/pty-host.mjs
       - name: Verify installed tarballs and self-update
         if: runner.os != 'Windows'
         run: pnpm server:verify-installed

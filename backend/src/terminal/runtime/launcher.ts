@@ -1,3 +1,5 @@
+import { usesPtyHost } from "./pty-host-client";
+import { ensureHostedTerminal } from "./pty-host-runtime";
 import { buildAgentResumeCommand, getAgentAdapter } from "./agent-adapters";
 export { buildAgentResumeCommand } from "./agent-adapters";
 import type {
@@ -332,6 +334,8 @@ export async function ensureTerminalRuntime(
       };
     });
   }
+
+  if (options.session.ptyHost || usesPtyHost()) return { runtime: await ensureHostedTerminal(options) };
 
   const runtime = options.ptyService.spawnSession({
     command: options.session.command,

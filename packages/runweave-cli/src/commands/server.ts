@@ -1,3 +1,7 @@
+import { PtyHostClient } from "@runweave/pty-host/client";
+import { ensureHost } from "@runweave/pty-host/lifecycle";
+import { submitForegroundUpdate } from "../server/processes.js";
+import { resolveActiveServerRelease } from "@runweave/config-node";
 import type { RuntimeNodeStatusSnapshot } from "@runweave/shared/runtime-status";
 import {
   ConfigurationStore,
@@ -22,6 +26,7 @@ import { createInterface } from "node:readline/promises";
 import { getStringOption, parseArgs } from "../args.js";
 import {
   identity,
+  processStart,
   readJson,
   requestJson,
   serverContext,
@@ -144,7 +149,7 @@ async function status(ctx: ServerContext) {
   }
   const active = readJson<typeof ctx.manifest>(
     path.join(
-      realpathSync(path.join(ctx.home, "current")),
+      resolveActiveServerRelease(ctx.home)!,
       "server-manifest.json",
     ),
   );
@@ -207,11 +212,13 @@ export async function runServerCommand(
     "port",
     "version",
     "server-package",
+    "channel",
+    "request-id",
   ]);
   for (const key of Object.keys(parsed.options))
     if (!allowed.has(key)) throw new Error(`Unknown server option: --${key}`);
-  if (process.platform === "win32" && (command === "service" || command === "update"))
-    throw new Error("Windows supports foreground Server only. Keep rw server start open; service installation and in-place update are not supported yet.");
+  if (process.platform === "win32" && command === "service")
+    throw new Error("Windows supports foreground Server only. Keep rw server start open; service installation is not supported.");
   const output = (value: unknown) =>
     io.stdout.write(JSON.stringify(value, null, 2) + "\n");
   let ctx: ServerContext;
@@ -285,7 +292,7 @@ export async function runServerCommand(
       ),
       terminalReady: !runtimeError && (process.platform === "win32" || tools.tmux?.installed),
       terminalRuntime: process.platform === "win32" ? "pty" : "tmux",
-      terminalRecovery: process.platform === "win32" ? "while-backend-running" : "tmux",
+      terminalRecovery: process.platform === "win32" ? "independent-pty-host" : "tmux",
       tools,
       agents: {
         codex: { authenticated: codexAuthenticated },
@@ -402,6 +409,13 @@ export async function runServerCommand(
     }
     return;
   }
+  const channel = getStringOption(parsed.options, "channel") ?? "latest";
+  if (channel !== "latest" && channel !== "next") throw new Error("--channel must be latest or next");
+  if (command === "update" && process.platform === "win32" && identity(ctx, "foreground") && !parsed.options["dry-run"]) {
+    output(await submitForegroundUpdate(ctx, { version: getStringOption(parsed.options, "version"),
+      sourcePackage: getStringOption(parsed.options, "server-package"), force: parsed.options.force === true, channel }, getStringOption(parsed.options, "request-id")));
+    return;
+  }
   await withManagementLock(ctx, async () => {
     const force = parsed.options.force === true;
     if (command === "start") {
@@ -427,6 +441,28 @@ export async function runServerCommand(
       output(await status(ctx));
       return;
     }
+    if (command === "host") {
+      if (process.platform !== "win32") throw new Error("Host management is supported for Windows standalone Server");
+      const action = parsed.positionals[0];
+      if (!["status", "stop", "update"].includes(action ?? "")) throw new Error("Usage: rw server host <status|stop|update>");
+      const host = await PtyHostClient.connect(ctx.context);
+      try {
+        const sessions = await host.request<{ terminalSessionId: string; sessionInstanceId: string; pid: number; status: string }[]>("listSessions");
+        if (action === "status") output({ hostInstanceId: host.descriptor.hostInstanceId, pid: host.descriptor.pid,
+          runningRelease: host.descriptor.release, installedRelease: ctx.release,
+          sessions: sessions.map(({ terminalSessionId, sessionInstanceId, pid, status }) => ({ terminalSessionId, sessionInstanceId, pid, status })) });
+        else {
+          await host.request("stop", { terminateSessions: false });
+          const deadline = Date.now() + 10_000;
+          while (processStart(host.descriptor.pid) === host.descriptor.startedAt && Date.now() < deadline)
+            await new Promise(resolve => setTimeout(resolve, 100));
+          if (processStart(host.descriptor.pid) === host.descriptor.startedAt) throw new Error("HOST_STOP_TIMEOUT");
+          if (action === "update") await ensureHost(ctx.context, ctx.release);
+          output({ action, stopped: true, started: action === "update" });
+        }
+      } finally { host.close(); }
+      return;
+    }
     if (command === "update") {
       const preview = await updateServer(
         ctx,
@@ -434,6 +470,8 @@ export async function runServerCommand(
         force,
         getStringOption(parsed.options, "server-package"),
         parsed.options["dry-run"] === true,
+        undefined,
+        channel,
       );
       output(parsed.options["dry-run"] ? preview : await status(serverContext(args)));
       return;

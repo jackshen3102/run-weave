@@ -13,6 +13,7 @@ export interface ServerMaintenanceLease {
 export interface ServerReleaseManifest {
   schemaVersion: 1;
   managementApiVersion: 1;
+  ptyHost?: { protocolVersion: 1; entry: "pty-host/index.cjs" };
   version: string;
   sourceRevision: string;
   platform: string;

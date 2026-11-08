@@ -1,4 +1,4 @@
-import { configurationOption, processStartIdentity } from "@runweave/config-node";
+import { configurationOption, processStartIdentity, resolveActiveServerRelease } from "@runweave/config-node";
 import {
   activateServer,
   findInstallation,
@@ -17,8 +17,8 @@ import {
   openSync,
   readFileSync,
   renameSync,
-  realpathSync,
   writeFileSync,
+  fsyncSync,
 } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -30,15 +30,15 @@ export function serverContext(args: string[]) {
     base.home,
     configurationOption("server-package", args),
   );
-  const current = path.join(base.home, "current");
+  const current = resolveActiveServerRelease(base.home);
   let release: string;
-  if (!existsSync(current)) {
+  if (!current) {
     const initial = materializeServer(installation.packageRoot, base.home);
     verifyRelease(initial.release);
     activateServer(base.home, initial.release, installation);
     release = initial.release;
   } else {
-    release = realpathSync(current);
+    release = current;
     if (!release.startsWith(path.join(base.home, "releases") + path.sep))
       throw new Error("Invalid active Server release path");
   }
@@ -87,9 +87,8 @@ export function readJson<T>(file: string): T {
 }
 export function writeJson(file: string, value: unknown): void {
   const temporary = `${file}.${randomUUID()}`;
-  writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", {
-    mode: 0o600,
-  });
+  const fd = openSync(temporary, "wx", 0o600);
+  try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(temporary, file);
 }
 export function processStart(pid: number): string | null {
@@ -198,7 +197,9 @@ export async function runChecked(
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
+    const windowsNpm = process.platform === "win32" && command === "npm";
+    if (windowsNpm && args.some(arg => /["%\r\n&|<>^]/.test(arg))) return reject(new Error("Unsupported npm argument"));
+    const child = spawn(windowsNpm ? "cmd.exe" : command, windowsNpm ? ["/d", "/s", "/c", `npm.cmd ${args.map(arg => `"${arg}"`).join(" ")}`] : args, {
       ...options,
       stdio: ["ignore", "ignore", "pipe"],
     });

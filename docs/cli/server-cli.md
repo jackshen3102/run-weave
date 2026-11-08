@@ -49,24 +49,28 @@ rw.cmd server start
 
 支持输入输出、调整尺寸、Ctrl+C 中断、关闭终端，以及 Backend 仍运行时的网页断线重连。
 关闭启动窗口、停止或重启服务会结束终端进程；不支持跨 Backend 重启恢复、tmux 分屏、Fork/Recover Agent、定时任务或系统服务托管。
-`server service` 与 `server update` 在 Windows 明确拒绝；首次版本不提供原地升级。不要把重新 `npm install` 视为运行版本已切换。
+Windows standalone 使用独立 PTY Host。`server stop` 或 Backend 重启只断开连接，显式删除终端才关闭 PTY；系统注销、重启和 Host 崩溃仍会丢失进程。
+`server service` 仍拒绝。`rw server update --channel next` 把升级交给现有前台管理进程，接管后发起终端退出不取消升级。
+接管请求和最终状态保存在 `<configRoot>/server/updates/<request-id>.json`，阶段保存在 `server/update.json`；可用 `--request-id <UUID>` 查询同一次提交，不能把超时当成未执行。
+从旧版直接 PTY 首次迁移需要在系统 PowerShell 中停止旧服务、安装测试包并重启，已有终端会中断一次。之后的兼容 Server 更新保留原 PTY。
+`rw server host status` 显示运行和已安装的 Host 发行目录；`host stop` / `host update` 仅在所有终端已退出时允许。普通更新不替换活跃 Host 或全局 CLI。
 配置默认位于当前用户的 `.runweave`，使用 Windows ACL 校验：只允许当前用户、SYSTEM 和 Administrators 访问。
 共享目录或宽松 ACL 的 `--config-dir` / `--auth-file` 会被拒绝，不通过放宽权限绕过。
 
 在另一个 PowerShell 窗口执行 `rw.cmd server status --json` 查看状态，或 `rw.cmd server stop` 正常停止。
-Windows 安装集成验收入口为 `node scripts/verify/server/registry.mjs --local`，验证实际 npm 安装、登录、PTY 和停止；不等同于浏览器 UI 验收。
+独立 Host 的真实进程验收入口是 `node scripts/verify/server/pty-host.mjs`。Windows 安装集成验收入口为 `node scripts/verify/server/registry.mjs --local`，验证实际 npm 安装、登录、PTY 和停止；不等同于浏览器 UI 验收。
 
 ## 生命周期命令
 
-| 命令                                                       | 合同                                                                                    |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `rw server status --json`                                  | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执         |
-| `rw server stop`                                           | 停止本产品持有的组件，保留 tmux 与数据                                                  |
-| `rw server restart [--force]`                              | 重启原模式；有受影响后台执行时默认拒绝                                                  |
-| `rw server logs [--follow]`                                | 系统托管日志末尾或持续跟随；前台日志在原终端                                            |
-| `rw server service install [--dry-run]`                    | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册     |
-| `rw server service uninstall`                              | 注销并停止系统服务，保留配置和数据                                                      |
-| `rw server update [--version X.Y.Z] [--dry-run] [--force]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
+| 命令                                    | 合同                                                                                |
+| --------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `rw server status --json`               | 返回安装、active、running 版本，组件 PID/健康、路径、托管启用状态与最近更新回执     |
+| `rw server stop`                        | 停止本产品持有的组件，保留 tmux 与数据                                              |
+| `rw server restart [--force]`           | 重启原模式；有受影响后台执行时默认拒绝                                              |
+| `rw server logs [--follow]`             | 系统托管日志末尾或持续跟随；前台日志在原终端                                        |
+| `rw server service install [--dry-run]` | 生成或注册系统级 systemd/launchd 服务，启用开机运行并启动；dry-run 不提升权限或注册 |
+| `rw server service uninstall`           | 注销并停止系统服务，保留配置和数据                                                  |
+| `rw server update [--version X.Y.Z      | --channel latest                                                                    | next] [--dry-run] [--force] [--request-id UUID]` | 从配置的 npm registry 下载并激活发行版，默认 latest；在原运行模式重启，停止态不自动启动 |
 
 注册系统任务需要管理员权限，进程仍以执行命令的服务用户运行。不要用 sudo 把配置账号切换成另一个用户。
 Linux 服务沿用安装命令的 HOME 与 PATH；迁移已有部署时须保留原服务的 HOME，以继续使用原 Agent 登录态和用户目录。
@@ -76,7 +80,7 @@ macOS 使用系统 LaunchDaemon，不把登录启动当开机启动。
 ## 发行与更新
 
 主包带轻量入口，精确版本的平台包带网页、JS、原生模块与辅助二进制。
-首次运行物化完整不可变版本到 `<configRoot>/server/releases/`，`current` 指向 active 版。
+首次运行物化完整不可变版本到 `<configRoot>/server/releases/`，POSIX 的 `current` 指向 active 版；Windows 使用带发行清单摘要的私有 `active-release.json` 原子文件指针。
 所有持久业务数据沿用现有配置，放在发行目录之外。控制 socket 放在当前 UID 私有的短路径目录，避免 macOS socket 路径上限。
 
 更新命令由独立 CLI 执行，不修改 CLI 自身安装。流程为下载和预检、维护租约、停止、npm 安装、current 切换、

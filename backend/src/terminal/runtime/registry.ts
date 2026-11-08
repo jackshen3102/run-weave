@@ -1,7 +1,9 @@
+import { closeHostedSession, usesPtyHost } from "./pty-host-client";
 import type { PtyRuntime } from "./pty-service";
 import {
   TerminalOutputRecoveryBuffer,
   type TerminalOutputFrame,
+  type TerminalOutputSource,
 } from "./output-recovery";
 import { extractShellPromptMetadata } from "./shell-integration";
 import { TerminalOutputScreen } from "./output-screen";
@@ -32,8 +34,8 @@ interface RuntimeEntry {
   terminalModeSequenceTail: string;
   subscribers: Set<RuntimeSubscriber>;
   recorderAttached: boolean;
-  outputRecovery?: TerminalOutputRecoveryBuffer;
-  outputScreen?: TerminalOutputScreen;
+  outputRecovery?: TerminalOutputSource;
+  outputScreen?: Pick<TerminalOutputScreen, "snapshot" | "dispose">;
   idleTimer?: NodeJS.Timeout;
   cols: number;
   rows: number;
@@ -62,12 +64,12 @@ export class TerminalRuntimeRegistry {
       recorderAttached: false,
       cols: 80,
       rows: 24,
-      outputRecovery: options.recoverableOutput
+      outputRecovery: runtime.hosted?.output ?? (options.recoverableOutput
         ? new TerminalOutputRecoveryBuffer()
-        : undefined,
+        : undefined),
     };
 
-    if (entry.outputRecovery) {
+    if (entry.outputRecovery && !runtime.hosted) {
       entry.outputScreen = new TerminalOutputScreen(
         entry.outputRecovery.cursor,
         () => {
@@ -80,7 +82,7 @@ export class TerminalRuntimeRegistry {
         ...runtime,
         resize: (cols, rows) => {
           const changed = entry.cols !== cols || entry.rows !== rows;
-          if (changed) entry.outputScreen!.resize(cols, rows);
+          if (changed) (entry.outputScreen as TerminalOutputScreen).resize(cols, rows);
           // Publish the grid boundary before any output from the resized PTY.
           // Unchanged requests still need an acknowledgement for the viewer.
           for (const subscriber of entry.subscribers)
@@ -92,6 +94,14 @@ export class TerminalRuntimeRegistry {
       };
     }
     this.runtimes.set(runtimeId, entry);
+    if (runtime.hosted) {
+      entry.outputScreen = { snapshot: () => runtime.hosted!.snapshot(), dispose() {} };
+      runtime.hosted.onFrame(frame => { for (const subscriber of entry.subscribers) subscriber.onOutputFrame?.(frame); });
+      runtime.hosted.onDisconnect(() => {
+        for (const subscriber of entry.subscribers) subscriber.onRecoveryError?.();
+        void this.disposeRuntime(runtimeId);
+      });
+    }
 
     runtime.onData((data) => {
       if (this.runtimes.get(runtimeId) !== entry) return;
@@ -108,10 +118,10 @@ export class TerminalRuntimeRegistry {
       entry.bufferedOutput = `${entry.bufferedOutput}${data}`.slice(
         -TerminalRuntimeRegistry.MAX_BUFFERED_OUTPUT_LENGTH,
       );
-      if (entry.outputRecovery) {
+      if (entry.outputRecovery && !runtime.hosted) {
         const { output } = extractShellPromptMetadata(data);
-        for (const frame of entry.outputRecovery.append(output)) {
-          entry.outputScreen!.append(frame);
+        for (const frame of (entry.outputRecovery as TerminalOutputRecoveryBuffer).append(output)) {
+          (entry.outputScreen as TerminalOutputScreen).append(frame);
           if (this.runtimes.get(runtimeId) !== entry) return;
           for (const subscriber of entry.subscribers)
             subscriber.onOutputFrame?.(frame);
@@ -164,11 +174,11 @@ export class TerminalRuntimeRegistry {
 
   getOutputRecovery(
     runtimeId: string,
-  ): TerminalOutputRecoveryBuffer | undefined {
+  ): TerminalOutputSource | undefined {
     return this.runtimes.get(runtimeId)?.outputRecovery;
   }
 
-  getOutputScreen(runtimeId: string): TerminalOutputScreen | undefined {
+  getOutputScreen(runtimeId: string): Pick<TerminalOutputScreen, "snapshot" | "dispose"> | undefined {
     return this.runtimes.get(runtimeId)?.outputScreen;
   }
 
@@ -259,9 +269,12 @@ export class TerminalRuntimeRegistry {
   }
 
   async disposeSessionRuntimes(terminalSessionId: string): Promise<void> {
+    if (usesPtyHost()) await closeHostedSession(terminalSessionId);
     for (const [runtimeId, entry] of this.runtimes) {
-      if (entry.terminalSessionId === terminalSessionId)
+      if (entry.terminalSessionId === terminalSessionId) {
+        await entry.runtime.hosted?.close();
         await this.disposeRuntime(runtimeId);
+      }
     }
   }
 }
