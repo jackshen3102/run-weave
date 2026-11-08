@@ -10,7 +10,7 @@ import { captureReviewSnapshot, reviewDigest } from "./snapshot";
 import { saveReviewReport } from "./report";
 import { buildCodeReviewPrompt } from "./prompt";
 import { deliverCodeReview, readSourceBinding } from "./delivery";
-import { reviewerHookArgs } from "./hooks";
+import { prepareReviewerLaunch } from "./hooks";
 
 const active = (run: CodeReviewRun) => ["preparing", "starting", "reviewing"].includes(run.phase);
 /** One Backend owner, serial ticks and request mutations. UI has no scheduling role. */
@@ -171,7 +171,7 @@ export class CodeReviewService {
       if (task.terminalSessionId) await this.manager.updateSessionAlias(task.terminalSessionId, `Review · ${id.slice(0, 8)}`);
       if (record.recovered || task.phase !== "created" || task.control !== "supervisor")
         throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
-      await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, { codexArgs: await reviewerHookArgs(record.source.rootPath) });
+      await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, await prepareReviewerLaunch(record.source.rootPath));
     }
     if (Date.now() - record.startedAt > (run.phase === "starting" ? 120_000 : 30 * 60_000))
       throw new CodeReviewError(409, "review_timeout", "自动推进已超时，Reviewer 未被强制停止，请查看评审终端");
