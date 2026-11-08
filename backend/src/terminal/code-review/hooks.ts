@@ -85,5 +85,5 @@ export async function prepareReviewerLaunch(cwd: string): Promise<{ command: str
     throw new CodeReviewError(503, "reviewer_hooks_unavailable", "Reviewer Hooks 配置不完整，未启动交互进程");
   const unsafe = parsed.data.data[0]!.hooks.some((hook) => hook.enabled && !hook.isManaged && hook.trustStatus !== "trusted");
   if (unsafe) throw new CodeReviewError(409, "reviewer_hooks_untrusted", "存在已启用但尚未信任的 Hooks，未自动授权或启动 Reviewer");
-  return { command, args: ["--dangerously-bypass-hook-trust"] };
+  return { command, args: ["--sandbox", "danger-full-access", "--ask-for-approval", "never", "--dangerously-bypass-hook-trust"] };
 }

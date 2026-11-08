@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { useMemoizedFn } from "ahooks";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
-import type { CreateCodeReviewRequest } from "@runweave/shared/terminal/code-review";
+import type { CodeReviewPage, CreateCodeReviewRequest } from "@runweave/shared/terminal/code-review";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import { createCodeReview, getCodeReview, listCodeReviews } from "../../../services/terminal/code-review";
+import { closeCodeReview, createCodeReview, getCodeReview, listCodeReviews } from "../../../services/terminal/code-review";
 import { HttpError } from "../../../services/http";
 import { useTerminalRuntime } from "./provider";
 import { terminalQueryKeys } from "./keys";
@@ -65,4 +65,19 @@ export function useCodeReviewDetail(id: string | null) {
       const run = query.state.data?.run;
       return query.state.error || (run && !["preparing", "starting", "reviewing"].includes(run.phase) && !["pending", "writing"].includes(run.delivery)) ? false : 5000;
     } });
+}
+export function useCloseCodeReview(sessionId: string | null) {
+  const { scope, apiBase, token, onAuthExpired } = useTerminalRuntime();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (reviewId: string) => closeCodeReview(apiBase, token, reviewId),
+    onSuccess: (run) => {
+      client.setQueryData<CodeReviewPage>(listKey(scope, sessionId), (page) => page ? {
+        ...page, runs: page.runs.map((item) => item.caseId === run.caseId ? { ...item, caseStatus: run.caseStatus } : item),
+      } : page);
+      void client.invalidateQueries({ queryKey: listKey(scope, sessionId) });
+      void client.invalidateQueries({ queryKey: [...terminalQueryKeys.all(scope), "code-review"] });
+    },
+    onError: (error) => { if (error instanceof HttpError && error.status === 401) onAuthExpired?.(); },
+  });
 }

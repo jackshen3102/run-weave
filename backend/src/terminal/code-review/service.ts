@@ -28,7 +28,7 @@ export class CodeReviewService {
     // A null attempt proves no PTY write was started. Requeue saved reports
     // rejected by the old source-binding checks, without replaying uncertain I/O.
     for (const record of this.store.records.values()) {
-      if (record.run.phase === "completed" && record.run.reportId && !record.delivery.attemptedAt &&
+      if (record.run.caseStatus !== "closed" && record.run.phase === "completed" && record.run.reportId && !record.delivery.attemptedAt &&
           ["unavailable", "target_changed"].includes(record.run.delivery)) {
         record.run.delivery = "pending"; record.run.deliveryError = null;
       }
@@ -59,6 +59,7 @@ export class CodeReviewService {
       try {
         for (const record of this.store.records.values()) {
           if (this.closing) break;
+          if (record.run.caseStatus === "closed") continue;
           if (!active(record.run) && record.run.delivery !== "pending") continue;
           try { await this.advance(record); }
           catch (error) {
@@ -93,16 +94,29 @@ export class CodeReviewService {
       catch (error) { throw new CodeReviewError(409, "target_changed", String(error)); }
       try { source.rootPath = await realpath(source.rootPath); }
       catch { throw new CodeReviewError(400, "workspace_unavailable", "工作区路径无效"); }
-      const same = [...this.store.records.values()].find((record) => active(record.run) && record.source.terminalId === terminalId);
-      if (same) {
-        same.requests.push({ terminalId, request }); await this.touch(same); return structuredClone(same.run);
+      const previous = [...this.store.records.values()].reverse().find((record) => record.source.terminalId === terminalId);
+      const continuing = previous?.run.caseStatus === "open" && previous.source.projectId === source.projectId && previous.source.rootPath === source.rootPath;
+      if (continuing && active(previous.run)) {
+        previous.requests.push({ terminalId, request }); await this.touch(previous); return structuredClone(previous.run);
       }
+      if (continuing && ["pending", "writing"].includes(previous.run.delivery))
+        throw new CodeReviewError(409, "delivery_pending", "本轮结果尚在回传，请等待回传结束后复审");
       const id = randomUUID(); const now = new Date().toISOString();
+      const candidate = continuing && previous.reviewerThreadId && previous.run.reviewerTerminalId
+        ? await this.tasks.observe(previous.reviewerTaskId).catch(() => null) : null;
+      // A user request authorizes another review, not taking control back from a
+      // human or resuming a lost executor. Keep the case, use a fresh Reviewer then.
+      const reuse = candidate?.availability === "available" && candidate.task.phase === "ready" && candidate.task.control === "supervisor" &&
+        candidate.task.threadId === previous?.reviewerThreadId && candidate.task.terminalSessionId === previous?.run.reviewerTerminalId &&
+        candidate.terminalState?.state === "agent_idle";
       const record: ReviewRecord = { source, requests: [{ terminalId, request }], snapshotId: null,
-        reviewerTaskId: `code-review:${id}`, reviewerThreadId: null, startedAt: Date.now(), dispatchId: `review:${id}`, recovered: false,
+        reviewerTaskId: reuse ? previous.reviewerTaskId : `code-review:${id}`, reviewerThreadId: reuse ? previous.reviewerThreadId : null,
+        startedAt: Date.now(), dispatchId: `review:${id}`, recovered: false,
         delivery: { deliveryId: `code-review-result:${id}`, reportHash: null, attemptedAt: null },
-        run: { reviewId: id, requestId: request.requestId, projectId: source.projectId, phase: "preparing", createdAt: now, updatedAt: now,
-          reviewerTerminalId: null, reviewerPanelId: null, reportId: null, stale: false, delivery: "not_ready", error: null,
+        run: { reviewId: id, caseId: continuing ? previous.run.caseId : id, caseStatus: "open", round: continuing ? previous.run.round + 1 : 1,
+          requestId: request.requestId, projectId: source.projectId, phase: "preparing", createdAt: now, updatedAt: now,
+          reviewerTerminalId: reuse ? previous.run.reviewerTerminalId : null, reviewerPanelId: reuse ? previous.run.reviewerPanelId : null,
+          reportId: null, stale: false, delivery: "not_ready", error: null,
           deliveryError: null, summary: null, findingCount: null } };
       this.store.records.set(id, record);
       await this.touch(record); // durable creation intent precedes snapshot or terminal creation
@@ -111,9 +125,25 @@ export class CodeReviewService {
       return structuredClone(record.run);
     });
   }
+  close(id: string): Promise<CodeReviewRun> {
+    return this.exclusive(async () => {
+      this.store.assertWritable();
+      const record = this.get(id);
+      const latest = [...this.store.records.values()].reverse().find((item) => item.run.caseId === record.run.caseId)!;
+      if (latest.run.caseStatus !== "open") return structuredClone(latest.run);
+      if (latest !== record) throw new CodeReviewError(409, "review_changed", "已有更新的复审，请刷新后结束事项");
+      if (active(record.run) || ["pending", "writing"].includes(record.run.delivery))
+        throw new CodeReviewError(409, "review_busy", "请等待本轮审查和回传结束后关闭事项");
+      for (const item of this.store.records.values()) {
+        if (item.run.caseId === record.run.caseId) item.run.caseStatus = "closed";
+      }
+      await this.touch(record);
+      return structuredClone(record.run);
+    });
+  }
   list(terminalId: string, before?: string): CodeReviewPage {
     const records = [...this.store.records.values()].filter((record) => record.source.terminalId === terminalId)
-      .sort((a, b) => b.run.createdAt.localeCompare(a.run.createdAt) || b.run.reviewId.localeCompare(a.run.reviewId));
+      .reverse();
     const start = before ? records.findIndex((record) => record.run.reviewId === before) + 1 : 0;
     if (before && start === 0) throw new CodeReviewError(400, "cursor_invalid", "Review 游标无效");
     const page = records.slice(start, start + 20);
@@ -164,14 +194,20 @@ export class CodeReviewService {
         // The durable task ledger proves that no terminal/start intent existed.
         record.recovered = false;
       }
-      const task = await this.tasks.create({ taskId: record.reviewerTaskId, projectId: record.source.projectId,
-        cwd: record.source.rootPath, goal: `Independent code review ${id}` });
-      run.reviewerTerminalId = task.terminalSessionId; run.reviewerPanelId = task.panelId;
-      run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
-      if (task.terminalSessionId) await this.manager.updateSessionAlias(task.terminalSessionId, `Review · ${id.slice(0, 8)}`);
-      if (record.recovered || task.phase !== "created" || task.control !== "supervisor")
-        throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
-      await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, await prepareReviewerLaunch(record.source.rootPath));
+      if (record.reviewerThreadId) {
+        // Explicit re-review: retain the case's executor, freeze a new snapshot and
+        // dispatch a new turn. Never restart/resume an executor or overwrite a report.
+        run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
+      } else {
+        const task = await this.tasks.create({ taskId: record.reviewerTaskId, projectId: record.source.projectId,
+          cwd: record.source.rootPath, goal: `Independent code review ${id}` });
+        run.reviewerTerminalId = task.terminalSessionId; run.reviewerPanelId = task.panelId;
+        run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
+        if (task.terminalSessionId) await this.manager.updateSessionAlias(task.terminalSessionId, `Review · ${id.slice(0, 8)}`);
+        if (record.recovered || task.phase !== "created" || task.control !== "supervisor")
+          throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
+        await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, await prepareReviewerLaunch(record.source.rootPath));
+      }
     }
     if (Date.now() - record.startedAt > (run.phase === "starting" ? 120_000 : 30 * 60_000))
       throw new CodeReviewError(409, "review_timeout", "自动推进已超时，Reviewer 未被强制停止，请查看评审终端");
@@ -181,6 +217,8 @@ export class CodeReviewService {
       throw new CodeReviewError(409, observation.availability, "Reviewer 身份已变化或终端不可用");
     if (task.phase === "unavailable") throw new CodeReviewError(503, "reviewer_unavailable", "Reviewer 启动服务不可用");
     if (run.phase === "starting" && task.phase === "ready" && observation.availability === "available") {
+      if (record.reviewerThreadId && record.reviewerThreadId !== task.threadId)
+        throw new CodeReviewError(409, "target_changed", "复审 Reviewer 的原会话已变化");
       const marker = `RW_TASK_READY_${reviewDigest(task.taskId).slice(0, 20)}`;
       const bootstrap = observation.turns.find((turn) => turn.messages.some((message) => message.role === "user" && message.text.includes(marker)));
       if (!bootstrap || bootstrap.status !== "completed" || bootstrap.itemsView !== "full" || observation.terminalState?.state !== "agent_idle" ||
@@ -190,7 +228,7 @@ export class CodeReviewService {
       record.reviewerThreadId = task.threadId;
       run.phase = "reviewing"; record.startedAt = Date.now(); await this.touch(record);
       await this.tasks.send(task.taskId, { expectedRevision: task.revision, dispatchId: record.dispatchId, delivery: "when_idle",
-        text: buildCodeReviewPrompt({ reviewId: id, snapshot, inputPath: path.join(this.store.input(id), "snapshot.json"), outputPath: this.store.output(id) }) });
+        text: buildCodeReviewPrompt({ reviewId: id, round: run.round, snapshot, inputPath: path.join(this.store.input(id), "snapshot.json"), outputPath: this.store.output(id) }) });
       return;
     }
     if (run.phase !== "reviewing" || observation.availability !== "available") return;
@@ -216,6 +254,9 @@ export class CodeReviewService {
     catch { run.stale = true; }
     run.reportId = id; run.summary = report.summary; run.findingCount = report.findings.length;
     run.phase = "completed"; run.delivery = "pending";
+    for (const item of this.store.records.values()) {
+      if (item.run.caseId === run.caseId) item.run.caseStatus = report.findings.length === 0 ? "passed" : "open";
+    }
     record.delivery.reportHash = reviewDigest(report);
     await this.touch(record);
     // A following serial tick handles delivery only after the independent report is durable.

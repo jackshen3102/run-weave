@@ -36,6 +36,7 @@ export function CodeReviewReportView() {
     {query.error ? <p role="alert">{codeReviewError(query.error)}</p> : null}
     {!value ? <p>{query.isFetching ? "读取报告…" : "从来源终端选择一份报告"}</p> : <>
       <p>{codeReviewStatus(value.run)}</p>
+      <p>第 {value.run.round ?? 1} 轮审查</p>
       {value.run.deliveryError ? <p className="text-muted-foreground">{value.run.deliveryError}</p> : null}
       <p className="break-all text-xs text-muted-foreground">{value.run.createdAt} · {value.snapshot?.fingerprint}</p>
       {value.run.stale ? <p className="text-muted-foreground">审查期间代码已变化，结论仅对应原快照。</p> : null}

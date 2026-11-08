@@ -10,6 +10,11 @@ export function listCodeReviews(apiBase: string, token: string, id: string, sign
 export function getCodeReview(apiBase: string, token: string, id: string, signal?: AbortSignal): Promise<CodeReviewDetail> {
   return requestJson(apiBase, `/api/terminal/code-reviews/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` }, signal });
 }
+export function closeCodeReview(apiBase: string, token: string, id: string): Promise<CodeReviewRun> {
+  return requestJson(apiBase, `/api/terminal/code-reviews/${encodeURIComponent(id)}/close`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` },
+  });
+}
 export function getCodeReviewArtifact(apiBase: string, token: string, id: string, artifactId: string): Promise<Blob> {
   return requestBlob(apiBase, `/api/terminal/code-reviews/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}`, { headers: { Authorization: `Bearer ${token}` } });
 }

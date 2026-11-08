@@ -13,7 +13,10 @@ struct TerminalActionsMenu: View, Equatable {
   let sharing: Bool
   let share: () -> Void
   let canReview: Bool
+  let reviewAgain: Bool
   let review: () -> Void
+  let hasReview: Bool
+  @Binding var showingReview: Bool
   let canReply: Bool
   let reply: () -> Void
   let openDesktop: () -> Void
@@ -35,14 +38,20 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
       && lhs.supervisionEnabled == rhs.supervisionEnabled
       && lhs.canReview == rhs.canReview
+      && lhs.reviewAgain == rhs.reviewAgain
+      && lhs.hasReview == rhs.hasReview
       && lhs.canFork == rhs.canFork && lhs.canReply == rhs.canReply
   }
 
   var body: some View {
     Menu {
       Text(cwd)
-      Button(action: review) { Label("代码 Review", systemImage: "checkmark.bubble") }
+      Button(action: review) { Label(reviewAgain ? "重新 Review" : "代码 Review", systemImage: "checkmark.bubble") }
         .disabled(!canReview).accessibilityIdentifier("terminal-menu-code-review")
+      if hasReview {
+        Button { showingReview = true } label: { Label("审查报告", systemImage: "doc.text.magnifyingglass") }
+          .accessibilityIdentifier("terminal-menu-code-review-report")
+      }
       if canReply {
         Button(action: reply) { Label("回复辅助", systemImage: "questionmark.bubble") }
           .accessibilityIdentifier("codex-reply-assistant-open")

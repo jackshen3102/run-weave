@@ -7,6 +7,7 @@ final class TerminalCodeReviewModel: ObservableObject {
   @Published private(set) var writing = false
   @Published private(set) var failure: String?
   @Published private(set) var actionFailure: String?
+  @Published private(set) var closing = false
   private weak var session: AppSession?
   private weak var controller: SessionController?
   private let terminalID: String
@@ -23,8 +24,34 @@ final class TerminalCodeReviewModel: ObservableObject {
     return session.generation == generation && session.terminal?.id == terminalID && session.terminalController === controller
   }
   var canRead: Bool { current && session?.foreground == true && session?.authenticated == true && session?.health.status == .online }
-  var canStart: Bool { canRead && !writing }
+  var canStart: Bool { canRead && !writing && !closing && latest?.active != true && !["pending", "writing"].contains(latest?.delivery ?? "") }
   var latest: TerminalCodeReviewRun? { page?.runs.first }
+  var canDismissStatus: Bool {
+    guard canRead, !writing, !closing, let latest else { return false }
+    return !latest.caseEnded && !latest.active && !["pending", "writing"].contains(latest.delivery)
+  }
+  var statusVisible: Bool {
+    writing || actionFailure != nil || (latest != nil && latest?.caseEnded != true)
+  }
+  func dismissStatus() {
+    guard canDismissStatus, let latest, let session else { return }
+    sequence += 1; loading = false; closing = true; actionFailure = nil
+    let revision = sequence
+    operation = Task { [weak self] in
+      guard let self else { return }
+      defer { if self.sequence == revision { self.closing = false; self.operation = nil } }
+      do {
+        _ = try await session.withConnection(reportFailure: false) { try await TerminalCodeReviewService(api: $0).close(latest.reviewId) }
+      } catch {
+        guard self.current, self.sequence == revision, !Task.isCancelled else { return }
+        self.actionFailure = self.message(error)
+      }
+      guard self.current, self.sequence == revision, !Task.isCancelled else { return }
+      self.closing = false
+      await self.refresh()
+      if self.latest?.caseEnded == true { self.actionFailure = nil }
+    }
+  }
   func poll() async {
     while canRead && !Task.isCancelled {
       await refresh()
@@ -37,7 +64,7 @@ final class TerminalCodeReviewModel: ObservableObject {
     return displayError(error)
   }
   func refresh() async {
-    guard canRead, !writing, !loading, let session else { return }
+    guard canRead, !writing, !closing, !loading, let session else { return }
     let revision = sequence; loading = true
     defer { if revision == sequence { loading = false } }
     do {
@@ -89,7 +116,7 @@ final class TerminalCodeReviewModel: ObservableObject {
     return url
   }
   func suspend() {
-    sequence += 1; operation?.cancel(); operation = nil; loading = false; writing = false
+    sequence += 1; operation?.cancel(); operation = nil; loading = false; writing = false; closing = false
     // Cancelling UI work never cancels the Backend run. Retain the request key after uncertain writes.
   }
 }
