@@ -1,3 +1,4 @@
+import { createConnection } from "node:net";
 // Real Host/native PTY integration. No user configuration or running terminal is touched.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
@@ -45,9 +46,20 @@ try {
   client = await PtyHostClient.connect(scope, randomUUID());
   observer = await PtyHostClient.connect(scope);
   const host = client.descriptor;
+  const denied = await new Promise((resolve, reject) => {
+    const socket = createConnection(host.endpoint); let source = "";
+    socket.setTimeout(5000, () => socket.destroy(new Error("auth probe timeout")));
+    socket.on("error", reject);
+    socket.on("connect", () => socket.write(JSON.stringify({ requestId: randomUUID(), hostInstanceId: host.hostInstanceId,
+      token: "invalid-credential", action: "hello", body: scope }) + "\n"));
+    socket.on("data", chunk => { source += chunk.toString(); });
+    socket.on("end", () => { try { resolve(JSON.parse(source)); } catch (error) { reject(error); } });
+  });
+  assert.equal(denied.error, "HOST_AUTH_FAILED");
+  await assert.rejects(client.request("hello", { ...scope, instanceId: "another-instance" }), /HOST_IDENTITY_MISMATCH/);
   const id = randomUUID(), sessionInstanceId = randomUUID();
   const counter = path.join(fixture, 'counter.cjs');
-  writeFileSync(counter, 'console.log("CHILD_PID="+process.pid);let tick=0;setInterval(()=>console.log("TICK="+(++tick)),100);');
+  writeFileSync(counter, 'console.log("CHILD_PID="+process.pid);let tick=0,writes=0;process.stdin.setRawMode?.(true);process.stdin.on("data",data=>{for(const value of String(data))if(value==="\\r"||value==="\\n")console.log("SUBMITTED="+(++writes));});setInterval(()=>console.log("TICK="+(++tick)),100);');
   const command = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
   const counterCommand = `& '${process.execPath.replaceAll("'", "''")}' '${counter.replaceAll("'", "''")}'`;
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('RUNWEAVE_') && !['PSModulePath', 'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE'].includes(key)));
@@ -76,6 +88,10 @@ try {
   await wait(() => Math.max(...[...output.matchAll(/TICK=(\d+)/g)].map(match => +match[1])) > beforeTick + 4, 'counter survives client exit');
   second = await PtyHostClient.connect(scope, randomUUID());
   const nextTarget = { ...target, generation: second.generation };
+  await second.request('writeInput', { ...nextTarget, input: { operationId, sequence: 1,
+    steps: [{ type: 'text', data: 'x' }, { type: 'delay', ms: 500 }, { type: 'text', data: '\r' }] } });
+  await wait(() => output.includes('SUBMITTED=1'), 'actual command submitted');
+  assert(!output.includes('SUBMITTED=2'), 'Duplicate operation submitted twice');
   const after = (await second.request('listSessions'))[0];
   assert.equal(after.pid, info.pid); assert.equal(after.sessionInstanceId, sessionInstanceId);
   assert.equal(second.descriptor.pid, host.pid); assert.equal(second.descriptor.hostInstanceId, host.hostInstanceId);
@@ -103,7 +119,7 @@ try {
   await sleep(400);
   assert.equal((await second.request('listSessions'))[0].status, 'exited');
   console.log(JSON.stringify({ platform: process.platform, hostPid: host.pid, shellPid: info.pid, counterPid, hostIdentityPreserved: true,
-    inputSurvivedDisconnect: true, writerFencing: true, outputStreamPreserved: true, eventOutboxDrained: true, expiredInputCannotReplay: true, explicitClose: true }));
+    inputSurvivedDisconnect: true, actualSubmissionCount: 1, privatePipeAuth: true, writerFencing: true, outputStreamPreserved: true, eventOutboxDrained: true, expiredInputCannotReplay: true, explicitClose: true }));
 } finally {
   client?.close(); second?.close();
   try { observer ??= await PtyHostClient.connect(scope); await observer.request('stop', { terminateSessions: true }); } catch { /* Fixture only. */ }
