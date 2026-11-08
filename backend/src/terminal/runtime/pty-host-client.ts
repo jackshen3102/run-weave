@@ -9,12 +9,16 @@ import type { PtyRuntime } from "./pty-service";
 const ownerId = randomUUID();
 let connection: Promise<PtyHostClient> | undefined;
 let generation: number | undefined;
+let hostInstanceId: string | undefined;
+let stopped = false;
 export function usesPtyHost(): boolean {
   return process.platform === "win32" && Boolean(process.env.RUNWEAVE_RUNTIME_RELEASE_ID);
 }
 export async function getPtyHost(): Promise<PtyHostClient> {
-  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation).then(client => {
+  if (stopped) throw new Error("HOST_CLIENT_STOPPED");
+  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId).then(client => {
     generation = client.generation;
+    hostInstanceId = client.descriptor.hostInstanceId;
     client.disconnected.add(() => { connection = undefined; });
     return client;
   }).catch(error => { connection = undefined; throw error; });
@@ -100,4 +104,10 @@ export async function closeHostedSession(terminalSessionId: string): Promise<voi
   const session = (await client.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === terminalSessionId);
   if (session) await client.request("closeSession", { hostInstanceId: session.hostInstanceId,
     sessionInstanceId: session.sessionInstanceId, terminalSessionId, generation: client.generation });
+}
+
+export async function disconnectPtyHost(): Promise<void> {
+  stopped = true;
+  if (connection) (await connection.catch(() => undefined))?.close();
+  connection = undefined;
 }

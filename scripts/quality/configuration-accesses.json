@@ -12703,5 +12703,53 @@
     "count": 1,
     "category": "test",
     "reason": "隔离真实 Host 和原生 PTY 集成夹具，清理继承的 Runweave 上下文并写入受控计数器，不操作用户实例。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(receipt)",
+    "count": 3,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(stateFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(script)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(trigger)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
   }
 ]

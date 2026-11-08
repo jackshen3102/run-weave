@@ -1,0 +1,61 @@
+// Actual installed Backend/manager upgrade while an existing ConPTY child keeps running.
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+export async function verifyWindowsHostedUpgrade({ id, socket, connect, home, cliEntry, rw, restartAfterCrash, local }) {
+  const host = JSON.parse(await rw('host', 'status'));
+  const shell = host.sessions.find(session => session.terminalSessionId === id);
+  assert(shell?.pid > 1, 'Host did not expose the existing shell identity');
+  const marker = randomUUID();
+  const script = path.join(home, 'continuity-counter.cjs');
+  const stateFile = path.join(home, 'continuity-state.json');
+  const trigger = path.join(home, 'continuity-update.request');
+  const requestId = randomUUID();
+  const configRoot = path.join(home, '.runweave');
+  writeFileSync(script, `const fs=require('node:fs'),cp=require('node:child_process');let tick=0,started=false,updaterPid=null;
+const write=()=>{fs.writeFileSync(${JSON.stringify(stateFile)}+'.tmp',JSON.stringify({pid:process.pid,tick,marker:${JSON.stringify(marker)},updaterPid}));fs.renameSync(${JSON.stringify(stateFile)}+'.tmp',${JSON.stringify(stateFile)});};
+setInterval(()=>{tick++;console.log('CONTINUITY_'+tick);if(!started&&fs.existsSync(${JSON.stringify(trigger)})){started=true;const child=cp.spawn(process.execPath,[${JSON.stringify(cliEntry)},'server','update','--channel','next','--request-id',${JSON.stringify(requestId)},'--instance','stable','--config-dir',${JSON.stringify(configRoot)}],{stdio:'ignore'});updaterPid=child.pid;child.on('error',()=>{});}write();},200);`);
+  const quote = value => `'${value.replaceAll("'", "''")}'`;
+  socket.send({ type: 'input', data: `& ${quote(process.execPath)} ${quote(script)}\r` });
+  let before;
+  const state = () => { try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; } };
+  const wait = async (predicate, label, timeout = 90000) => { const until = Date.now() + timeout; while (!await predicate()) { assert(Date.now() < until, `Timed out: ${label}`); await sleep(100); } };
+  await wait(() => state()?.tick >= 3, 'counter started'); before = state();
+  socket.ws.close();
+  await rw('restart');
+  await wait(() => state()?.tick > before.tick + 3, 'counter survived normal Backend restart');
+  let afterHost = JSON.parse(await rw('host', 'status'));
+  assert(afterHost.pid === host.pid && afterHost.hostInstanceId === host.hostInstanceId, 'Host replaced during restart');
+  assert(afterHost.sessions.find(session => session.terminalSessionId === id)?.pid === shell.pid, 'Shell replaced during restart');
+  await restartAfterCrash();
+  assert(state()?.pid === before.pid && state()?.marker === marker, 'PTY child replaced after Backend crash');
+  const result = { normalRestart: true, abnormalRestart: true, hostPid: host.pid, shellPid: shell.pid, childPid: before.pid };
+  if (local) {
+    writeFileSync(trigger, 'update');
+    const receipt = path.join(configRoot, 'server/updates', `${requestId}.json`);
+    await wait(() => existsSync(receipt) && state()?.updaterPid, 'upgrade accepted');
+    const accepted = JSON.parse(readFileSync(receipt, 'utf8'));
+    assert(accepted.state === 'accepted', 'Expected a running independently accepted upgrade');
+    process.kill(state().updaterPid, 'SIGKILL');
+    await wait(() => JSON.parse(readFileSync(receipt, 'utf8')).state !== 'accepted', 'upgrade completed after caller killed');
+    const completed = JSON.parse(readFileSync(receipt, 'utf8'));
+    assert(completed.state === 'complete', JSON.stringify(completed));
+    const status = JSON.parse(await rw('status', '--json'));
+    assert(status.healthy && status.runningVersion === '0.1.999', 'Candidate Server did not become active');
+    afterHost = JSON.parse(await rw('host', 'status'));
+    assert(afterHost.hostInstanceId === host.hostInstanceId && afterHost.pid === host.pid, 'Upgrade replaced Host');
+    assert(afterHost.sessions.find(session => session.terminalSessionId === id)?.pid === shell.pid, 'Upgrade replaced shell');
+    assert(state()?.pid === before.pid && state()?.tick > before.tick, 'Upgrade replaced or stopped PTY child');
+    assert(afterHost.installedRelease !== afterHost.runningRelease, 'Test did not switch immutable Server release');
+    result.upgrade = { requestId, callerKilledAfterAcceptance: true, targetVersion: status.runningVersion, sameChild: true };
+  }
+  socket = await connect();
+  await socket.waitOutput('CONTINUITY_');
+  socket.send({ type: 'signal', signal: 'SIGINT' });
+  await sleep(500);
+  socket.send({ type: 'input', data: "Write-Output ('AFTER_'+'HOST_UPGRADE')\r" });
+  await socket.waitOutput('AFTER_HOST_UPGRADE');
+  return { result, socket };
+}

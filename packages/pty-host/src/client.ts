@@ -37,7 +37,7 @@ export class PtyHostClient {
       } else if (message.type) for (const listener of this.events) listener(value as PtyHostEvent);
     });
   }
-  static async connect(scope: EnvironmentContext, ownerId?: string, expectedGeneration?: number): Promise<PtyHostClient> {
+  static async connect(scope: EnvironmentContext, ownerId?: string, expectedGeneration?: number, expectedHostInstanceId?: string): Promise<PtyHostClient> {
     const client = new PtyHostClient(scope);
     try {
       await new Promise<void>((resolve, reject) => {
@@ -46,7 +46,7 @@ export class PtyHostClient {
         client.socket.once("connect", () => { clearTimeout(timer); client.connected = true; resolve(); });
       });
       const hello = await client.request<{ generation: number }>("hello", scope);
-      if (ownerId) client.generation = (await client.request<{ generation: number }>("claimWriter", { ownerId, expectedGeneration: expectedGeneration ?? hello.generation })).generation;
+      if (ownerId) client.generation = (await client.request<{ generation: number }>("claimWriter", { ownerId, expectedGeneration: expectedHostInstanceId && expectedHostInstanceId !== client.descriptor.hostInstanceId ? hello.generation : expectedGeneration ?? hello.generation })).generation;
       return client;
     } catch (error) { client.close(); throw error; }
   }

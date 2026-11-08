@@ -1,4 +1,4 @@
-import { closeHostedSession, usesPtyHost } from "./pty-host-client";
+import { closeHostedSession, usesPtyHost, disconnectPtyHost } from "./pty-host-client";
 import type { PtyRuntime } from "./pty-service";
 import {
   TerminalOutputRecoveryBuffer,
@@ -266,6 +266,7 @@ export class TerminalRuntimeRegistry {
     for (const runtimeId of runtimeIds) {
       await this.disposeRuntime(runtimeId);
     }
+    if (usesPtyHost()) await disconnectPtyHost();
   }
 
   async disposeSessionRuntimes(terminalSessionId: string): Promise<void> {

@@ -1,8 +1,9 @@
+import { verifyWindowsHostedUpgrade } from "./windows-host-upgrade.mjs";
 // Real authenticated HTTP + WebSocket + ConPTY integration, against an installed Server.
 import { randomBytes } from "node:crypto";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
-export async function verifyWindowsTerminal(url, token, cwd) {
+export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
   async function api(route, body, method = "POST") {
     const response = await fetch(`${url}/api/terminal/${route}`, {
       method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -43,6 +44,7 @@ export async function verifyWindowsTerminal(url, token, cwd) {
       return {
         ws,
         send: message => ws.send(JSON.stringify(message)),
+        // eslint-disable-next-line no-control-regex -- Strip terminal ANSI controls before checking visible output.
         waitOutput: marker => wait(() => output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "").includes(marker), marker),
       };
     }
@@ -65,11 +67,16 @@ export async function verifyWindowsTerminal(url, token, cwd) {
     await socket.waitOutput(`READY_${nonce}`);
     socket.send({ type: "input", data: "Write-Output ('RECONNECTED_'+$rwProbe)\r" });
     await socket.waitOutput(`RECONNECTED_${nonce}`);
+    let continuity;
+    if (lifecycle) {
+      const verified = await verifyWindowsHostedUpgrade({ ...lifecycle, id, socket, connect, home: cwd });
+      continuity = verified.result; socket = verified.socket;
+    }
     await api(`session/${id}`, undefined, "DELETE");
     const sessions = await api("session", undefined, "GET");
     assert(!sessions.some(item => item.terminalSessionId === id), "Closed terminal remains listed");
     id = null;
-    return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true };
+    return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true, continuity };
   } finally {
     socket?.ws.close();
     if (id) await api(`session/${id}`, undefined, "DELETE").catch(() => {});

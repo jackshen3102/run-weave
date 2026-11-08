@@ -9,6 +9,7 @@ import {
   readFileSync,
   openSync,
   closeSync,
+  cpSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -81,7 +82,22 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let foreground, log, registry;
 try {
   if (process.argv.includes("--local")) {
-    registry = await localRegistry(path.resolve(".runtime-artifacts/server"), fixture);
+    const source = path.resolve(".runtime-artifacts/server");
+    let candidate;
+    if (process.platform === "win32") {
+      candidate = path.join(fixture, "candidate");
+      for (const directory of ["package", `${process.platform}-${process.arch}`]) {
+        const target = path.join(candidate, directory);
+        cpSync(path.join(source, directory), target, { recursive: true, filter: () => true });
+        const file = path.join(target, "package.json");
+        const pkg = JSON.parse(readFileSync(file, "utf8")); pkg.version = "0.1.999";
+        if (pkg.optionalDependencies) pkg.optionalDependencies = Object.fromEntries(Object.keys(pkg.optionalDependencies).map(key => [key, "0.1.999"]));
+        writeFileSync(file, JSON.stringify(pkg));
+      }
+      const file = path.join(candidate, `${process.platform}-${process.arch}`, "manifest.json");
+      const manifest = JSON.parse(readFileSync(file, "utf8")); manifest.version = "0.1.999"; writeFileSync(file, JSON.stringify(manifest));
+    }
+    registry = await localRegistry(source, fixture, candidate);
     env.npm_config_registry = registry.url;
   }
   await run(npmCommand[0], [...npmCommand.slice(1),
@@ -177,7 +193,25 @@ try {
   assert(verified.ok, "Authenticated request failed");
   console.log("Login verified; verify terminal runtime");
   const terminal = process.platform === "win32"
-    ? await verifyWindowsTerminal(url, session.accessToken, home) : null;
+    ? await verifyWindowsTerminal(url, session.accessToken, home, {
+      rw, cliEntry: cliCommand[1], local: process.argv.includes("--local"),
+      async restartAfterCrash() {
+        const before = JSON.parse(await rw("status", "--json"));
+        process.kill(before.backend.pid, "SIGKILL");
+        for (let i = 0; i < 600 && foreground.exitCode === null; i++) await sleep(100);
+        assert(foreground.exitCode !== null, "Manager did not release failed Backend");
+        foreground = spawn(cliCommand[0], [...cliCommand.slice(1), "server", "start"], { env, cwd: fixture, stdio: ["ignore", log, log] });
+        foreground.on("error", error => { spawnError = error; });
+        const until = Date.now() + 120000;
+        while (Date.now() < until) {
+          if (spawnError) throw spawnError;
+          assert(foreground.exitCode === null, "Replacement manager exited");
+          if (JSON.parse(await rw("status", "--json")).healthy) return;
+          await sleep(300);
+        }
+        throw new Error("Backend crash recovery timed out");
+      },
+    }) : null;
   console.log(
     JSON.stringify({
       platform: `${process.platform}-${process.arch}`,
@@ -202,6 +236,7 @@ try {
       `Verification process did not stop: ${fixture}`,
     );
   }
+  if (process.platform === "win32") await rw("host", "stop").catch(() => {});
   if (log !== undefined) closeSync(log);
   await registry?.close();
 }

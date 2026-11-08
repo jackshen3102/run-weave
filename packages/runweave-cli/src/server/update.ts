@@ -124,6 +124,7 @@ export async function updateServer(
   let configuration: ConfigurationUpgradePreview | ConfigurationUpgradeResult | undefined;
   let lastPhase = "preflight";
   const transactionId = execution?.transactionId ?? randomUUID();
+  let hostLease: PtyHostClient | undefined;
   let resumeOriginal: (() => Promise<void>) | undefined;
   const record = (phase: string, extra: Record<string, unknown> = {}) =>
     writeJson(receipt, {
@@ -203,6 +204,12 @@ export async function updateServer(
     if (dryRun) return { dryRun: true, fromVersion: ctx.manifest.version, targetVersion: manifest.version, databaseCompatible: true, configuration: configuration ?? null, restartRequired: wasRunning };
     record("staged", { targetVersion: manifest.version });
     await protectedRestart(ctx, force, async () => {
+      if (process.platform === "win32" && hostIdentity) {
+        hostLease = await PtyHostClient.connect(ctx.context);
+        if (hostLease.descriptor.hostInstanceId !== hostIdentity.hostInstanceId) throw new Error("HOST_IDENTITY_MISMATCH");
+        await hostLease.request("freeze", { frozen: true });
+        hostIdentity.sessions = await hostLease.request("listSessions");
+      }
       lastPhase = "stopping";
       record(lastPhase, { targetVersion: manifest.version });
       if (wasRunning && managed) await serviceStop(ctx);
@@ -258,6 +265,7 @@ export async function updateServer(
       activateServer(ctx.home, target, installation);
       record("activating", { targetVersion: manifest.version });
       const nextContext = { ...ctx, release: target, manifest };
+      await hostLease?.request("freeze", { frozen: false });
       if (wasRunning && managed) await serviceStart(nextContext);
       else if (foregroundOwner) await (execution ? execution.controls.restart() : foregroundControl(ctx, "restart"));
       if (hostIdentity) {
@@ -310,6 +318,10 @@ export async function updateServer(
     );
     throw error;
   } finally {
+    if (hostLease) {
+      await hostLease.request("freeze", { frozen: false }).catch(() => {});
+      hostLease.close();
+    }
     rmSync(stage, { recursive: true, force: true });
   }
 }
