@@ -448,7 +448,8 @@ export async function runServerCommand(
       const host = await PtyHostClient.connect(ctx.context);
       try {
         const sessions = await host.request<{ terminalSessionId: string; sessionInstanceId: string; pid: number; status: string }[]>("listSessions");
-        if (action === "status") output({ hostInstanceId: host.descriptor.hostInstanceId, pid: host.descriptor.pid,
+        const health = await host.request<{ outboxIncomplete: boolean }>("hello", ctx.context);
+        if (action === "status") output({ outboxIncomplete: health.outboxIncomplete, hostInstanceId: host.descriptor.hostInstanceId, pid: host.descriptor.pid,
           runningRelease: host.descriptor.release, installedRelease: ctx.release,
           sessions: sessions.map(({ terminalSessionId, sessionInstanceId, pid, status }) => ({ terminalSessionId, sessionInstanceId, pid, status })) });
         else {

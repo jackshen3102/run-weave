@@ -197,6 +197,7 @@ try {
       rw, cliEntry: cliCommand[1], local: process.argv.includes("--local"),
       async restartAfterCrash() {
         const before = JSON.parse(await rw("status", "--json"));
+        console.log("Force Backend exit", JSON.stringify({ pid: before.backend.pid, startedAt: before.backend.startedAt }));
         process.kill(before.backend.pid, "SIGKILL");
         for (let i = 0; i < 600 && foreground.exitCode === null; i++) await sleep(100);
         assert(foreground.exitCode !== null, "Manager did not release failed Backend");

@@ -99,6 +99,15 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
             if (previous.createDigest !== createHash("sha256").update(JSON.stringify(body)).digest("hex")) throw new Error("HOST_INPUT_CONFLICT");
             return reply(await previous.ready());
           }
+          if ([...sessions.values()].filter(session => session.info.status === "running").length >= 64) throw new Error("HOST_BUSY");
+          if (sessions.size >= 256) {
+            for (const [id, entry] of sessions) {
+              if (entry.info.status !== "exited") continue;
+              entry.screen.dispose();
+              sessions.delete(id);
+              if (sessions.size < 256) break;
+            }
+          }
           const session = new HostSession(hostInstanceId, body, secret => gateway.launchEnvironment(secret));
           sessions.set(body.terminalSessionId, session);
           return reply(await session.ready());

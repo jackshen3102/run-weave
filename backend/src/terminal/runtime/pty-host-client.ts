@@ -67,7 +67,11 @@ export async function createHostedPty(options: {
   initializing = false;
   for (const event of early) receive(event);
   let tail: Promise<unknown> = Promise.resolve();
+  let pendingInputs = 0, pendingBytes = 0;
   const writeSteps = (steps: PtyHostInputStep[], operationId = randomUUID()): Promise<void> => {
+    const bytes = steps.reduce((total, step) => total + (step.type === "text" ? Buffer.byteLength(step.data) : 0), 0);
+    if (pendingInputs >= 128 || pendingBytes + bytes > 4 * 1024 * 1024) return Promise.reject(new Error("HOST_BUSY"));
+    pendingInputs++; pendingBytes += bytes;
     const job = tail.then(async () => {
       const previous = await client.request<PtyHostInputResult | null>("getInputOperation", { ...target, operationId });
       const current = previous ? undefined : (await client.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === options.terminalSessionId);
@@ -75,7 +79,7 @@ export async function createHostedPty(options: {
       // Reserve once; an uncertain request is queried by ID, never blindly resent with a new ID.
       const result = await client.request<PtyHostInputResult>("writeInput", { ...target, input });
       if (result.state !== "written") throw new Error(result.error ?? "HOST_INPUT_UNCERTAIN");
-    });
+    }).finally(() => { pendingInputs--; pendingBytes -= bytes; });
     tail = job.catch(() => {});
     return job;
   };

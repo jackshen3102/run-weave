@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { link, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import path from "node:path";
+import { processStartIdentity } from "@runweave/config-node";
+import { isWindowsProfileOwnerLive } from "./windows-profile-owner";
 import {
   createBackendProfileLockOwner,
   formatBackendProfileLockConflict,
@@ -81,6 +83,7 @@ export async function acquireBackendProfileLock(
   await mkdir(options.profileDir, { recursive: true });
   const lockFile = getBrowserProfileLockFile(options.profileDir);
   const owner = createBackendProfileLockOwner(options);
+  if (process.platform === "win32") owner.processStartedAt = processStartIdentity(process.pid) ?? undefined;
   // Capture this Backend's generation at publication, never from caller env or
   // a later observer of the PID. Legacy/unavailable evidence cannot authorize
   // credential-bearing health probes, but unauthenticated startup still works.
@@ -112,7 +115,9 @@ export async function acquireBackendProfileLock(
       continue;
     }
     const existingOwner = existing.owner;
-    if (isBackendProfileLockOwnerLive(existingOwner)) {
+    let ownerLive = isBackendProfileLockOwnerLive(existingOwner);
+    if (ownerLive && process.platform === "win32" && existingOwner) ownerLive = isWindowsProfileOwnerLive(existingOwner);
+    if (ownerLive) {
       throw new BackendProfileLockConflictError(
         options.profileDir,
         lockFile,

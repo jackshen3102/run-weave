@@ -12652,9 +12652,9 @@
     "file": "packages/pty-host/src/event-outbox.ts",
     "kind": "file-io",
     "expression": "writeFileSync(fd)",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
-    "reason": "持久化有容量上限且带去重键的 Agent 事件，升级期间保留并在上游恢复后补投，不作为配置来源。"
+    "reason": "持久化有界 Agent 事件与不可丢失的不完整标记，按 Host 接收顺序补投；无效事件隔离保留，不阻塞后续事件，也不作为配置来源。"
   },
   {
     "file": "packages/pty-host/src/lifecycle.ts",

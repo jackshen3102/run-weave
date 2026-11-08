@@ -217,6 +217,7 @@ export async function updateServer(
       if (wasRunning && !managed && !foregroundOwner)
         throw new Error("Unmanaged component owner; refusing to update");
       if (wasRunning) resumeOriginal = async () => {
+        await hostLease?.request("freeze", { frozen: false });
         if (managed) await serviceStart(ctx);
         else if (foregroundOwner) await (execution ? execution.controls.restart() : foregroundControl(ctx, "restart"));
       };

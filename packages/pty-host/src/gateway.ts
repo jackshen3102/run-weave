@@ -73,7 +73,7 @@ export class HostGateway {
           method: "POST", headers: { authorization: `Bearer ${this.upstreams.appServerToken}`, "content-type": "application/json" },
           body, redirect: "error", signal: AbortSignal.timeout(5000),
         });
-        return response.ok;
+        return response.status === 400 || response.status === 422 ? "rejected" : response.ok;
       } catch { return false; }
     });
   }

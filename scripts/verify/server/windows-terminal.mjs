@@ -80,6 +80,6 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
   } finally {
     socket?.ws.close();
     if (id) await api(`session/${id}`, undefined, "DELETE").catch(() => {});
-    await api(`project/${project.projectId}`, undefined, "DELETE");
+    await api(`project/${project.projectId}`, undefined, "DELETE").catch(error => { console.error("Fixture project cleanup pending:", error.message); });
   }
 }

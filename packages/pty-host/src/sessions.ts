@@ -29,10 +29,10 @@ export class HostSession {
     this.screen = new TerminalOutputScreen(this.buffer.cursor, () => { this.degraded = true; });
     this.screen.resize(options.cols, options.rows);
     const pty = requireNative("node-pty") as typeof import("node-pty");
-    this.terminal = pty.spawn(options.command, options.args, {
+    try { this.terminal = pty.spawn(options.command, options.args, {
       name: "xterm-256color", cols: options.cols, rows: options.rows, cwd: options.cwd,
       env: { ...options.env, ...prepareEnv(this.info.gatewayToken, this.info.terminalSessionId) },
-    });
+    }); } catch (error) { this.screen.dispose(); throw error; }
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running");
     this.terminal.onData(data => {
       this.info.pid = this.terminal.pid;
@@ -53,7 +53,7 @@ export class HostSession {
     while (this.terminal.pid < 1 && this.info.status === "running" && Date.now() < deadline)
       await new Promise(resolve => setTimeout(resolve, 20));
     this.info.pid = this.terminal.pid;
-    if (this.info.pid < 1) throw new Error("HOST_SESSION_START_FAILED");
+    if (this.info.pid < 1) { this.close(); throw new Error("HOST_SESSION_START_FAILED"); }
     return this.describe();
   }
 
@@ -86,7 +86,10 @@ export class HostSession {
   }
 
   snapshot() {
-    if (this.degraded) throw new Error("HOST_SCREEN_UNAVAILABLE");
+    if (this.degraded) return Promise.resolve({
+      data: "\x1b[0m\x1b[2J\x1b[H[Runweave: screen recovery unavailable; the original process is still running.]\r\n",
+      cursor: this.buffer.cursor, cols: this.info.cols, rows: this.info.rows,
+    });
     return this.screen.snapshot();
   }
 }

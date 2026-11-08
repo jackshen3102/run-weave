@@ -26,6 +26,8 @@ export interface BackendProfileLockOwner {
   runtimeReleaseId: string | null;
   /** Backend-published process generation; absent on legacy locks. */
   processSignature?: string;
+  /** Windows process creation identity, distinct from publication time and PID. */
+  processStartedAt?: string;
 }
 
 export interface CreateBackendProfileLockOwnerOptions {
@@ -207,6 +209,7 @@ export function parseBackendProfileLockOwner(
     ...(typeof owner.processSignature === "string" && owner.processSignature
       ? { processSignature: owner.processSignature }
       : {}),
+    ...(typeof owner.processStartedAt === "string" && owner.processStartedAt ? { processStartedAt: owner.processStartedAt } : {}),
     port:
       typeof owner.port === "number" && Number.isInteger(owner.port)
         ? owner.port

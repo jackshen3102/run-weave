@@ -135,7 +135,6 @@ export async function foreground(ctx: ServerContext): Promise<void> {
       if (!source.includes("\n")) return;
       client.pause();
       void (async () => {
-        if (busy) throw new Error("SERVER_BUSY");
         const command = JSON.parse(source.trim()) as {
           action: string;
           token: string;
@@ -161,6 +160,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
             client.end(JSON.stringify({ accepted: true, requestId, receipt: file }) + "\n");
             return;
           }
+          if (busy) throw new Error("SERVER_BUSY");
           const job: UpdateJob = { requestId, digest, request, state: "accepted" };
           writeJson(file, job);
           busy = true;
@@ -175,6 +175,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
             .finally(() => { busy = false; });
           return;
         }
+        if (busy) throw new Error("SERVER_BUSY");
         if (!["stop", "restart", "pause"].includes(command.action))
           throw new Error("Invalid action");
         busy = true;
