@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct TerminalFilePreview: View {
+  enum Source {
+    case terminal(TerminalFileTap)
+    case link(TerminalFileReference, panelID: String?)
+  }
   @ObservedObject var session: AppSession
   let terminalID: String
   let projectID: String
-  let tap: TerminalFileTap
+  let source: Source
   let close: () -> Void
   @ObservedObject var model: ProjectChangesModel
   @State private var candidates: [TerminalFileCandidate] = []
@@ -46,19 +50,26 @@ struct TerminalFilePreview: View {
   private func resolve() async {
     guard let api = session.api else { failure = "当前连接不可用"; loading = false; return }
     do {
-      let workspace = try await api.terminalFileWorkspace(terminalID: terminalID)
-      try Task.checkCancellation()
       var panelID: String?
-      var target = tap.reference()
-      if workspace.panels.count > 1 {
-        guard let panel = workspace.panels.first(where: { panel in
-          guard let g = panel.geometry, g.windowWidth == tap.cols, g.windowHeight <= tap.rows else { return false }
-          return tap.col >= g.paneLeft && tap.col < g.paneLeft + g.paneWidth
-            && tap.viewportRow >= g.paneTop && tap.viewportRow < g.paneTop + g.paneHeight
-        }) else { failure = "终端分屏布局已变化，请重新点击文件。"; loading = false; return }
-        panelID = panel.panelId
-        target = tap.reference(geometry: panel.geometry)
-      } else if let id = workspace.panels.first?.panelId, id != "default" { panelID = id }
+      var target: TerminalFileReference?
+      switch source {
+      case .link(let reference, let id):
+        target = reference
+        panelID = id
+      case .terminal(let tap):
+        let workspace = try await api.terminalFileWorkspace(terminalID: terminalID)
+        try Task.checkCancellation()
+        target = tap.reference()
+        if workspace.panels.count > 1 {
+          guard let panel = workspace.panels.first(where: { panel in
+            guard let g = panel.geometry, g.windowWidth == tap.cols, g.windowHeight <= tap.rows else { return false }
+            return tap.col >= g.paneLeft && tap.col < g.paneLeft + g.paneWidth
+              && tap.viewportRow >= g.paneTop && tap.viewportRow < g.paneTop + g.paneHeight
+          }) else { failure = "终端分屏布局已变化，请重新点击文件。"; loading = false; return }
+          panelID = panel.panelId
+          target = tap.reference(geometry: panel.geometry)
+        } else if let id = workspace.panels.first?.panelId, id != "default" { panelID = id }
+      }
       guard let target else { failure = "无法识别此文件路径"; loading = false; return }
       let response = try await api.resolveTerminalFile(projectID: projectID, terminalID: terminalID,
         path: target.path, panelID: panelID, context: target.context)

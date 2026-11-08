@@ -8,16 +8,26 @@ struct ConversationReaderView: View {
   @ObservedObject private var browser: BrowserSession
   let controller: SessionController
   let terminalID: String
+  let projectID: String
+  @ObservedObject var changes: ProjectChangesModel
   let title: String
   let close: () -> Void
   @StateObject private var model: ConversationReaderModel
   @StateObject private var anchor = ConversationScrollAnchor()
   @State private var browserPresentationID = UUID()
   @State private var visible = false
+  @State private var fileLink: FileLink?
 
-  init(session: AppSession, controller: SessionController, terminalID: String, title: String, expectedTarget: TerminalConversation.Target? = nil, close: @escaping () -> Void) {
+  private struct FileLink: Identifiable {
+    let id = UUID()
+    let reference: TerminalFileReference
+    let panelID: String?
+  }
+
+  init(session: AppSession, controller: SessionController, terminalID: String, projectID: String, changes: ProjectChangesModel, title: String, expectedTarget: TerminalConversation.Target? = nil, close: @escaping () -> Void) {
     self.session = session; self.controller = controller; self.terminalID = terminalID; self.title = title
     self.close = close
+    self.projectID = projectID; self.changes = changes
     self.browser = session.browser
     _model = StateObject(wrappedValue: ConversationReaderModel(session: session, controller: controller, terminalID: terminalID, expectedTarget: expectedTarget))
   }
@@ -44,6 +54,15 @@ struct ConversationReaderView: View {
                       .font(.caption).foregroundColor(TerminalAppearance.accent)
                     MarkdownContent(content: message.text)
                       .environment(\.openURL, OpenURLAction { url in
+                        if url.isFileURL || (url.scheme == nil && url.absoluteString.hasPrefix("/") && !url.absoluteString.hasPrefix("//")) {
+                          guard session.terminal?.id == terminalID, session.terminal?.projectId == projectID,
+                            session.terminalController === controller, browser.state != .presented, !browser.hasPrompt,
+                            let reference = TerminalFileReference.parse(url.isFileURL ? url.absoluteString : "file://" + url.absoluteString)
+                          else { return .discarded }
+                          anchor.capture(); anchor.persist()
+                          fileLink = FileLink(reference: reference, panelID: model.data?.target?.panelId)
+                          return .handled
+                        }
                         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
                           let source = session.browserSource else { return .discarded }
                         anchor.capture(); anchor.persist()
@@ -88,6 +107,11 @@ struct ConversationReaderView: View {
         }
       }
     }.navigationViewStyle(.stack).tint(TerminalAppearance.accent).clarityMask()
+      .sheet(item: $fileLink) { link in
+        TerminalFilePreview(session: session, terminalID: terminalID, projectID: projectID,
+          source: .link(link.reference, panelID: link.panelID), close: { fileLink = nil }, model: changes)
+          .clarityMask().mobileAnalyticsScreen(.filePreview)
+      }
       .fullScreenCover(isPresented: Binding(
         get: { browser.state == .presented },
         set: { if !$0 { browser.collapse() } }
@@ -121,13 +145,14 @@ struct ConversationReaderView: View {
   private func connectBrowser() {
     guard let source = session.browserSource else { return }
     let visible = $visible
+    let fileLink = $fileLink
     let terminalID = terminalID
     browser.registerHostPresentation(id: browserPresentationID, source: source, hostID: ObjectIdentifier(controller)) {
       [weak session, weak controller, weak browser] in
       guard let session, let controller, let browser else { return false }
       return visible.wrappedValue && session.browserSource == source
         && session.terminal?.id == terminalID && session.terminalController === controller
-        && browser.state != .presented && !browser.hasPrompt
+        && browser.state != .presented && !browser.hasPrompt && fileLink.wrappedValue == nil
     }
   }
   private var emptyText: String {

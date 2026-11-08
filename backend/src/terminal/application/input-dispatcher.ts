@@ -435,6 +435,11 @@ export async function sendInputToSession(
             submitKey,
             attachClipboardImages,
           );
+        } else if (mode === "line") {
+          // Match tmux: a TUI can treat text and Enter in one PTY write as paste.
+          ensured.runtime.write(data);
+          await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
+          ensured.runtime.write("\r");
         } else {
           ensured.runtime.write(
             codexSlashCommand

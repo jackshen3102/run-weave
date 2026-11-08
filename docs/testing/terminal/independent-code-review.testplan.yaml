@@ -1,7 +1,7 @@
 version: 1
 name: 终端页面一键独立代码 Review
 description: >
-  独立代码 Review 验收合同，以 docs/cli/terminal-task-control.md 的当前产品语义为准。
+  待实现功能的验收合同，配合 docs/plans/2026-11-08-independent-code-review.md 使用。
   验证两端统一从更多菜单直接启动、来源上下文隔离、当前变更快照与安全回传。
   每例使用自己的项目、终端和证据目录，不操作用户工作终端；模型答案不能代替运行事实。
   本文件的格式通过不表示产品已实现或行为通过。
@@ -12,7 +12,7 @@ cases:
     description: 点击一次直接启动独立 Reviewer 并把完整报告送回来源，来源 Agent 无需执行调度命令。
     preconditions:
       - 自有 Dev Session 已包含实现，有可用 Codex 执行器、空闲来源 Agent 和一份可审文本变更。
-      - 本例来源是已有普通 Codex 终端，未通过任务启动接口启动，没有 launchOperationId；已记录总终端 ID 与工作区，未设置待提交草稿。
+      - 本例已记录来源与工作区身份，未设置待提交草稿。
     steps:
       - 使用 toolkit:playwright-cli 附着本例浏览器，在来源终端打开更多（…）菜单；确认代码 Review 位于菜单内，顶栏无独立发起按钮，仅打开菜单未创建任务。
       - 点击代码 Review 菜单项；确认菜单关闭，没有确认弹窗，终端输出区上方立即显示准备状态且来源没有收到发起审查的命令。
@@ -106,32 +106,32 @@ cases:
       - 关闭本例浏览器页面并停止客户端轮询；从 Backend 观察 Reviewer 继续执行直到报告保存。
       - 重新用 toolkit:playwright-cli 打开原终端，确认读取同一运行与报告且没有重复创建；清理资源。
   - id: ICR-011
-    name: 发起请求只以总终端 ID 定位
+    name: 待提交草稿阻止结果注入
     required: true
-    description: 客户端不要求 panel、thread、启动操作编号或预先读取目标身份即可发起 Review。
+    description: Review 完成不能提交、覆盖或清除来源草稿，草稿正常处理后才自动回传。
     preconditions:
-      - 本例自有终端与工作区有可审变更，能够查看本例浏览器发出的 Review HTTP 请求。
+      - 本例 Review 正在运行，来源 Agent 空闲，本例可控制 UI 输入与核对原生提交记录。
     steps:
-      - 使用 toolkit:playwright-cli 从更多菜单发起 Review，确认 URL 包含来源总终端 ID，正文仅含 requestId，没有其他身份字段或确认步骤。
-      - 确认 Backend 创建一次运行，清理本例资源。
+      - 通过 toolkit:playwright-cli 在来源输入唯一草稿但不提交，等待 Review 完成；确认报告可读且 delivery 为 pending，草稿原文仍在且未进入原生提交。
+      - 正常提交本例草稿并等待来源恢复 idle，确认报告随后回传一次，未丢失用户输入；清理资源。
   - id: ICR-012
-    name: 忙碌来源仍走普通终端发送通道
+    name: 忙碌来源不被 Review 打断
     required: true
-    description: 来源有其他任务时，Review 不额外阻止回传，输入或排队行为与普通终端发送相同。
+    description: 来源 Agent 运行时仅保存报告，待同一来源空闲后回传。
     preconditions:
-      - 本例来源持续执行一个可结束的无副作用任务，Review 可在来源任务结束前完成。
+      - 本例来源持续执行一个可结束的无副作用任务，无草稿，Review 可在来源任务结束前完成。
     steps:
-      - 等待 Review 完成，确认报告保存后调用普通终端发送通道，delivery 为 written，没有 Review 自身的忙闲等待条件。
-      - 观察普通输入通道的实际投递或原生排队记录，确认只发送一次；清理资源。
+      - 等待 Review 完成，确认来源没有收到 Escape、替换任务或报告正文，状态为等待回传。
+      - 结束来源自有任务，确认同一 thread 空闲后收到一次报告；清理资源。
   - id: ICR-013
-    name: 来源切换会话后仍按总终端 ID 回传
+    name: 来源切换会话后禁止投递给新会话
     required: true
-    description: 结果回传固定发起 Review 的总终端 ID，thread 或输入面板变化不阻止回传，界面焦点不会把报告发给其他总终端。
+    description: 结果回传固定创建时的来源身份，不跟随当前活动终端、面板或 thread。
     preconditions:
-      - 本例有 A、B 两个自有总终端，在 A 发起 Review 后能够切换 A 的 thread，B 保持独立。
+      - 本例有 A、B 两个来源面板，在 A 发起 Review 后能够切换 A 的 thread，B 保持独立。
     steps:
-      - 使用 toolkit:playwright-cli 在 A 更多菜单发起 Review；在完成前切换 A 的 thread，再将界面焦点移到 B。
-      - 等待报告完成，确认 A 当前输入会话收到一次完整报告，delivery 为 written，B 没有收到报告；记录输入计数并清理资源。
+      - 在 Review 完成前切换 A 的 thread，并将界面焦点移到 B；确认结果标记 target_changed，不写入 A 的新 thread 或 B。
+      - 从运行详情读取完整报告，确认结果没有丢失，记录所有目标输入计数后清理资源。
   - id: ICR-014
     name: 无原生终态不能发布完成报告
     required: true
@@ -188,12 +188,11 @@ cases:
       - 通过真实产物路由尝试未登录、路径穿越及指向目录外文件的 artifact；确认请求被拒绝且未泄漏标记内容。
       - 提交另一轮 reviewId 或错误 fingerprint 的报告，确认校验失败且未回传；恢复正确报告后核对可读性，清理资源。
   - id: ICR-020
-    name: 没有 Agent 会话身份也按总终端 ID 投递
+    name: 来源只有 shell 时仅展示报告
     required: true
-    description: Review 不依赖来源 Agent、thread 或启动代次，只使用普通终端发送接口。
+    description: 无法绑定原生 Agent 的来源终端仍可显示结果，但报告不能被当作 shell 命令执行。
     preconditions:
-      - 本例自有来源终端运行只接收并显示输入的 cat，关联工作区有可审变更，Reviewer 执行器可用。
-      - 来源没有 Agent 会话或启动操作编号，所有输入由本例拥有，不作为 shell 命令执行。
+      - 本例来源是自有空闲 shell 终端，关联工作区有可审变更，Reviewer 执行器可用。
     steps:
-      - 使用 toolkit:playwright-cli 从更多菜单发起 Review 并等待完成，确认报告持久可读、delivery 为 written。
-      - 确认原总终端的 cat 收到一次报告正文，其他终端没有收到；清理本例资源。
+      - 从真实页面发起 Review 并等待完成，确认报告在来源页面可读、自动回传显示不支持该目标。
+      - 确认 shell 输入记录无报告正文，未启动或替换来源 Agent；清理本例资源。

@@ -456,7 +456,7 @@ export function TerminalPreviewPanel({
     <>
       <TerminalPreviewPanelShell
         codeReviewBody={activeTool === "code-review" ? <CodeReviewReportView key={scope} /> : null}
-        conversationBody={activeTool === "conversation" ? <TerminalConversationSidecar projectId={activeProject?.projectId ?? ""} title={activeSession?.alias ?? "当前会话"} sessionId={activeSession?.terminalSessionId ?? null} panelId={activePanelId} /> : null}
+        conversationBody={activeTool === "conversation" ? <TerminalConversationSidecar projectId={activeProject?.projectId ?? ""} title={activeSession?.alias ?? "当前会话"} sessionId={activeSession?.terminalSessionId ?? null} panelId={activePanelId} onOpenFile={openPreviewFile} /> : null}
         layout={{
           expanded,
           panelWidth,
