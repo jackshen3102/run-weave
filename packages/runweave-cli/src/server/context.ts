@@ -1,4 +1,4 @@
-import { configurationOption, processStartIdentity } from "@runweave/config-node";
+import { configurationOption, processStartIdentity, resolveActiveServerRelease } from "@runweave/config-node";
 import {
   activateServer,
   findInstallation,
@@ -17,8 +17,8 @@ import {
   openSync,
   readFileSync,
   renameSync,
-  realpathSync,
   writeFileSync,
+  fsyncSync,
 } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -30,15 +30,15 @@ export function serverContext(args: string[]) {
     base.home,
     configurationOption("server-package", args),
   );
-  const current = path.join(base.home, "current");
+  const current = resolveActiveServerRelease(base.home);
   let release: string;
-  if (!existsSync(current)) {
+  if (!current) {
     const initial = materializeServer(installation.packageRoot, base.home);
     verifyRelease(initial.release);
     activateServer(base.home, initial.release, installation);
     release = initial.release;
   } else {
-    release = realpathSync(current);
+    release = current;
     if (!release.startsWith(path.join(base.home, "releases") + path.sep))
       throw new Error("Invalid active Server release path");
   }
@@ -59,6 +59,7 @@ export interface ProcessIdentity {
   version: string;
   release: string;
   configuration?: unknown;
+  foregroundProtocolVersion?: number;
 }
 
 export function controlSocket(ctx: ServerContext): string {
@@ -87,9 +88,8 @@ export function readJson<T>(file: string): T {
 }
 export function writeJson(file: string, value: unknown): void {
   const temporary = `${file}.${randomUUID()}`;
-  writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", {
-    mode: 0o600,
-  });
+  const fd = openSync(temporary, "wx", 0o600);
+  try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); } finally { closeSync(fd); }
   renameSync(temporary, file);
 }
 export function processStart(pid: number): string | null {
@@ -198,6 +198,14 @@ export async function runChecked(
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
+    // .cmd is a shell program; invoke npm's JS entry directly so Unicode and quoted
+    // prefixes remain argv, rather than passing through cmd.exe parsing.
+    if (process.platform === "win32" && command === "npm") {
+      const entry = path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js");
+      if (!existsSync(entry)) return reject(new Error("NPM_CLI_NOT_FOUND: install Node 22 with its bundled npm"));
+      command = process.execPath;
+      args = [entry, ...args];
+    }
     const child = spawn(command, args, {
       ...options,
       stdio: ["ignore", "ignore", "pipe"],
@@ -219,6 +227,7 @@ export function verifyRelease(root: string): ServerReleaseManifest {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.managementApiVersion !== 1 ||
+    manifest.foregroundProtocolVersion !== undefined && manifest.foregroundProtocolVersion !== 1 ||
     !/^\d+\.\d+\.\d+$/.test(manifest.version) ||
     manifest.platform !== process.platform ||
     manifest.arch !== process.arch ||

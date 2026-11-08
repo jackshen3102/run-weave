@@ -1,9 +1,10 @@
 import { CONFIGURATION_COMPATIBILITY, supportsConfiguration, type ConfigurationUpgradePreview, type ConfigurationUpgradeResult } from "@runweave/shared/configuration";
-import { BACKEND_CORE_CONFIGURATION_DOMAINS, withConfigurationUpgradeOwnership } from "@runweave/config-node";
+import { BACKEND_CORE_CONFIGURATION_DOMAINS, resolveActiveServerRelease, withConfigurationUpgradeOwnership } from "@runweave/config-node";
+import { PtyHostClient } from "@runweave/pty-host/client";
 import { execFileSync } from "node:child_process";
 import type { ServerMaintenanceLease, ServerConfigurationObservation } from "@runweave/shared/server-management";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   identity,
@@ -15,7 +16,7 @@ import {
   writeJson,
   type ServerContext,
 } from "./context.js";
-import { foregroundControl } from "./processes.js";
+import { foregroundControl } from "./control.js";
 import { registered, serviceStart, serviceStop } from "./services.js";
 import {
   activateServer,
@@ -111,6 +112,8 @@ export async function updateServer(
   force: boolean,
   sourcePackage?: string,
   dryRun = false,
+  execution?: { transactionId: string; controls: { pause(): Promise<void>; restart(): Promise<void> } },
+  channel: "latest" | "next" = "latest",
 ): Promise<unknown> {
   if (version && !/^\d+\.\d+\.\d+$/.test(version))
     throw new Error("--version must be an exact numeric semantic version");
@@ -120,7 +123,8 @@ export async function updateServer(
   const receipt = path.join(ctx.home, "update.json");
   let configuration: ConfigurationUpgradePreview | ConfigurationUpgradeResult | undefined;
   let lastPhase = "preflight";
-  const transactionId = randomUUID();
+  const transactionId = execution?.transactionId ?? randomUUID();
+  let hostLease: PtyHostClient | undefined;
   let resumeOriginal: (() => Promise<void>) | undefined;
   const record = (phase: string, extra: Record<string, unknown> = {}) =>
     writeJson(receipt, {
@@ -131,7 +135,7 @@ export async function updateServer(
       fromRelease: ctx.release,
       configurationReceipt: path.join(ctx.context.configRoot, "config-upgrade.json"),
       fromVersion: ctx.manifest.version,
-      requestedVersion: version ?? "latest",
+      requestedVersion: version ?? channel,
       at: new Date().toISOString(),
       ...extra,
     });
@@ -144,13 +148,24 @@ export async function updateServer(
         "--ignore-scripts",
         "--no-audit",
         "--no-fund",
-        `@runweave/server@${version ?? "latest"}`,
+        `@runweave/server@${version ?? channel}`,
       ]);
     const candidate = sourcePackage
       ? describeInstallation(sourcePackage).packageRoot
       : path.join(stage, "node_modules/@runweave/server");
     const target = materializeServer(candidate, ctx.home).release;
     const manifest = verifyRelease(target);
+    let hostIdentity: { hostInstanceId: string; sessions: { terminalSessionId: string; sessionInstanceId: string; pid: number }[] } | undefined;
+    if (process.platform === "win32") {
+      if (manifest.ptyHost?.protocolVersion !== 1) throw new Error("HOST_PROTOCOL_INCOMPATIBLE: target requires a maintenance upgrade");
+      if (identity(ctx, "backend")) {
+        const host = await PtyHostClient.connect(ctx.context);
+        try {
+          hostIdentity = { hostInstanceId: host.descriptor.hostInstanceId,
+            sessions: await host.request("listSessions") };
+        } finally { host.close(); }
+      }
+    }
     const hasUpgrade = manifest.configurationUpgradeVersion === 1;
     const databaseCompatible = hasUpgrade && manifest.databaseCompatibility
       ? ctx.manifest.databaseCompatibility
@@ -189,15 +204,22 @@ export async function updateServer(
     if (dryRun) return { dryRun: true, fromVersion: ctx.manifest.version, targetVersion: manifest.version, databaseCompatible: true, configuration: configuration ?? null, restartRequired: wasRunning };
     record("staged", { targetVersion: manifest.version });
     await protectedRestart(ctx, force, async () => {
+      if (process.platform === "win32" && hostIdentity) {
+        hostLease = await PtyHostClient.connect(ctx.context);
+        if (hostLease.descriptor.hostInstanceId !== hostIdentity.hostInstanceId) throw new Error("HOST_IDENTITY_MISMATCH");
+        await hostLease.request("freeze", { frozen: true });
+        hostIdentity.sessions = await hostLease.request("listSessions");
+      }
       lastPhase = "stopping";
       record(lastPhase, { targetVersion: manifest.version });
       if (wasRunning && managed) await serviceStop(ctx);
-      if (wasRunning && foregroundOwner) await foregroundControl(ctx, "pause");
+      if (wasRunning && foregroundOwner) await (execution ? execution.controls.pause() : foregroundControl(ctx, "pause"));
       if (wasRunning && !managed && !foregroundOwner)
         throw new Error("Unmanaged component owner; refusing to update");
       if (wasRunning) resumeOriginal = async () => {
+        await hostLease?.request("freeze", { frozen: false });
         if (managed) await serviceStart(ctx);
-        else if (foregroundOwner) await foregroundControl(ctx, "restart");
+        else if (foregroundOwner) await (execution ? execution.controls.restart() : foregroundControl(ctx, "restart"));
       };
       lastPhase = "installing";
       record(lastPhase, { targetVersion: manifest.version });
@@ -219,7 +241,7 @@ export async function updateServer(
         const installed = path.join(
           npmPrefix ?? managedPrefix,
           npmPrefix
-            ? "lib/node_modules/@runweave/server"
+            ? process.platform === "win32" ? "node_modules/@runweave/server" : "lib/node_modules/@runweave/server"
             : "node_modules/@runweave/server",
         );
         const installedVersion = readJson<{ version: string }>(
@@ -244,8 +266,18 @@ export async function updateServer(
       activateServer(ctx.home, target, installation);
       record("activating", { targetVersion: manifest.version });
       const nextContext = { ...ctx, release: target, manifest };
+      await hostLease?.request("freeze", { frozen: false });
       if (wasRunning && managed) await serviceStart(nextContext);
-      else if (foregroundOwner) await foregroundControl(ctx, "restart");
+      else if (foregroundOwner) await (execution ? execution.controls.restart() : foregroundControl(ctx, "restart"));
+      if (hostIdentity) {
+        const host = await PtyHostClient.connect(ctx.context);
+        try {
+          if (host.descriptor.hostInstanceId !== hostIdentity.hostInstanceId) throw new Error("HOST_IDENTITY_MISMATCH");
+          const after = await host.request<{ terminalSessionId: string; sessionInstanceId: string; pid: number }[]>("listSessions");
+          if (hostIdentity.sessions.some(before => !after.some(session => session.terminalSessionId === before.terminalSessionId &&
+            session.sessionInstanceId === before.sessionInstanceId && session.pid === before.pid))) throw new Error("HOST_IDENTITY_MISMATCH");
+        } finally { host.close(); }
+      }
       let backendConfigurationVerified = false;
       if (wasRunning && configuration && "savedRevision" in configuration) {
         const committed = configuration;
@@ -273,7 +305,7 @@ export async function updateServer(
     if (resumeOriginal && configuration) {
       try {
         const digest = createHash("sha256").update(readFileSync(path.join(ctx.context.configRoot, "settings.yaml"))).digest("hex");
-        if (digest === configuration.expectedDigest && realpathSync(path.join(ctx.home, "current")) === ctx.release) {
+        if (digest === configuration.expectedDigest && resolveActiveServerRelease(ctx.home) === ctx.release) {
           await resumeOriginal();
           recovery = "original-services-resumed";
         } else recovery = "manual-recovery-required";
@@ -287,6 +319,10 @@ export async function updateServer(
     );
     throw error;
   } finally {
+    if (hostLease) {
+      await hostLease.request("freeze", { frozen: false }).catch(() => {});
+      hostLease.close();
+    }
     rmSync(stage, { recursive: true, force: true });
   }
 }

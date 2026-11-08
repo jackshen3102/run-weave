@@ -1,0 +1,31 @@
+{
+  "name": "@runweave/pty-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.ts",
+    "./lifecycle": "./src/lifecycle.ts",
+    "./output-recovery": "./src/output-recovery.ts",
+    "./output-screen": "./src/output-screen.ts",
+    "./output-screen-state": "./src/output-screen-state.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@runweave/config-node": "workspace:*",
+    "@runweave/shared": "workspace:*",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/addon-unicode11": "0.9.0",
+    "@xterm/headless": "6.0.0",
+    "fs-native-extensions": "1.5.1",
+    "node-pty": "1.2.0-beta.14",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

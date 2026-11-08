@@ -33,7 +33,11 @@ export function createTerminalOutputRecovery(options: {
   const buffer = registry.getOutputRecovery(runtimeId);
   const screen = registry.getOutputScreen(runtimeId);
   if (!buffer || !screen) return undefined;
+  let grid = registry.getRuntime(runtimeId)?.hosted?.grid;
+  let gridRevision = 0;
   let ready = false;
+  const pending: TerminalOutputFrame[] = [];
+  let pendingBytes = 0;
   let disposed = false;
   let releaseLease: (() => void) | undefined;
   const params = new URL(request.url ?? "/", "http://localhost").searchParams;
@@ -53,8 +57,19 @@ export function createTerminalOutputRecovery(options: {
   return {
     onFrame(frame: TerminalOutputFrame) {
       if (ready && !disposed) batcher.pushFrame(frame);
+      else if (!disposed) {
+        pendingBytes += Buffer.byteLength(frame.data);
+        if (pendingBytes > 1024 * 1024 || pending.length >= 8192) {
+          disposed = true;
+          closeSlowTerminalSocket(socket, "Terminal recovery queue exceeded");
+        } else pending.push(frame);
+      }
     },
     onResize(cols: number, rows: number) {
+      if (grid) {
+        if (grid.cols !== cols || grid.rows !== rows) gridRevision++;
+        grid = { cols, rows };
+      }
       if (!ready || disposed || !orderedResize) return;
       batcher.flush();
       sendEvent(socket, { type: "resize", cols, rows, cursor: buffer.cursor });
@@ -66,10 +81,11 @@ export function createTerminalOutputRecovery(options: {
     },
     async start(): Promise<void> {
       try {
+        let capturedGridRevision = gridRevision;
         let reason: TerminalRecoveryReason = cursor
           ? "cursor_missing"
           : "initial";
-        let replay = cursor ? buffer.read(cursor) : undefined;
+        let replay = cursor ? await buffer.read(cursor) : undefined;
         if (replay && !replay.ok) reason = replay.reason;
         else if (cursor) {
           const leaseReason = clientId
@@ -93,8 +109,8 @@ export function createTerminalOutputRecovery(options: {
         sendEvent(socket, {
           type: "connected",
           terminalSessionId,
-          runtimeKind: "tmux",
-          tmuxScrollMode: "single-row",
+          runtimeKind: registry.getRuntime(runtimeId)?.hosted ? "pty" : "tmux",
+          tmuxScrollMode: registry.getRuntime(runtimeId)?.hosted ? undefined : "single-row",
           resizeMode: orderedResize ? "ordered" : undefined,
           recovery: includeSnapshot
             ? { mode: resume ? "resume" : "snapshot", reason }
@@ -105,6 +121,8 @@ export function createTerminalOutputRecovery(options: {
         else if (includeSnapshot) {
           const snapshot = await screen.snapshot();
           if (disposed || socket.readyState !== 1) return;
+          if (grid && (snapshot.cols !== grid.cols || snapshot.rows !== grid.rows)) throw new Error("Snapshot grid changed");
+          capturedGridRevision = gridRevision;
           if (
             !sendEvent(socket, {
               type: "snapshot",
@@ -119,9 +137,10 @@ export function createTerminalOutputRecovery(options: {
           head = snapshot.cursor;
         }
         if (disposed || socket.readyState !== 1) return;
-        // No await between reading the captured boundary and opening live delivery.
-        // Output arriving during snapshot work is recovered from the bounded ring.
-        const tail = buffer.read(head);
+        // The Host read is asynchronous. Queue live frames until its captured boundary arrives.
+        const tail = await buffer.read(head);
+        if (disposed || socket.readyState !== 1) return;
+        if (capturedGridRevision !== gridRevision) throw new Error("Terminal grid changed during recovery");
         if (!tail.ok) throw new Error("Snapshot output boundary evicted");
         for (const frame of tail.frames) {
           if (
@@ -133,6 +152,11 @@ export function createTerminalOutputRecovery(options: {
           )
             return;
         }
+        for (const frame of pending.splice(0)) {
+          if (frame.range.toOffset <= tail.cursor.offset) continue;
+          if (!sendEvent(socket, { type: "output", data: frame.data, range: frame.range })) return;
+        }
+        pendingBytes = 0;
         ready = true;
       } catch {
         closeSlowTerminalSocket(

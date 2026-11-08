@@ -1,6 +1,6 @@
 {
   "name": "@runweave/cli",
-  "version": "0.10.7",
+  "version": "0.10.8",
   "private": true,
   "license": "MIT",
   "type": "commonjs",
@@ -23,7 +23,8 @@
     "@runweave/shared": "workspace:*",
     "@types/node": "^22.13.10",
     "@types/ws": "^8.5.14",
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "@runweave/pty-host": "workspace:*"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.70.0",

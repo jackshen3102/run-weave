@@ -12567,5 +12567,197 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "恢复 Backend 自有 Review 运行账本和不确定交付状态，不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
+  },
+  {
+    "file": "scripts/verify/server/pty-host-spike.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(directory, \"counter.cjs\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Isolated native PTY process-tree fixture forwards a sanitized environment and writes only its own temporary counter program; no product configuration or user sessions are changed."
+  },
+  {
+    "file": "backend/src/app-server/integration.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "将本次 Backend 已验证的 Hook 凭据发布给本机 PTY gateway，用于代际切换转发，不改变配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/pty-host-client.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_RELEASE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "识别独立 npm Server 的启动上下文，仅在 Windows 使用外层管理的 PTY Host；不作为用户配置开关。"
+  },
+  {
+    "file": "packages/config-node/src/server/active-release.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(release, \"server-manifest.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取不可变 Server 发行清单校验私有激活指针摘要，并 fsync 写入新的原子发行指针，不读写业务配置。"
+  },
+  {
+    "file": "packages/config-node/src/server/active-release.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(fd)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "读取不可变 Server 发行清单校验私有激活指针摘要，并 fsync 写入新的原子发行指针，不读写业务配置。"
+  },
+  {
+    "file": "packages/pty-host/src/discovery.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(hostPaths(scope).descriptor)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存私有 Host 发现记录和管道凭据，检查进程开始身份与实例范围；内容不作为用户业务配置。"
+  },
+  {
+    "file": "packages/pty-host/src/discovery.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(paths.token)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存私有 Host 发现记录和管道凭据，检查进程开始身份与实例范围；内容不作为用户业务配置。"
+  },
+  {
+    "file": "packages/pty-host/src/discovery.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存私有 Host 发现记录和管道凭据，检查进程开始身份与实例范围；内容不作为用户业务配置。"
+  },
+  {
+    "file": "packages/pty-host/src/event-outbox.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(fd)",
+    "count": 2,
+    "category": "runtime-state",
+    "reason": "持久化有界 Agent 事件与不可丢失的不完整标记，按 Host 接收顺序补投；无效事件隔离保留，不阻塞后续事件，也不作为配置来源。"
+  },
+  {
+    "file": "packages/pty-host/src/lifecycle.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "外层启动独立 Host 时转发必要系统环境并移除 Node 注入和 Electron 标记；Host 私有身份由启动记录确定。"
+  },
+  {
+    "file": "packages/pty-host/src/sessions.ts",
+    "kind": "environment-forward",
+    "expression": "...options.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "转发 Backend 已清洗的终端环境，并覆盖为 Host 生命周期内稳定的 scoped gateway 地址与凭据。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/context.ts",
+    "kind": "file-io",
+    "expression": "writeFileSync(fd)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "以私有临时文件和 fsync 保存管理身份及升级回执，再原子发布，避免把未落盘请求报告为已接管。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/control.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(ctx.home, \"management-token\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取实例私有管理令牌向已确认的外层命名管道发送停止或重启控制，不作为业务配置来源。"
+  },
+  {
+    "file": "scripts/verify/server/pty-host.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 Host 和原生 PTY 集成夹具，清理继承的 Runweave 上下文并写入受控计数器，不操作用户实例。"
+  },
+  {
+    "file": "scripts/verify/server/pty-host.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(counter)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 Host 和原生 PTY 集成夹具，清理继承的 Runweave 上下文并写入受控计数器，不操作用户实例。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 2,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(receipt)",
+    "count": 3,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(stateFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(script)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/windows-host-upgrade.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(trigger)",
+    "count": 1,
+    "category": "test",
+    "reason": "隔离真实 npm 安装和 Windows PTY 升级夹具，记录受控进程计数及更新回执，候选版本仅由本机 registry 提供，不改用户配置或正式 npm。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(serverHome, \"active-release.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "读取隔离 Windows 安装夹具的私有发行指针，验证无兼容父管理进程时组件拒绝启动，不读取用户实例或业务配置。"
   }
 ]

@@ -96,6 +96,8 @@ ScreenJournal 默认展示原始录屏，整理事项为可选辅助能力；分
 
 ### Terminal
 
+Windows npm 终端保活与升级读 [windows-pty-host.md](./windows-pty-host.md)。
+
 长任务监控、三分类与原终端续接读 [terminal-task-supervision.md](./terminal-task-supervision.md)。
 
 | 任务                                                    | 文档                                                                           |

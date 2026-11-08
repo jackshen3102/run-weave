@@ -1,4 +1,4 @@
-import { assertPrivateDirectory, resolveConfigurationContext } from "@runweave/config-node";
+import { activateWindowsServerRelease, assertPrivateDirectory, resolveConfigurationContext } from "@runweave/config-node";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import {
@@ -117,10 +117,13 @@ export function activateServer(
   release: string,
   installation: ServerInstallation,
 ): void {
-  const current = path.join(home, "current");
-  const temporary = `${current}.${randomUUID()}`;
-  symlinkSync(release, temporary, process.platform === "win32" ? "junction" : "dir");
-  renameSync(temporary, current);
+  if (process.platform === "win32") activateWindowsServerRelease(home, release);
+  else {
+    const current = path.join(home, "current");
+    const temporary = `${current}.${randomUUID()}`;
+    symlinkSync(release, temporary, "dir");
+    renameSync(temporary, current);
+  }
   const record = path.join(home, "installation.json");
   const staged = `${record}.${randomUUID()}`;
   writeFileSync(staged, JSON.stringify(installation, null, 2) + "\n", {

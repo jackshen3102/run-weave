@@ -1,0 +1,125 @@
+version: 1
+name: Windows PTY Host 远程更新与维护
+description: |
+  Windows 独立 Host 的验收合同，当前实现见 docs/architecture/windows-pty-host.md。 每例使用自己拥有的 Windows 用户或隔离实例、Host、终端、进程与证据目录；禁止接管真实工作终端。 格式校验不代表行为通过；每项结论必须引用对应源码与运行证据。CI 计数器不替代真实 Traex、浏览器或手机验收。重启是被测行为时由同一用例记录前后身份并重新取得连接。 实际升级使用固定源码与真实 npm tarball；Windows CI、真实 Windows、浏览器和手机分别记录覆盖范围。
+cases:
+  - id: PTYUP-001
+    name: 网页 Agent 发起 npm 更新后原会话继续工作
+    required: true
+    description: 完整远程升级由外层执行者接管，新服务接回原 Agent，不能以新进程 resume 替代。
+    preconditions:
+      - 本例拥有 Windows 实例、真实旧新 Server tarball 和隔离测试 registry 的 next 标签，CLI 与活跃 Host 兼容两个版本。
+      - 已用 toolkit:playwright-cli 附着本例真实 Web，原托管 Traex 会话就绪，受控计数器持续运行且升级前身份已记录。
+    steps:
+      - 在网页终端让 Agent 执行明确的 next 更新命令，确认升级被外层管理进程持久接管并固定精确目标版本。
+      - 跨越网页断流等待升级，重新解析本例浏览器连接并取得 fresh UI 引用，确认网页重新连接且 running Server 为目标版本。
+      - 核对 Host、会话实例、shell PID、Traex PID、thread 和计数器启动身份均未变化，计数连续且可继续输入；保存实际 UI 与进程证据后清理。
+  - id: PTYUP-002
+    name: 升级接管请求丢失确认仍只有一个事务
+    required: true
+    description: 同 requestId 的网络重试不重复安装，冲突目标不能变更正在执行的事务。
+    preconditions:
+      - 本例拥有完整 Windows 安装、兼容目标 tarball，以及可丢弃 accepted 响应的受控本机管理客户端。
+    steps:
+      - 在外层已持久接管后丢弃响应，以相同 requestId 和目标重试，确认返回同一 transactionId，安装和激活各执行一次。
+      - 使用相同 requestId 不同目标，以及另一个并发更新请求，确认前者冲突、后者报告已有事务，不改变固定目标。
+      - 保存回执和执行计数，清理本例资源。
+  - id: PTYUP-003
+    name: 候选校验失败不打断运行服务
+    required: true
+    description: 下载失败、摘要错误、Host 协议不兼容或 CLI 能力不足均在停止旧服务前拒绝。
+    preconditions:
+      - 本例拥有活着的 Windows 托管终端和计数器，能够分别提供上述无效候选的独立等价样本。
+    steps:
+      - 对各样本提交更新，确认失败回执指出原因或所需维护窗口，Backend、Host 和终端身份保持原样且计数连续。
+      - 确认 force 不会绕过协议、身份、配置和数据兼容保护，current 和配置摘要未改变；保存证据并清理。
+  - id: PTYUP-004
+    name: 停止后但未提交时可恢复原组件
+    required: true
+    description: 激活前失败仅在配置与指针仍为源状态时恢复原组件，不丢 Host 会话。
+    preconditions:
+      - 本例拥有两个兼容版本和持续运行的托管会话，能够在组件停止后、配置与 current 提交前注入一次受控失败。
+    steps:
+      - 在指定阶段触发失败，确认执行者重新核对源配置摘要和 current 后恢复原组件，回执记录原组件恢复结果。
+      - 取得新连接核对 Host 和终端身份未变化，没有额外创建会话；保存证据并清理。
+  - id: PTYUP-005
+    name: 激活后失败保留 Host 且不盲目降级
+    required: true
+    description: 配置或 current 已提交后启动失败有明确恢复状态，不自动回滚可能不兼容的数据。
+    preconditions:
+      - 本例拥有兼容候选、独立配置和托管会话，能够在 current 或配置提交后阻止目标 Backend 启动。
+    steps:
+      - 注入指定失败，确认回执保留目标、失败阶段和 manual-recovery-required，没有静默降级配置或数据库。
+      - 确认 Host、原终端进程和输出仍存在；解除故障后重试启动同一目标，取得新连接并接回原会话，保存证据后清理。
+  - id: PTYUP-006
+    name: 普通 Server 更新保留兼容的旧 Host 发行
+    required: true
+    description: 安装了新 Host 文件不等于必须重启活跃 Host，兼容旧 Host 保持运行且原文件被保留。
+    preconditions:
+      - 本例拥有带活动终端的 Host、兼容的新 Server 及可安装的新 Host 发行文件。
+    steps:
+      - 执行本例兼容 Server 更新，确认 Host 身份及运行发行目录仍为原值，状态分别展示已安装和运行版本。
+      - 检查旧 Host 原生文件和原会话引用未被覆盖或垃圾回收；保存版本、进程和文件证据，清理本例资源。
+  - id: PTYUP-007
+    name: Host 自身维护受活动会话保护
+    required: true
+    description: 维护 Host 不能隐式结束活跃终端，显式关闭后才能更换 Host 代次。
+    preconditions:
+      - 本例拥有带活动终端的 Host、兼容的新 Server 及可安装的新 Host 发行文件。
+    steps:
+      - 在本例有活动会话时请求 host update 或不带终止会话参数的 host stop，确认被拒绝且终端继续运行。
+      - 显式关闭本例会话后维护 Host，确认 Host 身份变化，旧绑定未被解释为新会话；保存回执并清理本例资源。
+  - id: PTYUP-008
+    name: 首次从旧 Windows 版本迁移明确终端中断边界
+    required: true
+    description: 旧 Backend 内 PTY 不被伪装成无损迁移；完成一次迁移后新建终端才进入 Host 托管。
+    preconditions:
+      - 本例拥有不含 Host 的旧 Windows tarball、一个旧直接 PTY 和候选含 Host 的版本，所有终端均属于本例。
+    steps:
+      - 通过系统 PowerShell 或本例独立升级执行者完成首次迁移，确认操作指引事先说明旧终端会中断，旧记录没有被重新绑定为同一个托管实例。
+      - 在新版本创建终端，确认有 Host 会话绑定和独立进程身份，历史记录保留且没有旧 Agent 被静默重启；保存证据并清理。
+  - id: PTYUP-009
+    name: macOS/Linux tmux 安装和更新路径保持原行为
+    required: true
+    description: Windows Host 接入不会默认改变非 Windows 的 tmux 生命周期。
+    preconditions:
+      - 本例拥有对应 macOS/Linux 目标的候选 tarball 和独立实例，原有安装、自更新及终端验收入口可用。
+    steps:
+      - 在各目标的自有 tmux 实例分别执行原安装与自更新验证，确认未启动 Windows Host 或依赖 Windows 命名管道。
+      - 核对 tmux 终端和保留策略继续生效，记录各平台覆盖并清理本例资源。
+  - id: PTYUP-010
+    name: 非 Windows 直接 PTY 不被误标为托管恢复
+    required: true
+    description: 未切换 Host 的直接 PTY 保持既有生命周期，不产生虚假的跨 Backend 重启恢复能力。
+    preconditions:
+      - 本例拥有对应 macOS/Linux 目标的候选 tarball 和独立实例，原有安装、自更新及终端验收入口可用。
+    steps:
+      - 在各非 Windows 目标的自有直接 PTY 样本执行普通输入和显式关闭，确认实际执行与退出符合原行为。
+      - 检查运行时元数据没有伪造 Host 绑定或托管恢复能力，保存平台覆盖结果并清理。
+  - id: PTYUP-011
+    name: 升级执行者异常退出后按回执恢复观察
+    required: true
+    description: 外层管理进程丢失时 Host 仍存活，重新启动不会重复安装或把未完成事务记为成功。
+    preconditions:
+      - 本例拥有兼容升级事务和活跃托管终端，能够在已接管后、结果确认前终止外层管理进程。
+    steps:
+      - 终止外层管理进程，确认原 Host 与终端持续运行；重新执行本例 start，确认先读取回执、配置和发行指针的实际状态。
+      - 确认恢复同一事务的观察或给出明确人工恢复状态，没有重新发起第二次安装、没有伪造 healthy；保存证据并清理。
+  - id: PTYUP-012
+    name: Windows 发行指针与回执中断可确定恢复
+    required: true
+    description: JSON 指针切换前后中断不会删除发行目录或混读旧 junction，未知指针必须拒绝启动。
+    preconditions:
+      - 本例拥有 Windows 安装、两个完整发行目录及独立配置，可在指针 rename 前后中断执行并记录文件摘要。
+    steps:
+      - 在各独立样本的指针 rename 前后中断更新，重启控制进程后核对实际 JSON 指针、事务和配置摘要，确认选择结果明确且发行目录均未删除。
+      - 在本例额外样本中提供损坏或未来 schema 的 JSON 指针并保留旧 junction，确认拒绝而非静默启动旧版本；保存证据并清理。
+  - id: PTYUP-013
+    name: dry-run 不接管或执行更新
+    required: true
+    description: Windows 更新预演只校验候选，不创建执行事务、不切换运行版本或中断终端。
+    preconditions:
+      - 本例拥有活跃托管终端、兼容候选以及可记录升级事务数量、配置摘要和运行身份的安装实例。
+    steps:
+      - 执行 dry-run，确认返回固定目标、兼容性和是否需维护窗口，但没有新增已接管执行事务。
+      - 核对组件与终端身份、配置和发行指针未变，允许 staging 下载和物化；保存证据并清理本例资源。

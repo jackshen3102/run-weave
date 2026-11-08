@@ -1,8 +1,12 @@
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { ensureHost } from "@runweave/pty-host/lifecycle";
+import { updateServer } from "./update.js";
+import { randomUUID, createHash } from "node:crypto";
 import { createServer, createConnection } from "node:net";
 import { chmodSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
-import { configuration, CONFIGURATION_COMPATIBILITY } from "@runweave/config-node";
+import { configuration, CONFIGURATION_COMPATIBILITY, resolveActiveServerRelease } from "@runweave/config-node";
 import {
   controlSocket,
   identity,
@@ -11,6 +15,7 @@ import {
   settings,
   waitHealthy,
   writeJson,
+  withManagementLock,
   type Component,
   type ServerContext,
 } from "./context.js";
@@ -40,12 +45,20 @@ export async function foreground(ctx: ServerContext): Promise<void> {
   const socket = controlSocket(ctx);
   if (process.platform !== "win32") rmSync(socket, { force: true });
   writeJson(path.join(ctx.home, "foreground.json"), {
+    foregroundProtocolVersion: 1,
     configuration: CONFIGURATION_COMPATIBILITY,
     pid: process.pid,
     startedAt: processStart(process.pid),
     version: ctx.manifest.version,
     release: ctx.release,
   });
+  const jobs = path.join(ctx.home, "updates");
+  mkdirSync(jobs, { recursive: true, mode: 0o700 });
+  for (const name of readdirSync(jobs).filter(name => /^[a-f0-9-]{36}\.json$/.test(name))) {
+    const file = path.join(jobs, name);
+    const job = readJson<UpdateJob>(file);
+    if (job.state === "accepted") writeJson(file, { ...job, state: "interrupted", error: "SERVER_UPDATE_INTERRUPTED: inspect update.json and the active release before retrying" });
+  }
   let children: ChildProcess[] = [];
   let stopping = false;
   let intentional = false;
@@ -86,6 +99,10 @@ export async function foreground(ctx: ServerContext): Promise<void> {
         path.join(release, "server-manifest.json"),
       ),
     };
+    if (process.platform === "win32") {
+      if (next.manifest.ptyHost?.protocolVersion !== 1) throw new Error("HOST_PROTOCOL_INCOMPATIBLE");
+      await ensureHost(ctx.context, release);
+    }
     intentional = false;
     for (const name of ["app-server", "backend"] as const) {
       const child = spawnComponent(next, name);
@@ -96,6 +113,11 @@ export async function foreground(ctx: ServerContext): Promise<void> {
       });
       await waitHealthy(next, name);
     }
+    writeJson(path.join(ctx.home, "foreground.json"), {
+      foregroundProtocolVersion: 1,
+    configuration: CONFIGURATION_COMPATIBILITY, pid: process.pid, startedAt: processStart(process.pid),
+      version: next.manifest.version, release,
+    });
   };
   const shutdown = () => {
     stopping = true;
@@ -115,16 +137,47 @@ export async function foreground(ctx: ServerContext): Promise<void> {
       if (!source.includes("\n")) return;
       client.pause();
       void (async () => {
-        if (busy) throw new Error("SERVER_BUSY");
         const command = JSON.parse(source.trim()) as {
           action: string;
           token: string;
+          requestId?: string;
+          update?: UpdateRequest;
         };
         if (
           command.token !==
           readFileSync(path.join(ctx.home, "management-token"), "utf8").trim()
         )
           throw new Error("Forbidden");
+        if (command.action === "update") {
+          const requestId = command.requestId;
+          if (!requestId || !/^[a-f0-9-]{36}$/.test(requestId) || !command.update) throw new Error("Invalid update request");
+          const request = command.update;
+          if (typeof request.force !== "boolean" || !["latest", "next"].includes(request.channel) ||
+            request.version !== undefined && !/^\d+\.\d+\.\d+$/.test(request.version) ||
+            request.sourcePackage !== undefined && (!path.isAbsolute(request.sourcePackage) || request.sourcePackage.length > 1024)) throw new Error("Invalid update request");
+          const file = path.join(jobs, `${requestId}.json`);
+          const digest = createHash("sha256").update(JSON.stringify(request)).digest("hex");
+          if (existsSync(file)) {
+            if (readJson<UpdateJob>(file).digest !== digest) throw new Error("SERVER_UPDATE_CONFLICT");
+            client.end(JSON.stringify({ accepted: true, requestId, receipt: file }) + "\n");
+            return;
+          }
+          if (busy) throw new Error("SERVER_BUSY");
+          const job: UpdateJob = { requestId, digest, request, state: "accepted" };
+          writeJson(file, job);
+          busy = true;
+          client.end(JSON.stringify({ accepted: true, requestId, receipt: file }) + "\n");
+          void withManagementLock(ctx, async () => {
+            const release = fsRealCurrent(ctx);
+            const active = { ...ctx, release, manifest: readJson<typeof ctx.manifest>(path.join(release, "server-manifest.json")) };
+            await updateServer(active, request.version, request.force, request.sourcePackage, false,
+              { transactionId: requestId, controls: { pause: stop, restart: () => start(fsRealCurrent(ctx)) } }, request.channel);
+            writeJson(file, { ...job, state: "complete" });
+          }).catch(error => { writeJson(file, { ...job, state: "failed", error: (error as Error).message }); })
+            .finally(() => { busy = false; });
+          return;
+        }
+        if (busy) throw new Error("SERVER_BUSY");
         if (!["stop", "restart", "pause"].includes(command.action))
           throw new Error("Invalid action");
         busy = true;
@@ -170,44 +223,11 @@ export async function foreground(ctx: ServerContext): Promise<void> {
 }
 function fsRealCurrent(ctx: ServerContext): string {
   // Resolve again after a successful update has activated the new release.
-  return path.join(ctx.home, "current");
+  const release = resolveActiveServerRelease(ctx.home);
+  if (!release) throw new Error("SERVER_NOT_INSTALLED");
+  return release;
 }
-export async function foregroundControl(
-  ctx: ServerContext,
-  action: "stop" | "restart" | "pause",
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const client = createConnection(controlSocket(ctx));
-    let data = "";
-    client.setTimeout(130_000, () =>
-      client.destroy(new Error("Foreground control timed out")),
-    );
-    client.on("error", reject);
-    client.on("connect", () =>
-      client.write(
-        JSON.stringify({
-          action,
-          token: readFileSync(
-            path.join(ctx.home, "management-token"),
-            "utf8",
-          ).trim(),
-        }) + "\n",
-      ),
-    );
-    client.on("data", (chunk) => {
-      data += chunk.toString();
-    });
-    client.on("end", () => {
-      try {
-        const result = JSON.parse(data) as { error?: string };
-        if (result.error) reject(new Error(result.error));
-        else resolve();
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
+export { foregroundControl } from "./control.js";
 
 export function checkTmuxPolicy(): void {
   const policy = configuration().get("terminal.tmux.shutdownPolicy");
@@ -215,4 +235,31 @@ export function checkTmuxPolicy(): void {
     throw new Error(
       "Standalone server requires terminal.tmux.shutdownPolicy=preserve",
     );
+}
+
+export interface UpdateRequest { version?: string; sourcePackage?: string; force: boolean; channel: "latest" | "next" }
+interface UpdateJob { requestId: string; digest: string; request: UpdateRequest; state: "accepted" | "complete" | "failed" | "interrupted"; error?: string }
+
+/** Submission is durable before acknowledgement. A caller disconnect cannot cancel execution. */
+export async function submitForegroundUpdate(ctx: ServerContext, request: UpdateRequest, requestId: string = randomUUID()): Promise<unknown> {
+  if (!/^[a-f0-9-]{36}$/.test(requestId)) throw new Error("Invalid --request-id");
+  await new Promise<void>((resolve, reject) => {
+    const client = createConnection(controlSocket(ctx));
+    let source = "";
+    client.setTimeout(10_000, () => client.destroy(new Error("SERVER_UPDATE_ACCEPTANCE_UNCERTAIN: inspect the receipt using the same request ID")));
+    client.on("error", reject);
+    client.on("connect", () => client.write(JSON.stringify({ action: "update", requestId, update: request,
+      token: readFileSync(path.join(ctx.home, "management-token"), "utf8").trim() }) + "\n"));
+    client.on("data", chunk => { source += chunk.toString(); if (source.length > 8192) client.destroy(new Error("Invalid control response")); });
+    client.on("end", () => { try { const value = JSON.parse(source); if (!value.accepted) throw new Error(value.error ?? "SERVER_UPDATE_NOT_ACCEPTED"); resolve(); } catch (error) { reject(error); } });
+  });
+  const receipt = path.join(ctx.home, "updates", `${requestId}.json`);
+  process.stderr.write(`Update accepted: ${requestId}; receipt: ${receipt}\n`);
+  while (true) {
+    const job = readJson<UpdateJob>(receipt);
+    if (job.state === "complete") return { requestId, state: job.state, receipt };
+    if (job.state !== "accepted") throw new Error(job.error ?? "SERVER_UPDATE_FAILED");
+    if (!identity(ctx, "foreground")) throw new Error("SERVER_UPDATE_OWNER_UNAVAILABLE: inspect the receipt before retrying");
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 }

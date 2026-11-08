@@ -5,6 +5,7 @@ interface ClientLease {
   sessionId: string;
   disconnectedAt?: number;
   supersede: () => void;
+  invalidated?: boolean;
 }
 
 /** Memory-only continuity hints; session tickets remain the authorization gate. */
@@ -18,6 +19,7 @@ export class TerminalOutputClients {
   ): TerminalRecoveryReason | undefined {
     const lease = this.leases.get(this.key(sessionId, clientId));
     if (!lease) return "client_lease_missing";
+    if (lease.invalidated) return "client_lease_missing";
     if (
       lease.disconnectedAt !== undefined &&
       performance.now() - lease.disconnectedAt > RESUME_WINDOW_MS
@@ -55,6 +57,11 @@ export class TerminalOutputClients {
     for (const [key, lease] of this.leases)
       if (lease.sessionId === sessionId) this.leases.delete(key);
     this.prune();
+  }
+
+  /** A grid fence invalidates byte replay while retaining live connection ownership. */
+  invalidate(sessionId: string): void {
+    for (const lease of this.leases.values()) if (lease.sessionId === sessionId) lease.invalidated = true;
   }
 
   private key(sessionId: string, clientId: string): string {

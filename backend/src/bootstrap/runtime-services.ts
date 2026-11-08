@@ -39,6 +39,7 @@ import { TerminalQuickInputService } from "../terminal/quick-input/service";
 import { loadOrCreateHookToken } from "../terminal/application/hook-token";
 import { createTerminalSnapshotShares } from "./terminal-snapshot-shares";
 import { PtyService } from "../terminal/runtime/pty-service";
+import { registerTerminalRuntimeRegistry, initializeTerminalManagerRuntimes } from "./terminal-runtime";
 import { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
 import { TmuxLifecycleCoordinator } from "../terminal/tmux/lifecycle-coordinator";
 import { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
@@ -253,9 +254,7 @@ async function assembleRuntimeServices(
       tmuxService.killServer(socketPath).then(() => undefined),
     );
   }
-  resources.defer("terminal-runtimes", () =>
-    terminalRuntimeRegistry.disposeAll(),
-  );
+  registerTerminalRuntimeRegistry(resources, terminalRuntimeRegistry);
   const tmuxOutputWatcher = new TmuxOutputWatcher({
     onPaneObservation: (sessionId, paneId) => observeCodexPane(terminalSessionManager, terminalEventService, sessionId, paneId),
     outputDir: path.join(
@@ -267,7 +266,7 @@ async function assembleRuntimeServices(
     tmuxLifecycleCoordinator,
   });
   resources.defer("tmux-output-watcher", () => tmuxOutputWatcher.dispose());
-  await terminalSessionManager.initialize();
+  await initializeTerminalManagerRuntimes(terminalSessionManager, terminalRuntimeRegistry);
   const sideChatStore = new SideChatStore(path.join(storagePaths.browserProfileDir, "side-chats.sqlite"));
   sideChatService = new SideChatService(sideChatStore, terminalSessionManager, storagePaths.browserProfileDir);
   resources.defer("side-chat", () => sideChatService!.dispose());

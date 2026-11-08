@@ -88,8 +88,17 @@ await build({
   },
 });
 copyNativeLockRuntime(path.join(payload, "server"));
+await build({
+  bundle: true, entryPoints: [path.join(repo, "packages/pty-host/src/index.ts")],
+  outfile: path.join(payload, "pty-host/index.cjs"), platform: "node", target: "node22", format: "cjs",
+  external: ["node-pty", "fs-native-extensions"],
+  define: { "import.meta.url": "__IMPORT_META_URL__" },
+  banner: { js: "const __IMPORT_META_URL__ = require('url').pathToFileURL(__filename).href;" },
+});
+cpSync(path.join(payload, "backend/node_modules/node-pty"), path.join(payload, "pty-host/node_modules/node-pty"), { recursive: true, dereference: true, filter: () => true });
 
-for (const component of ["backend", "app-server", "server"]) {
+
+for (const component of ["backend", "app-server", "server", "pty-host"]) {
   // npm excludes nested node_modules from files; ship them as platform resources.
   const modules = path.join(payload, component, "node_modules");
   copyNativeLockRuntime(path.join(payload, component));
@@ -120,7 +129,7 @@ function files(dir, prefix = "") {
     });
 }
 const backendManifest = files(payload);
-const nativeFiles = ["backend", "server", "app-server"].flatMap((component) =>
+const nativeFiles = ["backend", "server", "app-server", "pty-host"].flatMap((component) =>
   files(path.join(platform, "native", component), `${component}/node_modules`),
 );
 const schemas = [
@@ -141,6 +150,8 @@ const legacyConfigurations = JSON.parse(readFileSync(path.join(repo, "scripts/re
 const manifest = {
   schemaVersion: 1,
   managementApiVersion: 1,
+  foregroundProtocolVersion: 1,
+  ptyHost: { protocolVersion: 1, entry: "pty-host/index.cjs" },
   version,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: repo,
@@ -214,7 +225,7 @@ manifest.files.push(...files(path.join(payload, "bin"), "bin"));
 json(path.join(platform, "manifest.json"), manifest);
 const expanded = path.join(output, ".native-expanded");
 rmSync(expanded, { recursive: true, force: true });
-for (const component of ["backend", "server", "app-server"])
+for (const component of ["backend", "server", "app-server", "pty-host"])
   cpSync(
     path.join(platform, "native", component),
     path.join(expanded, component, "node_modules"),
