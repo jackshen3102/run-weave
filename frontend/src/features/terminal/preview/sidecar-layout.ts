@@ -6,7 +6,8 @@ export type TerminalSidecarTool =
   | "race"
   | "handoff"
   | "task-supervision"
-  | "conversation";
+  | "conversation"
+  | "code-review";
 
 export type SidecarTabId = Exclude<TerminalSidecarTool, "browser"> | TerminalBrowserProfileId;
 
@@ -26,6 +27,7 @@ export const SIDECAR_TABS: ReadonlyArray<{ id: SidecarTabId; label: string }> = 
   { id: "handoff", label: "任务交接" },
   { id: "task-supervision", label: "任务监控" },
   { id: "conversation", label: "会话阅读" },
+  { id: "code-review", label: "审查报告" },
 ];
 
 const DEFAULT_HIDDEN: SidecarTabId[] = ["profile-2", "profile-3"];

@@ -1,3 +1,4 @@
+import { CodeReviewStatus } from "../code-review/status";
 import { useSideChat } from "../../../features/side-chat/use-side-chat";
 import { SideChatView } from "../side-chat/view";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
@@ -208,6 +209,7 @@ export function TerminalWorkspaceStage({
       ) : null}
       <div className="relative flex h-full min-h-0">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {!isMobileMonitor ? <CodeReviewStatus sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
           {activeSession?.tmuxSessionName && !isMobileMonitor && panelSplitEnabled ? (

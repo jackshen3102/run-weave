@@ -1,3 +1,5 @@
+import { CodeReviewService } from "../terminal/code-review/service";
+import { CodeReviewStore } from "../terminal/code-review/store";
 import { TerminalTaskService } from "../terminal/tasks/service";
 import { TerminalTaskStore } from "../terminal/tasks/store";
 import type { TerminalSessionCreationOptions } from "../terminal/application/create-session";
@@ -92,5 +94,8 @@ export async function createTerminalTaskServices(
       }
     },
   );
-  return tasks;
+  const codeReviews = new CodeReviewService(new CodeReviewStore(path.join(directory, "terminal-code-reviews")), manager, tasks, options);
+  resources.defer("terminal-code-reviews", () => codeReviews.dispose());
+  await codeReviews.initialize();
+  return { terminalTaskService: tasks, codeReviewService: codeReviews };
 }

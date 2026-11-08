@@ -1,3 +1,5 @@
+import { registerTerminalCodeReviewRoutes } from "./code-review";
+import type { CodeReviewService } from "../../terminal/code-review/service";
 import { registerTerminalVideoPreviewRoutes } from "./preview/video";
 import { createTerminalUnreadRouter } from "./unread";
 import type { DesktopBadgeAccess } from "../../device-monitor/desktop-badge-access";
@@ -123,6 +125,7 @@ export function createTerminalRouter(
     terminalBadges?: TerminalBadges | null;
     desktopBadgeAccess?: DesktopBadgeAccess | null;
     terminalTaskService?: TerminalTaskService;
+    codeReviewService?: CodeReviewService;
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     terminalQuestionsService?: TerminalQuestionsService;
     ptyService?: PtyService;
@@ -164,6 +167,7 @@ export function createTerminalRouter(
     }
   });
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
+  registerTerminalCodeReviewRoutes(router, options?.codeReviewService);
   registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
   registerTerminalAgentForkRoutes(router, new TerminalAgentForkService(terminalSessionManager, options ?? {}));
 

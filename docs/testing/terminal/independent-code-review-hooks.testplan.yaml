@@ -1,0 +1,37 @@
+version: 1
+name: 独立代码 Review 无 Hooks 审核弹窗启动
+description: 验证 Reviewer 在保留受信任及管理员托管 Hooks 的前提下不等待启动审核，且不会自动执行已启用的未信任 Hook。仅适用于具备原生 hooks/list 的 Codex。
+cases:
+  - id: ICH-001
+    name: 已停用且内容变更的 Hooks 不阻塞 Reviewer 启动
+    required: true
+    description: 停用的插件副本继续停用，Reviewer 无审核弹窗并建立独立原生会话。
+    preconditions:
+      - 本例拥有独立 Backend、Git 项目及来源终端，工作区有可读文本变更，目录已按正常流程信任。
+      - 原生 hooks/list 显示已启用项均已受信任或管理员托管，至少一个插件副本为 enabled=false 且 trustStatus=modified。
+    steps:
+      - 保存本例原生 Hook 元数据与用户配置摘要，使用 toolkit:playwright-cli 在来源终端更多菜单点击代码 Review。
+      - 确认 Reviewer 可见、来源页未切走；打开本轮 Reviewer，确认没有 Hooks need review 弹窗，原生 bootstrap completed 且 idle，随后业务派发关联独立 thread。
+      - 等待本轮结束并核对原生 final 与报告，确认用户信任配置未被修改，停用副本没有执行；保存界面证据并清理本例运行环境。
+  - id: ICH-002
+    name: 已启用且未信任的 Hook 在交互启动前阻塞
+    required: true
+    description: 一次性启动参数不能使未获授权的启用 Hook 执行，配置不可核验时也必须明确阻塞。
+    preconditions:
+      - 本例独立 Git 项目已有正常目录信任，可临时配置一个未信任的项目 Hook；其唯一副作用是写本例自有标记文件。
+      - 本例来源终端归属已确认，原生 hooks/list 可以观察该 Hook 的启用与未信任状态。
+    steps:
+      - 在本例项目配置无害的 SessionStart Hook，确认原生列表为 enabled=true 且未信任，标记文件尚不存在。
+      - 通过真实 Review API 发起请求，确认状态明确为 reviewer_hooks_untrusted，Reviewer 没有被启动成交互 Agent，也没有出现 Hooks 审核弹窗。
+      - 核对标记文件仍不存在、用户配置及托管 Hooks 保持原状；移除本例 Hook 和标记并清理本例资源。
+  - id: ICH-003
+    name: 无弹窗启动后托管生命周期仍支持报告回传
+    required: true
+    description: 跳过停用副本的审核后，原生会话身份、完成观察和固定来源的结果回传仍真实成立。
+    preconditions:
+      - 本例拥有可审文本变更、空闲无草稿的自有来源 Agent，以及已确认的 panel、thread 和启动代次。
+      - 本例已启用的生命周期 Hooks 均已受信任或管理员托管，原生 thread 读取服务可用。
+    steps:
+      - 使用 toolkit:playwright-cli 在本例来源终端更多菜单发起 Review，确认无启动审核弹窗且来源 Agent 未承担调度。
+      - 核对独立 Reviewer 的真实工具调用、关联轮次 completed final 与 idle，确认报告持久化后才进入回传。
+      - 确认来源保持原 panel、thread 和启动代次并且只收到一次报告，delivery 为 written；保存原生轮次和界面证据后清理本例环境。

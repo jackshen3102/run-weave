@@ -12,6 +12,8 @@ struct TerminalActionsMenu: View, Equatable {
   let canShare: Bool
   let sharing: Bool
   let share: () -> Void
+  let canReview: Bool
+  let review: () -> Void
   let canReply: Bool
   let reply: () -> Void
   let openDesktop: () -> Void
@@ -32,12 +34,15 @@ struct TerminalActionsMenu: View, Equatable {
       && lhs.canReconnect == rhs.canReconnect && lhs.canDelete == rhs.canDelete
       && lhs.canShare == rhs.canShare && lhs.sharing == rhs.sharing
       && lhs.supervisionEnabled == rhs.supervisionEnabled
+      && lhs.canReview == rhs.canReview
       && lhs.canFork == rhs.canFork && lhs.canReply == rhs.canReply
   }
 
   var body: some View {
     Menu {
       Text(cwd)
+      Button(action: review) { Label("代码 Review", systemImage: "checkmark.bubble") }
+        .disabled(!canReview).accessibilityIdentifier("terminal-menu-code-review")
       if canReply {
         Button(action: reply) { Label("回复辅助", systemImage: "questionmark.bubble") }
           .accessibilityIdentifier("codex-reply-assistant-open")

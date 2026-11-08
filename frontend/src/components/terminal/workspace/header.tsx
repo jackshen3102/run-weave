@@ -1,3 +1,4 @@
+import { useStartCodeReview, useCodeReviewActionState } from "../../../features/terminal/queries/code-review";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
@@ -44,6 +45,7 @@ import { ConnectionSwitcher } from "../../connection-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
@@ -167,6 +169,8 @@ export function TerminalWorkspaceHeader({
     ? (activePanelIdBySessionId[activeSession.terminalSessionId] ??
       activeSession.activePanelId)
     : null;
+  const startCodeReview = useStartCodeReview(activeSession);
+  const codeReviewAction = useCodeReviewActionState(activeSessionId);
   const previousProject = projectNavigationHistory[projectNavigationIndex - 1];
   const nextProject = projectNavigationHistory[projectNavigationIndex + 1];
   const projectHistoryLabel = (entry: ProjectNavigationEntry): string => {
@@ -350,6 +354,9 @@ export function TerminalWorkspaceHeader({
               </DropdownMenuTrigger>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuGroup>
+                <DropdownMenuItem disabled={loading || !activeSession || codeReviewAction?.pending} onSelect={() => void startCodeReview()}>代码 Review</DropdownMenuItem>
+              </DropdownMenuGroup>
               {tunnelBindingItems}
               {window.electronAPI?.isElectron && <DropdownMenuItem onSelect={() => useTunnelStore.getState().setOpen(true)}>端口与隧道</DropdownMenuItem>}
               {openCodexQuota ? (

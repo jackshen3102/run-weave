@@ -325,7 +325,7 @@ async function assembleRuntimeServices(
       );
     },
   );
-  const terminalTaskService = await createTerminalTaskServices(
+  const terminalTaskServices = await createTerminalTaskServices(
     storagePaths.browserProfileDir, terminalSessionManager,
     { ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher,
       terminalEventService, terminalStateService, activity: terminalActivity },
@@ -533,7 +533,7 @@ async function assembleRuntimeServices(
       textAttachmentFiles?.start();
       activity.start();
       evolutionRuntime.start(controlPlaneBaseUrl);
-      experienceLearning.start();
+      for (const owner of [experienceLearning, terminalTaskServices.codeReviewService]) owner.start();
       scheduledTasks.runtime?.start();
       taskAlerts?.start();
       terminalBadges?.start();
@@ -569,7 +569,7 @@ async function assembleRuntimeServices(
     appServerHistoryGateway,
     workHistoryService,
     taskHandoffService,
-    terminalTaskService,
+    ...terminalTaskServices,
     taskSupervisionService,
     textAttachmentDelivery,
     terminalQuestionsService,

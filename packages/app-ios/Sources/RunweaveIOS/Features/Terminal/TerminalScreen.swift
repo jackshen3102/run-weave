@@ -22,6 +22,7 @@ struct TerminalScreen: View {
   @State private var showingSupervision = false
   @StateObject private var sideChat: SideChatModel
   @StateObject private var composerEditor = CommandTextEditor()
+  @StateObject private var codeReview: TerminalCodeReviewModel
   @StateObject private var supervision: TaskSupervisionModel
   @State private var replyContext: CodexReplyContext?
   @State private var showingDiagnostics = false
@@ -50,6 +51,7 @@ struct TerminalScreen: View {
     self.details = details
     _sideChat = StateObject(wrappedValue: SideChatModel(session: session, terminalID: details.id))
     _supervision = StateObject(wrappedValue: TaskSupervisionModel(session: session, controller: controller, terminalID: details.id))
+    _codeReview = StateObject(wrappedValue: TerminalCodeReviewModel(session: session, controller: controller, terminalID: details.id))
     self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
     self.attachmentDrafts = session.attachmentDrafts
@@ -67,7 +69,7 @@ struct TerminalScreen: View {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && !controller.scrolledBack && tab == "Chat"
       && !showingBranchUpdates && !sideChat.visible && browser.state != .presented && !showingHistory && !showingConversation
-      && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
+      && !codeReview.showingReport && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
       && replyContext == nil && snapshotShare == nil && !deleting
   }
   private var completionViewKey: String {
@@ -114,12 +116,8 @@ struct TerminalScreen: View {
         }.padding(.vertical, 5).accessibilityIdentifier("scheduled-task-source")
       }
       tabs
-      if let watch = supervision.watch, watch.enabled {
-        TaskSupervisionStrip(watch: watch, stale: !supervision.canRead || supervision.failure != nil) {
-          controller.surface.view.window?.endEditing(true)
-          showingSupervision = true
-        }
-      }
+      TerminalMonitoringStrips(codeReview: codeReview, supervision: supervision, session: session,
+        controller: controller, showingSupervision: $showingSupervision)
       ZStack {
         chat.opacity(tab == "Chat" ? 1 : 0).allowsHitTesting(tab == "Chat").accessibilityHidden(
           tab != "Chat")
@@ -585,6 +583,7 @@ struct TerminalScreen: View {
         cwd: cwd, canReturnToBottom: session.canWrite && controller.canSend,
         canReconnect: session.canReconnect, canDelete: session.canWrite,
         canShare: session.canWrite, sharing: sharing, share: shareSnapshot,
+        canReview: codeReview.canStart, review: codeReview.start,
         canReply: currentTerminal?.terminalState.agent == "codex", reply: openReplyAssistant,
         openDesktop: { remoteDesktop.requestOpen(backendConnectionID: session.connection?.id) },
         supervisionEnabled: supervision.watch?.enabled == true,
