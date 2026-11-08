@@ -140,6 +140,8 @@ export class TerminalTextAttachmentService {
       await handle.close();
     }
     await rename(temporary, file);
+    // Windows cannot fsync directory handles; the file itself is already synced.
+    if (process.platform === "win32") return;
     const directory = await open(path.dirname(file), constants.O_RDONLY);
     try {
       await directory.sync();
