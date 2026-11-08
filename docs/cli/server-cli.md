@@ -61,6 +61,7 @@ rw.cmd server start
 ```
 
 `rw server host status` 显示运行和已安装的 Host 发行目录；`host stop` / `host update` 仅在所有终端已退出时允许。普通更新不替换活跃 Host 或全局 CLI。
+Host 每实例最多 64 个运行终端，保留最多 256 个会话运行时；输入等待队列限制为 128 个操作和 4 MiB。每个终端最多接管 65,536 个结构化操作 ID，历史窗口外只保留防重标记；达到上限需要结束该终端后新建，原进程不会被自动替换。原始键盘输入按单调序号处理。
 配置默认位于当前用户的 `.runweave`，使用 Windows ACL 校验：只允许当前用户、SYSTEM 和 Administrators 访问。
 共享目录或宽松 ACL 的 `--config-dir` / `--auth-file` 会被拒绝，不通过放宽权限绕过。
 

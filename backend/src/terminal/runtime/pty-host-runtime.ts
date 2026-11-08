@@ -36,7 +36,7 @@ export function ensureHostedTerminal(options: { session: TerminalSessionRecord; 
 export async function reconcileHostedTerminals(manager: TerminalSessionManager, registry: TerminalRuntimeRegistry): Promise<void> {
   if (!usesPtyHost()) return;
   for (const session of manager.listSessions()) {
-    if (session.runtimeKind !== "pty") continue;
+    if (session.runtimeKind !== "pty" || session.status !== "running") continue;
     if (!session.ptyHost) { if (session.status === "running") manager.markExited(session.id); continue; }
     try { await ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry }); }
     catch (error) {

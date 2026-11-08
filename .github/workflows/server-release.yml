@@ -57,8 +57,8 @@ jobs:
       - name: Build distributable
         if: ${{ !inputs.pty_spike_only }}
         run: pnpm server:build
-      - name: Verify independent ConPTY lifetime
-        if: ${{ inputs.pty_spike_only }}
+      - name: Verify independent Windows PTY Host
+        if: runner.os == 'Windows'
         timeout-minutes: 3
         run: |
           node scripts/verify/server/pty-host-spike.mjs
