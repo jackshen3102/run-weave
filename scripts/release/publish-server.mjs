@@ -1,4 +1,4 @@
-// Publish exactly the artifacts verified by the four platform jobs. No rebuild here.
+// Publish exactly the artifacts verified by the five platform jobs. No rebuild here.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";

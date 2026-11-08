@@ -119,6 +119,14 @@ try {
     "--port",
     String(port),
   );
+  if (process.platform === "win32") {
+    console.log("Verify PowerShell .cmd entry points");
+    for (const shim of [path.join(prefix, "rw.cmd"), path.join(home, ".runweave/server/rw.cmd")]) {
+      const command = `& '${shim.replaceAll("'", "''")}' --version\nexit $LASTEXITCODE`;
+      const version = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")]);
+      assert(version.trim() === cliVersion, `Wrong CLI version from ${shim}`);
+    }
+  }
   console.log("Verify native runtime loading");
   assert(
     JSON.parse(await rw("doctor", "--json")).runtimeReady,
