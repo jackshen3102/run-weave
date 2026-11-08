@@ -28,6 +28,8 @@ export class HostGateway {
     });
   });
   private timer: ReturnType<typeof setInterval> | undefined;
+  private readonly abort = new AbortController();
+  private stopping = false;
   url = "";
 
   constructor(private readonly scope: EnvironmentContext, root: string, private readonly sessions: () => PtyHostSession[]) {
@@ -60,6 +62,8 @@ export class HostGateway {
   }
 
   async close(): Promise<void> {
+    this.stopping = true;
+    this.abort.abort();
     if (this.timer) clearInterval(this.timer);
     this.server.closeAllConnections();
     await new Promise<void>(resolve => this.server.close(() => resolve()));
@@ -67,11 +71,11 @@ export class HostGateway {
 
   private flush(): Promise<void> {
     return this.outbox.drain(async body => {
-      if (!this.upstreams) return false;
+      if (this.stopping || !this.upstreams) return false;
       try {
         const response = await fetch(this.upstreams.appServerUrl + "/events", {
           method: "POST", headers: { authorization: `Bearer ${this.upstreams.appServerToken}`, "content-type": "application/json" },
-          body, redirect: "error", signal: AbortSignal.timeout(5000),
+          body, redirect: "error", signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(5000)]),
         });
         return response.status === 400 || response.status === 422 ? "rejected" : response.ok;
       } catch { return false; }
@@ -125,7 +129,7 @@ export class HostGateway {
         method: request.method, headers: app
           ? { authorization: `Bearer ${this.upstreams.appServerToken}`, "content-type": "application/json" }
           : { "x-runweave-hook-token": this.upstreams.backendToken, "content-type": "application/json" },
-        ...(body ? { body } : {}), redirect: "error", signal: AbortSignal.timeout(30_000),
+        ...(body ? { body } : {}), redirect: "error", signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(30_000)]),
       });
       response.writeHead(upstream.status);
       response.end(await upstream.text());
