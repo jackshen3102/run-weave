@@ -232,13 +232,14 @@ struct TerminalScreen: View {
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented && !showingConversation))
     .sheet(item: $fileTap) { tap in
       TerminalFilePreview(session: session, terminalID: details.id, projectID: projectID,
-        tap: tap, close: { fileTap = nil }, model: changes)
+        source: .terminal(tap), close: { fileTap = nil }, model: changes)
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
     .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
     .background {
       ConversationReaderPresentation(
-        session: session, controller: controller, terminalID: details.id, title: title,
+        session: session, controller: controller, terminalID: details.id, projectID: projectID,
+        changes: changes, title: title,
         expectedTarget: expectedConversation, isPresented: $showingConversation,
         onDismiss: connectBrowserIntents)
     }

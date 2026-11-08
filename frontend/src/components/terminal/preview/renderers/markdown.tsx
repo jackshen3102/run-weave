@@ -8,6 +8,7 @@ import anchor from "markdown-it-anchor";
 import footnote from "markdown-it-footnote";
 import taskLists from "markdown-it-task-lists";
 import mermaid from "mermaid";
+import { parseTerminalFileReference, type TerminalFileReference } from "@runweave/shared/terminal/file-link";
 import {
   resolveMarkdownPreviewAssetPath,
   resolveMarkdownPreviewHref,
@@ -32,6 +33,7 @@ interface TerminalMarkdownPreviewProps {
   onScrollRatioChange?: (ratio: number) => void;
   onAuthExpired?: () => void;
   onOpenFile: (path: string, hash?: string) => void;
+  onOpenFileReference?: (reference: TerminalFileReference) => void;
   onOpenWebLink?: (url: string) => Promise<void>;
   onInsertLineReference?: (reference: string) => void;
   onRevealSourceLine?: (line: number) => void;
@@ -214,6 +216,7 @@ export function TerminalMarkdownPreview({
   onScrollRatioChange,
   onAuthExpired,
   onOpenFile,
+  onOpenFileReference,
   onOpenWebLink,
   onInsertLineReference,
   onRevealSourceLine,
@@ -393,6 +396,15 @@ export function TerminalMarkdownPreview({
         const anchorElement = target.closest("a[href]");
         if (anchorElement instanceof HTMLAnchorElement) {
           const href = anchorElement.getAttribute("href") ?? "";
+          if (!path && onOpenFileReference && (/^\/(?!\/)/.test(href) || /^file:\/\//i.test(href))) {
+            event.preventDefault();
+            const reference = parseTerminalFileReference(href.startsWith("/") ? `file://${href}` : href);
+            if (reference) {
+              setLinkError(null);
+              onOpenFileReference(reference);
+            } else setLinkError("无法识别此文件链接或文件格式不支持预览");
+            return;
+          }
           if (!path && !/^https?:\/\//i.test(href) && !href.startsWith("#")) {
             event.preventDefault(); setLinkError("当前正文没有文件上下文，无法打开相对资源"); return;
           }

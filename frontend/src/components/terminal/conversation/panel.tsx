@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { TerminalFileReference } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
 import { useLocalBrowserSource } from "../../../features/terminal/navigation/local-preview";
 import { openTerminalBrowserUrl } from "../../../features/terminal/navigation/open-browser";
@@ -9,10 +10,12 @@ import { useConversationReadingPosition } from "../../../features/terminal/conve
 import { useConversation } from "../../../features/terminal/conversation/use-conversation";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalMarkdownPreview } from "../preview/renderers/markdown";
+import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "../preview/panel/file-link";
 import { Button } from "../../ui/button";
 
-export function TerminalConversationPanel({ sessionId, panelId, projectId, title }: {
+export function TerminalConversationPanel({ sessionId, panelId, projectId, title, onOpenFile }: {
   sessionId: string; panelId: string | null; projectId: string; title: string;
+  onOpenFile: (path: string, target?: Pick<TerminalFileReference, "line" | "column">) => void;
 }) {
   const pending = useConversationLocation(state => state.pending);
   const { scope } = useTerminalRuntime();
@@ -20,6 +23,13 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
   const { data, loading, error, unchanged, load } = useConversation(sessionId, panelId, location?.target.threadId);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [locationError, setLocationError] = useState("");
+  const [fileLink, setFileLink] = useState<TerminalPreviewFileLinkIntent | null>(null);
+  const fileLinkSequence = useRef(0);
+  const openFileReference = useMemoizedFn((reference: TerminalFileReference) => {
+    capture();
+    setFileLink({ ...reference, id: ++fileLinkSequence.current, scope, projectId,
+      terminalSessionId: sessionId, ...(panelId ? { panelId } : {}) });
+  });
   const { apiBase, token, activeConnectionId, remote } = useTerminalRuntime();
   const browserSource = useLocalBrowserSource(sessionId);
   const openWebLink = useMemoizedFn(async (url: string): Promise<void> => {
@@ -80,12 +90,16 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
               {message.createdAt && <time className="ml-auto text-slate-500">{new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>}
             </div>
             <TerminalMarkdownPreview apiBase={apiBase} token={token} projectId={projectId}
-              content={message.text} externalScroll onOpenFile={() => {}} onOpenWebLink={openWebLink} />
+              content={message.text} externalScroll onOpenFile={(path) => onOpenFile(path)}
+              onOpenFileReference={openFileReference} onOpenWebLink={openWebLink} />
           </article>)}
         </div>)}
         {!data?.turns.length ? <p className="py-12 text-center text-sm text-slate-400">{loading ? "正在读取会话…" : error && !data ? "点击刷新重试" : empty}</p> : null}
       </div>
     </div>
+    {fileLink && fileLink.scope === scope && fileLink.projectId === projectId && fileLink.terminalSessionId === sessionId ? <TerminalPreviewFileLink
+      key={fileLink.id} intent={fileLink} onOpen={onOpenFile} onDone={() => setFileLink(null)}
+      onError={(cause) => cause instanceof Error ? cause.message : "无法打开文件"} /> : null}
     <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-800 px-5 py-3 text-xs text-slate-500" aria-live="polite">
       <span>{data ? `读取于 ${new Date(data.readAt).toLocaleTimeString()}` : "尚未读取"}{data?.partial ? " · 部分内容不可读" : unchanged ? " · 内容无变化" : ""}</span>
       <button className="flex items-center gap-1 text-emerald-200" onClick={latest}>回到最新<ArrowDown className="h-3 w-3" /></button>

@@ -6,6 +6,8 @@ struct ConversationReaderPresentation: UIViewControllerRepresentable {
   let session: AppSession
   let controller: SessionController
   let terminalID: String
+  let projectID: String
+  let changes: ProjectChangesModel
   let title: String
   let expectedTarget: TerminalConversation.Target?
   @Binding var isPresented: Bool
@@ -85,6 +87,7 @@ struct ConversationReaderPresentation: UIViewControllerRepresentable {
       AnyView(
         ConversationReaderView(
           session: parent.session, controller: parent.controller, terminalID: parent.terminalID,
+          projectID: parent.projectID, changes: parent.changes,
           title: parent.title, expectedTarget: parent.expectedTarget,
           close: { [weak self] in self?.parent.isPresented = false })
         .mobileAnalyticsScreen(.conversationReader)
