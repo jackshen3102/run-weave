@@ -67,7 +67,7 @@ function run(command, args) {
       code === 0
         ? resolve(stdout)
         : reject(
-            new Error(`${command} failed (${code}): ${stderr.slice(-2000)}`),
+            new Error(`${command} ${args.slice(0, 3).join(" ")} failed (${code}): ${stdout.slice(-2000)} ${stderr.slice(-4000)}`),
           ),
     );
   });
@@ -94,6 +94,11 @@ try {
     `@runweave/cli@${cliVersion}`,
     `@runweave/server@${serverVersion}`,
   ]);
+  if (process.platform === "win32") {
+    console.log("Verify Windows native file lock");
+    const nativeLock = path.join(prefix, "node_modules/@runweave/cli/node_modules/fs-native-extensions");
+    await run(process.execPath, ["-e", `const fs=require('node:fs'); const lock=require(${JSON.stringify(nativeLock)}); const fd=fs.openSync('probe.lock','a+'); console.log('locking',fd); console.log('locked',lock.tryLock(fd)); fs.closeSync(fd); console.log('closed');`]);
+  }
   const auth = {
     username: "registry-verification",
     password: randomBytes(24).toString("hex"),
@@ -104,6 +109,7 @@ try {
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
   const port = listener.address().port;
   await new Promise((resolve) => listener.close(resolve));
+  console.log("Verify Server initialization");
   await rw(
     "init",
     "--auth-file",
@@ -113,6 +119,7 @@ try {
     "--port",
     String(port),
   );
+  console.log("Verify native runtime loading");
   assert(
     JSON.parse(await rw("doctor", "--json")).runtimeReady,
     "Native runtime not ready",
