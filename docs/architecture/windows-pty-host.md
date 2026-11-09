@@ -63,6 +63,8 @@ Browser CLI 仍向 Backend 查询终端身份并申请 Browser capability。Back
 令牌和该终端的 Host 会话令牌；后者通过已认证的 Host 管道核对 Host、会话实例及运行状态，
 只能授权 URL 指定的同一终端。Host 无需新增 Browser 网关路由或重启，已有终端也可使用；
 Backend 无法核对 Host 时明确拒绝，不把会话令牌作为全局 Hook 令牌。
+终端身份与 Browser capability 的鉴权等待最多 4 秒；调用方断开时释放该请求的本地等待并忽略
+迟到回复，不继续签发凭证，也不关闭共享 Host 连接、终端或已接收的 Host 操作。
 
 App Server `/events` 先带 dedupeKey 写入私有 outbox，fsync 后返回 202，再按接收顺序补投；
 上游事件中心负责去重。outbox 最多 16 MiB / 4096 个文件。上游拒绝的无效事件隔离保留，
