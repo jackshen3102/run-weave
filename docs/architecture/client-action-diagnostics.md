@@ -29,8 +29,8 @@ analytics 的 confirmed 只表示本地 SDK 初始化或标签调用已被接受
 
 ## 回放与环境
 
-Web 和原生 App 通过 Clarity 自定义标签 diagnostic*launch_id 与本地启动 ID 对应，再按时间和
-固定 action*\* 阶段事件定位操作。原生本地记录还包含 SDK 回调提供的 Clarity 会话 ID。
+Web 和原生 App 通过 Clarity 自定义标签 `diagnostic_launch_id` 与本地启动 ID 对应，再按时间和
+固定 `action_<操作>_<阶段>` 事件定位操作。原生本地记录还包含 SDK 回调提供的 Clarity 会话 ID。
 版本、构建 ID、源码 revision 来自正在运行的安装包；缺失时保留 unknown，不从连接的 Backend 推导。
 原生区分 analytics_environment、build_configuration、device_kind；分析项目归属不能替代服务环境核对。
 
