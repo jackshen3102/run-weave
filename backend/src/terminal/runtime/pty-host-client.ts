@@ -10,22 +10,31 @@ const ownerId = randomUUID();
 let connection: Promise<PtyHostClient> | undefined;
 let generation: number | undefined;
 let hostInstanceId: string | undefined;
+let upstreams: PtyHostUpstreams | undefined;
 let stopped = false;
 export function usesPtyHost(): boolean {
   return process.platform === "win32" && Boolean(process.env.RUNWEAVE_RUNTIME_RELEASE_ID);
 }
 export async function getPtyHost(): Promise<PtyHostClient> {
   if (stopped) throw new Error("HOST_CLIENT_STOPPED");
-  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId).then(client => {
+  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId).then(async client => {
     generation = client.generation;
     hostInstanceId = client.descriptor.hostInstanceId;
     client.disconnected.add(() => { connection = undefined; });
-    return client;
+    try {
+      // A replacement Host has a new gateway. Restore its verified upstreams
+      // before launching resumed Agents that inherit that gateway's environment.
+      if (upstreams) await client.request("setUpstreams", upstreams);
+      return client;
+    } catch (error) { client.close(); throw error; }
   }).catch(error => { connection = undefined; throw error; });
   return connection;
 }
-export async function syncPtyHostUpstreams(upstreams: PtyHostUpstreams): Promise<void> {
-  if (usesPtyHost()) await (await getPtyHost()).request("setUpstreams", upstreams);
+export async function syncPtyHostUpstreams(value: PtyHostUpstreams): Promise<void> {
+  if (usesPtyHost()) {
+    upstreams = { ...value };
+    await (await getPtyHost()).request("setUpstreams", value);
+  }
 }
 export async function createHostedPty(options: {
   terminalSessionId: string;
