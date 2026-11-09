@@ -392,6 +392,15 @@ const electronApi = {
       "terminal-browser:resolve-profile",
       request,
     ) as Promise<ResolvedTerminalBrowserProfile>,
+  openAgentObserverTerminal: (source) => ipcRenderer.invoke("automation:open-terminal", source),
+  onAgentObserverTerminal: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, source: { connectionId: string; terminalSessionId: string }) => listener(source);
+    ipcRenderer.on("automation:open-terminal", wrapped);
+    return () => { ipcRenderer.off("automation:open-terminal", wrapped); };
+  },
+  openAgentObserver: () => ipcRenderer.invoke("automation:open-window"),
+  agentObserverWindows: (selected: string[]) => ipcRenderer.invoke("automation:windows", selected),
+  agentObserverSimulators: (continuous: string[]) => ipcRenderer.invoke("automation:simulators", continuous),
   terminalBrowserAutomationGetSnapshot: () =>
     ipcRenderer.invoke(
       "terminal-browser:automation-get-snapshot",

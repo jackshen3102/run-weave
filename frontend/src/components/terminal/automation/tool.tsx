@@ -1,24 +1,22 @@
 import { useMemoizedFn } from "ahooks";
 import {
   Activity,
-  ExternalLink,
   MousePointer2,
   Pin,
   PinOff,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AgentObserverTerminalSource,
   TerminalBrowserAutomationActor,
   TerminalBrowserAutomationFrame,
   TerminalBrowserAutomationSnapshot,
   TerminalBrowserAutomationTargetSnapshot,
 } from "@runweave/shared/terminal-browser-automation";
-import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 
 interface TerminalBrowserAutomationToolProps {
   active: boolean;
-  sessions: TerminalSessionListItem[];
+  sources?: AgentObserverTerminalSource[];
 }
 
 type DisplayFrame = Pick<
@@ -47,20 +45,6 @@ function getActorKey(actor: TerminalBrowserAutomationActor): string {
     : `unattributed:${actor.connectionId}`;
 }
 
-function getSessionLabel(
-  actor: TerminalBrowserAutomationActor,
-  sessions: TerminalSessionListItem[],
-): string {
-  if (actor.kind === "unattributed") {
-    return "未归属自动化";
-  }
-  const session = sessions.find(
-    (candidate) => candidate.terminalSessionId === actor.terminalSessionId,
-  );
-  return (
-    session?.alias?.trim() || `Terminal ${actor.terminalSessionId.slice(0, 8)}`
-  );
-}
 
 function actionLabel(target: TerminalBrowserAutomationTargetSnapshot): string {
   switch (target.action) {
@@ -114,11 +98,12 @@ function groupCards(
 
 export function TerminalBrowserAutomationTool({
   active,
-  sessions,
+  sources = [],
 }: TerminalBrowserAutomationToolProps) {
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [pinned, setPinned] = useState(false);
+  const [pinnedActor, setPinnedActor] = useState<string | null>(null);
   const [frame, setFrame] = useState<DisplayFrame | null>(null);
   const [mainMaxEdge, setMainMaxEdge] = useState(1280);
   const [decodeError, setDecodeError] = useState<string | null>(null);
@@ -130,9 +115,7 @@ export function TerminalBrowserAutomationTool({
   const lastTargetChangeRef = useRef(0);
   const selectedTargetIdRef = useRef<string | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
-  const activateBrowser = useTerminalPreviewStore(
-    (state) => state.activateBrowser,
-  );
+
 
   const handleFrame = useMemoizedFn(
     async (incoming: TerminalBrowserAutomationFrame) => {
@@ -264,16 +247,17 @@ export function TerminalBrowserAutomationTool({
     return () => observer.disconnect();
   }, [hasConnections]);
 
-  const selectedStillExists = snapshot.targets.some(
+  const followTargets = snapshot.targets.filter(target => !pinnedActor || target.actorKeys.includes(pinnedActor));
+  const selectedStillExists = followTargets.some(
     (target) => target.targetId === selectedTargetId,
   );
-  const latestActionTargetId = [...snapshot.targets]
+  const latestActionTargetId = [...followTargets]
     .filter((target) => target.action !== "idle")
     .sort(
       (left, right) => (right.actionUntil ?? 0) - (left.actionUntil ?? 0),
     )[0]?.targetId;
   const fallbackTargetId =
-    latestActionTargetId ?? snapshot.targets[0]?.targetId ?? null;
+    latestActionTargetId ?? followTargets[0]?.targetId ?? null;
   useEffect(() => {
     if (!selectedStillExists) {
       setSelectedTargetId(fallbackTargetId);
@@ -333,19 +317,8 @@ export function TerminalBrowserAutomationTool({
   );
 
   const cards = useMemo(() => groupCards(snapshot), [snapshot]);
-  const openInBrowser = useMemoizedFn(async () => {
-    if (!selectedTarget) {
-      return;
-    }
-    await window.electronAPI?.terminalBrowserAutomationSetViewState?.({
-      visible: false,
-      selectedTargetId: null,
-      mainMaxEdge: 1,
-    });
-    await window.electronAPI?.terminalBrowserShow?.(selectedTarget.tabId);
-    activateBrowser(selectedTarget.profileId, null);
-  });
   const resumeFollowing = useMemoizedFn(() => {
+    setPinnedActor(null);
     setPinned(false);
     const latest = [...snapshot.targets]
       .filter((target) => target.action !== "idle")
@@ -390,6 +363,7 @@ export function TerminalBrowserAutomationTool({
       data-testid="terminal-browser-automation"
     >
       <div className="min-h-0 overflow-y-auto border-r border-slate-800 p-2">
+        {pinnedActor && <button className="mb-2 text-xs text-amber-300" onClick={resumeFollowing}>恢复全部跟随</button>}
         {cards.map((card) => (
           <section
             className={[
@@ -404,7 +378,7 @@ export function TerminalBrowserAutomationTool({
             <div className="mb-2 flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium text-slate-200">
-                  {getSessionLabel(card.actor, sessions)}
+                  {sources.find(source => card.actor.kind === "terminal" && source.terminalSessionId === card.actor.terminalSessionId)?.label ?? (card.actor.kind === "terminal" ? `Terminal ${card.actor.terminalSessionId.slice(0, 8)}` : "未归属自动化")}
                 </p>
                 <p className="mt-0.5 truncate text-[10px] text-slate-500">
                   {card.profileId} · {card.browserGroupId ?? "all groups"}
@@ -413,6 +387,13 @@ export function TerminalBrowserAutomationTool({
               <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-slate-400">
                 {card.connectionCount} conn
               </span>
+            </div>
+            <div className="mb-2 flex flex-wrap gap-2 text-[10px]">
+              <button className="text-amber-300" onClick={() => { setPinnedActor(card.key); setPinned(false); setSelectedTargetId(card.targets[0]?.targetId ?? null); }}>{card.actor.kind === "terminal" ? "固定此 Agent" : "固定此连接"}{pinnedActor === card.key ? " ✓" : ""}</button>
+              {sources.filter(source => card.actor.kind === "terminal" && source.terminalSessionId === card.actor.terminalSessionId).map(source => <span key={source.connectionId}>
+                <span className="block text-slate-400">{source.project}</span>
+                <button className="text-sky-300" onClick={() => void window.electronAPI?.openAgentObserverTerminal?.(source)}>返回终端</button>
+              </span>)}
             </div>
             <div className="space-y-1">
               {card.targets.map((target) => {
@@ -429,6 +410,7 @@ export function TerminalBrowserAutomationTool({
                     data-testid={`automation-target-${target.targetId}`}
                     key={target.targetId}
                     onClick={() => {
+                      setPinnedActor(null);
                       setPinned(true);
                       setSelectedTargetId(target.targetId);
                     }}
@@ -485,14 +467,7 @@ export function TerminalBrowserAutomationTool({
               <Pin className="h-3 w-3" /> 自动跟随
             </span>
           )}
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-sky-300 hover:bg-slate-800 disabled:text-slate-600"
-            disabled={!selectedTarget}
-            onClick={() => void openInBrowser()}
-          >
-            <ExternalLink className="h-3 w-3" /> 在 Browser 中打开
-          </button>
+
         </div>
         <div
           className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black/60 p-3"
@@ -544,7 +519,7 @@ export function TerminalBrowserAutomationTool({
                 : decodeError ||
                   (selectedTarget
                     ? "正在连接实时画面…"
-                    : "选择左侧 Tab 查看实时画面")}
+                    : pinnedActor ? "所关注 Agent 暂无受控页面" : "选择左侧 Tab 查看实时画面")}
             </div>
           ) : null}
         </div>

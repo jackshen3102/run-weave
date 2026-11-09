@@ -1,3 +1,5 @@
+import { useObserverTerminalNavigation } from "./features/terminal/automation-sources";
+import { AgentObserverPage } from "./pages/agent-observer-page";
 import { useScreenConversationLink } from "./features/screen-recording/use-conversation-link";
 import { SettingsEditProvider, useManagementExit } from "./features/settings/edit-session";
 import { SettingsPage } from "./pages/settings-page";
@@ -56,6 +58,8 @@ const TERMINAL_LIST_PATH = "/terminal";
 const isElectron = window.electronAPI?.isElectron === true;
 
 export default function App() {
+  const location = useLocation();
+  if (isElectron && location.pathname === "/agent-observer") return <AgentObserverPage />;
   return (
     <OverlayProvider>
       <StatusNoticeProvider>
@@ -93,6 +97,10 @@ function RunweaveApp() {
     reconnectSystemConnection,
   } = useConnections(CONNECTIONS_STORAGE_KEY);
 
+  const observerNavigation = useObserverTerminalNavigation(connections, setActive, navigate, action => {
+    if (managementExit?.active) managementExit.prepare(action, "返回观察画面的来源终端");
+    else action();
+  });
   useDesktopBadge(connections);
 
   const apiBase = isElectron ? (activeConnection?.url ?? "") : WEB_API_BASE;
@@ -522,6 +530,7 @@ function RunweaveApp() {
     </DevSessionBackendGuard>
   );
   return <>
+    {observerNavigation.error && <StatusNotice className="rounded bg-rose-950 p-3 text-white" kind="observer-navigation" noticeKey={observerNavigation.error} onDismiss={observerNavigation.dismiss}>{observerNavigation.error}</StatusNotice>}
     <ClarityNavigationObserver routes={routeElements} pendingElement={authPendingView} />
     {screenConversation.notice ? <StatusNotice kind="screen-conversation" noticeKey={screenConversation.notice} onDismiss={screenConversation.dismiss} className="rounded bg-slate-900 p-4 text-white">{screenConversation.notice}</StatusNotice> : null}
     {scheduledRunOpenError ? <StatusNotice kind="scheduled-run-error" role="alert" noticeKey={scheduledRunOpenError}

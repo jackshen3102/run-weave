@@ -1,6 +1,7 @@
-import { borrowTerminalBrowserPresentation } from "../view/presentation.js";
-import { relayoutTerminalBrowserViewport } from "../device/viewport-layout.js";
-import { BaseWindow, BrowserWindow, ipcMain, type WebContents } from "electron";
+import { automationOwner, automationObserver, registerAutomationObserver } from "./observer.js";
+import { isTerminalBrowserPresentationRequested } from "../view/presentation.js";
+import { attachCaptureSurface } from "./capture-surface.js";
+import { BrowserWindow, ipcMain, type WebContents } from "electron";
 import type {
   TerminalBrowserAutomationActionKind,
   TerminalBrowserAutomationActor,
@@ -88,7 +89,7 @@ export function getTerminalBrowserAutomationSnapshot(
 ): TerminalBrowserAutomationSnapshot {
   const windowConnections = getWindowConnections(windowId);
   const viewer = [...viewers.values()].find(
-    (candidate) => candidate.windowId === windowId,
+    (candidate) => candidate.windowId === windowId && candidate.capture !== null,
   );
   const targets = getTerminalBrowserCdpTargets()
     .filter((target) =>
@@ -160,6 +161,8 @@ export function getTerminalBrowserAutomationSnapshot(
 function notifyWindow(windowId: number): void {
   revisions.set(windowId, (revisions.get(windowId) ?? 0) + 1);
   const snapshot = getTerminalBrowserAutomationSnapshot(windowId);
+  const observer = automationObserver(windowId);
+  if (observer && !observer.isDestroyed()) observer.webContents.send(STATE_CHANNEL, snapshot);
   const win = BrowserWindow.fromId(windowId);
   if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
     win.webContents.send(STATE_CHANNEL, snapshot);
@@ -176,111 +179,16 @@ function stopViewerCapture(viewer: ViewerSession): void {
   viewer.previewError = null;
 }
 
-function attachCaptureSurface(
-  windowId: number,
-  targetId: string,
-  width: number,
-  height: number,
-): (() => void) | null {
-  const owner = BrowserWindow.fromId(windowId);
-  const entry = getTerminalBrowserEntryByTargetId(targetId)?.entry;
-  if (!owner || !entry) {
-    return null;
-  }
-  const releasePresentation = borrowTerminalBrowserPresentation(owner, entry);
-  if (entry.visible) {
-    entry.viewportView.setVisible(false);
-    entry.visible = false;
-  }
-  const previousViewportBounds = entry.viewportView.getBounds();
-  const previousContentBounds = entry.view.getBounds();
-  const previousBackgroundThrottling =
-    entry.view.webContents.getBackgroundThrottling();
-  entry.view.webContents.setBackgroundThrottling(false);
-  const wasAttached = entry.attached;
-  const hasCompositorSize =
-    previousContentBounds.width > 0 && previousContentBounds.height > 0;
-  if (wasAttached && hasCompositorSize) {
-    return () => {
-      if (!entry.view.webContents.isDestroyed()) {
-        entry.view.webContents.setBackgroundThrottling(
-          previousBackgroundThrottling,
-        );
-      }
-      releasePresentation(() => relayoutTerminalBrowserViewport(entry));
-    };
-  }
-  if (wasAttached) {
-    // Target.createTarget can attach a Browser tab before the Browser tool has
-    // supplied bounds. Reparent that 0x0 view so bounds are applied after its
-    // capture parent exists; resizing it while hidden in-place is ineffective.
-    owner.contentView.removeChildView(entry.viewportView);
-    entry.attached = false;
-  }
-  // An unattached or hidden WebContentsView has no compositor surface, so
-  // capturePage returns an empty image. Give it a focus-free BaseWindow behind
-  // the owning window. BaseWindow adds no extra webContents target of its own,
-  // and matching the owner's bounds keeps the host fully covered.
-  const ownerBounds = owner.getBounds();
-  const host = new BaseWindow({
-    show: false,
-    ...ownerBounds,
-    focusable: false,
-    skipTaskbar: true,
-  });
-  host.contentView.addChildView(entry.viewportView);
-  // Bounds must be applied after the nested view is attached. Electron does
-  // not propagate a pre-attachment resize to this WebContentsView, leaving its
-  // renderer viewport at 0x0 and every capture empty.
-  entry.viewportView.setBounds({ x: 0, y: 0, width, height });
-  entry.view.setBounds({ x: 0, y: 0, width, height });
-  entry.viewportView.setVisible(true);
-  const keepBehindOwner = () => {
-    if (!host.isDestroyed() && !owner.isDestroyed()) {
-      host.setBounds(owner.getBounds());
-      owner.moveTop();
-    }
-  };
-  owner.on("move", keepBehindOwner);
-  owner.on("resize", keepBehindOwner);
-  host.showInactive();
-  owner.moveTop();
-  return () => {
-    if (!owner.isDestroyed()) {
-      owner.removeListener("move", keepBehindOwner);
-      owner.removeListener("resize", keepBehindOwner);
-    }
-    if (!host.isDestroyed()) {
-      host.contentView.removeChildView(entry.viewportView);
-      host.destroy();
-    }
-    entry.attached = false;
-    if (
-      wasAttached &&
-      !owner.isDestroyed() &&
-      !entry.view.webContents.isDestroyed()
-    ) {
-      owner.contentView.addChildView(entry.viewportView);
-      entry.attached = true;
-    }
-    if (!entry.view.webContents.isDestroyed()) {
-      entry.view.webContents.setBackgroundThrottling(
-        previousBackgroundThrottling,
-      );
-    }
-    entry.viewportView.setVisible(false);
-    entry.viewportView.setBounds(previousViewportBounds);
-    entry.view.setBounds(previousContentBounds);
-    releasePresentation(() => relayoutTerminalBrowserViewport(entry));
-  };
-}
 
 function startViewerCapture(viewer: ViewerSession): void {
   stopViewerCapture(viewer);
+  const detached = automationObserver(viewer.windowId);
+  if (detached && detached.webContents !== viewer.sender && [...viewers.values()].some(other => other.windowId === viewer.windowId && other.sender === detached.webContents && other.visible)) return;
   const targetId = viewer.selectedTargetId;
   if (!viewer.visible || !targetId) {
     return;
   }
+  for (const other of viewers.values()) if (other !== viewer && other.windowId === viewer.windowId) stopViewerCapture(other);
   const snapshot = getTerminalBrowserAutomationSnapshot(viewer.windowId);
   if (!snapshot.targets.some((target) => target.targetId === targetId)) {
     return;
@@ -314,6 +222,13 @@ function startViewerCapture(viewer: ViewerSession): void {
         viewer.sender.isDestroyed()
       ) {
         capture.acknowledge(frame.sequence);
+        return;
+      }
+      const owner = BrowserWindow.fromId(viewer.windowId);
+      if (owner && !entry.attached && isTerminalBrowserPresentationRequested(owner, entry)) {
+        // Release the temporary compositor host before presenting the same page
+        // in the main Browser; restart capture against its original parent.
+        startViewerCapture(viewer);
         return;
       }
       if (viewer.previewState !== "live") {
@@ -509,7 +424,7 @@ function getOrCreateViewer(sender: WebContents): ViewerSession {
   const win = requireViewerWindow(sender);
   const viewer: ViewerSession = {
     sender,
-    windowId: win.id,
+    windowId: automationOwner(win),
     visible: false,
     selectedTargetId: null,
     maxEdge: MAX_PREVIEW_EDGE,
@@ -523,6 +438,8 @@ function getOrCreateViewer(sender: WebContents): ViewerSession {
   sender.once("destroyed", () => {
     stopViewerCapture(viewer);
     viewers.delete(sender.id);
+    const remaining = [...viewers.values()].find(other => other.windowId === viewer.windowId && other.visible);
+    if (remaining) startViewerCapture(remaining);
   });
   win.on("hide", () => {
     viewer.visible = false;
@@ -536,9 +453,10 @@ function getOrCreateViewer(sender: WebContents): ViewerSession {
 }
 
 export function registerTerminalBrowserAutomationHandlers(): void {
+  registerAutomationObserver();
   ipcMain.handle("terminal-browser:automation-get-snapshot", (event) => {
     const win = requireViewerWindow(event.sender);
-    return getTerminalBrowserAutomationSnapshot(win.id);
+    return getTerminalBrowserAutomationSnapshot(automationOwner(win));
   });
   ipcMain.handle(
     "terminal-browser:automation-set-view-state",

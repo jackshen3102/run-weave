@@ -33,6 +33,8 @@ import type { TerminalBrowserCdpProxyInfo } from "../browser/cdp-proxy";
 import type { TerminalBrowserFindCommand, TerminalBrowserFindState } from "../browser/find";
 export type { TerminalBrowserFindCommand, TerminalBrowserFindState } from "../browser/find";
 import type {
+  AgentObserverWindowFrame,
+  AgentObserverSimulatorFrame,
   TerminalBrowserAutomationFrame,
   TerminalBrowserAutomationFrameAcknowledgeRequest,
   TerminalBrowserAutomationSnapshot,
@@ -281,6 +283,11 @@ export interface RunweaveElectronBridge {
   terminalBrowserResolveProfile: (
     request: ResolveTerminalBrowserProfileRequest,
   ) => Promise<ResolvedTerminalBrowserProfile>;
+  openAgentObserverTerminal: (source: { connectionId: string; terminalSessionId: string }) => Promise<void>;
+  onAgentObserverTerminal: (listener: (source: { connectionId: string; terminalSessionId: string }) => void) => () => void;
+  openAgentObserver: () => Promise<void>;
+  agentObserverWindows: (selected: string[]) => Promise<AgentObserverWindowFrame[]>;
+  agentObserverSimulators: (continuous: string[]) => Promise<AgentObserverSimulatorFrame[]>;
   terminalBrowserAutomationGetSnapshot: () => Promise<TerminalBrowserAutomationSnapshot>;
   terminalBrowserAutomationSetViewState: (
     request: TerminalBrowserAutomationViewStateRequest,

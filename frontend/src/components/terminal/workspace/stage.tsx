@@ -313,7 +313,7 @@ export function TerminalWorkspaceStage({
             <Suspense fallback={<aside className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-400" style={{ width: previewReservedWidth }}>Loading preview...</aside>}>
               <TerminalPreviewPanel fileLinkIntent={pendingFileLink} onFileLinkDone={() => setFileLinkIntent(null)}
                 activeProject={activeProject} activeSession={activeSession} activePanelId={activePanelId}
-                sessions={sessions} widthPx={previewWidthPx}
+                widthPx={previewWidthPx}
                 onEditProject={onEditProject} />
             </Suspense>
           </div>
