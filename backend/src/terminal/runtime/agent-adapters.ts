@@ -101,10 +101,12 @@ export function buildAgentResumeCommand(thread: {
       thread.sessionFile ?? thread.threadId,
     ),
   ];
-  const configuredTrae = ["trae", "traex", "traecli"].includes(thread.provider)
-    ? settingText("agents.traex.binary")?.trim()
-    : undefined;
-  const executable = thread.executable ?? configuredTrae ?? thread.provider;
+  const configured = thread.provider === "codex"
+    ? settingText("agents.codex.binary")?.trim()
+    : ["trae", "traex", "traecli"].includes(thread.provider)
+      ? settingText("agents.traex.binary")?.trim()
+      : undefined;
+  const executable = thread.executable ?? configured ?? thread.provider;
   const shell = terminalShellName(thread.shell ?? "sh");
   if (["powershell", "pwsh", "cmd"].includes(shell)) {
     const parts = [executable, ...args];

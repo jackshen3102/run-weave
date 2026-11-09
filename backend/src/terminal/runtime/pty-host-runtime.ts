@@ -97,9 +97,7 @@ async function rebuildHostedTerminal(options: HostedTerminalOptions): Promise<Ho
   const runtime = await launchHostedTerminal(options, true);
   try {
     if (thread) {
-      const env = buildTerminalRuntimeEnvironment({ terminalSessionId: session.id, projectId: session.projectId, source: session.source });
-      const command = buildAgentResumeCommand({ ...thread, sessionFile, shell: session.command,
-        executable: thread.provider === "codex" ? env.RUNWEAVE_CODEX_BINARY : undefined });
+      const command = buildAgentResumeCommand({ ...thread, sessionFile, shell: session.command });
       await runtime.hosted!.writeSteps([{ type: "text", data: command.replace(/\n$/, "") }, { type: "delay", ms: 200 }, { type: "text", data: "\r" }], `recovery:${session.ptyHost!.sessionInstanceId}`);
       await terminalSessionManager.updateSessionThreadId(session.id, thread.threadId, thread.provider);
     }
