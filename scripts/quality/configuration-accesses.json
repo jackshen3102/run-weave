@@ -1,5 +1,85 @@
 [
   {
+    "file": "backend/src/scheduled-tasks/providers/codex.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_PROJECT_ID",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "仅为有项目来源的后台运行设置项目上下文，普通定时任务显式删除继承值，避免跨任务泄漏；不读取或持久化实例配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/scheduled-task-migration.ts",
+    "kind": "file-io",
+    "expression": "readFile(file)",
+    "count": 1,
+    "category": "migration",
+    "reason": "读取用户通过 --file 明确指定的迁移草稿，校验 SHA-256 和目标 Backend 后作为显式迁移请求输入，不作为实例配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/scheduled-task-migration.ts",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "migration",
+    "reason": "将迁移预览写入用户 --file 指定的全新私有草稿文件供确认，使用独占创建避免覆盖，不写实例配置。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/migrations.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "集成检查为临时 SQLite worker 继承测试进程环境并清除生产 worker 入口覆盖，不更改安装实例的业务配置。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-independent.ts",
+    "kind": "environment",
+    "expression": "environment.PLAYWRIGHT_MCP_CDP_ENDPOINT",
+    "count": 1,
+    "category": "test",
+    "reason": "读取受控环境构造函数的返回值，断言移除继承的项目参数并设置运行专属浏览器组，不连接真实浏览器。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-independent.ts",
+    "kind": "environment",
+    "expression": "environment.RUNWEAVE_PROJECT_ID",
+    "count": 1,
+    "category": "test",
+    "reason": "读取受控环境构造函数的返回值，断言普通定时任务不继承项目标识，不读取持久化实例配置。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-independent.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(first.executionContext.cwd!, \"marker\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "读取临时集成运行私有目录内的 marker，核对第一次运行的目录隔离与持久化，不访问安装实例数据。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-independent.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(second.executionContext.cwd!, \"marker\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "读取临时集成运行私有目录内的 marker，核对第二次运行的目录隔离与持久化，不访问安装实例数据。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-independent.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(input.workingDirectory, \"marker\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "受控 provider 在临时集成运行私有目录写入 marker 作为隔离验证证据，不写安装实例或业务配置。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/project-migration.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "集成检查为临时数据库 worker 继承测试进程环境并清除生产 worker 入口覆盖，仅用于隔离迁移和回滚验证。"
+  },
+  {
     "file": "packages/runweave-cli/src/commands/browser-downloads.ts",
     "kind": "file-io",
     "expression": "file.writeFile(bytes)",
