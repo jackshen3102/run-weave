@@ -1,16 +1,24 @@
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 export function commandExists(command) {
-  const result = spawnSync(
-    "bash",
-    ["-lc", `command -v ${shellQuote(command)}`],
-    {
-      encoding: "utf8",
-      stdio: "pipe",
-    },
-  );
-  return result.status === 0;
+  return commandPath(command) !== null;
+}
+
+function commandPath(command) {
+  const suffixes = process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  for (const directory of (process.env.PATH || "").split(path.delimiter)) {
+    for (const suffix of suffixes) {
+      const file = path.join(directory, command + suffix);
+      try {
+        accessSync(file, constants.X_OK);
+        return file;
+      } catch { /* next PATH entry */ }
+    }
+  }
+  return null;
 }
 
 export function run(command, commandArgs, options = {}) {
@@ -36,8 +44,23 @@ export function runOptional(command, commandArgs, options = {}) {
 }
 
 export function runResult(command, commandArgs, options = {}) {
+  const resolved = process.platform === "win32" ? commandPath(command) : null;
+  if (resolved && /\.(cmd|bat)$/i.test(resolved)) {
+    // cmd expands percent variables even inside quotes. Refuse unrepresentable argv.
+    const values = [resolved, ...commandArgs];
+    if (values.some(value => /["%\r\n]/.test(value)))
+      throw new Error("Cannot pass quotes, percent signs or line breaks to a Windows Agent command shim");
+    return spawnSync("cmd.exe", ["/d", "/v:off", "/s", "/c",
+      `"${values.map(value => `"${value}"`).join(" ")}"`], {
+      cwd: options.cwd || repoRoot,
+      env: options.env || process.env,
+      encoding: "utf8",
+      stdio: options.stdio || "pipe",
+      windowsVerbatimArguments: true,
+    });
+  }
   return spawnSync(command, commandArgs, {
-    cwd: repoRoot,
+    cwd: options.cwd || repoRoot,
     env: options.env || process.env,
     encoding: "utf8",
     stdio: options.stdio || "pipe",
@@ -45,7 +68,7 @@ export function runResult(command, commandArgs, options = {}) {
 }
 
 export function runCapture(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
+  const result = runResult(command, commandArgs, {
     cwd: process.cwd(),
     env: options.env || process.env,
     encoding: "utf8",
@@ -82,6 +105,4 @@ export function log(message) {
   console.log(`[toolkit-sync] ${message}`);
 }
 
-export const repoRoot = runCapture("git", ["rev-parse", "--show-toplevel"], {
-  quiet: true,
-}).trim();
+export const repoRoot = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));

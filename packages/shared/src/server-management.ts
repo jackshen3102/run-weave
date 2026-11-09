@@ -26,6 +26,8 @@ export interface ServerReleaseManifest {
   /** Version 1 separates database schema protection from configuration migration. */
   configurationUpgradeVersion?: 1;
   databaseCompatibility?: string;
+  /** Reviewed source database fingerprints accepted by this exact target. No reverse compatibility implied. */
+  databaseUpgradeFrom?: string[];
   /** Legacy combined fingerprints, computed with the same database sources. */
   legacyDataCompatibility?: string[];
   files: { path: string; sha256: string; size: number }[];

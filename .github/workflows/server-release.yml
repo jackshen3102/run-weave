@@ -70,6 +70,10 @@ jobs:
         if: ${{ runner.os == 'Windows' && !inputs.pty_spike_only }}
         timeout-minutes: 10
         run: node scripts/verify/server/registry.mjs --local
+      - name: Verify Windows explicit v4 to v5 task migration
+        if: ${{ runner.os == 'Windows' && !inputs.pty_spike_only }}
+        timeout-minutes: 3
+        run: pnpm scheduled-tasks:verify-runtime --case projectMigration
       - name: Pack verified packages
         if: ${{ !inputs.pty_spike_only }}
         shell: bash

@@ -134,6 +134,7 @@ for (const version of ["0.1.0", "0.1.1", "0.1.9"]) {
         manifest.dataCompatibility = manifest.legacyDataCompatibility[0];
         delete manifest.configurationUpgradeVersion;
         delete manifest.databaseCompatibility;
+        delete manifest.databaseUpgradeFrom;
         delete manifest.legacyDataCompatibility;
       }
       if (version === "0.1.9") {
@@ -485,6 +486,34 @@ try {
     status.healthy && status.runningVersion === "0.1.1",
     "NPM update after source activation failed",
   );
+  const upgradeSource = JSON.parse(readFileSync(path.join(current, "server-manifest.json"), "utf8")).databaseCompatibility;
+  for (const name of ["package", `${process.platform}-${process.arch}`]) {
+    const directory = path.join(sourceUpdate, name);
+    const file = path.join(directory, "package.json");
+    const pkg = JSON.parse(readFileSync(file, "utf8"));
+    pkg.version = "0.1.3";
+    writeFileSync(file, JSON.stringify(pkg));
+    if (name !== "package") {
+      const manifestFile = path.join(directory, "manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+      manifest.version = "0.1.3";
+      manifest.databaseUpgradeFrom = [upgradeSource];
+      manifest.databaseCompatibility = "a".repeat(64);
+      writeFileSync(manifestFile, JSON.stringify(manifest));
+    }
+  }
+  const bridgePid = status.backend.pid;
+  const bridgePreview = JSON.parse(await cli("update", "--server-package", path.join(sourceUpdate, "package"), "--dry-run"));
+  assert(bridgePreview.databaseCompatible && JSON.parse(await cli("status", "--json")).backend.pid === bridgePid,
+    "Declared database upgrade preview stopped the active Backend");
+  await cli("update", "--server-package", path.join(sourceUpdate, "package"));
+  status = JSON.parse(await cli("status", "--json"));
+  assert(status.healthy && status.activeVersion === "0.1.3", "Declared database upgrade did not activate");
+  let reverseRejected = false;
+  try { await cli("update", "--version", "0.1.1", "--dry-run"); }
+  catch (error) { assert(error.message.includes("SERVER_DATA_INCOMPATIBLE"), error.message); reverseRejected = true; }
+  assert(reverseRejected && JSON.parse(await cli("status", "--json")).backend.pid === status.backend.pid,
+    "One-way database upgrade allowed an undeclared rollback or stopped the Backend");
   assert(
     createHash("sha256").update(readFileSync(cliEntry)).digest("hex") ===
       cliHash,
@@ -532,6 +561,7 @@ try {
       "Server update 0.1.0 to fixture 0.1.1 preserving CLI and foreground session",
       "independent CLI/Server installation without rw collision",
       "source artifact activation followed by NPM activation using the same service",
+      "declared one-way database upgrade preview, activation and undeclared rollback rejection",
       "service definition dry-run",
       "stop cleanup",
     ],

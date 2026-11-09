@@ -1,0 +1,28 @@
+[
+  {
+    "platform": "win32",
+    "target": "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
+    ],
+    "reason": "Published Windows Server 0.1.7/0.1.8 to the reviewed v5 storage tree (CRLF checkout). Only scheduled task storage changed: populated v4 databases remain blocked pending explicit preview/apply; other databases are unchanged."
+  },
+  {
+    "platform": "win32",
+    "target": "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
+    ],
+    "reason": "Same reviewed storage tree with LF checkout; the existing byte-based fingerprint includes checkout line endings."
+  }
+]

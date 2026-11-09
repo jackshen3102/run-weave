@@ -11748,17 +11748,17 @@
     "file": "scripts/verify/server/installed.mjs",
     "kind": "file-io",
     "expression": "readFileSync(file)",
-    "count": 1,
+    "count": 2,
     "category": "test",
-    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+    "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
   },
   {
     "file": "scripts/verify/server/installed.mjs",
     "kind": "file-io",
     "expression": "readFileSync(manifestFile)",
-    "count": 1,
+    "count": 2,
     "category": "test",
-    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+    "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
   },
   {
     "file": "scripts/verify/server/installed.mjs",
@@ -11804,17 +11804,17 @@
     "file": "scripts/verify/server/installed.mjs",
     "kind": "file-io",
     "expression": "writeFileSync(file)",
-    "count": 1,
+    "count": 2,
     "category": "test",
-    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+    "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
   },
   {
     "file": "scripts/verify/server/installed.mjs",
     "kind": "file-io",
     "expression": "writeFileSync(manifestFile)",
-    "count": 1,
+    "count": 2,
     "category": "test",
-    "reason": "仅在隔离的真实进程与临时 npm registry fixture 中读写测试包、令牌、日志和回执，不修改真实 Stable 配置或登录态。"
+    "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
   },
   {
     "file": "scripts/verify/server/installed.mjs",
@@ -12935,5 +12935,61 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "Distinguish beta and production build channels in diagnostic context; no backend environment is inferred from this value."
+  },
+  {
+    "file": "backend/src/scheduled-tasks/windows-database-offline.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "向 PowerShell 独占句柄检查继承进程环境，并通过专用变量传入数据库绝对路径，不读取实例配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/server/toolkit.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "distribution",
+    "reason": "向已校验的随包 Toolkit 安装器继承当前用户的 Agent 安装目录与 PATH，不生成新的实例配置来源。"
+  },
+  {
+    "file": "scripts/release/build-server.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repo, \"scripts/release/database-upgrades.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "读取仓库审核的单向数据库升级指纹声明，仅在平台与目标源码摘要一致时写入发行清单。"
+  },
+  {
+    "file": "scripts/toolkit/package.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(payload, \"plugins/toolkit-release.json\"))",
+    "count": 1,
+    "category": "distribution",
+    "reason": "将构建完成的插件资产及内容版本元数据写入发行暂存目录，供脱离源码的安装器使用。"
+  },
+  {
+    "file": "scripts/toolkit/package.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(target)",
+    "count": 1,
+    "category": "distribution",
+    "reason": "将构建完成的插件资产及内容版本元数据写入发行暂存目录，供脱离源码的安装器使用。"
+  },
+  {
+    "file": "scripts/toolkit/sync-runtime.mjs",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 1,
+    "category": "tooling",
+    "reason": "从安装进程继承的 PATH 定位外部 Agent 可执行文件，不通过登录 shell 加载额外配置。"
+  },
+  {
+    "file": "scripts/verify/server/installed.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(current, \"server-manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
   }
 ]

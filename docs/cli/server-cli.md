@@ -29,6 +29,27 @@ doctor 检查 Server 发行组件、SQLite/PTY 原生加载及外部工具，区
 Pi 认证须按 provider 配置，不把仅安装工具当成认证成功。外部工具不自动安装。
 前台运行两个组件，必需组件异常会结束前台会话；Ctrl-C 关闭服务但保留 tmux。
 
+## Toolkit 插件
+
+Server 平台包携带构建好的 Toolkit 技能、Hooks 和 Pi 集成资源，无需克隆源码或安装 pnpm、编译工具。
+先安装并认证所用的 Agent CLI，再以运行 Agent 的系统用户执行：
+
+```bash
+rw server toolkit install --dry-run --json
+rw server toolkit install --json
+# 激活新版 Server 后，将其携带的 Toolkit 同步到 Agent
+rw server toolkit update --json
+```
+
+`install` 和 `update` 均为可重复执行的同步，使用 **active Server** 的资源；直接 npm 安装新版尚未激活时仍使用旧 active 版。
+命令校验完整发行清单后复用源码 Toolkit 同步器：为 PATH 中可用的 Codex、Trae 安装插件，
+并为已有的 Pi Agent 目录安装托管扩展；缺失 Agent 的跳过原因写入 stderr，stdout 为 JSON 回执。
+当前用户的 `CODEX_HOME`、`PI_CODING_AGENT_DIR` 继续生效；相同内容不重复安装，历史插件缓存保留，Pi 非托管扩展不覆盖。
+同步后需新建 Agent 会话加载技能。该命令不负责 Agent 登录，不更新系统级托管 Hook 快照。
+`--dry-run` 只校验发行资源并展示携带版本，不运行插件安装器，也不修改 Agent 配置。
+旧 Server 缺少资源时返回 `TOOLKIT_NOT_PACKAGED`，须先升级 Server。
+服务启动、npm 安装和 `rw server update` 不自动修改 Agent 插件；升级后显式执行 `toolkit update`。
+
 ## Windows 轻量模式
 
 适用于 Windows 10 1809 及以上版本或 Windows 11 x64，使用系统 PowerShell 与 ConPTY，无需 WSL、tmux 或 Visual Studio。
@@ -62,6 +83,15 @@ rw.cmd server start
 
 `rw server host status` 显示运行和已安装的 Host 发行目录；`host stop` / `host update` 仅在所有终端已退出时允许。普通更新不替换活跃 Host 或全局 CLI。
 Host 每实例最多 64 个运行终端，保留最多 256 个会话运行时；输入等待队列限制为 128 个操作和 4 MiB。每个终端最多接管 65,536 个结构化操作 ID，历史窗口外只保留防重标记；达到上限需要结束该终端后新建，原进程不会被自动替换。原始键盘输入按单调序号处理。
+从 Windows Server 0.1.7 升级到项目独立任务模型，需要带有数据库升级声明的新 Server 和支持该声明的新 CLI。
+旧前台管理进程不会因全局 CLI 更新而替换内存中的更新器；新 CLI 遇到它时返回
+`SERVER_UPDATER_RESTART_REQUIRED`。在系统 PowerShell 更新 CLI 后，先执行 `rw.cmd server stop`，
+在停止态执行 `rw.cmd server update --version <已发布的修复版本>`，再用新 CLI 执行 `rw.cmd server start`。
+独立 PTY Host 不停止，终端连接会在 Backend 启动后恢复。不要用 `server restart` 替代这次 stop/start，
+它仍复用旧前台管理进程。本段描述源码能力，不表示修复版本已发布。
+有旧定时任务数据时，Server 可升级，但任务子系统在显式 preview/apply 前保持不可用；
+任务内容、暂停及备份规则见[任务迁移](./scheduled-task-cli.md#旧项目任务的显式迁移)。
+
 配置默认位于当前用户的 `.runweave`，使用 Windows ACL 校验：只允许当前用户、SYSTEM 和 Administrators 访问。
 共享目录或宽松 ACL 的 `--config-dir` / `--auth-file` 会被拒绝，不通过放宽权限绕过。
 
@@ -95,6 +125,8 @@ macOS 使用系统 LaunchDaemon，不把登录启动当开机启动。
 原模式重启及健康核对。直接 npm 安装不触发重启，status 会显示分发版本与 active/running 的差异。
 新版发行包分别核对数据库指纹和候选包的配置迁移预演，再检查 CLI、App Server 以及前台 owner
 能否读取目标配置。`--dry-run` 下载和校验候选包，但不停止服务、不切换 current、不写配置或更新回执。
+数据库指纹不同时，仅接受候选包 `databaseUpgradeFrom` 中明确声明的源指纹；声明只允许单向升级，
+不授权回退，也不自动确认有业务影响的任务数据转换。未声明的差异仍返回 `SERVER_DATA_INCOMPATIBLE`。
 调用前先确认 `server status --json` 的 `cliCapabilities.updateDryRun` 为 true；旧 CLI 可能
 接受但忽略 `--dry-run`，缺少该声明时不能通过执行更新来试探能力。
 预检可能物化候选 release 和 npm 缓存，不承诺文件系统完全无写入。

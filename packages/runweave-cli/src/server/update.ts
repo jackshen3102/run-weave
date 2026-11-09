@@ -170,6 +170,7 @@ export async function updateServer(
     const databaseCompatible = hasUpgrade && manifest.databaseCompatibility
       ? ctx.manifest.databaseCompatibility
         ? manifest.databaseCompatibility === ctx.manifest.databaseCompatibility
+          || manifest.databaseUpgradeFrom?.includes(ctx.manifest.databaseCompatibility)
         : manifest.legacyDataCompatibility?.includes(ctx.manifest.dataCompatibility)
           || manifest.dataCompatibility === ctx.manifest.dataCompatibility
       : manifest.dataCompatibility === ctx.manifest.dataCompatibility;

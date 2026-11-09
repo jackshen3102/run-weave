@@ -53,6 +53,7 @@ import { ServerNotInstalledError } from "../server/installation.js";
 import { readCliVersion } from "../version.js";
 import { protectedRestart, updateServer } from "../server/update.js";
 import { SERVER_CLI_CAPABILITIES } from "@runweave/shared/server-management";
+import { runServerToolkit } from "../server/toolkit.js";
 
 function token(ctx: ServerContext): void {
   const file = path.join(ctx.home, "management-token");
@@ -253,6 +254,10 @@ export async function runServerCommand(
   if (command === "inspect") {
     inspect(ctx);
     output({ valid: true, version: ctx.manifest.version });
+    return;
+  }
+  if (command === "toolkit") {
+    output(await runServerToolkit(ctx, parsed.positionals, parsed.options["dry-run"] === true, io.stderr));
     return;
   }
   if (command === "status") {
@@ -505,7 +510,7 @@ export async function runServerCommand(
       return;
     }
     throw new Error(
-      "Usage: rw server <init|doctor|start|stop|restart|status|logs|update|service> [options]",
+      "Usage: rw server <init|doctor|start|stop|restart|status|logs|update|service|toolkit> [options]",
     );
   });
 }

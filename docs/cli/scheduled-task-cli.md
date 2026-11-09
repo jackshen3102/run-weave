@@ -60,7 +60,8 @@ preview 写入新的 0600 草稿文件（拒绝覆盖），展示全部原文、
 提示词上限仍为 12000 字符。原文加迁移说明超限时，草稿保留完整原文，并通过 `promptWarning` 提示说明未追加；
 迁移后任务仍暂停，须结合预览中的原项目路径核对和修改描述后再启用，不截断原文或放宽普通任务上限。
 apply 校验源逻辑数据摘要、任务清单与 revision，queued／waiting／owner 不明或终端准备未结束时返回
-migration_busy，不杀进程、不丢队列。lsof 不可用或数据库仍有连接也会拒绝。
+migration_busy，不杀进程、不丢队列。POSIX 使用 lsof 检查旧连接；Windows 使用系统 PowerShell
+以 FileShare.None 独占打开数据库及存在的 WAL/SHM 文件，连接未关闭或无法确认时拒绝。
 
 迁移先创建私有 SQLite 一致性备份，再在一个事务转换并保存幂等回执；失败回滚，不清库。
 普通旧任务保留 ID 和原文、追加已核对说明、递增 revision，全部保持暂停；不会重启日程或补跑过期 once。
