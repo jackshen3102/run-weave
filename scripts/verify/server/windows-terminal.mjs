@@ -16,10 +16,10 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
   const project = await api("project", { name: "Windows PTY verification", path: cwd });
   let socket, id;
   try {
-    const created = await api("session", { projectId: project.projectId });
+    const created = await api("session", { projectId: project.projectId, command: "powershell.exe", args: [] });
     id = created.terminalSessionId;
     const session = await api(`session/${id}`, undefined, "GET");
-    assert(session.command.toLowerCase().endsWith("powershell.exe"), "Default shell is not PowerShell");
+    assert(session.command.toLowerCase().endsWith("powershell.exe"), "Explicit PowerShell override was not preserved");
     assert(!session.tmuxSessionName, "Windows unexpectedly created tmux");
     async function connect() {
       const { ticket } = await api(`session/${id}/ws-ticket`, {});
@@ -83,7 +83,7 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
       await lifecycle.rw("host", "update");
       const after = JSON.parse(await lifecycle.rw("host", "status"));
       assert(after.hostInstanceId !== before.hostInstanceId, "Host maintenance did not replace its identity");
-      id = (await api("session", { projectId: project.projectId })).terminalSessionId;
+      id = (await api("session", { projectId: project.projectId, command: "powershell.exe", args: [] })).terminalSessionId;
       socket = await connect();
       socket.send({ type: "input", data: "$r=$null; for($i=0;$i -lt 10;$i++){try{$r=Invoke-WebRequest -UseBasicParsing ($env:RUNWEAVE_APP_SERVER_URL+'/readyz') -Headers @{Authorization=('Bearer '+$env:RUNWEAVE_APP_SERVER_TOKEN)};break}catch{Start-Sleep -Seconds 1}}; Write-Output ('GATEWAY_'+[int]$r.StatusCode)\r" });
       await socket.waitOutput("GATEWAY_200");

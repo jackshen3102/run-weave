@@ -70,6 +70,32 @@ rw config reload --instance stable --profile local --json
 `reload` 通过当前 profile 调用 Backend，由各消费者分别报告 appliedRevision、error、
 unconfigured 或 restartRequired。坏文件保留原件，不自动生成替代配置。
 
+## 默认终端 Shell
+
+`terminal.defaultShell.command` 和 `terminal.defaultShell.args` 都可不设置，缺失或 `null`
+使用执行电脑的系统默认。macOS/Linux 优先选择账户登录 Shell，再尝试 `$SHELL`、
+`/bin/bash`、`/bin/sh`，跳过不可执行文件；Windows 优先使用 `ComSpec`，不可用再尝试
+PowerShell、cmd。Windows 的系统命令解释器不等同于 Windows Terminal 的默认 Profile。
+
+`command` 是一个可执行文件绝对路径或 PATH 中的程序名，参数独立保存在字符串数组 `args` 中。
+未设置参数时保留现有规则：bash/zsh 使用 `['-l']`，其他程序使用空数组；显式 `[]` 不加参数。
+只设置参数时使用系统 Shell。普通新建、分屏和 Worktree Worker 共用该配置，单次请求指定
+command 时不继承配置中的 args；只覆盖 args 时保留电脑默认 command。
+
+保存并 reload 后仅影响后续创建，重连活着的进程不重新选择 Shell，已有 Shell 重建仍使用
+保存的启动配置。配置的默认程序不存在时使用系统默认；已启动的进程仅在识别为交互式 Shell 且一秒内
+非零退出时允许回退一次，同时替换 command 和 args。一次性命令（如 `sh -c`、PowerShell
+`-Command`）、脚本和未知程序不按交互 Shell 自动回退，保留原退出结果。
+
+普通 PTY 收到输入后停止自动回退。Windows PTY Host 在交付可回退的新会话前等待启动窗口结束，
+发生进程替换时，已接受但未写完的输入失败为 `HOST_PROCESS_CHANGED`，不能继续写入新 Shell；
+新的输入操作仍可使用回退后的 Shell。tmux 新建和分屏在交付前检查启动结果，确认失败后才
+切换系统 Shell，返回实际启动配置并提示；不会因探测超时或权限错误重放启动命令。
+
+配置格式错误会拒绝保存，不验证或执行用户启动脚本。Shell 文件名统一识别 `.exe` 后缀。
+Windows zsh 通过同安装目录的 `cygpath.exe` 转换集成脚本与用户配置路径，目录上报转换为
+原生 Windows 路径；转换失败记录警告并保留基础终端。MSYS2、Cygwin、WSL 仍需分别做真机验收。
+
 ## 全新 Stable 初始化
 
 只有确认此操作系统用户从未有过需要保留的 Runweave 身份和数据时，才执行：

@@ -1055,6 +1055,38 @@ Trae 可执行文件；多个入口统一
 | 约束              | 按字段类型校验                                        |
 | 显式迁移来源      | RUNWEAVE_COMPANION_AGENT_EXECUTABLE                   |
 
+## 默认 Shell
+
+配置域：`terminal.defaultShell`。
+
+### terminal.defaultShell.command
+
+当前电脑新终端的默认可执行文件；缺省使用系统 Shell，启动不可用时回退系统默认
+
+| 属性              | 合同                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                     |
+| 默认              | 系统账户登录 Shell；Windows 使用 ComSpec；不可用时采用平台兜底 |
+| 所属模块          | backend/terminal                                               |
+| 生效              | 所属消费者重载                                                 |
+| 敏感 / 远端可修改 | 否 / 否                                                        |
+| 约束              | 按字段类型校验                                                 |
+| 显式迁移来源      | new-field:no-legacy-source                                     |
+
+### terminal.defaultShell.args
+
+默认 Shell 的启动参数；空数组明确不加参数，缺省保留 bash/zsh 的 -l 行为
+
+| 属性              | 合同                                             |
+| ----------------- | ------------------------------------------------ |
+| 类型              | array<string>；允许 null 恢复默认                |
+| 默认              | 根据所选程序解析；bash/zsh 为 [-l]，其他为空数组 |
+| 所属模块          | backend/terminal                                 |
+| 生效              | 所属消费者重载                                   |
+| 敏感 / 远端可修改 | 否 / 否                                          |
+| 约束              | 按字段类型校验                                   |
+| 显式迁移来源      | new-field:no-legacy-source                       |
+
 ## 终端
 
 配置域：`terminal`。

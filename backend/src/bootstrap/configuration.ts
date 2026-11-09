@@ -20,5 +20,6 @@ export function initializeBackendConfiguration(resources: ResourceScope) {
   logger.debug("backend.logger.initialized", {
     component: "backend", logDir: loggerState.logDir, logToFile: loggerState.logToFile,
   });
+  resources.defer("terminal-shell-configuration", config.register("terminal.defaultShell", () => {}));
   return config;
 }

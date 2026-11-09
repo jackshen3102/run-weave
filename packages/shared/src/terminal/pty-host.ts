@@ -24,6 +24,8 @@ export interface PtyHostSession extends PtyHostBinding {
   exitCode?: number;
   cols: number;
   rows: number;
+  /** Actual launch, available on newer Hosts (including system-shell fallback). */
+  launch?: { command: string; args: string[]; fallbackReason?: string };
   gatewayToken: string;
   nextSequence: number;
 }
@@ -49,6 +51,8 @@ export interface PtyHostCreateSession {
   cols: number;
   rows: number;
   env: Record<string, string | undefined>;
+  /** Host owns spawn failure handling; Backend must not retry an uncertain create RPC. */
+  fallback?: { command: string; args: string[]; env: Record<string, string | undefined> };
 }
 export interface PtyHostSnapshot {
   data: string;
@@ -74,6 +78,7 @@ export interface PtyHostWireRequest {
   body: unknown;
 }
 export type PtyHostEvent =
+  | { type: "launch"; terminalSessionId: string; launch: NonNullable<PtyHostSession["launch"]> }
   | { type: "resize"; terminalSessionId: string; cols: number; rows: number; cursor: TerminalOutputCursor }
   | { type: "output"; terminalSessionId: string; data: string; cursor: TerminalOutputCursor; range: TerminalOutputRange }
   | { type: "exit"; terminalSessionId: string; exitCode: number }

@@ -102,3 +102,11 @@ export class TmuxRebuildLimitError extends Error {
     this.name = "TmuxRebuildLimitError";
   }
 }
+
+/** Startup may already have executed user configuration; never retry via another runtime. */
+export class TmuxShellStartupError extends Error {
+  constructor(cause: unknown) {
+    super(`Terminal shell startup failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = "TmuxShellStartupError";
+  }
+}

@@ -1,6 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { configuration } from "@runweave/config-node";
 import path from "node:path";
+import { terminalShellName } from "@runweave/shared/terminal/shell";
+import { resolveTerminalExecutable } from "./default-shell";
+import { logger } from "../../logging/index";
 
 const ESC = "\\u001b";
 const BEL = "\\u0007";
@@ -69,7 +73,9 @@ export function createShellPromptTracker(
         (_match, rawUrl: string) => {
           try {
             const parsedUrl = new URL(rawUrl);
-            const nextCwd = decodeURIComponent(parsedUrl.pathname);
+            const pathname = decodeURIComponent(parsedUrl.pathname);
+            const nextCwd = process.platform === "win32" && /^\/[a-z]:\//i.test(pathname)
+              ? path.win32.normalize(pathname.slice(1)) : pathname;
             if (nextCwd !== state.cwd) {
               state.cwd = nextCwd;
               metadataChanged = true;
@@ -120,24 +126,36 @@ export function extractShellPromptMetadata(chunk: string): {
   };
 }
 
-let cachedZshHookDir: string | null = null;
+const cachedZshHookDirs = new Map<string, string>();
 
-function ensureZshHookDirectory(): string {
-  if (cachedZshHookDir) {
-    return cachedZshHookDir;
-  }
+function shellPath(value: string, command: string, env: NodeJS.ProcessEnv): string {
+  if (process.platform !== "win32" || !value) return value;
+  const executable = resolveTerminalExecutable(command, env);
+  if (!executable) throw new Error("Cannot resolve zsh executable for path conversion");
+  const converted = execFileSync(path.join(path.dirname(executable), "cygpath.exe"), ["-u", "-a", "--", value], {
+    env, encoding: "utf8", timeout: 2000, maxBuffer: 64 * 1024, windowsHide: true,
+  }).trim();
+  if (!converted) throw new Error("cygpath returned an empty path");
+  return converted;
+}
+
+function ensureZshHookDirectory(command: string, env: NodeJS.ProcessEnv): string {
+  const key = process.platform === "win32" ? resolveTerminalExecutable(command, env) ?? command : "posix";
+  const cached = cachedZshHookDirs.get(key);
+  if (cached) return cached;
 
   const runtimeRoot = path.join(configuration().context.configRoot, "runtime");
   mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
   const hookDir = mkdtempSync(path.join(runtimeRoot, ZSH_HOOK_PREFIX));
-  const boundBin = path.join(runtimeRoot, "bin").replace(/'/g, "'\\''");
+  const hookShellDir = shellPath(hookDir, command, env);
+  const boundBin = shellPath(path.join(runtimeRoot, "bin"), command, env).replace(/'/g, "'\\''");
   const sourceOriginalScript = (startupFile: string) =>
     [
       '_runweave_original_zdotdir="${RUNWEAVE_ORIGINAL_ZDOTDIR:-${BROWSER_VIEWER_ORIGINAL_ZDOTDIR:-$HOME}}"',
       `if [[ "$_runweave_original_zdotdir" != */${ZSH_HOOK_PREFIX}* && -r "$_runweave_original_zdotdir/${startupFile}" ]]; then`,
       `  source "$_runweave_original_zdotdir/${startupFile}"`,
       "fi",
-      `export ZDOTDIR="${hookDir}"`,
+      `export ZDOTDIR='${hookShellDir.replace(/'/g, "'\\''")}'`,
       "",
     ].join("\n");
   const zshrcScript = [
@@ -175,7 +193,10 @@ function ensureZshHookDirectory(): string {
     "  fi",
     '}',
     '_runweave_emit_cwd() {',
-    '  printf "\\033]7;file://%s%s\\007" "${HOST:-localhost}" "$PWD"',
+    ...(process.platform === "win32" ? [
+      `  local cwd="$( '${shellPath(path.join(path.dirname(resolveTerminalExecutable(command, env) ?? command), "cygpath.exe"), command, env).replace(/'/g, "'\\''")}' -m -- "$PWD" )"`,
+      '  printf "\\033]7;file://%s/%s\\007" "${HOST:-localhost}" "$cwd"',
+    ] : ['  printf "\\033]7;file://%s%s\\007" "${HOST:-localhost}" "$PWD"']),
     '}',
     '_runweave_precmd() {',
     '  _runweave_clear_command',
@@ -203,24 +224,30 @@ function ensureZshHookDirectory(): string {
     "utf8",
   );
   writeFileSync(path.join(hookDir, ".zshrc"), zshrcScript, "utf8");
-  cachedZshHookDir = hookDir;
-  return hookDir;
+  cachedZshHookDirs.set(key, hookShellDir);
+  return hookShellDir;
 }
 
 export function applyShellIntegration(
   command: string,
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
-  const shellName = path.basename(command);
+  const shellName = terminalShellName(command);
 
   if (shellName === "zsh") {
-    const originalZdotdir = resolveOriginalZdotdir(env);
-    return {
-      ...env,
-      RUNWEAVE_ORIGINAL_ZDOTDIR: originalZdotdir,
-      BROWSER_VIEWER_ORIGINAL_ZDOTDIR: originalZdotdir,
-      ZDOTDIR: ensureZshHookDirectory(),
-    };
+    try {
+      const hookDir = ensureZshHookDirectory(command, env);
+      const originalZdotdir = shellPath(resolveOriginalZdotdir(env), command, env);
+      return {
+        ...env,
+        RUNWEAVE_ORIGINAL_ZDOTDIR: originalZdotdir,
+        BROWSER_VIEWER_ORIGINAL_ZDOTDIR: originalZdotdir,
+        ZDOTDIR: hookDir,
+      };
+    } catch (error) {
+      logger.warn("terminal.shell-integration.unavailable", { message: "Cannot prepare zsh integration paths; starting without integration", command, error });
+      return env;
+    }
   }
 
   if (shellName === "bash") {

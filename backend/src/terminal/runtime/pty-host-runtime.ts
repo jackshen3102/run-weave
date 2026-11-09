@@ -7,6 +7,8 @@ import { buildPtyEnv, type PtyRuntime } from "./pty-service";
 import { buildTerminalRuntimeEnvironment } from "./environment";
 import { createTerminalRuntimeRecorder } from "./recorder";
 
+import { resolveTerminalFallbackLaunchConfig } from "./default-shell";
+
 const launches = new Map<string, Promise<PtyRuntime>>();
 export function ensureHostedTerminal(options: { session: TerminalSessionRecord; terminalSessionManager: TerminalSessionManager; runtimeRegistry: TerminalRuntimeRegistry }): Promise<PtyRuntime> {
   const previous = launches.get(options.session.id);
@@ -21,11 +23,17 @@ export function ensureHostedTerminal(options: { session: TerminalSessionRecord; 
       binding = { hostInstanceId: (await getPtyHost()).descriptor.hostInstanceId, sessionInstanceId: randomUUID() };
       await terminalSessionManager.updateRuntimeMetadata(session.id, { runtimeKind: "pty", ptyHost: binding, recoverable: true });
     }
+    const fallback = creating ? resolveTerminalFallbackLaunchConfig(session) : null;
+    const terminalEnv = buildTerminalRuntimeEnvironment({ terminalSessionId: session.id, projectId: session.projectId, source: session.source });
     const runtime = await createHostedPty({ terminalSessionId: session.id, binding,
+      onLaunch: async launch => {
+        if (launch.fallbackReason) logger.warn("terminal.pty-host.fallback.activated", { terminalSessionId: session.id, command: launch.command, reason: launch.fallbackReason });
+        await terminalSessionManager.updateSessionLaunch(session.id, { command: launch.command, args: launch.args });
+      },
       create: creating ? { sessionInstanceId: binding.sessionInstanceId, terminalSessionId: session.id, projectId: session.projectId,
         command: session.command, args: session.args, cwd: session.cwd, cols: 80, rows: 24,
-        env: buildPtyEnv(process.env, buildTerminalRuntimeEnvironment({ terminalSessionId: session.id,
-          projectId: session.projectId, source: session.source }), session.command) } : undefined });
+        env: buildPtyEnv(process.env, terminalEnv, session.command),
+        ...(fallback ? { fallback: { ...fallback, env: buildPtyEnv(process.env, terminalEnv, fallback.command) } } : {}) } : undefined });
     runtimeRegistry.createRuntime(session.id, runtime);
     runtimeRegistry.ensureRecorder(session.id, createTerminalRuntimeRecorder(terminalSessionManager, session.id));
     return runtime;

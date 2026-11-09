@@ -1,3 +1,4 @@
+import { isInteractiveShellLaunch } from "@runweave/shared/terminal/shell";
 import { CONFIGURATION_FIELDS } from "@runweave/shared/configuration";
 import { accessSync, constants } from "node:fs";
 import path from "node:path";
@@ -278,12 +279,7 @@ export function formatShellCommand(launchCommand: TmuxLaunchCommand): string {
 export function isInteractiveShellLaunchCommand(
   launchCommand: TmuxLaunchCommand,
 ): boolean {
-  const commandName =
-    launchCommand.command.split(/[\\/]/).at(-1) ?? launchCommand.command;
-  if (!["bash", "zsh", "sh", "fish"].includes(commandName)) {
-    return false;
-  }
-  return !launchCommand.args.some((arg) => arg === "-c" || arg === "-lc");
+  return isInteractiveShellLaunch(launchCommand);
 }
 
 export function normalizePaneCommand(

@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import os from "node:os";
 import type { CreateTerminalSessionRequest } from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager } from "../manager/manager";
-import { resolveDefaultTerminalArgs, resolveDefaultTerminalCommand } from "../runtime/default-shell";
+import { resolveTerminalLaunchConfig } from "../runtime/default-shell";
 
 export class TerminalCreateDefaultsError extends Error {
   constructor(message: string, readonly statusCode: number) {
@@ -15,7 +15,7 @@ export function resolveTerminalCreateDefaults(
   payload: CreateTerminalSessionRequest,
   terminalSessionManager: TerminalSessionManager,
 ): { projectId?: string; command: string; args?: string[]; cwd: string } {
-  const command = payload.command?.trim() || resolveDefaultTerminalCommand();
+  const { command, args } = resolveTerminalLaunchConfig(payload);
   const inheritedSession = payload.inheritFromTerminalSessionId
     ? terminalSessionManager.getSession(payload.inheritFromTerminalSessionId)
     : undefined;
@@ -27,7 +27,7 @@ export function resolveTerminalCreateDefaults(
     throw new TerminalCreateDefaultsError(context ? "Terminal project context is unavailable" : "Terminal project not found", context ? 409 : 404);
   }
   const cwd = payload.cwd?.trim() || (isExistingDirectory(inheritedSession?.cwd) ? inheritedSession?.cwd : undefined) || projectPath || os.homedir();
-  return { projectId, command, args: payload.args ?? resolveDefaultTerminalArgs(command), cwd };
+  return { projectId, command, args, cwd };
 }
 
 function isExistingDirectory(value: string | undefined): boolean {

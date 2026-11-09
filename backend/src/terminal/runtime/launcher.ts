@@ -1,3 +1,4 @@
+import { isInteractiveShellLaunch as isShellLaunch } from "@runweave/shared/terminal/shell";
 import { usesPtyHost } from "./pty-host-client";
 import { ensureHostedTerminal } from "./pty-host-runtime";
 import { buildAgentResumeCommand, getAgentAdapter } from "./agent-adapters";
@@ -246,7 +247,7 @@ export async function ensureTerminalRuntime(
           source: currentSession.source,
           tmuxSessionName: target.sessionName,
         });
-        await options.tmuxService!.createDetachedSession(
+        const actualLaunch = await options.tmuxService!.createDetachedSession(
           target,
           currentSession.cwd,
           {
@@ -255,6 +256,10 @@ export async function ensureTerminalRuntime(
             env: terminalEnvironment,
           },
         );
+        if (actualLaunch.fallbackReason) {
+          currentSession = (await options.terminalSessionManager.updateSessionLaunch(currentSession.id, actualLaunch)) ?? currentSession;
+          warning = actualLaunch.fallbackReason;
+        }
         if (
           isInteractiveShellLaunch(currentSession.command, currentSession.args)
         ) {
@@ -375,11 +380,7 @@ export async function ensureTerminalRuntime(
 }
 
 function isInteractiveShellLaunch(command: string, args: string[]): boolean {
-  const commandName = command.split(/[\\/]/).at(-1) ?? command;
-  if (!["bash", "zsh", "sh", "fish"].includes(commandName)) {
-    return false;
-  }
-  return !args.some((arg) => arg === "-c" || arg === "-lc");
+  return isShellLaunch({ command, args });
 }
 
 export function resolveAgentThreadToResume(

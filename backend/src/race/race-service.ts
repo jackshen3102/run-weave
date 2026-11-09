@@ -10,8 +10,7 @@ import { buildTerminalChildProjectId } from "@runweave/shared/terminal/project-c
 import { prepareTerminalAgent } from "../terminal/application/agent-preparation";
 import { ensureTerminalPanelWorkspace } from "../terminal/application/panel-workspace";
 import {
-  resolveDefaultTerminalArgs,
-  resolveDefaultTerminalCommand,
+  resolveDefaultTerminalLaunchConfig,
 } from "../terminal/runtime/default-shell";
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
@@ -283,12 +282,11 @@ export class RaceService {
             return;
           }
           try {
-            const command = resolveDefaultTerminalCommand();
+            const launch = resolveDefaultTerminalLaunchConfig();
             const session =
               await this.options.terminalSessionManager.createSession({
                 projectId: worker.worktreeId,
-                command,
-                args: resolveDefaultTerminalArgs(command),
+                ...launch,
                 cwd: worker.worktreePath,
               });
             worker.terminalSessionId = session.id;

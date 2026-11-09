@@ -8,8 +8,7 @@ import type {
 import { ensureTerminalRuntime } from "../runtime/launcher";
 import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
 import {
-  resolveDefaultTerminalArgs,
-  resolveDefaultTerminalCommand,
+  resolveTerminalLaunchConfig,
 } from "../runtime/default-shell";
 import {
   buildPaneTarget,
@@ -113,8 +112,7 @@ export async function createTerminalPanelSplit(
   );
 
   const panelId = randomUUID();
-  const command = params.command?.trim() || resolveDefaultTerminalCommand();
-  const args = params.args ?? resolveDefaultTerminalArgs(command);
+  const { command, args } = resolveTerminalLaunchConfig(params);
   const cwd = params.cwd?.trim() || sourcePanel.cwd || session.cwd;
   const previousWorkspace = terminalSessionManager.getPanelWorkspace(
     session.id,
@@ -169,7 +167,7 @@ export async function createTerminalPanelSplit(
     });
     if (!params.skipPaneReadyWait) {
       await tmuxService.waitForPaneReady(splitTarget);
-      const metadata = await tmuxService.readPaneMetadata(splitTarget, command);
+      const metadata = await tmuxService.readPaneMetadata(splitTarget, splitTarget.launch?.command ?? command);
       provisionalPanel.cwd = metadata?.cwd || cwd;
       const nextActiveCommand = metadata?.activeCommand ?? null;
       await terminalSessionManager.observePanelActiveCommand(

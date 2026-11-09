@@ -121,10 +121,13 @@ export class TmuxPaneService extends TmuxSessionService {
       args?: string[];
       env?: Record<string, string | undefined>;
     },
-  ): Promise<TmuxPaneTarget> {
+  ): Promise<TmuxPaneTarget & { launch?: { command: string; args: string[] } }> {
+    const launch = params.command ? { command: params.command, args: params.args ?? [], env: params.env } : undefined;
+    const fallback = launch ? this.shellFallback(launch) : null;
     const result = await this.runTmux(
       [
         "split-window",
+        ...(fallback ? ["-d"] : []),
         params.direction === "right" ? "-h" : "-v",
         "-P",
         "-F",
@@ -133,7 +136,7 @@ export class TmuxPaneService extends TmuxSessionService {
         target.paneId,
         "-c",
         params.cwd,
-        ...(params.command
+        ...(fallback ? [""] : params.command
           ? [
               formatShellCommand({
                 command: params.command,
@@ -149,11 +152,9 @@ export class TmuxPaneService extends TmuxSessionService {
     if (!paneId.startsWith("%")) {
       throw new Error(`tmux split did not return a pane id: ${paneId}`);
     }
-    return {
-      sessionName: target.sessionName,
-      socketPath: target.socketPath,
-      paneId,
-    };
+    const launchTarget = { ...target, paneId };
+    const actual = fallback && launch ? await this.startShellInPane(launchTarget, params.cwd, launch, fallback) : undefined;
+    return { ...launchTarget, ...(actual ? { launch: { command: actual.command, args: actual.args } } : {}) };
   }
 
   async respawnPane(

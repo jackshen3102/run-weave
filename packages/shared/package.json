@@ -104,6 +104,7 @@
     "./browser-plugins": "./src/browser/plugins.ts",
     "./screen-recording": "./src/screen-recording/index.ts",
     "./terminal/code-review": "./src/terminal/code-review.ts",
+    "./terminal/shell": "./src/terminal/shell.ts",
     "./terminal/pty-host": "./src/terminal/pty-host.ts"
   },
   "scripts": {

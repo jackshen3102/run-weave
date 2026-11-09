@@ -13,6 +13,7 @@ import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import type { TerminalEventService } from "../state/terminal-event-service";
 import type { TerminalStateService } from "../state/terminal-state-service";
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
+import { TmuxShellStartupError } from "../tmux/types";
 import type { TmuxService } from "../tmux/service";
 import { logger } from "../../logging/index";
 import { ensureTerminalPanelWorkspace } from "./panel-workspace";
@@ -61,7 +62,7 @@ export async function createTerminalSession(
       try {
         await ensureTerminalRuntime({ session: launchSession, terminalSessionManager: manager, runtimeRegistry: options.runtimeRegistry, ptyService: options.ptyService, tmuxService: options.tmuxService, tmuxOutputWatcher: options.tmuxOutputWatcher, allowMissingTmuxSession: true });
       } catch (error) {
-        if (preference !== "auto" || !options.tmuxService || !isTmuxBackedSession(launchSession)) throw error;
+        if (error instanceof TmuxShellStartupError || preference !== "auto" || !options.tmuxService || !isTmuxBackedSession(launchSession)) throw error;
         terminalLogger.warn("terminal.session.runtime.tmux-launch-fallback", { terminalSessionId: session.id, error: String(error) });
         if (attemptedTarget) await options.tmuxService.killSession(attemptedTarget);
         launchSession = (await manager.updateRuntimeMetadata(session.id, { runtimeKind: "pty", tmuxUnavailableReason: "tmux launch failed; fell back to pty", recoverable: false })) ?? session;
