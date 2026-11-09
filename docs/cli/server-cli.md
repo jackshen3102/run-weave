@@ -4,7 +4,7 @@
 Server 不注册全局命令，也不携带一份 CLI；升级 Server 不替换 rw。
 CI 打包、npm 发布及已有 devbox 的升级约定见 [NPM Server 运维](../deployment/npm-server-operations.md)。
 安装组件、配置、运行进程是三个独立状态，`npm install` 不注册或启动服务。
-第一阶段一台机器一个 Stable 服务，支持 Node 22，macOS arm64/x64、Linux glibc arm64/x64、Windows x64 为构建目标。
+第一阶段一台机器一个 Stable 服务，支持 Node 22，macOS arm64、Linux glibc arm64/x64、Windows x64 为构建目标。npm 新发行不再支持 Intel Mac。
 已有源码部署的 App Server 占用实例时，Server 启动会被拒绝，保留原 App Server 发布指针和发布目录；
 Server 仅在取得 App Server 实例所有权并通过占用检查后激活其发布，启动期间持续持有该所有权。
 具体平台是否已验收以发布证据为准，不以存在 CI 矩阵当作通过。

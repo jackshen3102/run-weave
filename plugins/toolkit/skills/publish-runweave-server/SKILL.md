@@ -21,8 +21,10 @@ description: 发布 Runweave Server 与 CLI 的 npm 新版本：准备版本、�
   channel 与对应源码，不从旧聊天记录推断 registry 状态。
 - 用户指定版本或 channel 时遵从。未指定时，兼容修复默认选择新的 patch 版本并发布到 `latest`，
   先向用户说明选择；不重复询问已授权的发版。涉及不兼容升级或候选范围不明时先明确缺口。
-- 当前整套工作流发布六个包：Server 主包、四个平台包、独立 CLI。Server 与平台包版本一致；
-  CLI 独立编号，但这条整套发行要求 CLI 也使用新版本。仅发 CLI 是不同范围，不能擅自捆绑 Server 发版。
+- 当前整套工作流发布六个包：Server 主包、四个平台包、独立 CLI。平台为 macOS arm64、
+  Linux arm64/x64、Windows x64；不再发行 Intel Mac。Server 与平台包版本一致，CLI 独立编号。
+  先按源码和传递依赖确定范围，只提升受影响组件的版本；`scope=auto` 按尚未发布的新版本选择，
+  也可显式指定 `server|cli|all`。仅发 CLI 不捆绑 Server，未选中组件复用已发布的精确版本。
 - 已存在的版本不可覆盖。计算新版本时同时核对源码和 registry，不能把旧 `latest` 当成最大已占用版本。
 
 ## 执行发行
@@ -35,13 +37,16 @@ description: 发布 Runweave Server 与 CLI 的 npm 新版本：准备版本、�
 需要转换却缺少迁移步骤或验收未通过时，不提升正式 channel；兼容新增无需制造空迁移。
 不删除数据兼容检查绕过限制。无配置演进的发行沿用现有验证流程。
 
-1. 更新两个 package.json 的版本；若工作流或打包代码有变化，执行其明确要求的验证。
+1. 更新选中组件 package.json 的版本；若工作流或打包代码有变化，执行其明确要求的验证。
    保留已有 commit/push hook 和远端门禁。通过项目正常 PR 流程将发行提交合入主分支，
    不跳过失败检查或人工要求的评审。确认远端合并提交后再创建发行标签。
 2. 按运维文档推送与 Server 版本严格匹配的 `server-vX.Y.Z` 标签，默认触发正式发行。
    若请求 `next`，使用 `workflow_dispatch` 的 `publish=true, channel=next`。
+   仅发 CLI 使用 `main` 上的 `workflow_dispatch publish=true, channel=latest, scope=cli`，不创建 Server 标签。
    记录 run ID 和 head SHA；创建、推送或触发结果不明确时先查询远端，避免重复操作。
 3. 跟进四个平台构建、自更新验证、全套 artifact 校验、OIDC 发布、公共 registry 安装/登录验证和标签提升。
+   CLI-only 只构建一次 CLI；按 workflow plan 选择完整回归，公开安装验证保留四个平台。
+   平台包集中上传、并行等待和下载核验；CLI 独立处理，主包等待平台依赖全部可下载。
    发布 job 从本次 CI artifacts 取包，不使用本机重打的 tarball 替代。
 4. 失败先读具体 job、日志和 release receipt。确认本次实现缺陷时修复并走正常提交过程；
    外部权限或 npm 扫描未完成时保留准确状态。不要用本机 `npm publish` 绕过一个失败的 OIDC 链路并称其自动化成功。
@@ -56,7 +61,7 @@ description: 发布 Runweave Server 与 CLI 的 npm 新版本：准备版本、�
 
 ## 完成判据
 
-同时核对目标 run 成功、最终回执 `phase=complete`、六个包的版本/摘要及请求的 dist-tag，
+同时核对目标 run 成功、最终回执 `phase=complete`、所有选中包的版本/摘要及请求的 dist-tag，
 四个平台从公共 registry 安装后的服务和登录验证通过。需要重试时，保留每次 run 的来源关系。
 
 交付写明 Server/CLI 版本、channel、源码提交、工作流链接和未覆盖项。

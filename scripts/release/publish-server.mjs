@@ -1,15 +1,16 @@
-// Publish exactly the artifacts verified by the five platform jobs. No rebuild here.
+// Publish exactly the selected CI artifacts. No rebuild here.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { serverTargets } from "./server-targets.mjs";
 
 const root = path.resolve(
   process.argv.find((a) => a.startsWith("--artifacts="))?.slice(12) ??
     "release-artifacts",
 );
 const registry = "https://registry.npmjs.org";
-const targets = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"];
+const targets = serverTargets.map((row) => row.target);
 const server = JSON.parse(
   readFileSync("packages/runweave-server/package.json"),
 );
@@ -20,6 +21,9 @@ const revision = execFileSync("git", ["rev-parse", "HEAD"], {
 const channel = process.env.RELEASE_CHANNEL ?? "next";
 if (!["next", "latest"].includes(channel))
   throw new Error("Invalid release channel");
+const scope = process.env.RELEASE_SCOPE ?? "all";
+if (!["all", "server", "cli"].includes(scope))
+  throw new Error("Invalid release scope");
 const assert = (ok, message) => {
   if (!ok) throw new Error(message);
 };
@@ -30,7 +34,7 @@ const entry = (file, name) =>
     }),
   );
 const packages = [];
-for (const target of targets) {
+for (const target of scope === "cli" ? ["linux-x64"] : targets) {
   const directory = path.join(root, `npm-server-${target}`);
   const artifacts = readdirSync(directory)
     .filter((name) => name.endsWith(".tgz"))
@@ -40,8 +44,15 @@ for (const target of targets) {
       const integrity = `sha512-${createHash("sha512").update(readFileSync(file)).digest("base64")}`;
       return { file, pkg, integrity };
     });
-  assert(artifacts.length === 3, `Expected three tarballs for ${target}`);
-  for (const name of [`@runweave/server-${target}`, server.name, cli.name]) {
+  const names =
+    scope === "cli"
+      ? [cli.name]
+      : [`@runweave/server-${target}`, server.name, cli.name];
+  assert(
+    artifacts.length === names.length,
+    `Unexpected tarballs for ${target}`,
+  );
+  for (const name of names) {
     const matches = artifacts.filter((a) => a.pkg.name === name);
     assert(matches.length === 1, `Missing/duplicate ${name} on ${target}`);
     const artifact = matches[0],
@@ -92,7 +103,10 @@ for (const target of targets) {
     }
     // The platform jobs may contain platform-specific build metadata in the CLI.
     // Publish the public packages once, from the verified Linux x64 job.
-    if (target === "linux-x64" && [server.name, cli.name].includes(name))
+    if (
+      target === "linux-x64" &&
+      (name === server.name || (name === cli.name && scope !== "server"))
+    )
       packages.push(artifact);
   }
 }
@@ -106,6 +120,7 @@ console.log(
     {
       revision,
       channel,
+      scope,
       packages: packages.map(({ pkg, integrity }) => ({
         name: pkg.name,
         version: pkg.version,
@@ -122,7 +137,7 @@ assert(
     process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
   "Publishing requires GitHub Actions OIDC",
 );
-const receipt = { revision, channel, packages: [], phase: "preflight" };
+const receipt = { revision, channel, scope, packages: [], phase: "preflight" };
 const save = () =>
   writeFileSync(
     path.join(root, "release-receipt.json"),
@@ -163,11 +178,17 @@ async function verify(artifact) {
       if (response.status === 404) {
         await response.body?.cancel();
       } else {
-        assert(response.ok, `Cannot download ${pkg.name}: HTTP ${response.status}`);
+        assert(
+          response.ok,
+          `Cannot download ${pkg.name}: HTTP ${response.status}`,
+        );
         const downloaded = `sha512-${createHash("sha512")
           .update(Buffer.from(await response.arrayBuffer()))
           .digest("base64")}`;
-        assert(downloaded === integrity, `Downloaded bytes differ: ${pkg.name}`);
+        assert(
+          downloaded === integrity,
+          `Downloaded bytes differ: ${pkg.name}`,
+        );
         return;
       }
     }
@@ -181,41 +202,83 @@ async function verify(artifact) {
     `Registry visibility timeout: ${pkg.name}@${pkg.version}; inspect staged publish status before retry`,
   );
 }
-try {
-  // Reject conflicts across the whole release before publishing the first package.
-  for (const { pkg, integrity } of packages) {
-    const published = await metadata(pkg.name, pkg.version);
-    assert(
-      !published || published.dist?.integrity === integrity,
-      `Version already contains different bytes: ${pkg.name}@${pkg.version}`,
-    );
-  }
-  receipt.phase = "publishing";
-  save();
-  for (const artifact of packages) {
-    const { pkg, integrity } = artifact;
-    if (!(await metadata(pkg.name, pkg.version))) {
+const existing = new Set();
+async function checkedTogether(actions) {
+  // Finish all in-flight verification and receipt writes before reporting failure.
+  const results = await Promise.allSettled(actions);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+}
+async function publishGroup(group) {
+  // Upload the group before waiting for registry processing. A pending upload
+  // is never submitted twice; retries must reuse these exact CI artifacts.
+  for (const { pkg, file } of group) {
+    if (!existing.has(pkg.name)) {
       assert(
         !process.argv.includes("--promote"),
         `Cannot promote missing package: ${pkg.name}`,
       );
-      npm([
-        "publish",
-        artifact.file,
-        "--access=public",
-        "--tag=next",
-        "--provenance",
-      ]);
+      npm(["publish", file, "--access=public", "--tag=next", "--provenance"]);
     }
-    await verify(artifact);
-    receipt.packages.push({
-      name: pkg.name,
-      version: pkg.version,
-      integrity,
-      verified: true,
-    });
-    save();
   }
+  await checkedTogether(
+    group.map(async (artifact) => {
+      const { pkg, integrity } = artifact;
+      await verify(artifact);
+      receipt.packages.push({
+        name: pkg.name,
+        version: pkg.version,
+        integrity,
+        verified: true,
+      });
+      save();
+    }),
+  );
+}
+async function verifyTag({ pkg }) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const response = await fetch(
+      `${registry}/-/package/${encodeURIComponent(pkg.name)}/dist-tags`,
+      { signal: AbortSignal.timeout(30_000) },
+    );
+    assert(response.ok, `Cannot read tags: ${pkg.name} (${response.status})`);
+    if ((await response.json())[channel] === pkg.version) return;
+    if (attempt % 6 === 0)
+      console.log(`Waiting for npm tag propagation: ${pkg.name} ${channel}`);
+    await sleep(10_000);
+  }
+  throw new Error(`Tag verification timed out: ${pkg.name}`);
+}
+try {
+  // Reject conflicts across the whole selected release before the first upload.
+  await checkedTogether(
+    packages.map(async ({ pkg, integrity }) => {
+      const published = await metadata(pkg.name, pkg.version);
+      assert(
+        !published || published.dist?.integrity === integrity,
+        `Version already contains different bytes: ${pkg.name}@${pkg.version}`,
+      );
+      if (published) existing.add(pkg.name);
+    }),
+  );
+  receipt.phase = "publishing";
+  save();
+  await checkedTogether([
+    publishGroup(packages.filter((a) => a.pkg.name === cli.name)),
+    (async () => {
+      await publishGroup(
+        packages.filter((a) => ![server.name, cli.name].includes(a.pkg.name)),
+      );
+      // Keep the main package installable: its exact platform dependencies must
+      // be publicly downloadable before moving the main package's next tag.
+      await publishGroup(packages.filter((a) => a.pkg.name === server.name));
+    })(),
+  ]);
+  receipt.packages.sort(
+    (a, b) =>
+      packages.findIndex((p) => p.pkg.name === a.name) -
+      packages.findIndex((p) => p.pkg.name === b.name),
+  );
   if (!process.argv.includes("--promote")) {
     receipt.phase = "published";
     save();
@@ -225,29 +288,14 @@ try {
   save();
   for (const { pkg } of packages) {
     npm(["dist-tag", "add", `${pkg.name}@${pkg.version}`, channel]);
-    let tagged = false;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const response = await fetch(
-        `${registry}/-/package/${encodeURIComponent(pkg.name)}/dist-tags`,
-        { signal: AbortSignal.timeout(30_000) },
-      );
-      assert(response.ok, `Cannot read tags: ${pkg.name} (${response.status})`);
-      if ((await response.json())[channel] === pkg.version) {
-        tagged = true;
-        break;
-      }
-      if (attempt % 6 === 0)
-        console.log(`Waiting for npm tag propagation: ${pkg.name} ${channel}`);
-      await sleep(10_000);
-    }
-    assert(tagged, `Tag verification timed out: ${pkg.name}`);
   }
+  await checkedTogether(packages.map(verifyTag));
   receipt.phase = "complete";
   save();
   if (process.env.GITHUB_STEP_SUMMARY)
     writeFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `Released ${server.name}@${server.version}, ${cli.name}@${cli.version} to ${channel}.\nSource: ${revision}\nAll seven registry tarballs verified by SHA-512.\n`,
+      `Released ${packages.map(({ pkg }) => `${pkg.name}@${pkg.version}`).join(", ")} to ${channel}.\nSource: ${revision}\nAll ${packages.length} selected registry tarballs verified by SHA-512.\n`,
       { flag: "a" },
     );
 } catch (error) {

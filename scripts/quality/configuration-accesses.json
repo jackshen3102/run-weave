@@ -13007,5 +13007,93 @@
     "count": 1,
     "category": "test",
     "reason": "读取或改写隔离安装 fixture 的包与发行清单，验证单向数据库升级和回退拒绝，不修改用户配置。"
+  },
+  {
+    "file": "scripts/release/publish-server.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_SCOPE",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.GITHUB_OUTPUT",
+    "count": 2,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.GITHUB_REF_NAME",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.GITHUB_REF_TYPE",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_PTY_SPIKE_ONLY",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_PUBLISH",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_REQUESTED_SCOPE",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_WINDOWS_ONLY",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "file-io",
+    "expression": "appendFileSync(process.env.GITHUB_OUTPUT)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(`packages/runweave-${name}/package.json`)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(file)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
   }
 ]
