@@ -109,7 +109,10 @@ export function getExecutableCommandName(command: string | null): string | null 
   if (!executable) {
     return null;
   }
-  return executable.split("/").filter(Boolean).at(-1) ?? executable;
+  const basename = executable.split("/").filter(Boolean).at(-1) ?? executable;
+  return process.platform === "win32"
+    ? basename.replace(/\.(exe|cmd|bat)$/i, "").toLowerCase()
+    : basename;
 }
 
 export function getCompletionSourceForCommand(

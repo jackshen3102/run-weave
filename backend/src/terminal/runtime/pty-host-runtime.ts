@@ -29,7 +29,12 @@ export function ensureHostedTerminal(options: { session: TerminalSessionRecord; 
     runtimeRegistry.createRuntime(session.id, runtime);
     runtimeRegistry.ensureRecorder(session.id, createTerminalRuntimeRecorder(terminalSessionManager, session.id));
     return runtime;
-  })().finally(() => { launches.delete(options.session.id); });
+  })().catch(error => {
+    if (error instanceof Error && error.message === "HOST_SESSION_GONE") {
+      options.terminalSessionManager.markExited(options.session.id);
+    }
+    throw error;
+  }).finally(() => { launches.delete(options.session.id); });
   launches.set(options.session.id, launch);
   return launch;
 }
@@ -41,7 +46,6 @@ export async function reconcileHostedTerminals(manager: TerminalSessionManager, 
     try { await ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry }); }
     catch (error) {
       logger.warn("terminal.pty-host.reconcile.failed", { terminalSessionId: session.id, error });
-      if ((error as Error).message === "HOST_SESSION_GONE") manager.markExited(session.id);
     }
   }
 }

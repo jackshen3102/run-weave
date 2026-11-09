@@ -12839,5 +12839,37 @@
     "count": 1,
     "category": "test",
     "reason": "读取隔离 Windows 安装夹具的私有发行指针，验证无兼容父管理进程时组件拒绝启动，不读取用户实例或业务配置。"
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "environment",
+    "expression": "process.env.TEMP",
+    "count": 1,
+    "category": "test",
+    "reason": "Align detached Host temporary socket paths with the isolated lifecycle fixture."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "environment",
+    "expression": "process.env.TMP",
+    "count": 1,
+    "category": "test",
+    "reason": "Align detached Host temporary socket paths with the isolated lifecycle fixture."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "environment",
+    "expression": "process.env.TMPDIR",
+    "count": 1,
+    "category": "test",
+    "reason": "Align detached Host temporary socket paths with the isolated lifecycle fixture."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(scope.configRoot, \"runtime/pty-host/host.log\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Read isolated Host diagnostic output when lifecycle fixture startup fails."
   }
 ]

@@ -310,19 +310,20 @@ async function main() {
     delete process.env.RUNWEAVE_TERMINAL_PANEL_ID;
   }
   const commandName = args.commandName || tmuxPaneContext.commandName;
-  const normalizedCommandName = String(commandName || "").toLowerCase();
+  const normalizedCommandName = process.platform === "win32"
+    ? String(commandName || "").trim().replace(/\\/g, "/")
+      .split("/").at(-1).toLowerCase().replace(/\.(exe|cmd|bat)$/i, "")
+    : String(commandName || "").toLowerCase();
   let source = normalizeSource(args.source);
   if (source === "unknown") {
-    if (["codex", "claude"].includes(normalizedCommandName)) {
+    if (["codex", "claude", "trae", "traecli", "traex"].includes(normalizedCommandName)) {
       source = normalizedCommandName;
-    } else if (["trae", "traecli", "traex"].includes(normalizedCommandName)) {
-      source = "trae";
     }
   }
   const completionReason = normalizeReason(args.reason);
   const threadId = readThreadId(payload);
   const stateHookEvent =
-    source === "pi" || source === "codex" || source === "trae"
+    ["pi", "codex", "trae", "traecli", "traex"].includes(source)
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
   // Compaction continues the turn; child CLIs do not own the parent terminal.

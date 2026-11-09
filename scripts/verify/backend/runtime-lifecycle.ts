@@ -28,6 +28,7 @@ import { ActivityStore } from "../../../backend/src/activity/recording/store";
 import { createRuntimeServices } from "../../../backend/src/bootstrap/runtime-services";
 import type { SqliteEvolutionActivationStore } from "../../../backend/src/evolution/storage/store";
 import { runProviderProcess } from "../../../backend/src/evolution/providers/process-runner";
+import { verifyHostedTerminalLoss } from "./hosted-terminal-loss";
 
 // Integration verification: real SQLite workers, persistence, tmux and runtime
 // owners. No HTTP product server or installed runtime is started by this script.
@@ -478,6 +479,9 @@ async function main(): Promise<void> {
       case "provider":
         await verifyProviderCancellation();
         break;
+      case "hosted-terminal":
+        checks.push(await verifyHostedTerminalLoss());
+        break;
       default:
         throw new Error("unknown lifecycle verification case");
     }
@@ -527,6 +531,7 @@ async function main(): Promise<void> {
     await runCase("evolution");
     await runCase("cleanup");
     await runCase("provider");
+    await runCase("hosted-terminal");
     console.log(JSON.stringify({ ok: true, checks }, null, 2));
   } finally {
     execFileSync("tmux", ["-S", unrelatedSocket, "kill-server"]);

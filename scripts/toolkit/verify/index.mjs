@@ -16,6 +16,7 @@ import {
 import { verifyCompletionHookIsolation } from "./completion-isolation.mjs";
 import { createToolkitHookFixture } from "./fixture.mjs";
 import { verifyToolkitHookProviderGuards } from "./provider-guards.mjs";
+import { verifyPtyProviderLifecycle } from "./pty-provider-lifecycle.mjs";
 
 const fixture = await createToolkitHookFixture();
 const {
@@ -527,7 +528,7 @@ try {
     assert.equal(requests[13].body.threadId, "thread-trae-query");
     assert.equal(requests[13].body.query, "safe query");
 
-    await verifyPtyProviderInference({
+    const ptyProviderFixture = {
       userPromptCommand: getToolkitHookCommand(
         toolkitHooksConfig,
         "UserPromptSubmit",
@@ -539,8 +540,9 @@ try {
       completionEndpoint: `http://127.0.0.1:${port}/internal/terminal-completion`,
       requests,
       appServerRequests,
-    });
-
+    };
+    await verifyPtyProviderInference(ptyProviderFixture);
+    await verifyPtyProviderLifecycle(ptyProviderFixture);
     await verifyTmuxPaneContextFailure({
       command: getToolkitHookCommand(toolkitHooksConfig, "Stop"),
       homeDir,

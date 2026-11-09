@@ -33,7 +33,11 @@ export async function createHostedPty(options: {
   create?: PtyHostCreateSession;
 }): Promise<PtyRuntime> {
   const client = await getPtyHost();
-  if (client.descriptor.hostInstanceId !== options.binding.hostInstanceId) throw new Error("HOST_IDENTITY_MISMATCH");
+  if (client.descriptor.hostInstanceId !== options.binding.hostInstanceId) {
+    // A verified replacement Host cannot own a session from the previous Host.
+    // Creation and RPC identity checks still fail closed on an invalid binding.
+    throw new Error(options.create ? "HOST_IDENTITY_MISMATCH" : "HOST_SESSION_GONE");
+  }
   if (options.create) await client.request("createSession", { ...options.create, generation: client.generation });
   const target = { ...options.binding, terminalSessionId: options.terminalSessionId, generation: client.generation };
   const dataListeners = new Set<(data: string) => void>();
