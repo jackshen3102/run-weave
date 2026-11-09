@@ -4,6 +4,11 @@ on:
     tags: ["server-v*"]
   workflow_dispatch:
     inputs:
+      scope:
+        description: Packages to release (auto selects only new package versions)
+        type: choice
+        options: [auto, all, server, cli]
+        default: auto
       pty_spike_only:
         description: Verify independent Windows ConPTY lifetime only (never publish)
         type: boolean
@@ -27,20 +32,47 @@ concurrency:
   group: npm-server-release
   cancel-in-progress: false
 jobs:
-  package:
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON((inputs.windows_only || inputs.pty_spike_only) && '[{"runner":"windows-2022","target":"win32-x64"}]' || '[{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x64"},{"runner":"ubuntu-24.04","target":"linux-x64"},{"runner":"ubuntu-24.04-arm","target":"linux-arm64"},{"runner":"windows-2022","target":"win32-x64"}]') }}
-    runs-on: ${{ matrix.runner }}
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      server: ${{ steps.plan.outputs.server }}
+      full_regression: ${{ steps.plan.outputs.full_regression }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      registry_matrix: ${{ steps.plan.outputs.registry_matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
+      - name: Select release packages and regression coverage
+        id: plan
+        env:
+          RELEASE_REQUESTED_SCOPE: ${{ inputs.scope || 'auto' }}
+          RELEASE_PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+          RELEASE_WINDOWS_ONLY: ${{ inputs.windows_only }}
+          RELEASE_PTY_SPIKE_ONLY: ${{ inputs.pty_spike_only }}
+        run: node scripts/release/server-release-plan.mjs
+  package:
+    needs: plan
+    env:
+      RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix).include }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
           version: 10.6.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: pnpm
       - name: Check target and release tag
         shell: bash
         env:
@@ -55,26 +87,34 @@ jobs:
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build distributable
-        if: ${{ !inputs.pty_spike_only }}
+        if: ${{ needs.plan.outputs.server == 'true' && !inputs.pty_spike_only }}
         run: pnpm server:build
+      - name: Build independent CLI distributable
+        if: needs.plan.outputs.scope == 'cli'
+        run: |
+          node scripts/release/build-cli.mjs --out=.runtime-artifacts/server/cli-package
+          node .runtime-artifacts/server/cli-package/dist/index.js --version
       - name: Verify independent Windows PTY Host
-        if: runner.os == 'Windows'
+        if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' }}
         timeout-minutes: 3
         run: |
           node scripts/verify/server/pty-host-spike.mjs
           node scripts/verify/server/pty-host.mjs
       - name: Verify installed tarballs and self-update
-        if: runner.os != 'Windows'
+        if: ${{ needs.plan.outputs.server == 'true' && runner.os != 'Windows' && (needs.plan.outputs.full_regression == 'true' || matrix.target == 'linux-x64' || matrix.target == 'darwin-arm64') }}
         run: pnpm server:verify-installed
+      - name: Verify remaining Unix native installation
+        if: ${{ needs.plan.outputs.server == 'true' && runner.os != 'Windows' && needs.plan.outputs.full_regression != 'true' && matrix.target != 'linux-x64' && matrix.target != 'darwin-arm64' }}
+        run: node scripts/verify/server/registry.mjs --local --smoke
       - name: Verify published Linux Server 0.1.3 upgrade and task migration
-        if: matrix.target == 'linux-x64'
+        if: ${{ needs.plan.outputs.server == 'true' && needs.plan.outputs.full_regression == 'true' && matrix.target == 'linux-x64' }}
         run: node scripts/verify/server/registry.mjs --local --upgrade-from=0.1.3
       - name: Verify Windows installation, login and PowerShell terminal
         if: ${{ runner.os == 'Windows' && !inputs.pty_spike_only }}
         timeout-minutes: 10
-        run: node scripts/verify/server/registry.mjs --local
+        run: node scripts/verify/server/registry.mjs --local ${{ needs.plan.outputs.full_regression != 'true' && '--smoke' || '' }}
       - name: Verify Windows explicit v4 to v5 task migration
-        if: ${{ runner.os == 'Windows' && !inputs.pty_spike_only }}
+        if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' && !inputs.pty_spike_only }}
         timeout-minutes: 3
         run: pnpm scheduled-tasks:verify-runtime --case projectMigration
       - name: Pack verified packages
@@ -83,7 +123,12 @@ jobs:
         env:
           SERVER_TARGET: ${{ matrix.target }}
         run: |
-          for package in cli-package "$SERVER_TARGET" package; do
+          if [ "$RELEASE_SCOPE" = cli ]; then
+            release_packages=(cli-package)
+          else
+            release_packages=(cli-package "$SERVER_TARGET" package)
+          fi
+          for package in "${release_packages[@]}"; do
             (cd ".runtime-artifacts/server/$package" && npm pack --pack-destination ..)
           done
       - uses: actions/upload-artifact@v4
@@ -94,7 +139,9 @@ jobs:
           if-no-files-found: error
   validate:
     if: ${{ !inputs.windows_only && !inputs.pty_spike_only }}
-    needs: package
+    needs: [plan, package]
+    env:
+      RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -108,10 +155,12 @@ jobs:
       - name: Validate complete release without publishing credentials
         run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
   publish:
-    needs: validate
+    needs: [plan, validate]
     if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-24.04
     environment: npm-release
+    env:
+      RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
     permissions:
       contents: read
       id-token: write
@@ -134,21 +183,14 @@ jobs:
         if: always()
         with:
           name: npm-release-receipt
+          overwrite: true
           path: release-artifacts/release-receipt.json
           if-no-files-found: ignore
   verify-registry:
-    needs: publish
+    needs: [plan, publish]
     strategy:
       fail-fast: false
-      matrix:
-        runner:
-          [
-            macos-15,
-            macos-15-intel,
-            ubuntu-24.04,
-            ubuntu-24.04-arm,
-            windows-2022,
-          ]
+      matrix: ${{ fromJSON(needs.plan.outputs.registry_matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -157,11 +199,13 @@ jobs:
           node-version: "22.23.2"
       - name: Install public packages and verify native runtime and login
         timeout-minutes: 10
-        run: node scripts/verify/server/registry.mjs
+        run: node scripts/verify/server/registry.mjs --smoke
   promote:
-    needs: verify-registry
+    needs: [plan, verify-registry]
     runs-on: ubuntu-24.04
     environment: npm-release
+    env:
+      RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
     permissions:
       contents: read
       id-token: write
@@ -183,5 +227,6 @@ jobs:
         if: always()
         with:
           name: npm-release-final-receipt
+          overwrite: true
           path: release-artifacts/release-receipt.json
           if-no-files-found: ignore

@@ -24,6 +24,7 @@ const cliVersion = JSON.parse(
   readFileSync("packages/runweave-cli/package.json"),
 ).version;
 const upgradeFrom = process.argv.find(arg => arg.startsWith("--upgrade-from="))?.slice(15);
+const smoke = process.argv.includes("--smoke");
 if (upgradeFrom && (upgradeFrom !== "0.1.3" || process.platform !== "linux"))
   throw new Error("Published database upgrade verification supports Linux Server 0.1.3");
 const initialVersion = upgradeFrom ?? serverVersion;
@@ -90,7 +91,7 @@ try {
   if (process.argv.includes("--local")) {
     const source = path.resolve(".runtime-artifacts/server");
     let candidate;
-    if (process.platform === "win32") {
+    if (process.platform === "win32" && !smoke) {
       candidate = path.join(fixture, "candidate");
       for (const directory of ["package", `${process.platform}-${process.arch}`]) {
         const target = path.join(candidate, directory);
@@ -316,7 +317,7 @@ try {
   }
   console.log("Login verified; verify terminal runtime");
   const terminal = process.platform === "win32"
-    ? await verifyWindowsTerminal(url, session.accessToken, home, {
+    ? await verifyWindowsTerminal(url, session.accessToken, home, smoke ? undefined : {
       rw, cliEntry: cliCommand[1], local: process.argv.includes("--local"),
       async restartAfterCrash() {
         const before = JSON.parse(await rw("status", "--json"));

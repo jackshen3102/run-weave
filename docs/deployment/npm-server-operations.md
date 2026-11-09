@@ -29,13 +29,21 @@
 ### 自动发行入口
 
 [server-release.yml](../../.github/workflows/server-release.yml) 负责完整发行：
-五个平台构建与本地安装验证（macOS/Linux 含自更新，Windows 含 PowerShell PTY） → OIDC 发布七个包到 `next` → 五个平台从公共
+按范围构建与本地验证 → OIDC 发布选中的包到 `next` → 四个平台从公共
 registry 安装并验证原生运行时、服务和登录 → 提升到请求的 dist-tag。
+支持 macOS arm64、Linux glibc arm64/x64、Windows x64，不再发行 Intel Mac 平台包。
 只做构建的手动触发不会发布；没有通过全部安装验证时不提升 `latest`。
 
-完整发行同时使用 Server 和 CLI 两个精确版本。修改
-`packages/runweave-server/package.json`、`packages/runweave-cli/package.json`，
-选择尚未发布的新版本，将改动合并到 `main` 后推送匹配 Server 版本的标签：
+先根据上次成功发行后的源码及传递依赖变化决定范围：仅 CLI 变化只提升
+`packages/runweave-cli/package.json`；仅 Server 变化只提升
+`packages/runweave-server/package.json`；共享库、配置或协议同时影响两边时同时提升。
+不进入 npm 产物的 iOS、普通文档改动不要求发包。
+`scope=auto` 默认只选择当前版本尚未公开发布的组件，版本号就是已审定的发版范围；
+它不根据目录名猜测传递依赖。也可明确指定 `scope=server|cli|all`。
+选中的组件必须使用新版本，未选中的精确版本必须已发布，用于真实安装兼容验证。
+CLI-only 只在 Linux x64 构建一次，不构建 Server；公开安装验证仍覆盖四个平台。
+
+将发行改动合并到 `main` 后，包含 Server 的正式发行推送匹配 Server 版本的标签：
 
 ```bash
 git fetch origin main
@@ -45,8 +53,8 @@ git push origin server-vX.Y.Z
 
 标签必须与 Server package.json 的版本严格一致。该标签流程最终提升为 `latest`。
 版本号仍由发布者按改动选择，CI 不会给每次普通提交自动递增版本或发包。
-主包和五个平台包版本相同，CLI 版本独立；这条整套发行流程要求两个版本均更新，
-不复用已经由另一份构建发布的 CLI 版本。
+主包和四个平台包版本相同，CLI 版本独立；不更新未受影响组件的版本。
+仅发布 CLI 时，在 `main` 手动触发 `publish=true, channel=latest, scope=cli`，无需 Server 标签。
 
 也可以在 `main` 手动触发，选择发布到 `next` 先验收：
 
@@ -56,18 +64,29 @@ gh workflow run server-release.yml --repo jackshen3102/run-weave --ref main
 # 完整发布到 next（channel=latest 时安装验证通过后提升到 latest）
 gh workflow run server-release.yml --repo jackshen3102/run-weave --ref main \
   -f publish=true -f channel=next
+# 仅发 CLI 正式版
+gh workflow run server-release.yml --repo jackshen3102/run-weave --ref main \
+  -f publish=true -f channel=latest -f scope=cli
 gh run list --repo jackshen3102/run-weave --workflow server-release.yml --limit 5
 gh run view <run-id> --repo jackshen3102/run-weave
 ```
 
-Agent 要记录 run ID、head SHA、七个包版本和最终回执。
+Agent 要记录 run ID、head SHA、发版范围、实际选中的包版本和最终回执。
 `npm-server-<platform>` 是各平台构建产物，`npm-release-receipt` 记录发布阶段，
 `npm-release-final-receipt` 的 `phase=complete` 表示发布及标签核对完成。
 平台包先于主包发布；公共主包及 CLI 只取 Linux x64 job 的一份已验证产物。
-CLI 包须包含原生锁依赖及五个平台 prebuild；`npm pack` 从生成的包目录运行。
+CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成的包目录运行。
+
+完整升级回归按变更范围选择：发行、依赖、原生运行时、配置、存储及未知范围变化保留全部回归；
+已知普通 UI/业务路由变化保留 Linux x64、macOS arm64 的完整安装/自更新，其余平台做基础安装检查。
+历史标签缺失或不是当前源码祖先时回退到完整回归。公开 registry 阶段使用 `--smoke`，
+验证真实安装、原生加载、启动、登录和 Windows 基本 PTY；完整生命周期回归在本地产物阶段执行。
+这不改变配置/数据库兼容检查，也不把迁移相关验证变成可绕过选项。
 
 发布脚本 [publish-server.mjs](../../scripts/release/publish-server.mjs) 在发布前核对全套
 版本、sourceRevision、repository、原生依赖及 SHA-512，发布后重新下载核对摘要。
+平台包先连续上传，再并行等待可见并校验；CLI 独立并行处理，主包等平台依赖全部可下载后才上传。
+发行标签也先写入，再并行核对，避免逐包相加传播等待。
 npm 接受上传后可能仍需处理；版本信息与包文件也可能先后可见。脚本对每个精确版本最多等待 15 分钟，
 包文件暂时返回 404 时继续等待，期间不重复发布；摘要不一致仍立即拒绝。
 标签写入也可能晚于响应变得可见，写入后最多等待 5 分钟核对；只有全部标签一致才生成完成回执。
@@ -80,8 +99,8 @@ npm 接受上传后可能仍需处理；版本信息与包文件也可能先后�
 
 ### 一次性可信发布配置
 
-七个包分别设置 npm Trusted Publisher：`@runweave/cli`、`@runweave/server` 和
-`server-darwin-arm64`、`server-darwin-x64`、`server-linux-arm64`、`server-linux-x64`、`server-win32-x64`
+六个包分别设置 npm Trusted Publisher：`@runweave/cli`、`@runweave/server` 和
+`server-darwin-arm64`、`server-linux-arm64`、`server-linux-x64`、`server-win32-x64`
 （平台包均在 `@runweave` scope）。绑定值：
 
 | 字段                 | 值                            |

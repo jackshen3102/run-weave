@@ -15,6 +15,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { copyNativeLockRuntime } from "../../packages/config-node/scripts/native-runtime.mjs";
 import { packageToolkit } from "../toolkit/package.mjs";
+import { serverTargets } from "./server-targets.mjs";
 
 const repo = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,6 +39,8 @@ const output = path.resolve(
     path.join(repo, ".runtime-artifacts/server"),
 );
 const target = `${process.platform}-${process.arch}`;
+if (!serverTargets.some(row => row.target === target))
+  throw new Error(`Unsupported npm Server target: ${target}`);
 const main = path.join(output, "package");
 const platform = path.join(output, target);
 const payload = path.join(main, "payload");
@@ -202,7 +205,7 @@ pkg.files = ["bin", "README.md"];
 delete pkg.scripts;
 pkg.version = version;
 pkg.optionalDependencies = Object.fromEntries(
-  ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"].map((name) => [
+  serverTargets.map(({ target: name }) => [
     `@runweave/server-${name}`,
     version,
   ]),
