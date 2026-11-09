@@ -18,8 +18,8 @@ import {
 import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { cn } from "../../../lib/utils";
-import { HttpError } from "../../../services/http";
 import {
+  isWorkspaceServicesLocalOnlyError,
   startTerminalWorkspaceService,
   stopTerminalWorkspaceService,
 } from "../../../services/terminal/index";
@@ -182,13 +182,16 @@ export function TerminalWorkspaceServicesPopover({
     name: string;
   } | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const data = contextAvailable ? query.data : undefined;
+  const localOnlyError =
+    contextAvailable &&
+    isWorkspaceServicesLocalOnlyError(query.error);
+  const data = contextAvailable && !localOnlyError ? query.data : undefined;
   const services = data?.services ?? [];
   const readyCount = services.filter(
     (service) => service.status === "ready",
   ).length;
   const hasError =
-    contextAvailable &&
+    contextAvailable && !localOnlyError &&
     (Boolean(query.error) ||
       data?.config.status === "invalid" ||
       services.some((service) => service.status === "failed"));
@@ -288,15 +291,13 @@ export function TerminalWorkspaceServicesPopover({
     },
   );
 
-  const localOnlyError =
-    contextAvailable &&
-    query.error instanceof HttpError &&
-    query.error.status === 403;
   const triggerLabel = !contextAvailable
     ? "Services · 未设置项目路径"
-    : query.isPending
-      ? "Services · 正在读取"
-      : `Services · ${readyCount}/${services.length} ready`;
+    : localOnlyError
+      ? "Services · 仅限本机访问"
+      : query.isPending
+        ? "Services · 正在读取"
+        : `Services · ${readyCount}/${services.length} ready`;
   return (
     <Popover>
       <Tooltip content={triggerLabel}>

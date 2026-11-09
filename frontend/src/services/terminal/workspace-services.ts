@@ -2,7 +2,15 @@ import type {
   WorkspaceServiceListResponse,
   WorkspaceServiceMutationResponse,
 } from "@runweave/shared/terminal/workspace-service";
-import { requestJson } from "../http";
+import { HttpError, requestJson } from "../http";
+
+export function isWorkspaceServicesLocalOnlyError(error: unknown): boolean {
+  return (
+    error instanceof HttpError &&
+    error.status === 403 &&
+    error.code === "local_request_required"
+  );
+}
 
 function buildWorkspaceServicesPath(
   parentProjectId: string,

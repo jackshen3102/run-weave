@@ -12,6 +12,7 @@ import {
   listTerminalProjects,
   listTerminalSessions,
   listTerminalWorkspaceServices,
+  isWorkspaceServicesLocalOnlyError,
 } from "../../../services/terminal/index";
 import { terminalQueryKeys } from "./keys";
 import { useTerminalRuntime } from "./provider";
@@ -86,7 +87,10 @@ export function useTerminalWorkspaceServicesQuery(
         parentProjectId ?? "",
         projectId ?? "",
       ),
-    enabled: enabled && Boolean(parentProjectId && projectId && belongsToConnection),
+    enabled: (query) =>
+      enabled &&
+      Boolean(parentProjectId && projectId && belongsToConnection) &&
+      !isWorkspaceServicesLocalOnlyError(query.state.error),
     refetchInterval: workspaceServiceRefetchInterval,
     refetchOnWindowFocus: true,
     retry: false,
