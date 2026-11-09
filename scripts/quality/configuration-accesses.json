@@ -1,5 +1,37 @@
 [
   {
+    "file": "electron/src/browser/automation/simulators.ts",
+    "kind": "file-io",
+    "expression": "readFile(join(base, \"agent-device\", \"observations\", `${udid}.json`))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取设备操作的临时观察状态，核对租约后决定实时预览采集；仅包含来源和操作阶段，不作为实例配置来源。"
+  },
+  {
+    "file": "electron/src/browser/automation/simulators.ts",
+    "kind": "file-io",
+    "expression": "readFile(join(base, \"native-device\", \"locks\", udid, \"owner.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "只读核对托管模拟器当前租约与任务归属，拒绝过期或已释放设备的预览；不修改设备锁或实例配置。"
+  },
+  {
+    "file": "electron/src/browser/automation/simulators.ts",
+    "kind": "file-io",
+    "expression": "readFile(path)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取本次采集在私有临时目录生成的模拟器截图，读取后删除临时目录；不读取任意用户配置文件。"
+  },
+  {
+    "file": "scripts/ios-simulators/observation.py",
+    "kind": "native-or-shell",
+    "expression": "\"terminalSessionId\": (env or os.environ).get(\"RUNWEAVE_TERMINAL_SESSION_ID\"),",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从设备操作进程继承的终端身份关联实时观察来源，不读取凭据、不存储输入参数，也不作为实例配置回退。"
+  },
+  {
     "file": "backend/src/scheduled-tasks/providers/codex.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_PROJECT_ID",
