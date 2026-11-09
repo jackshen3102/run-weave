@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { assertPrivateDirectory, canonicalPath, processStartIdentity, readPrivateFile } from "@runweave/config-node";
@@ -51,10 +52,24 @@ export function readHost(scope: EnvironmentContext): { descriptor: PtyHostDescri
   return { descriptor, token };
 }
 
-export function writeHostJson(file: string, data: unknown): void {
+export async function writeHostJson(file: string, data: unknown): Promise<void> {
   const temporary = `${file}.${randomUUID()}.tmp`;
   writeFileSync(temporary, JSON.stringify(data) + "\n", { mode: 0o600, flag: "wx" });
-  renameSync(temporary, file);
+  const deadline = Date.now() + 5_000;
+  try {
+    for (;;) {
+      try { await rename(temporary, file); return; }
+      catch (error) {
+        // Windows discovery readers/virus scanners can briefly deny replacement.
+        // Keep the old record intact; never unlink it to bypass atomic publication.
+        if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "") || Date.now() >= deadline) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+  } catch (error) {
+    try { rmSync(temporary, { force: true }); } catch { /* Preserve the publication error. */ }
+    throw error;
+  }
 }
 
 /** Read only the last-known identity for stale-record diagnostics; not authorization. */

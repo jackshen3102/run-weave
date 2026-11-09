@@ -114,15 +114,16 @@ cases:
       - 提交一次 line 操作并在指定窗口停止 Backend，确认 Host 独立执行后续 Enter，命令只执行一次。
       - 重启 Backend 后取得新连接，查询同一操作为 written，原 Traex 身份不变；保存证据并清理。
   - id: PTYHOST-012
-    name: Host 失联后不伪装恢复或重发不确定输入
+    name: Host 丢失后重建没有 Agent 的交互 shell
     required: true
-    description: Host 自身故障是明确的会话边界，无法证明的输入结果必须保留 uncertain。
+    description: 仅在验证 Host 或会话丢失后重建同一终端；原进程和未确认输入不冒充已恢复。
     preconditions:
-      - 本例拥有候选 Host 和一个会话，能够在输入已经尝试写入但确认尚未送达时终止 Host。
-      - 本例仅使用自己的无副作用测试命令，能够观察 Backend 的重连与会话投影。
+      - 本例拥有独立 Host、Backend 和没有 Agent thread 的交互 PowerShell 终端，允许终止自己的 Host。
+      - 本例已记录终端 ID、Host 与会话实例、shell PID，并有一项确认丢失的无副作用输入。
     steps:
-      - 在指定窗口终止 Host，确认 Backend 显示 unavailable 或已证实的 exited，不自动启动同名替代 Agent。
-      - 启动新 Host，确认 hostInstanceId 不同，旧输入结果没有被标成 written 或自动重发；保存证据并清理。
+      - 终止本例 Host 并由管理进程启动新 Host，重新取得连接；确认新 Host 实例不同。
+      - 通过 $toolkit:playwright-cli 打开同一终端页面，确认终端 ID 保持、PTY 绑定与 shell PID 已改变，出现新 shell 并可输入。
+      - 确认未确认的旧输入没有自动重发，持久历史仍可读取；保存身份和画面证据并清理。
   - id: PTYHOST-013
     name: Host 实例鉴权和发现不串实例
     required: true

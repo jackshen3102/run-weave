@@ -10,11 +10,10 @@ import type {
   TmuxPaneTarget,
 } from "./types";
 import { TmuxRebuildLimitError } from "./types";
+import { recordTerminalRebuildAttempt, TerminalRebuildLimitError } from "../runtime/recovery-policy";
 import { isNpmProcessEnvName } from "../runtime/env";
 import { TmuxProcess } from "./process";
 import {
-  MaxRebuildAttempts,
-  RebuildWindowMs,
   RUNWEAVE_TMUX_PREFIX,
   TMUX_RUNTIME_OPTION_ARGS,
   TMUX_SANITIZE_ENV_ARGS,
@@ -339,28 +338,12 @@ export class TmuxSessionService extends TmuxProcess {
   }
 
   recordRebuildAttempt(terminalSessionId: string): TmuxRebuildAttempt {
-    const now = this.now();
-    const windowStart = now - RebuildWindowMs;
-    const attempts = (this.rebuildAttempts.get(terminalSessionId) ?? []).filter(
-      (timestamp) => timestamp >= windowStart,
-    );
-    if (attempts.length >= MaxRebuildAttempts) {
-      this.rebuildAttempts.set(terminalSessionId, attempts);
-      throw new TmuxRebuildLimitError(
-        terminalSessionId,
-        attempts.length + 1,
-        RebuildWindowMs,
-        MaxRebuildAttempts,
-      );
+    try {
+      return recordTerminalRebuildAttempt(this.rebuildAttempts, terminalSessionId, this.now());
+    } catch (error) {
+      if (error instanceof TerminalRebuildLimitError)
+        throw new TmuxRebuildLimitError(error.terminalSessionId, error.count, error.windowMs, error.maxAttempts);
+      throw error;
     }
-
-    attempts.push(now);
-    this.rebuildAttempts.set(terminalSessionId, attempts);
-    return {
-      allowed: true,
-      count: attempts.length,
-      windowMs: RebuildWindowMs,
-      maxAttempts: MaxRebuildAttempts,
-    };
   }
 }

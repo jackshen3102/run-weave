@@ -1,4 +1,6 @@
 import { buildAgentResumeArgs } from "@runweave/shared/terminal/agent-resume";
+import { terminalShellName } from "@runweave/shared/terminal/shell";
+import { settingText } from "@runweave/config-node";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalPromptSubmitKey } from "@runweave/shared/terminal/input";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -90,6 +92,7 @@ export function buildAgentResumeCommand(thread: {
   threadId: string;
   sessionFile?: string;
   executable?: string;
+  shell?: string;
 }): string {
   const args = [
     ...(thread.provider === "codex" ? CODEX_SKIP_UPDATE_ON_STARTUP_ARGS : []),
@@ -98,7 +101,23 @@ export function buildAgentResumeCommand(thread: {
       thread.sessionFile ?? thread.threadId,
     ),
   ];
-  return `${shellQuote(thread.executable ?? thread.provider)} ${args.map(shellQuote).join(" ")}\n`;
+  const configured = thread.provider === "codex"
+    ? settingText("agents.codex.binary")?.trim()
+    : ["trae", "traex", "traecli"].includes(thread.provider)
+      ? settingText("agents.traex.binary")?.trim()
+      : undefined;
+  const executable = thread.executable ?? configured ?? thread.provider;
+  const shell = terminalShellName(thread.shell ?? "sh");
+  if (["powershell", "pwsh", "cmd"].includes(shell)) {
+    const parts = [executable, ...args];
+    if (parts.some(part => [...part].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)))
+      throw new Error("Agent resume arguments contain terminal control characters");
+    const command = `& ${parts.map(part => `'${part.replaceAll("'", "''")}'`).join(" ")}`;
+    return shell === "cmd"
+      ? `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(command, "utf16le").toString("base64")}\n`
+      : `${command}\n`;
+  }
+  return `${shellQuote(executable)} ${args.map(shellQuote).join(" ")}\n`;
 }
 
 function shellQuote(value: string): string {
