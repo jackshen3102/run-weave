@@ -10,7 +10,7 @@ import {
 } from "./browser-profile.js";
 
 const USAGE =
-  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json] | rw browser proxy <status|set> [options] | rw browser headers <list|set|remove> [options] | rw browser downloads <capture|release|list|fetch> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
+  "Usage: rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--wait-timeout-ms <0..120000>] [--json] | rw browser proxy <status|set> [options] | rw browser headers <list|set|remove> [options] | rw browser downloads <capture|release|list|fetch> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
 
 export async function runBrowserCommand(
   subcommand: string | undefined,

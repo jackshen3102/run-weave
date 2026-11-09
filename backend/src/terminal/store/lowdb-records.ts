@@ -8,6 +8,7 @@ export function toMetadataRecord(
   session: PersistedTerminalSessionRecord,
 ): PersistedTerminalSessionMetadataRecord {
   return {
+    browserBinding: session.browserBinding,
     ptyHost: session.ptyHost,
     source: session.source,
     feishuNotificationState: session.feishuNotificationState,

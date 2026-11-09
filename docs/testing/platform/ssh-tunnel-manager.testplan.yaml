@@ -166,3 +166,34 @@ cases:
       - "在测试主机配置中启用远程访问并连接；确认通道状态为 failed，错误码为 REMOTE_ACCESS_INSECURE_AUTH，且没有在远端地址和端口建立监听。"
       - "从另一台可达设备请求该地址的 /api/auth/login；确认无法连接，也不能用固定凭据获取访问令牌。"
       - "关闭本例连接并清理专属资源；确认普通 SSH 转发与 Backend 本机访问仍可用。"
+  - id: STM-017
+    name: "Backend 重启恢复后台终端 Browser 归属"
+    required: true
+    description: "已确认归属在同目录 Backend 重启后恢复，终端无需重新打开；临时 capability 仍须重新签发。"
+    preconditions:
+      - "本例拥有隔离的远端 Backend、持久终端和专属桌面 Browser 通道；只操作本例进程、存储和页面。"
+      - "桌面和 Backend 均为候选版本，原登录会话有效，已为终端显式选择桌面 A，并用 toolkit:playwright-cli 经终端 resolver 读取本例页面标识。"
+    steps:
+      - "记录终端 ID、原登录会话、确认归属和旧 capability；让桌面切到另一条终端，在本例远端 Backend 正常关闭后使用相同目录重启。"
+      - "等待 A 的 Browser 通道重新注册，不重新打开原终端、不手动绑定；在原终端重新执行 rw browser profile resolve --json，确认成功；旧 capability 被拒绝。"
+      - "使用 toolkit:playwright-cli 立即 attach 新解析的 endpoint，读取原工作组的本例页面标识，确认桌面和 Profile 归属不变；detach 并清理本例资源。"
+  - id: STM-018
+    name: "重启后不将已保存归属交给其他登录"
+    required: true
+    description: "Backend 重启后仍按原认证会话匹配，其他登录即使使用相同桌面和主机标识也不能自动接管。"
+    preconditions:
+      - "本例拥有隔离的远端 Backend、持久终端和两个独立登录会话；终端已确认属于会话 A 的桌面，桌面和 Backend 为候选版本。"
+      - "本例可仅重启 Backend，并在原 A 通道恢复前，用会话 B 注册相同 desktopId、hostId 的独立测试通道；只操作本例 fixture。"
+    steps:
+      - "正常关闭 Backend 并使用原存储目录重启，只恢复 B 的通道；从原终端申请 capability，确认 DESKTOP_UNAVAILABLE，不能读取 B 的页面。"
+      - "再由原 A 会话注册新代际通道；原终端重新 resolve 并用 toolkit:playwright-cli attach 新 endpoint，确认读取 A 的本例页面；detach 并清理本例资源。"
+  - id: STM-019
+    name: "终端 Browser 归属落盘失败不伪成功"
+    required: true
+    description: "选择 Browser 归属时先持久化再采用，写入失败必须返回失败并保持最后成功保存的归属。"
+    preconditions:
+      - "本例拥有隔离的 Backend、终端存储和可区分的 A/B 桌面通道，桌面和 Backend 为候选版本；允许仅对本例存储注入写入失败。"
+      - "本例终端已成功保存 A 的归属；A 断开后，B 的 Browser 通道已就绪。"
+    steps:
+      - "记录终端存储摘要和 A 的归属；注入本例存储写入失败，显式请求将终端绑定到 B，确认接口返回失败且存储摘要不变。"
+      - "恢复存储写入并重新注册 A；原终端重新 resolve，确认仍指向 A，而不是 B；清理本例资源。"

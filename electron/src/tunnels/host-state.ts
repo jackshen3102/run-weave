@@ -15,6 +15,8 @@ export interface Host extends RemoteAccessOwner, RemoteDesktopOwner {
   browserEpoch: number;
   endpointPending: Map<number, Promise<string>>;
   lastBrowserRefresh: number;
+  browserRetryAt: number;
+  browserFailures: number;
   busy: boolean;
   retryAt: number;
   failures: number;
@@ -42,6 +44,8 @@ export function createTunnelHost(config: TunnelHostConfig): Host {
     browserEpoch: 0,
     endpointPending: new Map(),
     lastBrowserRefresh: 0,
+    browserRetryAt: 0,
+    browserFailures: 0,
     busy: false,
     retryAt: 0,
     failures: 0,

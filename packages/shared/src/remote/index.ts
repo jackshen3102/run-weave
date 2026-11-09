@@ -38,6 +38,8 @@ export interface DesktopBrowserBindingRequest {
   generation: number;
   reversePort: number;
   gatewayKey: string;
+  /** Private desktop continuity proof, never included in public binding responses. */
+  ownerKey?: string;
 }
 
 export interface DesktopBrowserBinding {

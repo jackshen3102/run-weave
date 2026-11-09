@@ -50,10 +50,10 @@ export function registerRemoteBrowserRoutes(
     if (!owner) { res.sendStatus(401); return; }
     res.json(bindings.list(owner));
   });
-  app.put("/api/terminal/session/:id/browser/binding", requireAuth, (req, res) => {
+  app.put("/api/terminal/session/:id/browser/binding", requireAuth, async (req, res) => {
     const owner = auth.verifyAccessToken(readBearerToken(req) ?? "")?.sessionId;
     if (!owner || typeof req.body?.bindingId !== "string") { res.sendStatus(400); return; }
-    try { bindings.select(owner, String(req.params.id), req.body.bindingId); res.sendStatus(204); }
+    try { await bindings.select(owner, String(req.params.id), req.body.bindingId); res.sendStatus(204); }
     catch (error) { sendError(res, error); }
   });
   app.delete("/api/desktop-browser/bindings/:id", requireAuth, (req, res) => {

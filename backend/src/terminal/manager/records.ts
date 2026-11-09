@@ -14,6 +14,7 @@ import type {
   PersistedTerminalPanelWorkspaceRecord,
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
+  TerminalBrowserBindingOwner,
   TerminalRuntimeKind,
 } from "../store/store";
 import {
@@ -38,6 +39,7 @@ export interface TerminalProjectContextRecord
     TerminalProjectContextListItem {}
 
 export interface TerminalSessionRecord {
+  browserBinding?: TerminalBrowserBindingOwner;
   feishuNotificationState?: FeishuNotificationState;
   source?: ScheduledTaskSource;
   pinnedAt?: string | null;
@@ -162,6 +164,7 @@ export function buildSessionRecord(
   persisted: PersistedTerminalSessionMetadataRecord & { scrollback?: string },
 ): TerminalSessionRecord {
   return {
+    browserBinding: persisted.browserBinding,
     source: persisted.source,
     id: persisted.id,
     projectId: persisted.projectId,
@@ -247,6 +250,7 @@ export function toPersistedSession(
   session: TerminalSessionRecord,
 ): PersistedTerminalSessionRecord {
   return {
+    browserBinding: session.browserBinding,
     source: session.source,
     id: session.id,
     projectId: session.projectId,

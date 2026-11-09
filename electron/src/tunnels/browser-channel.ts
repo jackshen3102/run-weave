@@ -30,6 +30,10 @@ export class BrowserChannel {
   private check() {
     if (this.stopped) throw new Error("TUNNEL_CANCELLED");
   }
+  get connected(): boolean {
+    return !!this.binding && !!this.gateway && !!this.reverse &&
+      this.reverse.child.exitCode === null && this.reverse.child.signalCode === null;
+  }
   async refresh(): Promise<DesktopBrowserBinding> {
     if (this.busy) {
       if (this.binding) return this.binding;
@@ -111,6 +115,7 @@ export class BrowserChannel {
             generation: this.generation,
             reversePort: this.port,
             gatewayKey: this.gateway.key,
+            ownerKey: this.credentials.browserOwnerKey(this.host.id, info.installationId),
           }),
           signal: AbortSignal.timeout(5000),
           redirect: "error",
@@ -120,7 +125,9 @@ export class BrowserChannel {
         throw new Error(
           response.status === 401
             ? "NEEDS_AUTH: 远端登录已过期"
-            : "BROWSER_BINDING_FAILED: 无法注册浏览器通道，请检查远端版本",
+            : response.status >= 500 || response.status === 429
+              ? "BACKEND_UNAVAILABLE: 浏览器通道续期暂时失败"
+              : "BROWSER_SCOPE_DENIED: 无法注册浏览器通道，请检查远端版本",
         );
       const binding = (await response.json()) as DesktopBrowserBinding;
       if (
@@ -139,6 +146,8 @@ export class BrowserChannel {
   }
   async select(terminalSessionId: string): Promise<void> {
     if (!this.binding || !this.token) throw new Error("DESKTOP_UNAVAILABLE");
+    this.token = await this.credentials.token(this.host.id,
+      `${this.host.sshTarget}:${this.host.browser.backendPort}`, this.base);
     const res = await fetch(
       `${this.base}/api/terminal/session/${encodeURIComponent(terminalSessionId)}/browser/binding`,
       {
@@ -152,12 +161,13 @@ export class BrowserChannel {
         redirect: "error",
       },
     );
-    if (!res.ok)
-      throw new Error(
-        res.status === 409
-          ? "BROWSER_BINDING_CONFLICT: 此终端正在使用另一台桌面"
-          : "BROWSER_BINDING_FAILED",
-      );
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as { code?: string } | null;
+      const code = res.status === 401 ? "NEEDS_AUTH"
+        : res.status === 409 ? "BROWSER_BINDING_CONFLICT"
+          : body?.code ?? "BROWSER_BINDING_FAILED";
+      throw new Error(`${code}: Browser binding selection failed (HTTP ${res.status})`);
+    }
   }
   async stop(): Promise<void> {
     this.stopped = true;

@@ -1,0 +1,88 @@
+version: 1
+name: "Browser 通道故障恢复"
+description: "先复现身份查询、控制通道和重新登录故障，再验证恢复及权限隔离；只使用归属明确的桌面、SSH 与后端 fixture。"
+cases:
+  - id: BCR-001
+    name: "首次身份查询失败后自动恢复"
+    required: true
+    description: "首次 capabilities 查询临时返回 503 后，不刷新页面也会再次查询并取得有效安装身份。"
+    preconditions:
+      - "本例拥有 toolkit:runweave-dev-session 创建的独占桌面 Session，已通过 computer use 确认窗口，登录有效。"
+      - "可以仅对本例桌面的首次 capabilities 请求注入 503，后续请求使用正常后端响应。"
+    steps:
+      - "使用 toolkit:playwright-cli 附着 dev:open 返回的 desktop surface，注入一次 503 并打开终端页面，记录请求数量和响应状态。"
+      - "不刷新、不切换登录；确认自动出现后续请求并得到 200，终端页面仍可操作，移除本例故障注入。"
+  - id: BCR-002
+    name: "临时控制故障保留已连接的 Browser"
+    required: true
+    description: "一次控制查询 503 不关闭健康的 Browser WebSocket，恢复后保留原通道及页面。"
+    preconditions:
+      - "本例拥有独占 Beta 桌面和真实 SSH 通道；远端 fixture 使用候选代码的认证、终端存储及 Browser HTTP 路由，不操作生产 Backend。"
+      - "本例终端已绑定；远端 resolver 和仓库固定 Playwright CLI 已连接该终端的实际 Browser 页面，页面中有本例唯一标识。"
+    steps:
+      - "记录通道 bindingId 和页面标识，仅对 fixture 的控制 capabilities 查询注入 503；等待桌面显示正在重连。"
+      - "在故障仍存在时，使用原 Playwright 会话读取原页面标识；确认连接未关闭、bindingId 未清空。"
+      - "移除故障，确认通道自动恢复 ready、错误清除，并再次从原会话读到相同页面标识。"
+  - id: BCR-003
+    name: "重新登录恢复后台终端归属"
+    required: true
+    description: "同一桌面通过重新认证及连续性证明恢复后台终端，不要求打开终端或再次选择绑定。"
+    preconditions:
+      - "本例拥有隔离桌面和真实 SSH 通道，远端 fixture 使用候选认证、终端存储及 Browser 路由；已确认归属中包含连续性密钥哈希。"
+      - "本例后台终端可以 resolve 并经 toolkit:playwright-cli 读取带唯一标识的页面；桌面当前显示另一终端。"
+    steps:
+      - "通过本例桌面的登录远端 Backend 入口重新登录同一个 fixture，确认重新认证成功。"
+      - "保持后台终端未打开、不重新绑定；在原终端身份下 resolve，立即 attach 新 endpoint，确认成功且读到原页面标识。"
+  - id: BCR-004
+    name: "CLI 等待短暂故障恢复"
+    required: true
+    description: "同一 resolver 调用等待可恢复故障，失败一次模式和默认等待模式有明确区别，输出保持 JSON 合同。"
+    preconditions:
+      - "本例使用候选 CLI、有效 fixture 终端身份和真实 Browser 通道；可仅对 capability 接口注入临时 503。"
+      - "本例可在等待期间移除故障，且不执行页面业务写操作。"
+    steps:
+      - "注入临时 503，执行 resolve --wait-timeout-ms 0 --json，确认只尝试一次并失败。"
+      - "再次注入相同故障，启动默认 resolve --json，在等待期间移除故障；确认同一次调用最终成功、stdout 可解析为单一 JSON，等待提示仅在 stderr。"
+      - "使用 toolkit:playwright-cli 立即连接返回的新 endpoint，读取本例页面，detach。"
+  - id: BCR-005
+    name: "拒绝无连续性证明的同标识登录"
+    required: true
+    description: "不同登录复制 desktopId 和 hostId 或提交错误密钥，也不能自动取得原终端归属。"
+    preconditions:
+      - "本例使用隔离的候选 Browser 路由、真实认证及终端持久化；A 已选择终端并保存连续性证明。"
+      - "本例拥有 B 的独立登录及独立网关，可以注册与 A 相同的公开标识，但不持有 A 的连续性密钥。"
+    steps:
+      - "用 B 的登录注册相同公开标识和错误密钥；确认原终端仍指向 A，不能自动改为 B。"
+      - "原终端已有密钥哈希时，使用之前仍有效的登录会话但提交错误密钥注册独立网关；确认不能绕过原密钥证明。"
+      - "使 A 通道离线，仅保留 B；原终端申请 capability 必须得到 DESKTOP_UNAVAILABLE，不能取得 B 的页面票据。"
+      - "用原 A 的认证和正确连续性证明重建通道；原终端重新解析成功，清理本例资源。"
+  - id: BCR-006
+    name: "Backend 重启后恢复后台终端和原页面"
+    required: true
+    description: "重启远端 Browser 控制进程后，从相同存储恢复已确认归属并访问原 Browser 页面。"
+    preconditions:
+      - "本例拥有独占桌面、真实 SSH 及使用候选代码的隔离远端控制进程；仅重启本例进程，不操作用户服务。"
+      - "后台终端归属已落盘，原 Browser 页面标识已记录，桌面当前未打开该终端。"
+    steps:
+      - "记录远端进程身份和存储路径，正常停止本例远端控制进程，再用同一存储路径和端口启动，确认进程身份已变化。"
+      - "不打开原后台终端、不重绑；等待桌面通道重连，原终端重新 resolve 并通过 toolkit:playwright-cli 连接，确认读取原页面标识。"
+  - id: BCR-007
+    name: "CLI 权限拒绝不等待或切换 Profile"
+    required: true
+    description: "不可恢复的授权失败立即报告，不能用等待机制绕过 Profile 或终端身份限制。"
+    preconditions:
+      - "本例拥有候选 CLI、有效 fixture 终端和只允许 Browser 1 的实际桌面通道。"
+      - "本例可使用无效测试 Hook 或显式指定未授权 Browser 2，不影响其他终端和 Profile。"
+    steps:
+      - "以有效终端指定未授权 Browser 2 并执行默认 resolve；确认立即返回 BROWSER_SCOPE_DENIED，不进入 30 秒等待且不切换 Profile。"
+      - "恢复本例合法参数，重新解析并经 toolkit:playwright-cli 读取 Browser 1 的原页面；detach 并清理本例资源。"
+  - id: BCR-008
+    name: "响应体不结束时仍遵守解析期限"
+    required: true
+    description: "本地 resolver 只返回响应头和不完整 JSON 时，CLI 在请求期限内退出，不无限等待响应体。"
+    preconditions:
+      - "本例拥有候选 CLI 和独立配置目录，可在自有 loopback HTTP fixture 中返回 200 响应头后保持响应体不结束；不使用用户的 resolver。"
+      - "本例有自己的 CLI 子进程和超时回收机制，结束时能关闭自有 HTTP 连接。"
+    steps:
+      - "让 CLI 指向本例 loopback resolver，执行 profile resolve --wait-timeout-ms 0 --json；记录请求已收到、响应头已返回但响应体未结束。"
+      - "确认 CLI 自己在约 5 秒的请求期限退出并报告失败，无需外部杀进程；关闭本例 HTTP fixture 并清理资源。"

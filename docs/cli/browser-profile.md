@@ -4,7 +4,7 @@ Terminal 内需要连接 Browser 时，先通过当前桌面实例的 resolver �
 CDP Group scope：
 
 ```bash
-rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--json]
+rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--wait-timeout-ms <0..120000>] [--json]
 ```
 
 全局 `--instance`、`--config-dir` 由 CLI 入口解析，适用于全部 `browser` 子命令。
@@ -24,6 +24,10 @@ SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`�
 身份不完整返回 `REMOTE_CAPABILITY_UNSUPPORTED`，桌面通道不可用返回
 `DESKTOP_UNAVAILABLE`，越权访问返回 `BROWSER_SCOPE_DENIED`。未选择终端归属返回 `BROWSER_BINDING_REQUIRED`；需在桌面为该终端选择通道，不能按最后注册者猜测。
 Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、id），旧通道重建后必须重新 resolve。
+解析遇到网络故障、429 或临时 5xx 时默认最多等待 30 秒，在同一终端身份下退避重试，并重新读取
+当前项目身份。`--wait-timeout-ms` 可设为 0–120000；0 表示只尝试一次，单次请求上限仍为 5 秒。
+未绑定、身份不符、权限拒绝、Profile 冲突和不支持的协议直接失败，不切换桌面或 Profile。
+等待提示只写 stderr，JSON stdout 保持原合同；重试不重放页面点击、表单或业务操作。
 远端 Profile 与工作组受桌面
 独立隧道配置约束；完整通道合同见 [SSH 远程项目](../architecture/ssh-remote-projects.md)。
 

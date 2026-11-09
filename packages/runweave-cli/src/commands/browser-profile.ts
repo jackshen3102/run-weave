@@ -18,6 +18,21 @@ interface ResolveOptions {
   profileId: TerminalBrowserProfileId | null;
   groupId: string | null;
   json: boolean;
+  waitTimeoutMs: number;
+  deadline?: number;
+}
+
+class BrowserProfileTemporaryError extends CliError {}
+
+function requestTimeout(options: ResolveOptions): number {
+  return Math.max(1, Math.min(5000, (options.deadline ?? Date.now() + 5000) - Date.now()));
+}
+
+function resolveError(status: number, code: string | undefined, message: string): CliError {
+  const retryable = (status === 429 || status >= 500) &&
+    !["BROWSER_BINDING_REQUIRED", "BROWSER_SCOPE_DENIED", "REMOTE_CAPABILITY_UNSUPPORTED"].includes(code ?? "");
+  return retryable ? new BrowserProfileTemporaryError(message, 3)
+    : new CliError(message, status === 400 ? 2 : status === 403 || status === 409 ? 4 : 3);
 }
 
 function parseProfile(value: string): TerminalBrowserProfileId {
@@ -32,10 +47,18 @@ function parseResolveOptions(args: string[]): ResolveOptions {
   let profileId: TerminalBrowserProfileId | null = null;
   let groupId: string | null = null;
   let json = false;
+  let waitTimeoutMs = 30000;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--json") {
       json = true;
+      continue;
+    }
+    if (arg === "--wait-timeout-ms") {
+      const value = args[++index];
+      if (!value || !/^\d+$/.test(value) || Number(value) > 120000)
+        throw new CliError("--wait-timeout-ms must be an integer from 0 to 120000", 2);
+      waitTimeoutMs = Number(value);
       continue;
     }
     if (arg === "--profile" || arg === "--group-id") {
@@ -56,7 +79,7 @@ function parseResolveOptions(args: string[]): ResolveOptions {
     }
     throw new CliError(`Unknown browser profile option: ${arg}`, 2);
   }
-  return { profileId, groupId, json };
+  return { profileId, groupId, json, waitTimeoutMs };
 }
 
 function parseAmbientEndpoint(raw: string | undefined): {
@@ -102,7 +125,7 @@ async function resolveRemoteBrowserProfile(
     throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Remote Browser identity is unavailable", 3);
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const timeout = setTimeout(() => controller.abort(), requestTimeout(options));
   try {
     const capabilityResponse = await fetch(
       `${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(terminalSessionId)}/browser/capability`,
@@ -115,7 +138,8 @@ async function resolveRemoteBrowserProfile(
     );
     if (!capabilityResponse.ok) {
       const error = await capabilityResponse.json().catch(() => null) as {code?:string;message?:string}|null;
-      throw new CliError(`${error?.code ?? "REMOTE_CAPABILITY_UNSUPPORTED"}: ${error?.message ?? `HTTP ${capabilityResponse.status}`}`, 3);
+      throw resolveError(capabilityResponse.status, error?.code,
+        `${error?.code ?? "REMOTE_CAPABILITY_UNSUPPORTED"}: ${error?.message ?? `HTTP ${capabilityResponse.status}`}`);
     }
     const issued = (await capabilityResponse.json()) as { capability?: string };
     if (!issued.capability) throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: missing terminal capability", 3);
@@ -134,7 +158,8 @@ async function resolveRemoteBrowserProfile(
     );
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { code?: string; message?: string } | null;
-      throw new CliError(`${error?.code ?? "DESKTOP_UNAVAILABLE"}: ${error?.message ?? `HTTP ${response.status}`}`, response.status === 403 ? 4 : 3);
+      throw resolveError(response.status, error?.code,
+        `${error?.code ?? "DESKTOP_UNAVAILABLE"}: ${error?.message ?? `HTTP ${response.status}`}`);
     }
     const resolved = (await response.json()) as RemoteBrowserResolveResponse;
     if (resolved.protocolVersion !== 2 || resolved.binding?.protocolVersion !== 2 || !isRemoteBrowserProfileState(resolved)) {
@@ -152,13 +177,13 @@ async function resolveRemoteBrowserProfile(
     };
   } catch (error) {
     if (error instanceof CliError) throw error;
-    throw new CliError(`DESKTOP_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`, 3);
+    throw new BrowserProfileTemporaryError(`DESKTOP_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`, 3);
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function resolveCurrentProjectId(io: BrowserCommandIo): Promise<string | null> {
+async function resolveCurrentProjectId(io: BrowserCommandIo, options: ResolveOptions): Promise<string | null> {
   const fallback = io.env.RUNWEAVE_PROJECT_ID?.trim() || null;
   const id = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
   const hookToken = io.env.RUNWEAVE_HOOK_TOKEN?.trim();
@@ -167,45 +192,44 @@ async function resolveCurrentProjectId(io: BrowserCommandIo): Promise<string | n
   if (!id || !hookToken || !base) return fallback;
   try {
     const response = await fetch(`${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(id)}/runtime-identity`, {
-      headers: { "x-runweave-hook-token": hookToken }, signal: AbortSignal.timeout(5_000),
+      headers: { "x-runweave-hook-token": hookToken }, signal: AbortSignal.timeout(requestTimeout(options)),
     });
     // Older Backends do not expose this hook-authenticated route.
     if (response.status === 404 || response.status === 401) {
       if (response.status === 404) {
         const error = await response.json().catch(() => null) as { code?: string } | null;
-        if (error?.code === "terminal_session_not_found") throw new Error("Terminal session not found");
+        if (error?.code === "terminal_session_not_found") throw new CliError("Terminal session not found", 3);
       }
       io.stderr.write("Warning: Backend cannot refresh terminal project identity; using launch environment.\n");
       return fallback;
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw resolveError(response.status, undefined, `Terminal project identity is unavailable: HTTP ${response.status}`);
     const identity = await response.json() as TerminalSessionIdentityResponse;
     if (identity.terminalSessionId !== id || typeof identity.projectId !== "string" || !identity.projectId.trim()) {
-      throw new Error("Invalid terminal identity");
+      throw new CliError("Invalid terminal identity", 3);
     }
     return identity.projectId;
   } catch (error) {
-    throw new CliError(`Terminal project identity is unavailable: ${error instanceof Error ? error.message : String(error)}`, 3);
+    if (error instanceof CliError) throw error;
+    throw new BrowserProfileTemporaryError(`Terminal project identity is unavailable: ${error instanceof Error ? error.message : String(error)}`, 3);
   }
 }
 
-export async function resolveBrowserProfile(
-  args: string[],
+async function resolveBrowserProfileAttempt(
+  options: ResolveOptions,
   io: BrowserCommandIo,
 ): Promise<ResolvedTerminalBrowserProfile> {
-  const options = parseResolveOptions(args);
-  const projectId = await resolveCurrentProjectId(io);
+  const projectId = await resolveCurrentProjectId(io, options);
   if (!io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT?.trim() &&
       (io.env.RUNWEAVE_TERMINAL_SESSION_ID || io.env.RUNWEAVE_PROJECT_ID)) {
     return resolveRemoteBrowserProfile(options, io, projectId);
   }
   const ambient = parseAmbientEndpoint(io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT);
   const groupId = options.groupId ?? (io.env.RUNWEAVE_BROWSER_GROUP_ID?.trim() || null) ?? ambient.ambientGroupId;
-  let response: Response;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const timeout = setTimeout(() => controller.abort(), requestTimeout(options));
   try {
-    response = await fetch(ambient.resolverUrl, {
+    const response = await fetch(ambient.resolverUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -216,8 +240,19 @@ export async function resolveBrowserProfile(
       }),
       signal: controller.signal,
     });
+    if (response.status === 404)
+      throw new CliError("This Runweave version does not provide Browser Profile state; update the desktop", 3);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: TerminalBrowserErrorPayload } | null;
+      const error = body?.error;
+      throw resolveError(response.status, error?.code,
+        error ? `${error.code}: ${error.message}` : `Profile resolver returned HTTP ${response.status}`);
+    }
+    return await response.json() as ResolvedTerminalBrowserProfile;
   } catch (error) {
-    throw new CliError(
+    if (error instanceof CliError) throw error;
+    if (error instanceof SyntaxError) throw new CliError("Profile resolver returned invalid JSON", 3);
+    throw new BrowserProfileTemporaryError(
       `Terminal Browser Profile resolver is unreachable: ${
         error instanceof Error ? error.message : String(error)
       }`,
@@ -227,23 +262,20 @@ export async function resolveBrowserProfile(
     clearTimeout(timeout);
   }
 
-  let result: ResolvedTerminalBrowserProfile;
-  if (response.status === 404) {
-    throw new CliError("This Runweave version does not provide Browser Profile state; update the desktop", 3);
-  } else if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: TerminalBrowserErrorPayload;
-    } | null;
-    const error = body?.error;
-    throw new CliError(
-      error
-        ? `${error.code}: ${error.message}`
-        : `Profile resolver returned HTTP ${response.status}`,
-      response.status === 400 ? 2 : response.status === 409 ? 4 : 3,
-    );
-  } else {
-    result = (await response.json()) as ResolvedTerminalBrowserProfile;
-  }
+}
 
-  return result;
+export async function resolveBrowserProfile(args: string[], io: BrowserCommandIo): Promise<ResolvedTerminalBrowserProfile> {
+  const options = parseResolveOptions(args);
+  options.deadline = Date.now() + (options.waitTimeoutMs || 5000);
+  let attempt = 0;
+  for (;;) {
+    try { return await resolveBrowserProfileAttempt(options, io); }
+    catch (error) {
+      if (!(error instanceof BrowserProfileTemporaryError) || !options.waitTimeoutMs || Date.now() >= options.deadline)
+        throw error;
+      if (!attempt) io.stderr.write("Browser is reconnecting; waiting for the authorized channel.\n");
+      const delay = Math.min(1000 * 2 ** Math.min(attempt++, 3), 5000, options.deadline - Date.now());
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
 }
