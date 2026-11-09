@@ -269,6 +269,8 @@ try {
     };
     const before = snapshot();
     assert(before.version === 4, "Published source did not create the expected v4 database");
+    const sourcePackage = path.join(fixture, "published-server-source");
+    cpSync(path.join(prefix, "lib/node_modules/@runweave/server"), sourcePackage, { recursive: true });
     const beforePid = status.backend.pid;
     const preview = JSON.parse(await rw("update", "--version", serverVersion, "--dry-run"));
     assert(preview.databaseCompatible && JSON.parse(await rw("status", "--json")).backend.pid === beforePid,
@@ -306,12 +308,9 @@ try {
       && migratedRun.executionContext.projectId === project.projectId, "Migration lost the historical run or its execution context");
     assert(JSON.parse(await tasks("run", "output", oldRun.id, "--cursor", "0")).text === "original output", "Migration lost historical output");
     assert((await api("/api/scheduled-tasks/capabilities")).enabled, "Task subsystem did not recover after migration and restart");
-    const targetRegistry = env.npm_config_registry;
-    env.npm_config_registry = "https://registry.npmjs.org/";
     let rollbackRejected = false;
-    try { await rw("update", "--version", upgradeFrom, "--dry-run"); }
+    try { await rw("update", "--server-package", sourcePackage, "--dry-run"); }
     catch (error) { assert(error.message.includes("SERVER_DATA_INCOMPATIBLE"), error.message); rollbackRejected = true; }
-    finally { env.npm_config_registry = targetRegistry; }
     assert(rollbackRejected && JSON.parse(await rw("status", "--json")).healthy, "One-way upgrade allowed rollback to the old database writer");
     console.log("Published v4 upgrade, read-only previews, explicit migration, backup, replay and rollback rejection verified");
   }
