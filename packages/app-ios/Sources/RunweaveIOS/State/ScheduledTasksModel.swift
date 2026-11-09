@@ -3,7 +3,6 @@ import Foundation
 @MainActor
 final class ScheduledTasksModel: ObservableObject {
   @Published var query = ""
-  @Published var project = ""
   @Published var archived = false
   @Published private(set) var capabilities: ScheduledCapabilities?
   @Published private(set) var items: [ScheduledTaskRecord] = []
@@ -27,7 +26,7 @@ final class ScheduledTasksModel: ObservableObject {
   init(session: AppSession) { self.session = session; generation = session.generation }
   var current: Bool { generation == session.generation && session.authenticated }
   var canWrite: Bool { current && session.canWrite && capabilities?.enabled == true && !writing }
-  var filterID: String { "\(query)\u{0}\(project)\u{0}\(archived)" }
+  var filterID: String { "\(query)\u{0}\(archived)" }
   var backgroundRun: ScheduledRun? {
     runs.first { $0.id == highlightedRun && $0.snapshot.origin?.kind == "quick-input" }
   }
@@ -88,12 +87,12 @@ final class ScheduledTasksModel: ObservableObject {
         runsCursor = page.nextCursor
         if more { runPages += 1 }
       } else {
-        var page = try await call { try await $0.list(q: query, project: project, archived: archived, cursor: more ? nextCursor : nil) }
+        var page = try await call { try await $0.list(q: query, archived: archived, cursor: more ? nextCursor : nil) }
         var records = page.items
         if !more, listPages > 1 {
           for _ in 1..<listPages {
             guard let cursor = page.nextCursor else { break }
-            page = try await call { try await $0.list(q: query, project: project, archived: archived, cursor: cursor) }
+            page = try await call { try await $0.list(q: query, archived: archived, cursor: cursor) }
             records += page.items
           }
         }

@@ -1,3 +1,5 @@
+import { taskWorkspace, validateExecutionContext } from "./execution-context";
+import type { ScheduledTaskMigration } from "./migration";
 import { paginate, decodeOffset } from "./pagination";
 import {
   normalizeConfig,
@@ -45,6 +47,8 @@ export class ScheduledTaskService {
     private readonly unavailableReason: string | null = null,
   ) {}
 
+  migration: ScheduledTaskMigration | null = null;
+
   private runtime: ScheduledTaskRuntime | null = null;
   private attachment: ScheduledTerminalAttachment | null = null;
 
@@ -57,13 +61,7 @@ export class ScheduledTaskService {
   }
 
   capabilities(): ScheduledTaskCapabilities {
-    if (this.unavailableReason)
-      throw new ScheduledTaskError(
-        "scheduler_unavailable",
-        503,
-        this.unavailableReason,
-      );
-    return this.capabilitiesValue;
+    return { ...this.capabilitiesValue, taskContextVersion: 2, ...(this.unavailableReason ? { enabled: false, reason: this.unavailableReason } : {}) };
   }
 
   preview(schedule: TaskSchedule, now = new Date()): SchedulePreviewResponse {
@@ -80,11 +78,16 @@ export class ScheduledTaskService {
     }
   }
 
+  async replayCreate(input: unknown, key: string): Promise<ScheduledTask | null> {
+    try { return await this.requireStore().replayCreate(hash(input), key); }
+    catch (error) { throw scheduledTaskErrorFromStorage(error); }
+  }
+
   async create(
     input: CreateScheduledTaskRequest,
     idempotencyKey: string,
   ): Promise<ScheduledTask> {
-    const { store, project, nextRunAt, now } = this.prepareCreate(input);
+    const { store, nextRunAt, now } = this.prepareCreate(input);
     const task: ScheduledTask = {
       ...normalizeConfig(input),
       id: randomUUID(),
@@ -98,7 +101,6 @@ export class ScheduledTaskService {
     try {
       return await store.createTask(
         task,
-        this.terminalSessionManager.resolveParentProjectId(project.id),
         idempotencyKey,
         hash(input),
       );
@@ -108,8 +110,8 @@ export class ScheduledTaskService {
   }
 
   validateCreate(input: CreateScheduledTaskRequest): ScheduledTaskValidation {
-    const { project, nextRunAt, now } = this.prepareCreate(input);
-    return validationResult(input, project, nextRunAt, now, null);
+    const { nextRunAt, now } = this.prepareCreate(input);
+    return validationResult(input, nextRunAt, now, null);
   }
 
   private prepareCreate(input: CreateScheduledTaskRequest) {
@@ -131,12 +133,11 @@ export class ScheduledTaskService {
       throw scheduleError(error);
     }
     const store = this.requireStore();
-    const project = this.requireProject(input.projectId);
     const now = new Date();
     const nextRunAt = input.enabled
       ? this.requireNextOccurrence(input.schedule, now)
       : null;
-    return { store, project, nextRunAt, now };
+    return { store, nextRunAt, now };
   }
 
   async getTask(taskId: string): Promise<ScheduledTask> {
@@ -158,13 +159,6 @@ export class ScheduledTaskService {
     const filtered = all.filter((task) => {
       if (task.origin?.kind === "quick-input") return false;
       if (Boolean(task.deletedAt) !== Boolean(filter.archived)) return false;
-      if (filter.projectId && task.projectId !== filter.projectId) return false;
-      if (
-        filter.parentProjectId &&
-        this.terminalSessionManager.resolveParentProjectId(task.projectId) !==
-          filter.parentProjectId
-      )
-        return false;
       if (
         query &&
         !`${task.name}\n${task.prompt}`.toLocaleLowerCase().includes(query)
@@ -179,12 +173,11 @@ export class ScheduledTaskService {
     taskId: string,
     input: UpdateScheduledTaskRequest,
   ): Promise<ScheduledTask> {
-    const { task, project } = await this.prepareUpdate(taskId, input);
+    const { task } = await this.prepareUpdate(taskId, input);
     try {
       return await this.requireStore().updateTask(
         task,
         input.expectedRevision,
-        this.terminalSessionManager.resolveParentProjectId(project.id),
       );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
@@ -195,10 +188,9 @@ export class ScheduledTaskService {
     taskId: string,
     input: UpdateScheduledTaskRequest,
   ): Promise<ScheduledTaskValidation> {
-    const { task, project, now } = await this.prepareUpdate(taskId, input);
+    const { task, now } = await this.prepareUpdate(taskId, input);
     return validationResult(
       task,
-      project,
       task.nextRunAt,
       now,
       input.expectedRevision,
@@ -225,8 +217,6 @@ export class ScheduledTaskService {
         "The task changed; refresh before saving",
       );
     const now = new Date();
-    const projectId = input.projectId ?? current.projectId;
-    const project = this.requireProject(projectId);
     const schedule = input.schedule ?? current.schedule;
     this.requireProvider(input.provider ?? current.provider);
     this.requireExecutionPolicy(
@@ -257,7 +247,6 @@ export class ScheduledTaskService {
     const task: ScheduledTask = {
       ...current,
       ...input,
-      projectId,
       name: input.name?.trim() ?? current.name,
       prompt: input.prompt?.trim() ?? current.prompt,
       model:
@@ -281,7 +270,7 @@ export class ScheduledTaskService {
     };
     delete (task as ScheduledTask & { expectedRevision?: number })
       .expectedRevision;
-    return { task, project, now };
+    return { task, now };
   }
 
   async remove(
@@ -311,7 +300,6 @@ export class ScheduledTaskService {
       return await this.requireStore().updateTask(
         task,
         expectedRevision,
-        this.terminalSessionManager.resolveParentProjectId(task.projectId),
       );
     } catch (error) {
       throw scheduledTaskErrorFromStorage(error);
@@ -331,9 +319,8 @@ export class ScheduledTaskService {
     this.requireProvider(task.provider);
     this.requireExecutionPolicy(task.provider, task.executionPolicy);
     this.requireContinuation(task.provider, task.continuationPolicy);
-    const project = this.requireProject(task.projectId);
     const now = new Date().toISOString();
-    const run = createScheduledRunRecord(task, "manual", now, project.path!);
+    const run = createScheduledRunRecord(task, "manual", now, (id) => taskWorkspace(this.requireStore().databasePath, id));
     try {
       const created = await this.requireStore().createManualRun(
         run,
@@ -455,13 +442,7 @@ export class ScheduledTaskService {
       run.snapshot.provider,
       reply ? { mode: "bounded" } : run.snapshot.continuationPolicy,
     );
-    const project = this.requireProject(run.executionProjectId);
-    if (project.path !== run.cwd)
-      throw new ScheduledTaskError(
-        "context_unavailable",
-        409,
-        "原执行目录已变化。",
-      );
+    await validateExecutionContext(run, this.terminalSessionManager);
     try {
       const updated = await this.requireStore().continueRun(
         runId,

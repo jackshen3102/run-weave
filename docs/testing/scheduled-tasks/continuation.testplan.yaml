@@ -67,7 +67,7 @@ cases:
     required: true
     description: 目录、thread 和冻结配置是恢复边界，不用最新任务配置或父目录替代。
     preconditions:
-      - 本例隔离项目的任务已保存待续接，能单独控制目录映射、会话历史及 provider 身份响应。
+      - 本例隔离项目的任务已保存待续接，能单独控制 executionContext 目录、会话历史及 provider 身份响应。
     steps:
       - 分别让原 cwd 不可用、thread 历史缺失、provider 返回错误 thread，确认明确拒绝且没有回退父目录或新建 thread。
       - 修改任务当前模型和权限配置，再续接另一条有效 run，确认其执行参数仍来自原快照；权限不会自动升级。
@@ -115,5 +115,5 @@ cases:
     preconditions:
       - 本例隔离数据根有旧配置及历史 failed 记录，提供有效和无效认证客户端，能够观察 provider 启动次数。
     steps:
-      - 执行升级并启动，确认旧配置缺省关闭、历史 run 及原结果可读且没有自动执行。
+      - 执行获准的显式迁移并重启，确认旧日程暂停、continuation 旧缺省关闭、历史 run 及原结果可读且没有自动执行。
       - 用无效认证调用 continue，确认拒绝且无新增 attempt；使用旧 revision 或不同连接的 run 身份，确认冲突或不存在，不产生跨连接执行。

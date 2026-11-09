@@ -42,12 +42,12 @@ struct ScheduledTaskConfig: Codable, Equatable {
   struct QuickInputOrigin: Codable, Equatable {
     let kind: String
     let quickInputId: String
+    let projectId: String
     let projectName: String
     let worktreeName: String?
     var label: String { projectName + (worktreeName.map { " / " + $0 } ?? "") }
   }
   var name = ""
-  var projectId = ""
   var provider = "codex"
   var prompt = ""
   var model: String?
@@ -69,7 +69,7 @@ struct ScheduledTaskConfig: Codable, Equatable {
   }
   func body(editing: Bool) -> [String: Any] {
     var value: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines),
-      "projectId": projectId, "provider": provider, "prompt": prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+      "provider": provider, "prompt": prompt.trimmingCharacters(in: .whitespacesAndNewlines),
       "schedule": schedule.body, "misfirePolicy": misfirePolicy.body]
     if let continuationPolicy { value["continuationPolicy"] = ["mode": continuationPolicy.mode] }
     if let executionPolicy { value["executionPolicy"] = executionPolicy }
@@ -116,6 +116,11 @@ struct ScheduledOpenResponse: Decodable {
   let projectId: String
   let error: String?
 }
+struct ScheduledExecutionContext: Decodable {
+  let kind: String
+  let cwd: String?
+  let projectId: String?
+}
 struct ScheduledRun: Decodable, Identifiable {
   struct Recovery: Decodable { let action: String; let category: String; let evidence: String; let nextStep: String; let notBefore: String?; let confirmation: String? }
   struct Continuation: Decodable { let count: Int; let maxAttempts: Int; let nextAt: String?; let deadline: String?; let activeMs: Double; let recovery: Recovery?; let stopReason: String? }
@@ -150,8 +155,7 @@ struct ScheduledRun: Decodable, Identifiable {
   let outcome: String?
   let error: Failure?
   let artifacts: [Artifact]
-  let executionProjectId: String
-  let cwd: String
+  let executionContext: ScheduledExecutionContext
   let threadRef: Thread?
   let recoverable: Bool
   let terminalBinding: ScheduledTerminalBinding?
@@ -180,6 +184,7 @@ struct ScheduledRun: Decodable, Identifiable {
 }
 struct ScheduledPage<T: Decodable>: Decodable { let items: [T]; let nextCursor: String? }
 struct ScheduledCapabilities: Decodable {
+  let taskContextVersion: Int?
   struct Provider: Decodable, Identifiable {
     let provider: String; let available: Bool; let reason: String?; let executionPolicies: [String]?; let continuation: Bool?
     var id: String { provider }

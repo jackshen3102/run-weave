@@ -143,7 +143,7 @@ function createHttpApp(
   app.use(createTunnelTokenBootstrapMiddleware(tunnelAuthConfig));
   app.use("/api/screen-recording/analysis", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); }, requireTunnelAuth, requireAuth, createScreenRecordingAnalysisRouter(services.screenRecording, services.authService, services.workHistoryService));
   app.use("/api/screen-recording", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); }, requireTunnelAuth, requireAuth, createScreenRecordingRouter(services.screenRecording, services.authService));
-  app.use("/api/server", createServerManagementRouter(services.scheduledTaskRuntime, services.runtimeStatus.registry));
+  app.use("/api/server", createServerManagementRouter(services.scheduledTaskRuntime, services.runtimeStatus.registry, services.scheduledTaskService.migration?.maintenance));
   app.use("/api/configuration", requireTunnelAuth, requireAuth, createConfigurationRouter());
 
   app.use("/prototype-preview", requireTunnelAuth, createPrototypePreviewRouter(

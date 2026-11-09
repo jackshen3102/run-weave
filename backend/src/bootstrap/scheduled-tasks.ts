@@ -1,3 +1,5 @@
+import path from "node:path";
+import { acquireBackendProfileLock } from "../server/profile-lock";
 import type { ResourceScope } from "./resource-scope";
 import { createScheduledTaskSubsystem, type ScheduledTaskSubsystem } from "../scheduled-tasks/bootstrap";
 import type { TerminalActivityDependencies } from "../terminal/runtime/activity-events";
@@ -25,6 +27,8 @@ export async function createScheduledTasks(
   },
 ): Promise<ScheduledTaskSubsystem> {
   const paths = resolveScheduledTaskStoragePaths();
+  const lock = await acquireBackendProfileLock({ profileDir: path.join(path.dirname(paths.scheduledTasksDatabaseFile), "database-owner"), port: null, host: undefined });
+  resources.defer("scheduled-task-data-lock", () => lock.release());
   const subsystem = await createScheduledTaskSubsystem({
     databasePath: paths.scheduledTasksDatabaseFile,
     terminalSessionManager: input.terminalSessionManager,
@@ -39,6 +43,7 @@ export async function createScheduledTasks(
       activity: input.terminalActivity,
     },
   });
+  resources.defer("scheduled-task-migration", () => subsystem.service.migration?.maintenance.dispose());
   if (subsystem.store) resources.defer("scheduled-task-store", () => subsystem.store!.dispose());
   if (subsystem.runtime) resources.defer("scheduled-task-runtime", () => subsystem.runtime!.dispose());
   return subsystem;

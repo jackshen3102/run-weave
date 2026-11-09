@@ -7,7 +7,7 @@ extension ScheduledRun {
     if let origin = snapshot.origin {
       return "\(origin.projectName) / \(origin.worktreeName ?? "主项目")"
     }
-    return cwd
+    return executionContext.cwd ?? "原执行目录未保存"
   }
 }
 
@@ -262,14 +262,17 @@ struct QuickCommandRunDetail: View {
           if selected.canOpen {
             return try await service.restoreTerminal(selected.id, replace: replace).terminalSessionId
           }
-          let contexts = try await service.contexts(HomeOverview.parentProjectID(selected.executionProjectId))
-          guard contexts.contains(where: { $0.projectId == selected.executionProjectId && $0.path == selected.cwd && $0.availability == "available" }) else {
+          guard let projectID = selected.executionContext.projectId, let cwd = selected.executionContext.cwd else {
+            throw ScheduledFailure(code: "context_unavailable", message: "本次运行没有项目执行位置。")
+          }
+          let contexts = try await service.contexts(HomeOverview.parentProjectID(projectID))
+          guard contexts.contains(where: { $0.projectId == projectID && $0.path == cwd && $0.availability == "available" }) else {
             throw ScheduledFailure(code: "context_unavailable", message: "本次运行的项目或工作区已不可用，无法新建终端。")
           }
           try Task.checkCancellation()
-          let created = try await api.createTerminal(projectID: selected.executionProjectId)
+          let created = try await api.createTerminal(projectID: projectID)
           let details = try await api.details(id: created.terminalSessionId)
-          guard details.projectId == selected.executionProjectId, details.cwd == selected.cwd else {
+          guard details.projectId == projectID, details.cwd == cwd else {
             throw ScheduledFailure(code: "context_changed", message: "项目执行位置已变化，请重新确认后再打开终端。")
           }
           return created.terminalSessionId

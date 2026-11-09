@@ -348,6 +348,7 @@ public actor APIClient {
   func authorized<T: Decodable>(
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
     retryUnauthorized: Bool = true, idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
+    additionalHeaders: [String: String] = [:],
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil,
     download: ((URL) throws -> T)? = nil
@@ -366,7 +367,7 @@ public actor APIClient {
     guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
     do {
       let value: T = try await request(path, method: method, body: body, bearer: current.accessToken,
-        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode, download: download)
+        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeError: decodeError, decode: decode, download: download)
       guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
@@ -379,7 +380,7 @@ public actor APIClient {
       guard retryUnauthorized else { throw APIError.writeRequiresRetry }
       do {
         let value: T = try await request(path, method: method, body: body, bearer: renewed.accessToken,
-          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), decodeError: decodeError, decode: decode, download: download)
+          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeError: decodeError, decode: decode, download: download)
         guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
@@ -401,6 +402,7 @@ public actor APIClient {
     _ path: String, method: String, body: [String: Any]? = nil, bearer: String? = nil,
     idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     connectionIDOverride: String? = nil,
+    additionalHeaders: [String: String] = [:],
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil,
     download: ((URL) throws -> T)? = nil
@@ -428,6 +430,7 @@ public actor APIClient {
       guard let url = URL(string: baseURL.absoluteString + path) else { throw APIError.invalidURL }
       var request = URLRequest(url: url)
       request.httpMethod = method
+    for (name, value) in additionalHeaders { request.setValue(value, forHTTPHeaderField: name) }
       request.setValue("app", forHTTPHeaderField: "X-Auth-Client")
       request.setValue(connectionIDOverride ?? authenticationConnectionID, forHTTPHeaderField: "X-Connection-ID")
       request.setValue("application/json", forHTTPHeaderField: "Content-Type")

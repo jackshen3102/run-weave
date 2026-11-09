@@ -12,9 +12,7 @@ struct ScheduledTaskEditorView: View {
   @State private var revision: Int?
   @State private var baseline: ScheduledTaskConfig
   @State private var baselineEnabled: Bool
-  @State private var contexts: [ScheduledProjectContext] = []
   @State private var catalogs: ScheduledModelSettings?
-  @State private var optionsFailure: String?
   @State private var modelFailure: String?
   @State private var preview: ScheduledPreview?
   @State private var previewSchedule: ScheduledTaskSchedule?
@@ -66,8 +64,6 @@ struct ScheduledTaskEditorView: View {
     if draft.name.utf16.count > 80 { return "名称最多 80 个字符" }
     if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请填写提示词" }
     if draft.prompt.utf16.count > 12000 { return "提示词最多 12000 个字符" }
-    if draft.projectId.isEmpty { return "请选择项目" }
-    if contexts.first(where: { $0.id == draft.projectId })?.availability != "available" { return "请选择目录可用的项目，或重试加载项目" }
     if provider?.available != true { return provider?.reason ?? "此 Agent 暂不可用" }
     if TimeZone(identifier: draft.schedule.timezone) == nil { return "请选择有效时区" }
     if draft.schedule.kind == "weekly" && (draft.schedule.weekdays ?? []).isEmpty { return "请至少选择一周中的一天" }
@@ -149,16 +145,6 @@ struct ScheduledTaskEditorView: View {
   private var basicFields: some View {
     Section("任务") {
       TextField("名称", text: $draft.name).disabled(uncertain).accessibilityIdentifier("scheduled-name").clarityMask()
-      Picker("项目", selection: $draft.projectId) {
-        Text("选择项目").tag("")
-        if !draft.projectId.isEmpty && !contexts.contains(where: { $0.id == draft.projectId }) { Text("\(draft.projectId)（待校验）").tag(draft.projectId) }
-        ForEach(contexts) { context in
-          Text(contextLabel(context) + (context.availability == "available" ? "" : "（目录不可用）"))
-            .tag(context.id).disabled(context.availability != "available")
-        }
-      }
-      .disabled(uncertain)
-      if let optionsFailure { Text(optionsFailure).foregroundColor(.orange); Button("重试加载项目") { Task { await loadOptions() } } }
       Picker("Agent", selection: $draft.provider) {
         ForEach(model.capabilities?.providers ?? []) { item in
           Text(item.provider + (item.available ? "" : "（不可用）")).tag(item.provider).disabled(!item.available)
@@ -247,23 +233,12 @@ struct ScheduledTaskEditorView: View {
       }
     }.disabled(uncertain)
   }
-  private func contextLabel(_ context: ScheduledProjectContext) -> String {
-    let parent = session.overview?.projects.first { $0.id == context.parentProjectId }?.name ?? context.parentProjectId
-    return context.isPrimary ? parent : "\(parent) / \(context.name)"
-  }
   private func loadModels() async {
     do { let value = try await model.call { try await $0.models() }; try Task.checkCancellation(); catalogs = value; modelFailure = nil }
     catch { if !Task.isCancelled { modelFailure = "模型目录暂不可用，已有配置仍会保留。" } }
   }
   private func loadOptions() async {
     loading = true; defer { loading = false }
-    do {
-      var values: [ScheduledProjectContext] = []
-      for project in session.overview?.projects ?? [] {
-        values += try await model.call { try await $0.contexts(project.id) }
-      }
-      try Task.checkCancellation(); contexts = values; optionsFailure = nil
-    } catch { if !Task.isCancelled { optionsFailure = displayError(error) } }
     await loadModels()
   }
   private func submit(retry: Bool = false) {

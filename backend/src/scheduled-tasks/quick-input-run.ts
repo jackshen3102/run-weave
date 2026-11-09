@@ -140,7 +140,6 @@ export async function startQuickInputRun(args: {
     id: randomUUID(),
     revision: 1,
     name: input.title.trim() || "创建 github pr",
-    projectId,
     provider: "codex",
     prompt: input.data,
     model,
@@ -152,6 +151,7 @@ export async function startQuickInputRun(args: {
     origin: {
       kind: "quick-input",
       quickInputId,
+      projectId,
       projectName: parent.name,
       worktreeName:
         parseTerminalChildProjectId(projectId)?.worktreeName ?? null,
@@ -165,7 +165,6 @@ export async function startQuickInputRun(args: {
   try {
     const run = await store.createQuickInputRun(
       task,
-      parentProjectId,
       project.path!,
       idempotencyKey,
       requestHash,

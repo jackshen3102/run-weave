@@ -88,10 +88,6 @@ struct ScheduledTasksView: View {
       Section {
         Text(session.connection?.name ?? "当前电脑").font(.caption).foregroundColor(.secondary)
         TextField("搜索任务", text: $model.query).accessibilityIdentifier("scheduled-search").clarityMask()
-        Picker("项目", selection: $model.project) {
-          Text("所有项目").tag("")
-          ForEach(session.overview?.projects ?? []) { Text($0.name).tag($0.id) }
-        }
       }
       ScheduledStatusView(session: session, model: model)
       Section(model.archived ? "已删除任务" : "我的任务") {
@@ -102,7 +98,7 @@ struct ScheduledTasksView: View {
                 VStack(alignment: .leading, spacing: 8) {
                   Text(task.config.name).font(.headline).foregroundColor(.primary)
                   Text(task.config.prompt).font(.subheadline).foregroundColor(.secondary).lineLimit(2)
-                  Text("\(scheduledProjectLabel(task.config.projectId, session: session)) · \(task.config.provider)")
+                  Text(task.config.provider)
                     .font(.caption).foregroundColor(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
               }.buttonStyle(.plain)

@@ -21,14 +21,14 @@ cases:
     name: Full Access 启动参数与身份边界正确
     required: true
     description: |
-      full-access 子进程无 workspace-write 和命令联网限制，取得本次项目及 Browser scope，但不继承交互式终端或敏感服务身份。
+      full-access 子进程无 workspace-write 和命令联网限制，取得本次运行上下文及 Browser scope，但不继承交互式终端或敏感服务身份。
     preconditions:
       - 隔离 Backend 配置可记录本例 provider 的真实 argv、环境变量名称和脱敏 Browser endpoint，不记录凭据值。
       - 本例项目、run ID 和 ambient Browser endpoint 均带可区分标识，另有独立 sandbox Run 作为对照。
     steps:
       - 启动 full-access Run；确认 argv 包含 danger-full-access 与 never approval，不包含 workspace-write 或
         sandbox_workspace_write.network_access=false，也没有待人工响应的审批请求。
-      - 检查子进程环境；确认 RUNWEAVE_SCHEDULED_TASK_RUN_ID 和 RUNWEAVE_PROJECT_ID 分别等于本次 Run 与项目，Browser
+      - 检查子进程环境；确认 RUNWEAVE_SCHEDULED_TASK_RUN_ID 等于本次 Run，普通任务的 RUNWEAVE_PROJECT_ID 不存在，Browser
         endpoint 的 groupId 只属于本次 Run。
       - 确认环境不含 Terminal/Panel、tmux、Hook token、App Server token、旧 Codex thread/session 身份；对照 sandbox
         Run 仍保留原沙箱和禁网参数。
@@ -66,7 +66,7 @@ cases:
       - 受控页面包含本例唯一 marker、可点击控件和点击后可读取的 DOM 状态；本例记录初始 Browser workspace。
     steps:
       - 创建 full-access 任务，提示词明确要求使用 toolkit:playwright-cli 打开受控页面、读取 marker、点击控件并读取变化后的 DOM，且禁止静态代码分析代替；立即运行。
-      - 检查 Agent 通过 rw browser profile resolve 取得任务项目对应的 Profile 和本次 run group，在真实页面完成操作；确认输出含实际 URL、marker 和交互前后状态。
+      - 检查 Agent 通过 rw browser profile resolve 取得当前默认 Profile 和本次 run group，在真实页面完成操作；确认输出含实际 URL、marker 和交互前后状态。
       - 等待 Run 返回 succeeded；使用独立的 toolkit:playwright-cli 连接重新读取页面，确认最终 DOM 与摘要一致，并清理本例页面和 Browser 连接。
   - id: SFA-006
     name: 提示词驱动真实 iOS 模拟器操作

@@ -5,16 +5,19 @@ import { catchUpDataSql } from "./migrations/002-catch-up-data";
 import { continuationSql } from "./migrations/003-continuation";
 import { outputChunksSql } from "./migrations/004-output-chunks";
 
+import { projectIndependentSql, convertProjectRecords, validateConvertedRecords } from "./migrations/005-project-independent";
+
 const migrations = [
   { version: 1, name: "initial-schema", sql: initialSchemaSql },
   { version: 2, name: "catch-up-data", sql: catchUpDataSql },
   { version: 3, name: "continuation", sql: continuationSql },
   { version: 4, name: "output-chunks", sql: outputChunksSql },
+  { version: 5, name: "project-independent", sql: projectIndependentSql },
 ] as const;
-export const SCHEDULED_TASK_SCHEMA_VERSION = 4;
+export const SCHEDULED_TASK_SCHEMA_VERSION = 5;
 
 /** The entire upgrade is atomic, including adoption of the unversioned legacy database. */
-export function migrateScheduledTasks(database: Database.Database): void {
+export function migrateScheduledTasks(database: Database.Database, reviewedPrompts?: ReadonlyMap<string, string>): void {
   database
     .transaction(() => {
       const version = database.pragma("user_version", {
@@ -22,6 +25,8 @@ export function migrateScheduledTasks(database: Database.Database): void {
       }) as number;
       if (version > SCHEDULED_TASK_SCHEMA_VERSION)
         throw new Error("scheduled_tasks_schema_too_new");
+      if (version < 5 && !reviewedPrompts && database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='scheduled_tasks'").get() &&
+          database.prepare("SELECT 1 FROM scheduled_tasks LIMIT 1").get()) throw new Error("scheduled_tasks_migration_required");
       database.exec(`CREATE TABLE IF NOT EXISTS scheduled_schema_migrations (
       version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
       applied_at TEXT NOT NULL
@@ -50,7 +55,9 @@ export function migrateScheduledTasks(database: Database.Database): void {
         if (migration.version === 1) assertLegacySchema(database);
         try {
           if (migration.version === 2) assertMigrationInput(database);
+          if (migration.version === 5) convertProjectRecords(database, reviewedPrompts ?? new Map());
           database.exec(migration.sql);
+          if (migration.version === 5) validateConvertedRecords(database);
           if (migration.version === 2) assertCurrentData(database);
         } catch {
           // Do not include private payloads or SQL driver error details in the error.

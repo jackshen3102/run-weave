@@ -13,6 +13,7 @@ const database = new ScheduledTaskDatabase(
 
 function execute(command: ScheduledTaskWorkerCommand) {
   switch (command.op) {
+    case "replay-create": return database.replayCreate(command.requestHash, command.key);
     case "list-attempts":
       return database.listAttempts(command.runId);
     case "set-run-thread":
@@ -45,7 +46,6 @@ function execute(command: ScheduledTaskWorkerCommand) {
     case "create-task":
       return database.createTask(
         command.task,
-        command.parentProjectId,
         command.idempotencyKey,
         command.requestHash,
       );
@@ -57,7 +57,6 @@ function execute(command: ScheduledTaskWorkerCommand) {
       return database.updateTask(
         command.task,
         command.expectedRevision,
-        command.parentProjectId,
       );
     case "list-due-tasks":
       return database.listDueTasks(command.through);
@@ -85,7 +84,6 @@ function execute(command: ScheduledTaskWorkerCommand) {
     case "create-quick-input-run":
       return database.createQuickInputRun(
         command.task,
-        command.parentProjectId,
         command.cwd,
         command.idempotencyKey,
         command.requestHash,

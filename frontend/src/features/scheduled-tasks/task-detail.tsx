@@ -183,7 +183,7 @@ export function RunRecord({
           <summary className="cursor-pointer">本次配置快照</summary>
           <p className="mt-2 break-words">
             {run.snapshot.name} · {run.snapshot.provider} ·{" "}
-            {run.snapshot.projectId}
+            {run.executionContext.kind === "project" ? run.executionContext.projectId : "独立任务工作区"}
           </p>
           {run.snapshot.origin?.kind === "quick-input" ? null : (
             <>
@@ -261,7 +261,7 @@ export function TaskDetail({
             </p>
           ) : null}
           <p className="mt-3 break-words text-sm text-muted-foreground">
-            {task.data.projectId} · {task.data.provider}
+            {task.data.provider}
           </p>
           {task.data.origin?.kind === "quick-input" ? null : (
             <p className="mt-2 text-sm">{scheduleLabel(task.data.schedule)}</p>

@@ -51,9 +51,10 @@ struct QuickInputService {
   }
 
   func start(_ item: BackendQuickInput, projectId: String, key: String) async throws -> ScheduledRun {
-    try await request("/\(APIClient.pathComponent(item.id))/run", method: "POST", body: [
+    _ = try await ScheduledTasksService(api: api).capabilities()
+    return try await request("/\(APIClient.pathComponent(item.id))/run", method: "POST", body: [
       "projectId": projectId, "expectedInputUpdatedAt": item.updatedAt,
-    ], key: key)
+    ], key: key, headers: ["X-Runweave-Task-Context-Version": "2"])
   }
 
   func runs(projectId: String? = nil, cursor: String? = nil) async throws -> ScheduledPage<ScheduledRun> {
@@ -64,13 +65,13 @@ struct QuickInputService {
     ]
     if let cursor { components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
     if let projectId { components.queryItems?.append(URLQueryItem(name: "projectId", value: projectId)) }
-    return try await api.authorized("/api/scheduled-tasks/runs?" + (components.percentEncodedQuery ?? ""))
+    return try await ScheduledTasksService(api: api).request("/runs?" + (components.percentEncodedQuery ?? ""))
   }
 
   private func request<T: Decodable>(_ path: String, method: String = "GET", body: [String: Any]? = nil,
-    key: String? = nil) async throws -> T {
+    key: String? = nil, headers: [String: String] = [:]) async throws -> T {
     try await api.authorized(base + path, method: method, body: body,
-      retryUnauthorized: method == "GET", idempotencyKey: key,
+      retryUnauthorized: method == "GET", idempotencyKey: key, additionalHeaders: headers,
       decodeError: { _, data in try? JSONDecoder().decode(BackendQuickInputFailure.self, from: data) })
   }
 }

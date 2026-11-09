@@ -4,12 +4,20 @@ struct ScheduledTasksService {
   let api: APIClient
   private let base = "/api/scheduled-tasks"
   func request<T: Decodable>(_ path: String = "", method: String = "GET", body: [String: Any]? = nil, key: String? = nil) async throws -> T {
-    try await api.authorized(base + path, method: method, body: body, retryUnauthorized: method == "GET",
-      idempotencyKey: key, decodeError: { _, data in try? JSONDecoder().decode(ScheduledFailure.self, from: data) })
+    if path != "/capabilities" {
+      let caps: ScheduledCapabilities = try await api.authorized(base + "/capabilities")
+      guard caps.taskContextVersion == 2 else { throw ScheduledFailure(code: "task_context_version_mismatch", message: "此电脑的定时任务协议不兼容，请更新 Backend。") }
+    }
+    return try await api.authorized(base + path, method: method, body: body, retryUnauthorized: method == "GET",
+      idempotencyKey: key, additionalHeaders: ["X-Runweave-Task-Context-Version": "2"], decodeError: { _, data in try? JSONDecoder().decode(ScheduledFailure.self, from: data) })
   }
-  func capabilities() async throws -> ScheduledCapabilities { try await request("/capabilities") }
-  func list(q: String, project: String, archived: Bool, cursor: String? = nil) async throws -> ScheduledPage<ScheduledTaskRecord> {
-    try await request(query(["q": q, "parentProjectId": project, "archived": String(archived), "cursor": cursor, "limit": "20"]))
+  func capabilities() async throws -> ScheduledCapabilities {
+    let value: ScheduledCapabilities = try await request("/capabilities")
+    guard value.taskContextVersion == 2 else { throw ScheduledFailure(code: "task_context_version_mismatch", message: "此电脑的定时任务协议不兼容，请更新 Backend。") }
+    return value
+  }
+  func list(q: String, archived: Bool, cursor: String? = nil) async throws -> ScheduledPage<ScheduledTaskRecord> {
+    try await request(query(["q": q, "archived": String(archived), "cursor": cursor, "limit": "20"]))
   }
   func task(_ id: String) async throws -> ScheduledTaskRecord { try await request("/\(APIClient.pathComponent(id))") }
   func runs(_ id: String, cursor: String? = nil) async throws -> ScheduledPage<ScheduledRun> {

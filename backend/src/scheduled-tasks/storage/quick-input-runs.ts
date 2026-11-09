@@ -11,7 +11,7 @@ export function listQuickInputRuns(
   const rows = database.prepare(
     `SELECT * FROM scheduled_runs WHERE json_valid(payload_json)
      AND json_extract(payload_json, '$.snapshot.origin.kind') = 'quick-input'
-     AND (? IS NULL OR json_extract(payload_json, '$.snapshot.projectId') = ?)
+     AND (? IS NULL OR json_extract(payload_json, '$.snapshot.origin.projectId') = ?)
      AND (? IS NULL OR json_extract(payload_json, '$.finishedAt') >= ?)
      ORDER BY CASE WHEN ? IS NULL THEN scheduled_for END DESC,
               CASE WHEN ? IS NOT NULL THEN json_extract(payload_json, '$.finishedAt') END ASC,

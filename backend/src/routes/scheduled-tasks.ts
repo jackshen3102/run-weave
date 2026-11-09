@@ -1,6 +1,8 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
+import { SCHEDULED_TASK_PROMPT_MAX_LENGTH } from "@runweave/shared/scheduled-tasks";
 import type { ScheduledTaskService } from "../scheduled-tasks/service";
+import { registerScheduledTaskMigrationRoutes, taskContextVersionGate } from "./scheduled-task-migration";
 import { ScheduledTaskError } from "../scheduled-tasks/errors";
 
 const timezone = z.string().trim().min(1).max(100);
@@ -31,9 +33,8 @@ const continuationPolicy = z
 const configShape = {
   continuationPolicy: continuationPolicy.optional(),
   name: z.string().trim().min(1).max(80),
-  projectId: z.string().trim().min(1).max(500),
   provider,
-  prompt: z.string().trim().min(1).max(12_000),
+  prompt: z.string().trim().min(1).max(SCHEDULED_TASK_PROMPT_MAX_LENGTH),
   model: z.string().trim().min(1).max(200).optional(),
   effort: z.string().trim().min(1).max(100).optional(),
   executionPolicy: z.enum(["sandbox", "auto-review", "full-access"]).optional(),
@@ -56,11 +57,13 @@ const configShape = {
 const createTaskSchema = z
   .object({ ...configShape, enabled: z.boolean() })
   .strict();
+const legacyCreateShape = Object.fromEntries(Object.entries(configShape).flatMap(([key, value]) =>
+  key === "name" ? [[key, value], ["projectId", z.string().trim().min(1).max(500)]] : [[key, value]]));
+const legacyCreateTaskSchema = z.object({ ...legacyCreateShape, enabled: z.boolean() }).strict();
 const updateTaskSchema = z
   .object({
     continuationPolicy: configShape.continuationPolicy,
     name: configShape.name.optional(),
-    projectId: configShape.projectId.optional(),
     provider: provider.optional(),
     prompt: configShape.prompt.optional(),
     model: z.string().trim().min(1).max(200).nullable().optional(),
@@ -81,8 +84,6 @@ const openSchema = z
   .strict();
 const listSchema = z
   .object({
-    parentProjectId: z.string().trim().min(1).optional(),
-    projectId: z.string().trim().min(1).optional(),
     q: z.string().max(500).optional(),
     archived: z
       .enum(["true", "false"])
@@ -114,6 +115,8 @@ export function createScheduledTasksRouter(
   service: ScheduledTaskService,
 ): Router {
   const router = Router();
+  router.use(taskContextVersionGate);
+  registerScheduledTaskMigrationRoutes(router, service);
   router.get("/capabilities", (_req, res) =>
     handle(res, () => service.capabilities()),
   );
@@ -187,11 +190,12 @@ export function createScheduledTasksRouter(
   router.post("/", (req, res) =>
     handle(
       res,
-      () =>
-        service.create(
-          createTaskSchema.parse(req.body),
-          requireIdempotencyKey(req.headers["idempotency-key"]),
-        ),
+      async () => {
+        const key = requireIdempotencyKey(req.headers["idempotency-key"]);
+        const parsed = req.body?.projectId === undefined ? createTaskSchema.parse(req.body) : legacyCreateTaskSchema.parse(req.body);
+        const replay = await service.replayCreate(parsed, key);
+        return replay ?? service.create(createTaskSchema.parse(req.body), key);
+      },
       201,
     ),
   );

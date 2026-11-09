@@ -1,7 +1,5 @@
 import type { ScheduledTask } from "@runweave/shared/scheduled-tasks";
 import { CalendarClock } from "lucide-react";
-import { useTerminalProjectsQuery } from "../terminal/queries/workspace";
-import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
 import { displayTime, scheduleLabel } from "./presentation";
 import { TaskActions } from "./task-actions";
 
@@ -16,15 +14,9 @@ export function TaskList({
   onOpen: (taskId: string) => void;
   onEdit: (task: ScheduledTask) => void;
 }) {
-  const projects = useTerminalProjectsQuery().data;
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {tasks.map((task) => {
-        const child = parseTerminalChildProjectId(task.projectId);
-        const project = projects?.find(
-          (item) =>
-            item.projectId === (child?.parentProjectId ?? task.projectId),
-        );
         return (
           <article
             key={task.id}
@@ -49,8 +41,7 @@ export function TaskList({
                 {task.prompt}
               </p>
               <p className="mt-4 break-words text-xs text-muted-foreground">
-                {project?.name ?? task.projectId}
-                {child ? ` / ${child.worktreeName}` : ""} · {task.provider}
+                {task.provider}
               </p>
               <p className="mt-3 flex items-start gap-2 text-xs">
                 <CalendarClock className="h-4 w-4 shrink-0" />

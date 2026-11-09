@@ -20,6 +20,8 @@ import {
 } from "../../../backend/src/scheduled-tasks/schedule";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
+import { verifyProjectMigration } from "./project-migration";
+import { verifyProjectIndependent } from "./project-independent";
 import { verifyMaintenance } from "./maintenance";
 import { verifyContinuation } from "./continuation";
 import { verifyMigrations } from "./migrations";
@@ -27,6 +29,8 @@ import { verifyArchive, verifyConcurrent } from "./concurrent";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
+  projectMigration: verifyProjectMigration,
+  projectIndependent: () => withStore(store => verifyProjectIndependent(store)),
   continuation: () =>
     withStore((store, directory) =>
       verifyContinuation(store, directory, taskFixture),
@@ -215,7 +219,6 @@ async function verifyDedupe(): Promise<void> {
     const task = taskFixture();
     const created = await store.createTask(
       task,
-      task.projectId,
       "create-key",
       "create-hash",
     );
@@ -223,7 +226,6 @@ async function verifyDedupe(): Promise<void> {
       (
         await store.createTask(
           { ...task, id: crypto.randomUUID() },
-          task.projectId,
           "create-key",
           "create-hash",
         )
@@ -234,7 +236,6 @@ async function verifyDedupe(): Promise<void> {
       () =>
         store.createTask(
           { ...task, id: crypto.randomUUID() },
-          task.projectId,
           "create-key",
           "different",
         ),
@@ -275,7 +276,7 @@ async function verifyRestart(): Promise<void> {
   try {
     let store = await ScheduledTaskStore.create({ databasePath });
     const task = taskFixture();
-    await store.createTask(task, task.projectId, "create-key", "create-hash");
+    await store.createTask(task, "create-key", "create-hash");
     const run = await store.createManualRun(
       runFixture(task, "manual"),
       "run-key",
@@ -295,7 +296,6 @@ async function verifyRestart(): Promise<void> {
     const liveTask = { ...taskFixture(), id: crypto.randomUUID() };
     await store.createTask(
       liveTask,
-      liveTask.projectId,
       "live-create",
       "live-hash",
     );
@@ -362,7 +362,6 @@ async function verifyCatchUp(): Promise<void> {
         };
         await store.createTask(
           task,
-          task.projectId,
           `boundary-${index}`,
           "hash",
         );
@@ -378,7 +377,7 @@ async function verifyCatchUp(): Promise<void> {
         nextRunAt: "2020-01-01T09:00:00.000Z",
         misfirePolicy: { mode: "catch-up-latest", maxDelaySeconds: 86400 },
       };
-      await store.createTask(task, task.projectId, "backlog", "hash");
+      await store.createTask(task, "backlog", "hash");
       await runtime["materializeDue"](now);
       await runtime["materializeDue"](now);
       const runs = await store.listRuns(task.id);
@@ -425,7 +424,7 @@ async function verifyCatchUp(): Promise<void> {
         ...taskFixture(),
         nextRunAt: "2026-09-22T09:00:00.000Z",
       };
-      await store.createTask(legacy, legacy.projectId, "legacy", "hash");
+      await store.createTask(legacy, "legacy", "hash");
       await runtime["materializeDue"](now);
       assert.equal((await store.listRuns(legacy.id))[0]?.error?.code, "missed");
     } finally {
@@ -443,7 +442,7 @@ async function verifyCatchUpExecution(): Promise<void> {
       schedule: { kind: "once", timezone: "UTC", runAt: at },
       misfirePolicy: { mode: "catch-up-latest", maxDelaySeconds: 86400 },
     };
-    await store.createTask(task, task.projectId, "execute-catch-up", "hash");
+    await store.createTask(task, "execute-catch-up", "hash");
     let invocations = 0;
     const runtime = new ScheduledTaskRuntime(
       store,
@@ -456,7 +455,7 @@ async function verifyCatchUpExecution(): Promise<void> {
           {
             provider: "codex",
             run: async (request) => {
-              assert.equal(request.projectId, task.projectId);
+              assert.equal(request.projectId, undefined);
               invocations += 1;
               return {
                 provider: "codex",
@@ -525,7 +524,6 @@ function taskFixture(): ScheduledTask {
     id: crypto.randomUUID(),
     revision: 1,
     name: "fixture",
-    projectId: "fixture-project",
     provider: "codex",
     prompt: "fixture",
     misfirePolicy: { mode: "skip" },
@@ -547,7 +545,6 @@ function runFixture(
     taskRevision: task.revision,
     snapshot: {
       name: task.name,
-      projectId: task.projectId,
       provider: task.provider,
       prompt: task.prompt,
       schedule: task.schedule,
@@ -563,8 +560,7 @@ function runFixture(
     error: null,
     artifacts: [],
     outputCursor: "0",
-    executionProjectId: task.projectId,
-    cwd: os.tmpdir(),
+    executionContext: { kind: "project", projectId: "fixture-project", cwd: os.tmpdir() },
     threadRef: null,
     recoverable: false,
     terminalBinding: null,

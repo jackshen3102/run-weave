@@ -225,14 +225,15 @@ export class CodexScheduledTaskProvider implements ScheduledProviderAdapter {
 export function codexScheduledEnvironment(
   source: NodeJS.ProcessEnv,
   runId: string,
-  projectId: string,
+  projectId: string | undefined,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...source,
     RUNWEAVE_SCHEDULED_TASK_RUN_ID: runId,
-    RUNWEAVE_PROJECT_ID: projectId,
     RUNWEAVE_BROWSER_GROUP_ID: scheduledBrowserGroupId(runId),
   };
+  if (projectId) env.RUNWEAVE_PROJECT_ID = projectId;
+  else delete env.RUNWEAVE_PROJECT_ID;
   for (const key of [
     "AUTH_USERNAME",
     "AUTH_PASSWORD",
@@ -264,7 +265,7 @@ export function codexScheduledEnvironment(
 function scopedBrowserEndpoint(
   raw: string | undefined,
   runId: string,
-  projectId: string,
+  projectId: string | undefined,
 ): string | null {
   if (!raw?.trim()) return null;
   try {
@@ -277,7 +278,8 @@ function scopedBrowserEndpoint(
     )
       return null;
     endpoint.searchParams.set("groupId", scheduledBrowserGroupId(runId));
-    endpoint.searchParams.set("projectId", projectId);
+    if (projectId) endpoint.searchParams.set("projectId", projectId);
+    else endpoint.searchParams.delete("projectId");
     return endpoint.toString();
   } catch {
     return null;

@@ -65,10 +65,9 @@ export async function verifyMaintenance(
   try {
     const first = { ...taskFixture(), enabled: false },
       second = { ...taskFixture(), enabled: false };
-    await store.createTask(first, first.projectId, "maintenance-first", "hash");
+    await store.createTask(first, "maintenance-first", "hash");
     await store.createTask(
       second,
-      second.projectId,
       "maintenance-second",
       "hash",
     );

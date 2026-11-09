@@ -49,7 +49,7 @@ struct ScheduledRunView: View {
       }
       DisclosureGroup("本次配置快照") {
         VStack(alignment: .leading, spacing: 8) {
-          Text("\(run.snapshot.name) · \(run.snapshot.provider) · \(run.executionProjectId)")
+          Text("\(run.snapshot.name) · \(run.snapshot.provider) · \(run.executionContext.cwd ?? "原执行目录未保存")")
           if run.snapshot.origin?.kind != "quick-input" {
             Text(run.snapshot.schedule.label)
             Text(run.snapshot.misfirePolicy.label)

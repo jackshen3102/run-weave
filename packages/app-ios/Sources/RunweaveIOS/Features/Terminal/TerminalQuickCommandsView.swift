@@ -202,7 +202,7 @@ struct TerminalQuickCommandsView: View {
     } else {
       Button { start(item) } label: {
         compactLabel(model.starting.contains(item.id) ? "提交中" : "后台", symbol: "play", primary: false)
-      }.disabled(!currentTerminal || !model.canEdit(session) || model.starting.contains(item.id))
+      }.disabled(!currentTerminal || !model.canStart(session) || model.starting.contains(item.id))
         .accessibilityLabel("后台运行 \(item.title)").accessibilityIdentifier("quick-command-background-\(item.id)")
     }
   }

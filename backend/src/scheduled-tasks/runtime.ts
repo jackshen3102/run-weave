@@ -1,5 +1,5 @@
 import { ServerMaintenance } from "./server-maintenance";
-import { stat } from "node:fs/promises";
+import { taskWorkspace, validateExecutionContext } from "./execution-context";
 import { continuationPrompt } from "./continuation";
 import { randomUUID } from "node:crypto";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
@@ -162,12 +162,11 @@ export class ScheduledTaskRuntime {
           task.schedule.kind === "once"
             ? null
             : (nextOccurrences(task.schedule, now, 1)[0] ?? null);
-        const project = this.terminalSessionManager.getProject(task.projectId);
         const run = createScheduledRunRecord(
           task,
           "scheduled",
           scheduledFor,
-          project?.path ?? "",
+          (id) => taskWorkspace(this.store.databasePath, id),
         );
         run.dispatch = {
           evaluatedAt: now.toISOString(),
@@ -186,13 +185,6 @@ export class ScheduledTaskRuntime {
           run.error = {
             code: "missed",
             message: "The schedule exceeded its allowed delay and was skipped",
-          };
-        } else if (!project?.path) {
-          run.status = "failed";
-          run.finishedAt = now.toISOString();
-          run.error = {
-            code: "context_unavailable",
-            message: "The scheduled project directory is unavailable",
           };
         } else if (!this.providers.has(task.provider)) {
           run.status = "failed";
@@ -244,15 +236,7 @@ export class ScheduledTaskRuntime {
     this.active.set(initial.id, controller);
     const executionStarted = Date.now();
     try {
-      const project = this.terminalSessionManager.getProject(
-        initial.snapshot.projectId,
-      );
-      if (
-        !project?.path ||
-        project.path !== initial.cwd ||
-        !(await stat(initial.cwd).catch(() => null))?.isDirectory()
-      )
-        throw new Error("context_unavailable");
+      const cwd = await validateExecutionContext(initial, this.terminalSessionManager, !initial.threadRef);
       const provider = this.providers.get(initial.snapshot.provider);
       if (!provider) throw new Error("provider_unavailable");
       const budget = initial.executionBudget ?? this.limits;
@@ -266,12 +250,12 @@ export class ScheduledTaskRuntime {
       const resuming = Boolean(initial.threadRef && initial.continuation);
       const result = await provider.run({
         runId: initial.id,
-        projectId: initial.snapshot.projectId,
+        projectId: initial.executionContext.kind === "project" ? initial.executionContext.projectId : undefined,
         prompt: resuming
           ? continuationPrompt(initial)
           : initial.snapshot.prompt,
         ...(resuming ? { resumeThreadId: initial.threadRef!.threadId } : {}),
-        workingDirectory: project.path,
+        workingDirectory: cwd,
         model: initial.snapshot.model,
         effort: initial.snapshot.effort,
         executionPolicy: initial.snapshot.executionPolicy,
@@ -310,7 +294,7 @@ export class ScheduledTaskRuntime {
       const code = controller.signal.aborted
         ? "cancelled"
         : error instanceof Error
-          ? error.message
+          ? ("code" in error ? String(error.code) : error.message)
           : "provider_failed";
       await this.store.finishExecution(initial.id, this.ownerId, {
         finishedAt: new Date().toISOString(),
