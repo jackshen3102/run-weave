@@ -29,7 +29,7 @@
 ### 自动发行入口
 
 [server-release.yml](../../.github/workflows/server-release.yml) 负责完整发行：
-按范围构建与本地验证 → OIDC 发布选中的包到 `next` → 四个平台从公共
+按范围构建与本地验证 → OIDC 发布选中的包到发行专属候选 tag → 四个平台从公共
 registry 安装并验证原生运行时、服务和登录 → 提升到请求的 dist-tag。
 支持 macOS arm64、Linux glibc arm64/x64、Windows x64，不再发行 Intel Mac 平台包。
 只做构建的手动触发不会发布；没有通过全部安装验证时不提升 `latest`。
@@ -72,9 +72,12 @@ gh run view <run-id> --repo jackshen3102/run-weave
 ```
 
 Agent 要记录 run ID、head SHA、发版范围、实际选中的包版本和最终回执。
-`npm-server-<platform>` 是各平台构建产物，`npm-release-receipt` 记录发布阶段，
+`npm-server-<platform>` 是构建完成立即保存的不可变候选 tarball；本地验收先从这些 tarball 恢复，
+失败重跑只复用同一次 run、同一源码及精确版本的候选，不重新构建或打包。
+候选保存不代表验证通过，所有本地验收成功后才允许后续发布。
+`npm-release-receipt` 记录发布阶段，
 `npm-release-final-receipt` 的 `phase=complete` 表示发布及标签核对完成。
-平台包先于主包发布；公共主包及 CLI 只取 Linux x64 job 的一份已验证产物。
+公共主包及 CLI 只取 Linux x64 job 的一份已验证产物。
 CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成的包目录运行。
 
 完整升级回归按变更范围选择：发行、依赖、原生运行时、配置、存储及未知范围变化保留全部回归；
@@ -85,12 +88,14 @@ CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成�
 
 发布脚本 [publish-server.mjs](../../scripts/release/publish-server.mjs) 在发布前核对全套
 版本、sourceRevision、repository、原生依赖及 SHA-512，发布后重新下载核对摘要。
-平台包先连续上传，再并行等待可见并校验；CLI 独立并行处理，主包等平台依赖全部可下载后才上传。
+所有选中包（含主包）先连续上传到 `release-<source SHA 前12位>`，再并行等待可见并校验，
+重叠主包与平台依赖的 npm 处理时间。候选精确版本在依赖齐备前不保证可安装；
+`next/latest` 保持原指向，直到全部依赖可下载、公开安装验收通过才提升请求的通道，并清理候选 tag。
 发行标签也先写入，再并行核对，避免逐包相加传播等待。
 npm 接受上传后可能仍需处理；版本信息与包文件也可能先后可见。脚本对每个精确版本最多等待 15 分钟，
 包文件暂时返回 404 时继续等待，期间不重复发布；摘要不一致仍立即拒绝。
 标签写入也可能晚于响应变得可见，写入后最多等待 5 分钟核对；只有全部标签一致才生成完成回执。
-同版本只有字节完全相同才允许跳过并继续。新发布的包先进入 `next`；中间失败可能留下部分包，
+同版本只有字节完全相同才允许跳过并继续。中间失败可能留下部分候选包，
 不等于正式发行成功。
 
 失败时先读日志和回执，解决原因后优先 **Re-run failed jobs**，复用本次已验证的 artifacts。

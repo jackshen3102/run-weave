@@ -53,8 +53,7 @@ setInterval(()=>{tick++;console.log('CONTINUITY_'+tick);if(!started&&fs.existsSy
   }
   socket = await connect();
   await socket.waitOutput('CONTINUITY_');
-  socket.send({ type: 'signal', signal: 'SIGINT' });
-  await sleep(500);
+  await socket.interrupt();
   socket.send({ type: 'input', data: "Write-Output ('AFTER_'+'HOST_UPGRADE')\r" });
   await socket.waitOutput('AFTER_HOST_UPGRADE');
   return { result, socket };

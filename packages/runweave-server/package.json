@@ -1,6 +1,6 @@
 {
   "name": "@runweave/server",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Standalone Runweave Backend, App Server and web resources",
   "license": "MIT",
   "files": [
