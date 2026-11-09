@@ -17,7 +17,7 @@ import urllib.request
 import uuid
 import runpy
 recycled_group = runpy.run_path(str(Path(__file__).with_name("process_group.py")))["recycled_group"]
-
+observed = runpy.run_path(str(Path(__file__).with_name("observation.py")))["observed"]
 BASE = Path.home() / ".runweave"
 APPS = {"runweave": "com.runweave.app.native", "suiji": "com.runweave.suiji"}
 IDLE_SECONDS = 30 * 60
@@ -234,9 +234,9 @@ class Operation:
     def __init__(self, owner):
         self.owner = owner
 
+    @observed
     def run(self, args, *, env=None, cwd=None, capture_output=False, timeout=None):
-        # Keep the safety boundary here: installed skill wrappers also use this
-        # operation, even when they predate the graceful shutdown protocol.
+        # Installed skill wrappers, including older versions, share this safety boundary.
         if args[:3] == ["agent-device", "daemon", "stop"] and "--clean" in args:
             root = Path(self.owner["taskDir"])
             state_index = args.index("--state-dir") + 1 if "--state-dir" in args else len(args)

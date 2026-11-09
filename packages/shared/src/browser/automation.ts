@@ -68,3 +68,27 @@ export interface TerminalBrowserAutomationFrame {
   mimeType: "image/jpeg";
   bytes: Uint8Array;
 }
+
+/** An explicitly selected native window; no inferred Agent ownership. */
+export interface AgentObserverWindowFrame {
+  id: string;
+  name: string;
+  image: string | null;
+  capturedAt: number;
+}
+
+/** Latest local simulator frame, bound to a live pool lease; no recording. */
+export interface AgentObserverSimulatorFrame extends AgentObserverWindowFrame {
+  udid: string;
+  terminalSessionId: string | null;
+  phase: "running" | "settling" | "idle" | "private";
+  action: string;
+  error: string | null;
+}
+
+export interface AgentObserverTerminalSource {
+  connectionId: string;
+  terminalSessionId: string;
+  label: string;
+  project: string;
+}

@@ -96,3 +96,9 @@ export function registerTerminalBrowserPresentationHandler(): void {
     setTerminalBrowserPresentation(win, value);
   });
 }
+
+/** Whether the user currently asks to see this page in its original Browser. */
+export function isTerminalBrowserPresentationRequested(win: BrowserWindow, entry: TerminalBrowserEntry): boolean {
+  const state = stateFor(win);
+  return state.target === entry && state.active && !state.suppressed && Boolean(entry.viewportBounds && entry.viewportBounds.width > 0 && entry.viewportBounds.height > 0);
+}

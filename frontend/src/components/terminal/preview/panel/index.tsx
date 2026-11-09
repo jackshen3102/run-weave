@@ -32,14 +32,13 @@ import { TerminalRacePanel } from "../../race/race-panel";
 import { useTerminalFileTree } from "../files/use-tree";
 import { useTerminalMarkdownReferenceActions } from "../../markdown/use-actions";
 import { useTerminalPreviewFileMutations } from "../files/use-mutations";
-import { TerminalBrowserAutomationTool } from "../../automation/tool";
+import { AgentObserverLauncher } from "../../automation/launcher";
 interface TerminalPreviewPanelProps {
   fileLinkIntent?: TerminalPreviewFileLinkIntent | null;
   onFileLinkDone?: () => void;
   activeProject: TerminalProjectListItem | null;
   activeSession: TerminalSessionListItem | null;
   activePanelId: string | null;
-  sessions: TerminalSessionListItem[];
   widthPx?: number;
   onEditProject: () => void;
 }
@@ -69,7 +68,6 @@ export function TerminalPreviewPanel({
   activeProject,
   activeSession,
   activePanelId,
-  sessions,
   widthPx,
   onEditProject,
 }: TerminalPreviewPanelProps) {
@@ -447,10 +445,7 @@ export function TerminalPreviewPanel({
   }
   const raceBody = <TerminalRacePanel />;
   const automationBody = (
-    <TerminalBrowserAutomationTool
-      active={activeTool === "automation"}
-      sessions={sessions}
-    />
+    <AgentObserverLauncher active={activeTool === "automation"} />
   );
   return (
     <>

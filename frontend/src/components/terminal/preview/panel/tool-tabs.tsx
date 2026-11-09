@@ -45,20 +45,6 @@ export function TerminalSidecarTabs({
   const visible = getVisibleSidecarTabs(layout, available);
   const active = getActiveSidecarTab(activeTool, profileId);
   const [open, setOpen] = useState(false);
-  const [automationCount, setAutomationCount] = useState(0);
-
-  useEffect(() => {
-    if (!isElectron) return;
-    let alive = true;
-    void window.electronAPI?.terminalBrowserAutomationGetSnapshot?.()
-      .then((snapshot) => { if (alive) setAutomationCount(snapshot.connections.length); })
-      .catch(() => { /* State-change events can still provide the count. */ });
-    const unsubscribe = window.electronAPI?.onTerminalBrowserAutomationStateChanged?.(
-      (snapshot) => setAutomationCount(snapshot.connections.length),
-    );
-    return () => { alive = false; unsubscribe?.(); };
-  }, [isElectron]);
-
   const activate = useMemoizedFn((id: SidecarTabId) => {
     if (isTerminalBrowserProfileId(id)) activateBrowser(id, projectId);
     else onSetActiveTool(id);
@@ -86,9 +72,7 @@ export function TerminalSidecarTabs({
     if (!nextVisible.includes(active)) activate(getSidecarFallback(defaults, active, nextVisible));
     reset();
   });
-  const label = (id: SidecarTabId) => id === "automation" && automationCount > 0
-    ? `Automation · ${automationCount}`
-    : SIDECAR_TABS.find((tab) => tab.id === id)!.label;
+  const label = (id: SidecarTabId) => SIDECAR_TABS.find((tab) => tab.id === id)!.label;
   const renderTab = useMemoizedFn((id: SidecarTabId, { isDragging }: SortableTabRenderProps) => (
     <button
       type="button"
