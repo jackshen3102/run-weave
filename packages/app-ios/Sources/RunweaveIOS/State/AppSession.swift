@@ -46,6 +46,7 @@ final class AppSession: ObservableObject {
   var unreadableDraftScopes = Set<String>()
 
   init() {
+    MobileAnalytics.observeBrowser(browser)
     attachmentDrafts.onChange = { [weak self] in self?.scheduleDraftSave() }
     configureBrowser()
     startNetworkMonitoring()

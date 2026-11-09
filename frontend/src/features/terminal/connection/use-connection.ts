@@ -1,7 +1,7 @@
+import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type {
-  TerminalClientMessage,
   TerminalModeState,
   TerminalServerMessage,
 } from "@runweave/shared/terminal/websocket";
@@ -14,7 +14,7 @@ import {
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
 import { logTerminalPerf, summarizeTerminalChunk } from "../output/performance";
-import { toWebSocketBase } from "../navigation/url";
+import { buildTerminalWsUrl, sendMessage } from "./socket-transport";
 import {
   TerminalClientOutputRecovery,
   hasTerminalDimensions,
@@ -24,33 +24,6 @@ import {
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
 type TerminalRuntimeKind = "tmux" | "pty" | null;
-
-function buildTerminalWsUrl(
-  apiBase: string,
-  terminalSessionId: string,
-  ticket: string,
-  includeSnapshot: boolean,
-): string {
-  const searchParams = new URLSearchParams({
-    terminalSessionId,
-    token: ticket,
-  });
-  if (!includeSnapshot) {
-    searchParams.set("snapshot", "0");
-  }
-  return `${toWebSocketBase(apiBase)}/ws/terminal?${searchParams.toString()}`;
-}
-
-function sendMessage(
-  socket: WebSocket | null,
-  payload: TerminalClientMessage,
-): void {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
-  socket.send(JSON.stringify(payload));
-}
 
 export function useTerminalConnection(params: {
   apiBase: string;
@@ -168,6 +141,7 @@ export function useTerminalConnection(params: {
     };
 
     const connect = async (): Promise<void> => {
+      const diagnostics = beginDiagnosticAction("connection_recover");
       if (cancelled) {
         return;
       }
@@ -185,6 +159,7 @@ export function useTerminalConnection(params: {
         await previousRecovery?.reconnectCursor();
         const cursor = await outputRecovery.reconnectCursor();
         if (cancelled) return;
+        diagnostics.stage("request_started");
         const ticketPayload = await createTerminalWsTicket(
           apiBase,
           tokenRef.current,
@@ -229,6 +204,7 @@ export function useTerminalConnection(params: {
             return;
           }
 
+          diagnostics.stage("response_received");
           connectedAtRef.current = Date.now();
           closeReasonRef.current = null;
           setFailureSince(null);
@@ -256,6 +232,7 @@ export function useTerminalConnection(params: {
           }
         });
         socket.addEventListener("close", (event) => {
+          diagnostics.stage(cancelled || socketRef.current !== socket ? "cancelled" : "failed");
           if (socketRef.current !== socket) {
             return;
           }
@@ -331,6 +308,8 @@ export function useTerminalConnection(params: {
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
               orderedResizeRef.current = parsed.resizeMode === "ordered";
+              diagnostics.stage("confirmed");
+              diagnostics.stage("state_updated");
               singleRowScrollRef.current = parsed.runtimeKind === "tmux" && parsed.tmuxScrollMode === "single-row";
               if (parsed.recovery?.mode !== "resume")
                 outputRecovery.invalidate();
@@ -455,6 +434,7 @@ export function useTerminalConnection(params: {
           }
         });
       } catch (error) {
+        diagnostics.stage("failed", error);
         if (cancelled) {
           return;
         }

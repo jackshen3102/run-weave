@@ -1,3 +1,4 @@
+import { actionDiagnosticSnapshot, actionDiagnosticPersistenceFailed } from "../lib/action-diagnostics";
 import { useSettingsDraft } from "../features/settings/edit-session";
 import { useMemoizedFn } from "ahooks";
 import {
@@ -335,6 +336,13 @@ export function DiagnosticLogEntry({
             ) : null}
           </div>
 
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" onClick={() => {
+              const logs = actionDiagnosticSnapshot();
+              downloadBlob(new Blob([JSON.stringify({ logs, persistenceFailed: actionDiagnosticPersistenceFailed() }, null, 2)], { type: "application/json" }));
+            }}>导出最近操作诊断</Button>
+            <span className="text-xs text-muted-foreground">保留最近关键操作，不含输入正文。</span>
+          </div>
           {result ? (
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,3 +1,4 @@
+import IOSDiagnostics
 import Foundation
 
 /// A single serial writer owns the bounded on-disk ring. Callers never perform file I/O on MainActor.
@@ -50,7 +51,19 @@ final class DiagnosticStore: @unchecked Sendable {
 
   /// App analytics spans connections; a nil scope exports only those app-wide records.
   func snapshot(scope: String?) async -> Snapshot {
-    await withCheckedContinuation { continuation in
+    let actions = await ClientDiagnostics.snapshot().map { item in
+      var fields = item.context
+      fields["operationId"] = item.operationID
+      fields["relatedOperationId"] = item.relatedOperationID
+      fields["stage"] = item.stage.rawValue
+      fields["elapsedMs"] = String(item.elapsedMs)
+      fields["failureCode"] = item.failureCode
+      fields["errorDomain"] = item.errorDomain
+      fields["errorCode"] = item.errorCode.map(String.init)
+      return DiagnosticRecord(at: item.at, source: "native-ios:action", message: item.action.rawValue, details: fields)
+    }
+    let actionPersistenceFailed = await ClientDiagnostics.persistenceFailed()
+    return await withCheckedContinuation { continuation in
       queue.async {
         self.load()
         self.save()
@@ -67,8 +80,8 @@ final class DiagnosticStore: @unchecked Sendable {
               return DiagnosticRecord(
                 at: stored.record.at, source: stored.record.source,
                 message: stored.record.message, details: details)
-            },
-            persistenceError: self.persistenceError))
+            } + actions,
+            persistenceError: self.persistenceError ?? (actionPersistenceFailed ? "操作诊断仅保存在内存中，持久化不可用" : nil)))
       }
     }
   }
@@ -92,6 +105,7 @@ final class DiagnosticStore: @unchecked Sendable {
         }
       }
     }
+    try await ClientDiagnostics.clear()
   }
 
   func flush() async {
