@@ -11,7 +11,7 @@ export class PtyHostClient {
   generation = 0;
   readonly events = new Set<(event: PtyHostEvent) => void>();
   readonly disconnected = new Set<() => void>();
-  private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void; timer: NodeJS.Timeout }>();
+  private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
   private readonly socket: Socket;
   private readonly token: string;
   private connected = false;
@@ -23,7 +23,7 @@ export class PtyHostClient {
     this.socket.on("error", () => {});
     this.socket.on("close", () => {
       this.connected = false;
-      for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error("HOST_CONNECTION_LOST")); }
+      for (const request of this.pending.values()) request.reject(new Error("HOST_CONNECTION_LOST"));
       this.pending.clear();
       for (const listener of this.disconnected) listener();
     });
@@ -32,7 +32,6 @@ export class PtyHostClient {
       if (message.requestId) {
         const request = this.pending.get(message.requestId);
         if (!request) return;
-        clearTimeout(request.timer); this.pending.delete(message.requestId);
         if (message.error) request.reject(new Error(message.error)); else request.resolve(message.result);
       } else if (message.type) for (const listener of this.events) listener(value as PtyHostEvent);
     });
@@ -50,13 +49,30 @@ export class PtyHostClient {
       return client;
     } catch (error) { client.close(); throw error; }
   }
-  request<T>(action: string, body: unknown = {}): Promise<T> {
+  /** Aborting only releases this caller's wait; it does not cancel or replay Host operations. */
+  request<T>(action: string, body: unknown = {}, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) return Promise.reject(new Error("HOST_REQUEST_ABORTED"));
     if (!this.connected) return Promise.reject(new Error("HOST_CONNECTION_LOST"));
     const requestId = randomUUID();
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error("HOST_REQUEST_UNCERTAIN")); }, 15_000);
-      this.pending.set(requestId, { resolve: value => resolve(value as T), reject, timer });
-      sendJson(this.socket, { requestId, token: this.token, hostInstanceId: this.descriptor.hostInstanceId, action, body });
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
+        this.pending.delete(requestId);
+      };
+      const request = {
+        resolve: (value: unknown) => { cleanup(); resolve(value as T); },
+        reject: (error: Error) => { cleanup(); reject(error); },
+      };
+      const abort = () => request.reject(new Error("HOST_REQUEST_ABORTED"));
+      const timer = setTimeout(() => request.reject(new Error("HOST_REQUEST_UNCERTAIN")), 15_000);
+      this.pending.set(requestId, request);
+      signal?.addEventListener("abort", abort, { once: true });
+      try {
+        if (!sendJson(this.socket, { requestId, token: this.token, hostInstanceId: this.descriptor.hostInstanceId, action, body })) {
+          request.reject(new Error("HOST_CONNECTION_LOST"));
+        }
+      } catch (error) { request.reject(error as Error); }
     });
   }
   close(): void { this.socket.destroy(); }
