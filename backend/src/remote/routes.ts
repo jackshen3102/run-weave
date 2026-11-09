@@ -1,5 +1,4 @@
 import { registerDesktopNetworkRoutes } from "../tunnels/routes";
-import { timingSafeEqual } from "node:crypto";
 import type { Express } from "express";
 import type { DesktopBrowserBindingRequest, RemoteBrowserResolveRequest } from "@runweave/shared/remote";
 import { createRequireAuth, readBearerToken } from "../auth/middleware";
@@ -8,13 +7,7 @@ import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/session";
 import { DesktopBrowserBindings, RemoteBrowserError } from "./browser-bindings";
 import { registerRemoteCapabilitiesRoute } from "./capabilities";
-
-function matchesHookToken(value: unknown, expected: string | undefined): boolean {
-  if (typeof value !== "string" || !expected) return false;
-  const supplied = Buffer.from(value);
-  const actual = Buffer.from(expected);
-  return supplied.length === actual.length && timingSafeEqual(supplied, actual);
-}
+import { createRequireTerminalHook } from "./terminal-hook-auth";
 
 function sendError(res: { status: (code: number) => { json: (body: unknown) => void } }, error: unknown): void {
   if (error instanceof RemoteBrowserError) {
@@ -34,13 +27,11 @@ export function registerRemoteBrowserRoutes(
 ): void {
   const bindings = new DesktopBrowserBindings(sessions);
   const requireAuth = createRequireAuth(auth);
+  const requireTerminalHook = createRequireTerminalHook(sessions);
   registerDesktopNetworkRoutes(app, requireAuth);
   registerRemoteCapabilitiesRoute(app, requireTunnelAuth, requireAuth, browserProfileDir, backendId);
-  app.get("/api/terminal/session/:id/runtime-identity", (req, res) => {
-    if (!matchesHookToken(req.headers["x-runweave-hook-token"], process.env.RUNWEAVE_HOOK_TOKEN)) {
-      res.sendStatus(401); return;
-    }
-    const session = sessions.getSession(req.params.id);
+  app.get("/api/terminal/session/:id/runtime-identity", requireTerminalHook, (req, res) => {
+    const session = sessions.getSession(String(req.params.id));
     if (!session) { res.status(404).json({ code: "terminal_session_not_found" }); return; }
     const identity: TerminalSessionIdentityResponse = {
       terminalSessionId: session.id, projectId: session.projectId,
@@ -73,14 +64,11 @@ export function registerRemoteBrowserRoutes(
       res.sendStatus(204);
     } catch (error) { sendError(res, error); }
   });
-  app.post("/api/terminal/session/:id/browser/capability", (req, res) => {
-    if (!matchesHookToken(req.headers["x-runweave-hook-token"], process.env.RUNWEAVE_HOOK_TOKEN)) {
-      res.sendStatus(401); return;
-    }
+  app.post("/api/terminal/session/:id/browser/capability", requireTerminalHook, (req, res) => {
     const projectId = req.body?.projectId;
     if (typeof projectId !== "string") { res.sendStatus(400); return; }
     try {
-      res.json({ capability: bindings.issueCapability(req.params.id, projectId), expiresIn: 3600 });
+      res.json({ capability: bindings.issueCapability(String(req.params.id), projectId), expiresIn: 3600 });
     } catch (error) { sendError(res, error); }
   });
   app.post("/api/terminal/session/:id/browser/resolve", async (req, res) => {

@@ -1064,10 +1064,10 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(file)"
   },
   {
-    "file": "backend/src/remote/routes.ts",
+    "file": "backend/src/remote/terminal-hook-auth.ts",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 2,
+    "count": 1,
     "category": "runtime-context",
     "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
