@@ -127,7 +127,10 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 | 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                                                                               |
 | Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                                                                                     |
 
-快捷指令的“后台运行”接入现有定时任务的 task/run 存储与单并发队列。Backend 校验已保存指令、
+普通定时任务不绑定项目，每次运行使用系统分配的私有目录；Task 不保存项目，Run 的 executionContext 冻结执行位置。
+旧项目任务须显式预览并迁移，旧日程迁移后暂停，操作与协议版本见 [定时任务 CLI](../cli/scheduled-task-cli.md)。
+
+快捷指令的“后台运行”接入现有定时任务的 task/run 存储与有界并发队列。Backend 校验已保存指令、
 实际项目目录和后台默认模型；请求按幂等键去重，运行快照保留项目与 worktree 来源。
 Web 和原生 iOS 的快捷指令面板按当前电脑展示所有项目的后台运行，需处理任务优先；支持将已结束的快捷指令运行移至历史：Backend 持久化 `archivedAt`，主列表与需处理计数排除归档记录，历史仍保留原始状态、业务结果、输出和恢复入口。
 未结束（含 waiting）的运行不可归档，新执行不继承旧记录的归档标记。两端按原有恢复合同打开对话；没有可恢复对话时可在原项目与工作区新建终端。当前实现不依赖独立 worker 或桌面自更新。通知、恢复及跨端交互仍须按

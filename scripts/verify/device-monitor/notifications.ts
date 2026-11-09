@@ -348,16 +348,16 @@ export async function verifyScheduledNotifications() {
     const otherPhone = await register(randomUUID());
     const now = new Date().toISOString();
     const task: ScheduledTask = {
-      id: randomUUID(), revision: 1, name: "background fixture", projectId: "fixture",
+      id: randomUUID(), revision: 1, name: "background fixture",
       provider: "codex", prompt: "fixture", enabled: false, nextRunAt: null,
       schedule: { kind: "daily", timezone: "UTC", localTime: "09:00" },
       misfirePolicy: { mode: "skip" }, createdAt: now, updatedAt: now, deletedAt: null,
     };
-    await runs.createTask(task, task.projectId, task.id, task.id);
+    await runs.createTask(task, task.id, task.id);
     const finish = async (quick = false) => {
       const run = createScheduledRunRecord({ ...task, ...(quick ? { origin: {
-        kind: "quick-input" as const, quickInputId: "fixture", projectName: "Fixture", worktreeName: null,
-      } } : {}) }, "manual", new Date().toISOString(), f.directory);
+        kind: "quick-input" as const, quickInputId: "fixture", projectId: "fixture", projectName: "Fixture", worktreeName: null,
+      } } : {}) }, "manual", new Date().toISOString(), () => ({ kind: "project", projectId: "fixture", cwd: f.directory }));
       run.status = quick ? "failed" : "completed";
       run.outcome = quick ? "blocked" : "succeeded";
       run.threadRef = { provider: "codex", threadId: randomUUID() };

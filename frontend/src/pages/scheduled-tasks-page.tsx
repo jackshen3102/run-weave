@@ -15,13 +15,11 @@ import {
 import { ConnectionSwitcher } from "../components/connection-switcher";
 import type { ConnectionConfig } from "../features/connection/types";
 import { TerminalRuntimeProvider } from "../features/terminal/queries/provider";
-import { useTerminalProjectsQuery } from "../features/terminal/queries/workspace";
 import { buildConnectionQueryScope } from "../features/query/connection-query-provider";
 import { useTaskNavigation } from "../features/scheduled-tasks/navigation";
 import { useCapabilities, useRun, useTasks } from "../features/scheduled-tasks/queries";
 import { runDetailsPath } from "../features/scheduled-tasks/run-details-path";
 import {
-  fieldClass,
   RequestError,
 } from "../features/scheduled-tasks/presentation";
 import { TaskList } from "../features/scheduled-tasks/task-list";
@@ -65,17 +63,15 @@ function ScheduledTasksContent(props: Props) {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const linkedRun = useRun(taskId ? searchParams.get("run") : null, false);
-  const { workspace, go } = useTaskNavigation();
-  const [parentId, setParentId] = useState(workspace.parentProjectId ?? "");
+  const { go } = useTaskNavigation();
   const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState("");
   const query = useDebounce(search, { wait: 250 });
   const [editor, setEditor] = useState<ScheduledTask | "new" | null>(null);
   const capabilities = useCapabilities();
-  const projects = useTerminalProjectsQuery();
   const available = Boolean(capabilities.data) && !capabilities.isError;
   const tasks = useTasks(
-    { parentProjectId: parentId || undefined, archived, q: query },
+    { archived, q: query },
     available && !taskId,
   );
   const records = tasks.data?.pages.flatMap((page) => page.items) ?? [];
@@ -186,21 +182,8 @@ function ScheduledTasksContent(props: Props) {
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="搜索任务"
                   />
-                  <select
-                    aria-label="项目筛选"
-                    className={fieldClass}
-                    value={parentId}
-                    onChange={(e) => setParentId(e.target.value)}
-                  >
-                    <option value="">所有项目</option>
-                    {projects.data?.map((project) => (
-                      <option key={project.projectId} value={project.projectId}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
-                <RequestError error={projects.error ?? tasks.error} />
+                <RequestError error={tasks.error} />
                 {tasks.isPending ? <p>正在加载任务…</p> : null}
                 {!tasks.isPending && !tasks.error && !records.length ? (
                   <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -234,7 +217,6 @@ function ScheduledTasksContent(props: Props) {
       {editor && capabilities.data ? (
         <TaskEditor
           task={editor === "new" ? undefined : editor}
-          defaultProjectId={workspace.projectId ?? ""}
           capabilities={capabilities.data}
           onClose={() => setEditor(null)}
           onSaved={(task) => {

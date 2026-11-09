@@ -61,7 +61,6 @@ export class ScheduledTaskDatabase {
 
   createTask(
     task: ScheduledTask,
-    parentProjectId: string,
     idempotencyKey: string,
     requestHash: string,
   ): ScheduledTask {
@@ -72,7 +71,7 @@ export class ScheduledTaskDatabase {
           throw new Error("idempotency_conflict");
         return this.requireTask(existing.resourceId);
       }
-      this.insertTask(task, parentProjectId);
+      this.insertTask(task);
       this.insertIdempotency(
         "create-task",
         idempotencyKey,
@@ -82,6 +81,13 @@ export class ScheduledTaskDatabase {
       );
       return task;
     })();
+  }
+
+  replayCreate(requestHash: string, key: string): ScheduledTask | null {
+    const existing = this.readIdempotency("create-task", key);
+    if (!existing) return null;
+    if (existing.requestHash !== requestHash) throw new Error("idempotency_conflict");
+    return this.requireTask(existing.resourceId);
   }
 
   getTask(taskId: string): ScheduledTask | null {
@@ -102,16 +108,13 @@ export class ScheduledTaskDatabase {
   updateTask(
     task: ScheduledTask,
     expectedRevision: number,
-    parentProjectId: string,
   ): ScheduledTask {
     const result = this.database
       .prepare(
-        `UPDATE scheduled_tasks SET revision = ?, parent_project_id = ?, project_id = ?, name = ?, enabled = ?, next_run_at = ?, deleted_at = ?, payload_json = ? WHERE id = ? AND revision = ?`,
+        `UPDATE scheduled_tasks SET revision = ?, name = ?, enabled = ?, next_run_at = ?, deleted_at = ?, payload_json = ? WHERE id = ? AND revision = ?`,
       )
       .run(
         task.revision,
-        parentProjectId,
-        task.projectId,
         task.name,
         task.enabled ? 1 : 0,
         task.nextRunAt,
@@ -175,7 +178,7 @@ export class ScheduledTaskDatabase {
         nextRunAt,
         enabled: task.schedule.kind === "once" ? false : task.enabled,
       };
-      this.updateTaskRow(updated, this.parentProjectId(run.taskId));
+      this.updateTaskRow(updated);
       return stored;
     })();
   }
@@ -225,7 +228,6 @@ export class ScheduledTaskDatabase {
 
   createQuickInputRun(
     candidate: ScheduledTask,
-    parentProjectId: string,
     cwd: string,
     idempotencyKey: string,
     requestHash: string,
@@ -236,19 +238,19 @@ export class ScheduledTaskDatabase {
         throw new Error("invalid_quick_input_task");
       const prior = this.findQuickInputRun(
         quickInputId,
-        candidate.projectId,
+        candidate.origin!.projectId,
         idempotencyKey,
         requestHash,
       );
       if (prior) return prior;
       const row = this.database
         .prepare(
-          `SELECT * FROM scheduled_tasks WHERE project_id = ? AND deleted_at IS NULL
+          `SELECT * FROM scheduled_tasks WHERE json_extract(payload_json, '$.origin.projectId') = ? AND deleted_at IS NULL
            AND json_valid(payload_json)
            AND json_extract(payload_json, '$.origin.kind') = 'quick-input'
            AND json_extract(payload_json, '$.origin.quickInputId') = ? LIMIT 1`,
         )
-        .get(candidate.projectId, quickInputId) as StoredRow | undefined;
+        .get(candidate.origin!.projectId, quickInputId) as StoredRow | undefined;
       const previous = row ? parseTask(row) : null;
       if (previous) {
         const busy = this.findUnfinished(previous.id);
@@ -262,12 +264,12 @@ export class ScheduledTaskDatabase {
             createdAt: previous.createdAt,
           }
         : candidate;
-      if (previous) this.updateTaskRow(task, parentProjectId);
-      else this.insertTask(task, parentProjectId);
-      const run = createScheduledRunRecord(task, "manual", task.updatedAt, cwd);
+      if (previous) this.updateTaskRow(task);
+      else this.insertTask(task);
+      const run = createScheduledRunRecord(task, "manual", task.updatedAt, () => ({ kind: "project", projectId: task.origin!.projectId, cwd }));
       this.insertRun(run, `manual:${run.id}`);
       this.insertIdempotency(
-        `quick-input-run:${quickInputId}:${task.projectId}`,
+        `quick-input-run:${quickInputId}:${task.origin!.projectId}`,
         idempotencyKey,
         requestHash,
         run.id,
@@ -477,16 +479,14 @@ export class ScheduledTaskDatabase {
     }
   }
 
-  private insertTask(task: ScheduledTask, parentProjectId: string): void {
+  private insertTask(task: ScheduledTask): void {
     this.database
       .prepare(
-        `INSERT INTO scheduled_tasks(id, revision, parent_project_id, project_id, name, enabled, next_run_at, deleted_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO scheduled_tasks(id, revision, name, enabled, next_run_at, deleted_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         task.id,
         task.revision,
-        parentProjectId,
-        task.projectId,
         task.name,
         task.enabled ? 1 : 0,
         task.nextRunAt,
@@ -495,15 +495,13 @@ export class ScheduledTaskDatabase {
       );
   }
 
-  private updateTaskRow(task: ScheduledTask, parentProjectId: string): void {
+  private updateTaskRow(task: ScheduledTask): void {
     this.database
       .prepare(
-        `UPDATE scheduled_tasks SET revision = ?, parent_project_id = ?, project_id = ?, name = ?, enabled = ?, next_run_at = ?, deleted_at = ?, payload_json = ? WHERE id = ?`,
+        `UPDATE scheduled_tasks SET revision = ?, name = ?, enabled = ?, next_run_at = ?, deleted_at = ?, payload_json = ? WHERE id = ?`,
       )
       .run(
         task.revision,
-        parentProjectId,
-        task.projectId,
         task.name,
         task.enabled ? 1 : 0,
         task.nextRunAt,
@@ -550,14 +548,6 @@ export class ScheduledTaskDatabase {
     const run = this.getRun(runId);
     if (!run) throw new Error("scheduled_run_not_found");
     return run;
-  }
-
-  private parentProjectId(taskId: string): string {
-    const row = this.database
-      .prepare("SELECT parent_project_id FROM scheduled_tasks WHERE id = ?")
-      .get(taskId) as { parent_project_id: string } | undefined;
-    if (!row) throw new Error("scheduled_task_not_found");
-    return row.parent_project_id;
   }
 
   private readIdempotency(

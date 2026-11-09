@@ -11,10 +11,11 @@ import type { RuntimeStatusRegistry } from "../runtime-status/registry";
 export function createServerManagementRouter(
   runtime?: ScheduledTaskRuntime | null,
   registry?: RuntimeStatusRegistry,
+  migrationMaintenance?: ServerMaintenance,
 ): Router {
   const router = Router();
   const maintenance =
-    runtime?.maintenance ??
+    runtime?.maintenance ?? migrationMaintenance ??
     new ServerMaintenance(
       async () => {},
       () => [],

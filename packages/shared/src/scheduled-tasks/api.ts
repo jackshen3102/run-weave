@@ -6,7 +6,12 @@ import type {
   TaskSchedule,
 } from "./types";
 
+export const TASK_CONTEXT_VERSION = 2;
+export const TASK_CONTEXT_VERSION_HEADER = "X-Runweave-Task-Context-Version";
+export const SCHEDULED_TASK_PROMPT_MAX_LENGTH = 12_000;
+
 export interface ScheduledTaskCapabilities {
+  taskContextVersion: 2;
   enabled: boolean;
   reason?: string;
   providers: Array<{
@@ -29,8 +34,6 @@ export interface ScheduledTaskPage<T> {
   nextCursor: string | null;
 }
 export interface ScheduledTaskFilter {
-  parentProjectId?: string;
-  projectId?: string;
   q?: string;
   archived?: boolean;
   cursor?: string;
@@ -54,7 +57,6 @@ export interface CreateScheduledTaskRequest extends ScheduledTaskConfig {
 /** Read-only validation result for the exact create or update request. */
 export interface ScheduledTaskValidation {
   config: CreateScheduledTaskRequest;
-  project: { id: string; name: string; path: string };
   provider: ScheduledTaskProvider;
   enabled: boolean;
   nextRunAt: string | null;

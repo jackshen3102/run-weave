@@ -24,13 +24,13 @@ export type ScheduledMisfirePolicy =
 export interface ScheduledQuickInputOrigin {
   kind: "quick-input";
   quickInputId: string;
+  projectId: string;
   projectName: string;
   worktreeName: string | null;
 }
 
 export interface ScheduledTaskConfig {
   name: string;
-  projectId: string;
   provider: ScheduledTaskProvider;
   prompt: string;
   model?: string;
@@ -72,6 +72,11 @@ export interface ScheduledTerminalBinding {
   error?: string;
 }
 
+export type ScheduledExecutionContext =
+  | { kind: "task-workspace"; cwd: string }
+  | { kind: "project"; cwd: string; projectId: string }
+  | { kind: "unavailable"; cwd: null; reason: "legacy-context-unavailable"; originalProjectId: string | null };
+
 export interface ScheduledRun {
   id: string;
   revision?: number;
@@ -112,8 +117,7 @@ export interface ScheduledRun {
     fileRef?: string;
   }>;
   outputCursor: string | null;
-  executionProjectId: string;
-  cwd: string;
+  executionContext: ScheduledExecutionContext;
   threadRef: {
     provider: ScheduledTaskProvider;
     threadId: string;

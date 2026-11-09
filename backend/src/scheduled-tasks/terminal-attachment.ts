@@ -1,5 +1,5 @@
 import { codexScheduledArgs } from "./providers/codex-options";
-import { stat } from "node:fs/promises";
+import { validateExecutionContext } from "./execution-context";
 import { settingText } from "@runweave/config-node";
 import type {
   OpenScheduledRunResponse,
@@ -76,20 +76,7 @@ export class ScheduledTerminalAttachment {
         409,
         "This run has no recoverable thread",
       );
-    const project = this.manager.getProject(run.executionProjectId);
-    if (
-      !project?.path ||
-      project.path !== run.cwd ||
-      !(await stat(run.cwd).then(
-        (value) => value.isDirectory(),
-        () => false,
-      ))
-    )
-      throw new ScheduledTaskError(
-        "context_unavailable",
-        409,
-        "The original project context is unavailable",
-      );
+    await validateExecutionContext(run, this.manager);
 
     const discovered = this.manager
       .listSessions()
@@ -132,8 +119,8 @@ export class ScheduledTerminalAttachment {
         const paneId = panel.tmuxPaneId;
         const pane = panes.find((item) => item.paneId === paneId);
         if (
-          pane?.cwd === run.cwd &&
-          (pane.activeCommand === "codex" || pane.paneCommand === "node")
+          pane?.cwd === run.executionContext.cwd! &&
+          (pane.activeCommand === "codex" || pane.paneCommand === "node" || pane.paneCommand === "codex")
         ) {
           return this.persistAndRespond(run, {
             terminalSessionId: session.id,
@@ -158,7 +145,7 @@ export class ScheduledTerminalAttachment {
       }
       if (session && panel && knownBinding?.attachmentState === "starting") {
         this.startResume(run, session.id, panel.id);
-        return response(run.executionProjectId, knownBinding);
+        return response(session.projectId, knownBinding);
       }
       if (session && panel && knownBinding?.attachmentState === "failed") {
         const starting: ScheduledTerminalBinding = {
@@ -169,16 +156,16 @@ export class ScheduledTerminalAttachment {
         await this.store.putBinding(run.id, starting);
         this.bindings.set(run.id, starting);
         this.startResume(run, session.id, panel.id);
-        return response(run.executionProjectId, starting);
+        return response(session.projectId, starting);
       }
     }
 
     // Reject missing history before allocating any terminal resources.
-    await checkpointCodexResume(run.threadRef.threadId, run.cwd);
+    await checkpointCodexResume(run.threadRef.threadId, run.executionContext.cwd!);
     if (!session || !panel) {
       session = await createTerminalSession(
         this.manager,
-        { projectId: run.executionProjectId, runtimePreference: "tmux" },
+        { ...(run.snapshot.origin?.kind === "quick-input" && run.executionContext.kind === "project" ? { projectId: run.executionContext.projectId } : {}), cwd: run.executionContext.cwd!, runtimePreference: "tmux" },
         { ...this.options, strictDefaultPanel: true },
         { type: "scheduled-task", taskId: run.taskId, runId: run.id },
       );
@@ -201,7 +188,7 @@ export class ScheduledTerminalAttachment {
     await this.store.putBinding(run.id, starting);
     this.bindings.set(run.id, starting);
     this.startResume(run, session.id, panel.id);
-    return response(run.executionProjectId, starting);
+    return response(session.projectId, starting);
   }
 
   private startResume(
@@ -229,7 +216,7 @@ export class ScheduledTerminalAttachment {
         throw new Error("provider_attachment_unavailable");
       const checkpoint = await checkpointCodexResume(
         run.threadRef.threadId,
-        run.cwd,
+        run.executionContext.cwd!,
       );
       const { tmuxService, runtimeRegistry, ptyService } = this.options;
       if (
@@ -326,7 +313,7 @@ export class ScheduledTerminalAttachment {
               "-c",
               'tui.resume_cwd="current"',
             ],
-            cwd: run.cwd,
+            cwd: run.executionContext.cwd!,
           },
           {
             resetPanelBeforeResume: true,
@@ -369,12 +356,14 @@ export class ScheduledTerminalAttachment {
           );
         }
         let confirmedState: "agent_idle" | "agent_running" | null = null;
+        // A staged shell launch can retain "." as its command hint; the foreground native Codex still requires exact resume proof below.
         if (
           currentSession &&
           currentPanel &&
-          current?.cwd === run.cwd &&
+          current?.cwd === run.executionContext.cwd! &&
           (current?.activeCommand === "codex" ||
-            current?.paneCommand === "node") &&
+            current?.paneCommand === "node" ||
+            current?.paneCommand === "codex") &&
           this.manager.matchesPanelAgentOperationGeneration(
             terminalSessionId,
             panelId,
@@ -384,7 +373,7 @@ export class ScheduledTerminalAttachment {
           (confirmedState = await confirmCodexResume(
             checkpoint,
             run.threadRef.threadId,
-            run.cwd,
+            run.executionContext.cwd!,
             run.snapshot,
             {
               panePid: (
@@ -468,7 +457,7 @@ export class ScheduledTerminalAttachment {
   ): Promise<OpenScheduledRunResponse> {
     await this.store.putBinding(run.id, binding);
     this.bindings.set(run.id, binding);
-    return response(run.executionProjectId, binding);
+    return response(this.manager.getSession(binding.terminalSessionId)!.projectId, binding);
   }
 }
 

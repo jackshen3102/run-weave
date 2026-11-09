@@ -228,8 +228,10 @@ export function QuickInputRunDetail({
     Boolean(run.threadRef);
   const create = useMutation({
     mutationFn: async () => {
+      if (run.executionContext.kind !== "project") throw new Error("本次运行没有项目来源。");
+      const executionContext = run.executionContext;
       const parentProjectId = resolveTerminalParentProjectId(
-        run.executionProjectId,
+        executionContext.projectId,
       );
       const contexts = await listTerminalProjectContexts(
         apiBase,
@@ -240,14 +242,14 @@ export function QuickInputRunDetail({
       if (
         !contexts.some(
           (context) =>
-            context.projectId === run.executionProjectId &&
-            context.path === run.cwd &&
+            context.projectId === executionContext.projectId &&
+            context.path === executionContext.cwd &&
             context.availability === "available",
         )
       )
         throw new Error("本次运行的项目或工作区已不可用，无法新建终端。");
       const created = await createTerminalSession(apiBase, token, {
-        projectId: run.executionProjectId,
+        projectId: executionContext.projectId,
       });
       const details = await getTerminalSession(
         apiBase,
@@ -255,8 +257,8 @@ export function QuickInputRunDetail({
         created.terminalSessionId,
       );
       if (
-        details.projectId !== run.executionProjectId ||
-        details.cwd !== run.cwd
+        details.projectId !== executionContext.projectId ||
+        details.cwd !== executionContext.cwd
       )
         throw new Error("项目执行位置已变化，请重新确认后再打开终端。");
       await client.invalidateQueries({
@@ -266,7 +268,7 @@ export function QuickInputRunDetail({
       const enterTerminal = () => {
         setTerminalNavigation(scope, {
         parentProjectId,
-        projectId: run.executionProjectId,
+        projectId: executionContext.projectId,
         terminalSessionId: created.terminalSessionId,
       });
       onOpened();

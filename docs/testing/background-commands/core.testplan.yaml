@@ -22,7 +22,7 @@ cases:
     preconditions:
       - 本例隔离父项目有两个登记的 worktree 和一条共享快捷指令，能核对 provider 的真实 cwd。
     steps:
-      - 使用 toolkit:playwright-cli 分别从两个 worktree 启动；核对 run 的 projectId、cwd 和名称快照分别对应点击位置。
+      - 使用 toolkit:playwright-cli 分别从两个 worktree 启动；核对 run 的 origin.projectId、executionContext.cwd 和名称快照分别对应点击位置。
       - 在本例另一条排队运行开始前移除或改动其目录映射；确认执行被拒绝，没有在父目录或新目录产生副作用。
   - id: BGC-003
     name: 重试和重复点击不重复执行

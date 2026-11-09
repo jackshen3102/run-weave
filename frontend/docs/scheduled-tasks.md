@@ -52,6 +52,18 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 不根据迟到推断宕机。电脑休眠期间不会执行，准点执行需要持续在线的 Backend。
 补跑验收见 [补跑测试计划](../../docs/testing/scheduled-tasks/catch-up.testplan.yaml)。
 
+## 无项目任务与旧库迁移
+
+普通任务使用系统管理的每运行私有工作目录，不继承进入表单时的项目；描述指定操作目标，
+不会自动扩大 sandbox。目录与 thread 保存在 executionContext，继续和恢复保持原位置，缺失时明确拒绝。
+创建终端时使用显式 cwd，终端展示归属不再是任务执行条件。任务权限、队列和额度保持原语义。
+
+Web、iOS、CLI 协同使用 taskContextVersion 2；变更请求必须带新版协议头。
+iOS 快捷后台入口也在读取运行和发送启动请求前预检协议；旧 Backend 显示升级提示并禁用后台按钮，
+仍可管理快捷指令，不能先启动运行再依靠响应解码发现版本不兼容。
+旧库需要用户核对迁移预览后显式转换，迁移后的旧日程保持暂停。回执要求重启 Backend，
+客户端不自行迁移、填假项目或提高权限。操作合同见 [定时任务 CLI](../../docs/cli/scheduled-task-cli.md#旧项目任务的显式迁移)。
+
 ## 接入边界
 
 - [服务层](../src/services/scheduled-tasks.ts)只使用既有鉴权 HTTP 客户端。
@@ -65,7 +77,7 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
 - 表单使用服务器 preview，不计算下一次调度。一次性时间显式输入 UTC，并按所选 IANA
   时区预览。创建和立即运行重试复用幂等键；修改与删除带 `expectedRevision`。
   冲突保留原草稿，不擅自用新 revision 覆盖他人配置。
-- 项目选择包含父项目与规范 Worktree 子项目。返回时通过连接隔离的一次性导航选择
+- 普通任务不配置项目或 Worktree；列表没有项目筛选。返回时通过连接隔离的一次性导航选择
   恢复父项目、实际项目、session 和 panel；不向 Backend 发送停止或删除。
 - 运行中只查看只读输出。可打开性由 Backend 的 `recoverable` 和真实 thread 决定；
   打开接口返回普通终端标识；Web 等待 Backend attachment 明确 ready 后，经现有路由进入终端，
@@ -100,7 +112,7 @@ Web、共享 DTO 与 Backend 已接通 `/api/scheduled-tasks`。Backend 使用�
   缺失或非法结果不能降级为成功。结果是 Agent 对业务执行的报告，不是独立验收证明。
 - 旧 completed 记录没有业务结果，界面显示“运行已结束”并提示检查摘要，不反向猜测历史状态。
   受阻记录仍可恢复对话，修正配置后需新建一次运行，旧快照不变。
-- 后台运行有独立 run ID 和冻结的 project ID；合法的本机 Browser endpoint 会改写为
+- 后台运行有独立 run ID 和冻结的 executionContext；普通任务没有项目身份，快捷来源保留实际项目。合法的本机 Browser endpoint 会改写为
   `browser-group-scheduled-<runId>` 的独立 scope。运行仍移除继承的 Terminal、tmux、Codex 会话身份，
   Browser group 不构成终端身份，也不用于伪造终端通知。
   依赖交互式终端身份的通知脚本需要单独适配，通知失败须如实反映在结果中。

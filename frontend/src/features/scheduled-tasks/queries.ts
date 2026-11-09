@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   useInfiniteQuery,
   useQuery,
@@ -28,7 +29,8 @@ export const pollInterval = () =>
 
 export function useScheduledApi() {
   const { apiBase, token, scope } = useTerminalRuntime();
-  return { api: scheduledTasksApi(apiBase, token), scope };
+  const api = useMemo(() => scheduledTasksApi(apiBase, token), [apiBase, token]);
+  return { api, scope };
 }
 export function useCapabilities() {
   const { api, scope } = useScheduledApi();

@@ -9,14 +9,12 @@ import { nextOccurrences } from "./schedule";
 
 export function validationResult(
   input: CreateScheduledTaskRequest | ScheduledTask,
-  project: { id: string; name: string; path: string | null },
   nextRunAt: string | null,
   now: Date,
   currentRevision: number | null,
 ): ScheduledTaskValidation {
   return {
     config: { ...normalizeConfig(input), enabled: input.enabled },
-    project: { id: project.id, name: project.name, path: project.path! },
     provider: input.provider,
     enabled: input.enabled,
     nextRunAt,
@@ -30,7 +28,6 @@ export function normalizeConfig(
 ) {
   return {
     name: input.name.trim(),
-    projectId: input.projectId,
     provider: input.provider,
     prompt: input.prompt.trim(),
     ...(input.continuationPolicy

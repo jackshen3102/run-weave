@@ -5,7 +5,6 @@
 
 ```bash
 rw auth status --json
-rw scheduled-task projects --json
 rw scheduled-task capabilities --json
 rw scheduled-task list --json
 rw scheduled-task get <task-id> --json
@@ -13,7 +12,7 @@ rw scheduled-task validate-create --file /private/draft.json --json
 rw scheduled-task validate-update <task-id> --file /private/patch.json --json
 ```
 
-`projects` 返回父项目及其 Worktree contexts，使用精确 `projectId`。`list` 可用 `--project-id`、`--parent-project-id`、`--q`、`--archived true|false` 过滤；不传时返回 Backend 默认第一页。验证响应包含完整请求、SHA-256、Backend 地址、项目名称与路径、provider、启用状态以及后续 UTC 运行时间。只有当前配置通过与正式写入相同的服务校验时，`validate-*` 才成功。时间预览是验证当刻的结果；写入时会重新计算下一次执行时间。
+普通任务不绑定项目。`list` 可用 `--q`、`--archived true|false` 过滤；不传时返回 Backend 默认第一页。验证响应包含完整请求、SHA-256、Backend 地址、provider、启用状态以及后续 UTC 运行时间。只有当前配置通过与正式写入相同的服务校验时，`validate-*` 才成功。时间预览是验证当刻的结果；写入时会重新计算下一次执行时间。
 
 用户核对**完整请求和目标 Backend**后，原样使用验证响应的 `sha256` 与 `backend`：
 
@@ -22,11 +21,56 @@ rw scheduled-task create --file /private/draft.json --sha256 <验证响应的 sh
 rw scheduled-task update <task-id> --file /private/patch.json --sha256 <验证响应的 sha256> --expected-backend <验证响应的 backend> --json
 ```
 
-创建文件是 `CreateScheduledTaskRequest`：`name`、`projectId`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy`、`continuationPolicy` 可选。`executionPolicy` 可为 `sandbox`、`auto-review` 或 `full-access`，省略时仍为 sandbox；可用值以当前 Backend capabilities 为准，不支持的值会被 `validate-*` 明确拒绝而不会降级。`full-access` 无沙箱且不等待交互审批，可联网并访问 Browser、模拟器和本机文件，只应使用可信提示词。Browser、模拟器、网络或 Git 不是额外配置字段，是否使用由完整提示词和对应 Skill 决定。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。创建和更新本身不额外启动运行。
+创建文件是 `CreateScheduledTaskRequest`：`name`、`provider`、`prompt`、`schedule`、`misfirePolicy`、`enabled` 必填；`model`、`effort`、`executionPolicy`、`continuationPolicy` 可选。`executionPolicy` 可为 `sandbox`、`auto-review` 或 `full-access`，省略时仍为 sandbox；可用值以当前 Backend capabilities 为准，不支持的值会被 `validate-*` 明确拒绝而不会降级。`full-access` 无沙箱且不等待交互审批，可联网并访问 Browser、模拟器和本机文件，只应使用可信提示词。Browser、模拟器、网络或 Git 不是额外配置字段，是否使用由完整提示词和对应 Skill 决定。编辑文件是 `UpdateScheduledTaskRequest`：只放修改字段和从 `get` 读取的 `expectedRevision`；`model`、`effort` 可用 `null` 恢复默认。具体字段与合法范围以 Backend 的严格 schema 和 `validate-*` 结果为准。创建和更新本身不额外启动运行。
 
 创建时保留本次 UUID 与原文件。若请求结果未知，只能用**相同文件、摘要、Backend 和 Idempotency-Key**核对或重试；新键会创建第二个任务。编辑没有幂等键：结果未知时先 `get`，核对 revision 和字段，不能盲目重复 `update`。旧 revision 返回冲突，应重新读取、整理并请用户再次确认。认证失效时沿用 `rw auth` 的 profile 刷新机制，不把 token 写入草稿或命令参数。
 
 `--profile` 与 `--backend-port` 可指定连接；`RUNWEAVE_BASE_URL` 及 `RUNWEAVE_ACCESS_TOKEN` 也遵守现有 `rw` 规则。`--json` 输出机器可读 JSON；非 JSON 模式输出格式化 JSON。CLI 退出非零表示请求未确认成功，不能仅凭命令启动或网络发送宣称任务已创建。
+
+## 执行目录与协议版本
+
+Backend capabilities 的 `taskContextVersion` 为 2。新版 Web、iOS 和 CLI 在读取 Task／Run 前检查该版本，
+任务的 POST／PATCH／DELETE 带 `X-Runweave-Task-Context-Version: 2`；缺失或错误返回
+`409 task_context_version_mismatch`。旧项目字段、客户端 cwd 和 executionContext 均不属于普通任务请求，
+提交时返回 400。不要用虚假项目 ID 兼容旧版本。
+
+普通任务每次运行自动分配 `<scheduledTasksDirectory>/workspaces/<runId>` 私有工作目录，首次启动建立，
+validate 不创建目录。`ScheduledRun.executionContext` 保存实际执行位置；原顶层 cwd／executionProjectId
+已移除。自动继续和终端恢复沿用同一目录及 thread；目录丢失时拒绝恢复，不创建空目录替代现场。
+软删除和归档不清理运行工作目录；当前没有自动 TTL。普通任务的 Browser 使用默认 Profile 和独立 run group，
+不继承前台项目 Profile。快捷后台运行仍冻结项目／Worktree 来源，使用 project 上下文。
+
+需要操作仓库时在完整提示词中说明目标、规则和验收条件。描述中的目录不会扩大执行权限；默认 sandbox
+不能自动获得目录外写入或联网权限。打开普通运行对话时显式使用原 cwd，返回的 projectId 只是实际终端的展示归属。
+
+## 旧项目任务的显式迁移
+
+schema 5 移除任务项目列和旧运行字段。旧库有任务时，新 Backend 不自动升级并启动任务，capabilities
+返回 enabled=false 和 migration_required 原因；其他 Backend 子系统继续工作。无旧任务的新空库直接初始化。
+必须停止所有旧数据库 owner，不能让旧程序与新 schema 混用；共享数据目录由 Backend owner lock 排他管理。
+
+```bash
+rw scheduled-task migration preview --instance <目标实例> --file /private/unique-migration.json --json
+rw scheduled-task migration apply --instance <目标实例> --file /private/unique-migration.json --sha256 <草稿摘要> --expected-backend <预览地址> --idempotency-key <本次UUID> --json
+```
+
+迁移命令接受全局 `--instance` 和 `--config-dir`，沿用既有实例与配置根校验；两个 POST 操作均须显式指定实例。
+preview 写入新的 0600 草稿文件（拒绝覆盖），展示全部原文、原项目位置、建议描述、原状态与暂停影响，
+不会写任务。用户核对完整草稿后才可 apply；如果编辑了建议描述，须重新核对该文件的 SHA-256。
+提示词上限仍为 12000 字符。原文加迁移说明超限时，草稿保留完整原文，并通过 `promptWarning` 提示说明未追加；
+迁移后任务仍暂停，须结合预览中的原项目路径核对和修改描述后再启用，不截断原文或放宽普通任务上限。
+apply 校验源逻辑数据摘要、任务清单与 revision，queued／waiting／owner 不明或终端准备未结束时返回
+migration_busy，不杀进程、不丢队列。lsof 不可用或数据库仍有连接也会拒绝。
+
+迁移先创建私有 SQLite 一致性备份，再在一个事务转换并保存幂等回执；失败回滚，不清库。
+普通旧任务保留 ID 和原文、追加已核对说明、递增 revision，全部保持暂停；不会重启日程或补跑过期 once。
+旧运行保留 thread、输出、结果、通知版本和原执行上下文；快捷内部任务保留来源与去重身份，不被启用。
+成功回执含 backupPath 和 `restartRequired: true`：需按既有服务生命周期重启 Backend 后使用新版任务子系统，
+CLI 不自行重启服务。核对新描述与权限后，再按正常编辑流程重新启用所需任务。
+
+响应未知时保留原文件、摘要、Backend 与幂等键，先核对原回执，不生成新键重复迁移。
+已成功的旧创建请求由升级客户端携带新版协议头和原请求重放时，按原 hash／键返回既有任务，不新建。
+回退应停新版生产者并恢复完整备份及匹配旧版程序；不能只降低 user_version，有新版数据时先保全与对账。
 
 ## 后台续接与人工回复
 

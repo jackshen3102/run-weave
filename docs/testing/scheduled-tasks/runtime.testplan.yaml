@@ -132,14 +132,14 @@ cases:
       - "准备已恢复任务对话的普通终端，明确切换到另一 thread；再打开原 run，确认 terminal_repurposed 且新 thread 与草稿不被覆盖。"
       - "用户显式选择另开普通终端后确认新 binding 正确；旧终端及当前对话仍存在。"
   - id: SRT-013
-    name: "Worktree 失效不能回退父目录"
+    name: "快捷运行 Worktree 失效不能回退父目录"
     required: true
     description: "运行的子项目不可用时保留历史并拒绝恢复，不创建错目录终端。"
     preconditions:
       - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
       - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
     steps:
-      - "在独立已登记 Worktree 中完成运行，保存规范子 projectId 与 cwd，随后使本 fixture Worktree 暂时不可用。"
+      - "在独立已登记 Worktree 中完成快捷后台运行，保存 origin.projectId 与 executionContext.cwd，随后使本 fixture Worktree 暂时不可用。"
       - "调用 open-terminal，确认 context_unavailable、历史可读且父目录没有替代终端；恢复原路径后确认精确恢复正确。"
   - id: SRT-014
     name: "缺失 thread 不能创建空对话冒充恢复"
@@ -154,13 +154,13 @@ cases:
   - id: SRT-015
     name: "未授权或越界请求不能启动执行"
     required: true
-    description: "新的管理与打开 API 沿用认证及真实项目上下文授权。"
+    description: "新的管理与打开 API 沿用认证及运行上下文和协议版本边界。"
     preconditions:
       - "已实现对应 Backend 计划，隔离 Backend 使用临时数据根、独立测试项目和专属 provider 配置；不连接安装态数据库。"
       - "本用例独立创建任务与 fixture，记录 Backend、进程 owner 和数据路径；结束仅清理本用例资源。"
     steps:
       - "未登录调用列表、创建、输出、停止和 open-terminal，确认 401 且无新增进程、终端或 run。"
-      - "用有效身份提交未知 projectId、非法子 projectId、越界路径或不存在 run，确认 4xx 且不回退默认项目。"
+      - "用有效身份为普通任务提交 projectId 或 cwd、为快捷运行提交未知子项目、或读取不存在 run，确认 4xx 且不回退其他目录。"
       - "检查正常响应和诊断日志不包含 token、完整私有环境或可任意读取的文件接口。"
   - id: SRT-016
     name: "运行限额终止进程并保留部分结果"

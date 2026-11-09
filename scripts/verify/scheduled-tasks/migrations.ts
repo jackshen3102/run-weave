@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { initialSchemaSql } from "../../../backend/src/scheduled-tasks/storage/migrations/001-initial-schema";
-import { SCHEDULED_TASK_SCHEMA_VERSION } from "../../../backend/src/scheduled-tasks/storage/migrations";
+import { migrateScheduledTasks, SCHEDULED_TASK_SCHEMA_VERSION } from "../../../backend/src/scheduled-tasks/storage/migrations";
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
 const requireBackend = createRequire(
@@ -22,7 +22,16 @@ export async function verifyMigrations(): Promise<void> {
   );
   const stores: ScheduledTaskStore[] = [];
   const open = async (databasePath: string) => {
-    const store = await ScheduledTaskStore.create({ databasePath });
+    if (await import("node:fs").then(fs => fs.existsSync(databasePath))) {
+      const db = new Database(databasePath);
+      try {
+        if (Number(db.pragma("user_version", { simple: true })) < 5 && db.prepare("SELECT 1 FROM sqlite_master WHERE name='scheduled_tasks'").get()) {
+          const tasks = db.prepare("SELECT id,payload_json FROM scheduled_tasks").all() as { id: string; payload_json: string }[];
+          migrateScheduledTasks(db, new Map(tasks.map(task => [task.id, JSON.parse(task.payload_json).prompt])));
+        }
+      } finally { db.close(); }
+    }
+    const store = await ScheduledTaskStore.create({ databasePath, env: { ...process.env, RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY: undefined } });
     stores.push(store);
     return store;
   };
@@ -55,18 +64,16 @@ export async function verifyMigrations(): Promise<void> {
     const store = await open(legacyPath);
     const task = await store.getTask("legacy-task");
     const run = await store.getRun("legacy-run");
-    assert.deepEqual(task, {
-      ...JSON.parse(originalTask),
-      misfirePolicy: { mode: "skip" },
-    });
-    assert.deepEqual(run, {
-      ...JSON.parse(originalRun),
-      snapshot: {
-        ...JSON.parse(originalRun).snapshot,
-        misfirePolicy: { mode: "skip" },
-      },
-      dispatch: null,
-    });
+    const expectedTask = JSON.parse(originalTask);
+    delete expectedTask.projectId;
+    assert.deepEqual(task, { ...expectedTask, revision: expectedTask.revision + 1, updatedAt: task!.updatedAt,
+      enabled: false, nextRunAt: null, misfirePolicy: { mode: "skip" } });
+    const expectedRun = JSON.parse(originalRun);
+    delete expectedRun.cwd;
+    delete expectedRun.executionProjectId;
+    delete expectedRun.snapshot.projectId;
+    assert.deepEqual(run, { ...expectedRun, snapshot: { ...expectedRun.snapshot, misfirePolicy: { mode: "skip" } },
+      dispatch: null, executionContext: { kind: "project", projectId: "project", cwd: "/original" } });
     assert.equal(
       (await store.readOutput("legacy-run", 0, 1024)).text,
       "original output",

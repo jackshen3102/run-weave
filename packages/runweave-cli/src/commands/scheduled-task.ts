@@ -6,8 +6,6 @@ import type {
   ScheduledTaskPage,
   ScheduledTaskValidation,
 } from "@runweave/shared/scheduled-tasks";
-import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
-import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import {
   getStringOption,
   parseArgs,
@@ -17,18 +15,23 @@ import {
 import { resolveAuthContext } from "../client/auth-context.js";
 import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
+import { runScheduledTaskMigrationCommand } from "./scheduled-task-migration.js";
 import { runScheduledTaskRunCommand } from "./scheduled-task-run.js";
 
 type Io = { stdout: Pick<NodeJS.WriteStream, "write">; env: NodeJS.ProcessEnv };
 
 const USAGE =
-  "Usage: rw scheduled-task <projects|capabilities|list|get|validate-create|create|validate-update|update|run> [task-id] [--file path] [--sha256 digest] [--expected-backend url] [--idempotency-key key] [--profile name|--backend-port port] [--json]";
+  "Usage: rw scheduled-task <migration|capabilities|list|get|validate-create|create|validate-update|update|run> [task-id] [--file path] [--sha256 digest] [--expected-backend url] [--idempotency-key key] [--profile name|--backend-port port] [--json]";
 
 export async function runScheduledTaskCommand(
   command: string | undefined,
   args: string[],
   io: Io,
 ): Promise<void> {
+  if (command === "migration") {
+    await runScheduledTaskMigrationCommand(args, io);
+    return;
+  }
   if (command === "run") {
     await runScheduledTaskRunCommand(args, io);
     return;
@@ -36,7 +39,6 @@ export async function runScheduledTaskCommand(
   if (
     !command ||
     ![
-      "projects",
       "capabilities",
       "list",
       "get",
@@ -50,6 +52,7 @@ export async function runScheduledTaskCommand(
   }
   const { options, positionals } = parseArgs(args, new Set(["json", "plain"]));
   const mode = resolveOutputMode(options);
+  if (options["project-id"] || options["parent-project-id"]) throw new CliError("普通定时任务不再支持项目筛选", 2);
   const taskId = ["get", "validate-update", "update"].includes(command)
     ? requireTaskId(positionals)
     : undefined;
@@ -87,24 +90,14 @@ export async function runScheduledTaskCommand(
     );
   }
   const root = "/api/scheduled-tasks";
+  if (command !== "capabilities") {
+    const capabilities = await auth.requestJson<ScheduledTaskCapabilities>(`${root}/capabilities`);
+    if (capabilities.taskContextVersion !== 2) throw new CliError("定时任务协议不兼容，请更新 Backend", 2);
+  }
   const taskPath = taskId ? `${root}/${encodeURIComponent(taskId)}` : root;
   let result: unknown;
 
   switch (command) {
-    case "projects": {
-      const projects = await auth.requestJson<TerminalProjectListItem[]>(
-        "/api/terminal/project",
-      );
-      result = await Promise.all(
-        projects.map(async (project) => ({
-          ...project,
-          contexts: await auth.requestJson<TerminalProjectContextListItem[]>(
-            `/api/terminal/project/${encodeURIComponent(project.projectId)}/contexts`,
-          ),
-        })),
-      );
-      break;
-    }
     case "capabilities":
       result = await auth.requestJson<ScheduledTaskCapabilities>(
         `${root}/capabilities`,
@@ -113,8 +106,6 @@ export async function runScheduledTaskCommand(
     case "list": {
       const query = new URLSearchParams();
       for (const name of [
-        "project-id",
-        "parent-project-id",
         "q",
         "archived",
         "cursor",
@@ -162,7 +153,7 @@ export async function runScheduledTaskCommand(
       result = await auth.requestJson<ScheduledTask>(root, {
         ...jsonRequest("POST", request!.body),
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json", "X-Runweave-Task-Context-Version": "2",
           "Idempotency-Key": key,
         },
       });
@@ -206,7 +197,7 @@ async function readRequest(
 function jsonRequest(method: "POST" | "PATCH", body: object): RequestInit {
   return {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Runweave-Task-Context-Version": "2" },
     body: JSON.stringify(body),
   };
 }

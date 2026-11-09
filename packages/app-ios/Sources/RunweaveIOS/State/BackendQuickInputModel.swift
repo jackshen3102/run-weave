@@ -11,6 +11,7 @@ final class BackendQuickInputModel: ObservableObject {
   @Published private(set) var archiving = Set<String>()
   @Published var failure: String?
   @Published var runFailure: String?
+  @Published private(set) var runProtocolCompatible = false
   private var orderVersion: String?
   private var scope: String?
   private var generation = -1
@@ -24,11 +25,15 @@ final class BackendQuickInputModel: ObservableObject {
     items = []; runs = []; archiving = []
     orderVersion = nil; scope = nil; generation = -1; loaded = false
     loading = false; saving = false; starting = []; failure = nil; runFailure = nil; runKeys = [:]
-    runRequest += 1
+    runRequest += 1; runProtocolCompatible = false
   }
 
   func canEdit(_ session: AppSession) -> Bool {
     current(session) && session.canWrite && loaded && !saving && !loading && failure == nil
+  }
+
+  func canStart(_ session: AppSession) -> Bool {
+    canEdit(session) && runProtocolCompatible
   }
 
   func loadIfNeeded(_ session: AppSession) async {
@@ -202,23 +207,23 @@ final class BackendQuickInputModel: ObservableObject {
       } while cursor != nil
       var seen = Set<String>()
       runs = records.filter { seen.insert($0.id).inserted }
-      runFailure = nil
+      runFailure = nil; runProtocolCompatible = true
     } catch {
       guard current(session), scope == expectedScope, generation == expectedGeneration,
         runRequest == ticket, !(error is CancellationError), !Task.isCancelled else { return }
-      runFailure = displayError(error)
+      runFailure = displayError(error); runProtocolCompatible = false; runs = []
     }
   }
 
   func start(_ session: AppSession, item: BackendQuickInput, projectId: String) async throws -> ScheduledRun {
-    guard canEdit(session), !projectId.isEmpty,
+    guard canStart(session), !projectId.isEmpty,
       !starting.contains(item.id) else { throw APIError.offline }
     let expected = generation
     if let existing = run(for: item.id, projectId: projectId), existing.active { return existing }
     starting.insert(item.id)
     defer { if generation == expected { starting.remove(item.id) } }
     await refresh(session)
-    guard current(session), generation == expected, canEdit(session), let currentItem = items.first(where: { $0.id == item.id }) else {
+    guard current(session), generation == expected, canStart(session), let currentItem = items.first(where: { $0.id == item.id }) else {
       throw APIError.invalidResponse
     }
     guard currentItem.data == item.data, currentItem.mode == item.mode else {
@@ -249,7 +254,7 @@ final class BackendQuickInputModel: ObservableObject {
   func run(for id: String, projectId: String?) -> ScheduledRun? {
     guard let projectId else { return nil }
     let matches = runs.filter {
-      $0.archivedAt == nil && $0.executionProjectId == projectId && $0.snapshot.origin?.quickInputId == id
+      $0.archivedAt == nil && $0.snapshot.origin?.projectId == projectId && $0.snapshot.origin?.quickInputId == id
     }
     return matches.first(where: \.active) ?? matches.first
   }

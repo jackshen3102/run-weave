@@ -18,7 +18,7 @@ struct ScheduledTaskDetailView: View {
                 ScheduledTaskActions(model: model, task: task, edit: { edit(task) })
               }
             }
-            Text("\(task.config.origin?.label ?? scheduledProjectLabel(task.config.projectId, session: session)) · \(task.config.provider)").font(.subheadline)
+            Text("\(task.config.origin?.label ?? "定时任务") · \(task.config.provider)").font(.subheadline)
             if task.config.origin?.kind != "quick-input" {
               Text(task.config.schedule.label)
               Text(task.config.misfirePolicy.label).font(.caption).foregroundColor(.secondary)

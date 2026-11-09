@@ -16,7 +16,6 @@ import {
   DialogDescription,
 } from "../../components/ui/dialog";
 import { TaskModelSettings } from "./model-settings";
-import { TaskProjectSelect } from "./project-select";
 import { useScheduledApi, useRefreshTasks, scheduledKeys } from "./queries";
 import {
   displayTime,
@@ -28,13 +27,11 @@ import {
 
 export function TaskEditor({
   task,
-  defaultProjectId,
   capabilities,
   onClose,
   onSaved,
 }: {
   task?: ScheduledTask;
-  defaultProjectId: string;
   capabilities: ScheduledTaskCapabilities;
   onClose: () => void;
   onSaved: (task: ScheduledTask) => void;
@@ -50,7 +47,6 @@ export function TaskEditor({
   }, []);
   const [draft, setDraft] = useState<CreateScheduledTaskRequest>(() => ({
     name: task?.name ?? "",
-    projectId: task?.projectId ?? defaultProjectId,
     provider: task?.provider ?? "codex",
     prompt: task?.prompt ?? "",
     model: task?.model ?? "",
@@ -143,8 +139,8 @@ export function TaskEditor({
   };
   const submit = useMemoizedFn((event: React.FormEvent) => {
     event.preventDefault();
-    if (!draft.name.trim() || !draft.prompt.trim() || !draft.projectId) {
-      setValidationError("请填写名称、项目和提示词。");
+    if (!draft.name.trim() || !draft.prompt.trim()) {
+      setValidationError("请填写名称和提示词。");
       return;
     }
     if (draft.schedule.kind === "weekly" && !draft.schedule.weekdays.length) {
@@ -210,10 +206,6 @@ export function TaskEditor({
               自动继续（最多 3 次，保留原对话和进度）
             </label>
           ) : null}
-          <TaskProjectSelect
-            value={draft.projectId}
-            onChange={(value) => change("projectId", value)}
-          />
           <label className="grid gap-1 text-sm">
             Agent
             <select

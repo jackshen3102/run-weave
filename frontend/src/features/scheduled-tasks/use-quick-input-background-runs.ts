@@ -50,7 +50,7 @@ export function quickInputRunProjectLabel(run: ScheduledRun) {
   const origin = run.snapshot.origin;
   return origin?.kind === "quick-input"
     ? `${origin.projectName} / ${origin.worktreeName ?? "主项目"}`
-    : run.cwd;
+    : run.executionContext.cwd;
 }
 
 export function useQuickInputBackgroundRuns(enabled: boolean) {

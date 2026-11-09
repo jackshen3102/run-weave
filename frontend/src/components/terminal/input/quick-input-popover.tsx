@@ -420,7 +420,7 @@ export function TerminalQuickInputPopover({
                   (candidate) =>
                     !candidate.archivedAt &&
                     isQuickInputRunActive(candidate) &&
-                    candidate.executionProjectId === activeProject?.projectId &&
+                    candidate.snapshot.origin?.projectId === activeProject?.projectId &&
                     candidate.snapshot.origin?.quickInputId === item.id,
                 );
                 return (

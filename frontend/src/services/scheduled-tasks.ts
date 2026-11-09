@@ -19,7 +19,8 @@ const root = "/api/scheduled-tasks";
 const id = encodeURIComponent;
 
 export function scheduledTasksApi(apiBase: string, token: string) {
-  function request<T>(
+  let versionCheck: Promise<void> | undefined;
+  async function request<T>(
     path: string,
     options: {
       method?: string;
@@ -28,11 +29,19 @@ export function scheduledTasksApi(apiBase: string, token: string) {
       signal?: AbortSignal;
     } = {},
   ): Promise<T> {
-    return requestJson(apiBase, `${root}${path}`, {
+    if (path !== "/capabilities") {
+      versionCheck ??= request<ScheduledTaskCapabilities>("/capabilities").then(() => undefined).catch(error => {
+        versionCheck = undefined;
+        throw error;
+      });
+      await versionCheck;
+    }
+    const result = await requestJson<T>(apiBase, `${root}${path}`, {
       method: options.method,
       signal: options.signal,
       headers: {
         Authorization: `Bearer ${token}`,
+        "X-Runweave-Task-Context-Version": "2",
         ...(options.body === undefined
           ? {}
           : { "Content-Type": "application/json" }),
@@ -41,6 +50,9 @@ export function scheduledTasksApi(apiBase: string, token: string) {
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
     });
+    if (path === "/capabilities" && (result as ScheduledTaskCapabilities).taskContextVersion !== 2)
+      throw new Error("此电脑的定时任务协议不兼容，请更新 Backend 和客户端。");
+    return result;
   }
   return {
     capabilities: (signal?: AbortSignal) =>

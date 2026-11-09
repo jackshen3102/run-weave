@@ -1,3 +1,4 @@
+import { ScheduledTaskMigration } from "./migration";
 import { configuration, settingText } from "@runweave/config-node";
 import type { ScheduledTaskCapabilities } from "@runweave/shared/scheduled-tasks";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
@@ -29,7 +30,7 @@ export async function createScheduledTaskSubsystem(params: {
   try { configuration().requireDomain("scheduledTasks"); }
   catch {
     return { service: new ScheduledTaskService(null, params.terminalSessionManager, {
-      enabled: false, reason: "Scheduled task configuration is invalid", providers: [],
+      taskContextVersion: 2, enabled: false, reason: "Scheduled task configuration is invalid", providers: [],
       limits: { maxConcurrentRuns: DEFAULT_MAX_CONCURRENT_RUNS, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES },
     }, "Scheduled task configuration is invalid"), runtime: null, store: null };
   }
@@ -63,6 +64,7 @@ export async function createScheduledTaskSubsystem(params: {
     }
   }
   const capabilities: ScheduledTaskCapabilities = {
+    taskContextVersion: 2,
     enabled,
     ...(enabled
       ? {}
@@ -96,6 +98,7 @@ export async function createScheduledTaskSubsystem(params: {
         params.terminalOptions,
       ),
     );
+    service.migration = new ScheduledTaskMigration(params.databasePath, params.terminalSessionManager);
     return { service, runtime, store };
   } catch (error) {
     logger.error("scheduled-tasks.initialize.failed", {
@@ -103,21 +106,21 @@ export async function createScheduledTaskSubsystem(params: {
       message: "Scheduled task subsystem initialization failed",
       error,
     });
-    return {
-      service: new ScheduledTaskService(
+    const service = new ScheduledTaskService(
         null,
         params.terminalSessionManager,
         capabilities,
-        error instanceof Error &&
+        error instanceof Error && error.message === "scheduled_tasks_migration_required"
+          ? "migration_required: 请使用 rw scheduled-task migration preview 核对并显式迁移旧任务；迁移前不会启动任务。"
+          : error instanceof Error &&
           /^scheduled_tasks_schema_(too_new|history_mismatch|legacy_mismatch|migration_failed)$/.test(
             error.message,
           )
           ? `Scheduled task database migration blocked (${error.message})`
           : "Scheduled task storage failed to initialize",
-      ),
-      runtime: null,
-      store: null,
-    };
+      );
+    service.migration = new ScheduledTaskMigration(params.databasePath, params.terminalSessionManager);
+    return { service, runtime: null, store: null };
   }
 }
 

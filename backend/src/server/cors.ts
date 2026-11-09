@@ -95,6 +95,7 @@ export function createCorsMiddleware(
     "X-Auth-Client",
     "X-Connection-Id",
     "Idempotency-Key",
+    "X-Runweave-Task-Context-Version",
   ];
 
   return (req, res, next) => {

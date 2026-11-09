@@ -33,7 +33,6 @@ const schedule = z
   });
 const config = z.object({
   name: text,
-  projectId: text,
   provider,
   prompt: text,
   model: text.optional(),
@@ -52,6 +51,7 @@ const config = z.object({
     .object({
       kind: z.literal("quick-input"),
       quickInputId: text,
+      projectId: text,
       projectName: text,
       worktreeName: text.nullable(),
     })
@@ -134,8 +134,11 @@ const runSchema: z.ZodType<ScheduledRun> = z.object({
     }),
   ),
   outputCursor: z.string().nullable(),
-  executionProjectId: text,
-  cwd: z.string(),
+  executionContext: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("task-workspace"), cwd: text }).strict(),
+    z.object({ kind: z.literal("project"), cwd: text, projectId: text }).strict(),
+    z.object({ kind: z.literal("unavailable"), cwd: z.null(), reason: z.literal("legacy-context-unavailable"), originalProjectId: text.nullable() }).strict(),
+  ]),
   threadRef: z
     .object({ provider, threadId: text, sessionFile: z.string().optional() })
     .nullable(),
@@ -201,7 +204,6 @@ export function parseTask(row: StoredRow): ScheduledTask {
   return parse(row, "task", taskSchema, {
     id: "id",
     revision: "revision",
-    project_id: "projectId",
     name: "name",
     enabled: "enabled",
     next_run_at: "nextRunAt",

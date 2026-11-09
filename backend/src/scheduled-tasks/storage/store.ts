@@ -33,7 +33,7 @@ export class ScheduledTaskStore {
   private failure: Error | null = null;
   private disposePromise: Promise<void> | null = null;
 
-  private constructor(databasePath: string, env: NodeJS.ProcessEnv) {
+  private constructor(readonly databasePath: string, env: NodeJS.ProcessEnv) {
     const entry = resolveWorkerEntry(env);
     this.worker = createWorker(entry, databasePath);
     let resolveExit: (() => void) | undefined;
@@ -81,17 +81,18 @@ export class ScheduledTaskStore {
 
   createTask(
     task: ScheduledTask,
-    parentProjectId: string,
     idempotencyKey: string,
     requestHash: string,
   ) {
     return this.request<ScheduledTask>({
       op: "create-task",
       task,
-      parentProjectId,
       idempotencyKey,
       requestHash,
     });
+  }
+  replayCreate(requestHash: string, key: string) {
+    return this.request<ScheduledTask | null>({ op: "replay-create", requestHash, key });
   }
   getTask(taskId: string) {
     return this.request<ScheduledTask | null>({ op: "get-task", taskId });
@@ -102,13 +103,11 @@ export class ScheduledTaskStore {
   updateTask(
     task: ScheduledTask,
     expectedRevision: number,
-    parentProjectId: string,
   ) {
     return this.request<ScheduledTask>({
       op: "update-task",
       task,
       expectedRevision,
-      parentProjectId,
     });
   }
   listDueTasks(through: string) {
@@ -158,7 +157,6 @@ export class ScheduledTaskStore {
   }
   createQuickInputRun(
     task: ScheduledTask,
-    parentProjectId: string,
     cwd: string,
     idempotencyKey: string,
     requestHash: string,
@@ -166,7 +164,6 @@ export class ScheduledTaskStore {
     return this.request<ScheduledRun>({
       op: "create-quick-input-run",
       task,
-      parentProjectId,
       cwd,
       idempotencyKey,
       requestHash,

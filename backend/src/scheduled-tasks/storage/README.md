@@ -1,6 +1,6 @@
 # 定时任务数据库升级
 
-定时任务使用独立 SQLite。当前数据库版本为 **4**，由 `PRAGMA user_version` 保存；
+定时任务使用独立 SQLite。当前数据库版本为 **5**，由 `PRAGMA user_version` 保存；
 `scheduled_schema_migrations` 记录每步的版本、名称、SQL SHA-256 和执行时间。
 迁移入口是 [migrations.ts](./migrations.ts)，由 `ScheduledTaskDatabase` 构造时调用，
 成功后才交付 store、恢复运行并启动调度。
@@ -22,6 +22,13 @@
 当前业务模型要求明确的 misfirePolicy 和 dispatch，不在读取时继续解释旧格式。
 创建 API 必须提供策略；PATCH 省略策略仍是“不修改”的局部更新语义。
 
+第 5 号迁移通过明确的 preview/apply 入口执行：移除任务项目列，将快捷来源项目移入 origin，
+运行使用 executionContext；普通旧任务转换后暂停，保留历史、输出、幂等及通知身份。新库直接创建新版。
+旧库有数据时 worker 返回 scheduled_tasks_migration_required，不自动执行有业务影响的转换。
+迁移 owner 独立于未就绪的 worker，受数据目录锁、数据库 offline 检查和与服务更新共用的 maintenance 保护。
+成功后按回执 restartRequired 重启 Backend，再显式核对并重新启用任务。
+完整命令、备份及回退见 [任务 CLI](../../../../docs/cli/scheduled-task-cli.md#旧项目任务的显式迁移)。
+
 ## 原子性与失败处理
 
 全部待执行迁移、迁移历史与版本更新在一个 `BEGIN IMMEDIATE` 事务内完成。
@@ -33,7 +40,7 @@
 不会启动调度，也不会删除数据库重建。Backend 的其他能力按原有子系统隔离方式运行。
 
 已执行的编号迁移不可修改，只能追加下一步。每次新增迁移同步更新当前版本，
-并通过旧库升级与失败回滚验证。这里采用单向迁移，不维护旧业务模型或自动 down migration。
+并通过旧库升级与失败回滚验证。第 5 号转换前必须停止所有旧库连接；queued、waiting、owner 未明及准备中的绑定均阻断迁移。这里采用单向迁移，不维护旧业务模型或自动 down migration。
 已经发布且没有版本检查的旧程序无法被新库主动阻止；部署时不能让它重新打开升级后的库。
 
 第 4 号迁移会一次性搬迁全部已有日志（空日志不建块），不会改写运行记录中的游标。

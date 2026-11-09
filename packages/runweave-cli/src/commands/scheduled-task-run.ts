@@ -1,3 +1,4 @@
+import type { ScheduledTaskCapabilities } from "@runweave/shared/scheduled-tasks";
 import { readFile } from "node:fs/promises";
 import {
   getStringOption,
@@ -101,6 +102,7 @@ export async function runScheduledTaskRunCommand(
       const body: { expectedRevision?: number; reply?: string } = {};
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        "X-Runweave-Task-Context-Version": "2",
       };
       if (command === "start" || command === "continue") {
         const key = requireStringOption(options, "idempotency-key");
@@ -132,6 +134,8 @@ export async function runScheduledTaskRunCommand(
     backendPort: getStringOption(options, "backend-port"),
     env: io.env,
   });
+  const capabilities = await auth.requestJson<ScheduledTaskCapabilities>("/api/scheduled-tasks/capabilities");
+  if (capabilities.taskContextVersion !== 2) throw new CliError("定时任务协议不兼容，请更新 Backend", 2);
   const result = await auth.requestJson(
     `${route}${query.size ? `?${query}` : ""}`,
     init,

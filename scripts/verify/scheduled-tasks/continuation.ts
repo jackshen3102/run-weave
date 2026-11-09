@@ -30,12 +30,12 @@ export async function verifyContinuation(
       nextRunAt: null,
       ...(enabled ? { continuationPolicy: { mode: "bounded" } } : {}),
     };
-    await store.createTask(task, task.projectId, task.id, task.id);
+    await store.createTask(task, task.id, task.id);
     const run = createScheduledRunRecord(
       task,
       "manual",
       new Date().toISOString(),
-      directory,
+      () => ({ kind: "project", projectId: "fixture-project", cwd: directory }),
     );
     await store.createManualRun(run, run.id, run.id);
     return run;

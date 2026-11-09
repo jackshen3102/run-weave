@@ -3,16 +3,18 @@ import { randomUUID } from "node:crypto";
 import type {
   ScheduledRun,
   ScheduledTask,
+  ScheduledExecutionContext,
 } from "@runweave/shared/scheduled-tasks";
 
 export function createScheduledRunRecord(
   task: ScheduledTask,
   trigger: ScheduledRun["trigger"],
   scheduledFor: string,
-  cwd: string,
+  context: (runId: string) => ScheduledExecutionContext,
 ): ScheduledRun {
+  const id = randomUUID();
   return {
-    id: randomUUID(),
+    id,
     revision: 1,
     resultRevision: 0,
     activeAttemptId: null,
@@ -23,7 +25,6 @@ export function createScheduledRunRecord(
     taskRevision: task.revision,
     snapshot: {
       name: task.name,
-      projectId: task.projectId,
       provider: task.provider,
       prompt: task.prompt,
       executionPolicy: task.executionPolicy ?? "sandbox",
@@ -46,8 +47,7 @@ export function createScheduledRunRecord(
     error: null,
     artifacts: [],
     outputCursor: "0",
-    executionProjectId: task.projectId,
-    cwd,
+    executionContext: context(id),
     threadRef: null,
     recoverable: false,
     terminalBinding: null,

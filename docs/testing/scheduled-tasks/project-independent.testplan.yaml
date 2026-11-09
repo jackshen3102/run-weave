@@ -1,0 +1,195 @@
+version: 1
+name: 定时任务无项目绑定验收
+description: >
+  2026-11-08 目标验收合同；源码已接入，实际执行范围须以本次终端证据为准，不代表全量通过。覆盖普通任务配置、独立运行上下文、旧库显式迁移、
+  快捷来源隔离和跨端消费。除显式验证旧协议的请求外，均使用携带版本 2 协议头的新版客户端。
+  每例自行建立隔离 fixture，不操作生产任务或借用其他用例的运行；格式校验不代表行为通过。
+cases:
+  - id: SPI-001
+    name: 普通任务请求不接收项目和运行目录
+    required: true
+    description: 新版任务创建与编辑不需要项目，旧项目及客户端目录字段被明确拒绝而非静默改变执行位置。
+    preconditions:
+      - 本例隔离 Backend 已实现 taskContextVersion 2，使用空白任务库及独立有效认证；provider 能力可用。
+    steps:
+      - 不带 projectId 提交只读创建校验并创建 disabled 任务；确认成功，任务和 validation 不含 projectId 或 project 对象。
+      - 使用当前 revision 修改任务描述；确认成功且没有分配运行目录或创建运行。
+      - 分别带 projectId、cwd 或 executionContext 提交普通创建及编辑；确认返回 400，原任务 revision 和运行数量不变。
+  - id: SPI-002
+    name: 没有业务项目也能到点执行
+    required: true
+    description: 普通定时任务由真实 Backend 时钟触发，不依赖业务项目目录，也不预先创建交互终端。
+    preconditions:
+      - 本例隔离 Backend 使用新版空库、独立数据根和真实 Codex，未建立任何有业务路径的项目；终端默认展示项目可存在。
+      - 本例记录初始终端数量，使用无外部副作用且返回唯一随机标记的一次性任务。
+    steps:
+      - 创建未来到期任务，不指定项目且不调用立即运行；等待 Backend 到点生成运行并完成。
+      - 核对真实 provider 的 cwd 等于持久 executionContext，路径位于本实例 workspaces/runId，结果包含本例标记。
+      - 确认终端数量未增加，任务未借用 Backend 启动目录或任意业务项目，trigger 为 scheduled。
+  - id: SPI-003
+    name: 不同运行的目录独立
+    required: true
+    description: 不同 run 的执行目录互不混用，持久上下文不随前台工作区切换而改变。
+    preconditions:
+      - 本例隔离 Backend 已实现工作目录 owner，provider 集成 fixture 可记录真实目录与写入标记，无生产数据。
+    steps:
+      - 为同一普通任务创建两次已获准的独立运行，各自写入不同标记；确认 runId 和工作路径不同。
+      - 切换本例前台项目后读取两次运行；确认执行路径仍各自固定，标记没有被写入另一运行目录。
+  - id: SPI-004
+    name: 描述可以指定实际操作仓库
+    required: true
+    description: 显式 full-access 任务从运行目录启动，按描述进入准确目标并读取项目规则，无需保存项目绑定。
+    preconditions:
+      - 本例隔离 Backend 配置真实 Codex 和已明确选择 full-access 的任务，拥有唯一临时仓库及只允许写入指定文件的项目规则。
+      - 任务描述包含临时仓库绝对路径、读取规则要求和无外部副作用的唯一标记动作。
+    steps:
+      - 执行任务；核对 provider 初始 cwd 为运行目录，Agent 实际读取目标仓库规则，并只在指定位置写入标记。
+      - 独立读取标记与任务定义；确认目标正确且没有自动补写 projectId 或改变权限。
+  - id: SPI-005
+    name: 描述不会自动扩大 sandbox 权限
+    required: true
+    description: 省略 executionPolicy 的任务仍为 sandbox，目录外拒绝不会触发提权或换执行位置重试。
+    preconditions:
+      - 本例真实 provider 支持现有 workspace-write 限制，独立目标文件位于本例运行目录之外且未加入额外写权限。
+      - 任务未填写 executionPolicy，提示词要求修改该目标文件；文件初始内容已记录。
+    steps:
+      - 执行任务并检查 argv 与快照；确认权限仍为 sandbox，没有 danger-full-access 或扩大写入目录的参数。
+      - 确认目标内容未变，任务报告具体权限阻塞；不存在静默切换启动目录后重新执行的第二进程。
+  - id: SPI-006
+    name: 自动继续保留原工作目录和线程
+    required: true
+    description: 同一 run 的自动继续读取已完成成果，保持 thread、cwd、权限和预算，不重做已完成副作用。
+    preconditions:
+      - 本例隔离 Backend 使用真实 Codex 和独立受控服务，任务允许自动继续；服务记录一次写入后让下一步临时失败。
+    steps:
+      - 启动无项目普通任务并记录首轮 thread、executionContext、输出额度及服务写入次数。
+      - 恢复服务并等待持久化续接；确认同一 run 和 thread 使用原 cwd，只完成剩余步骤，服务原写入仍为一次。
+      - 核对累计预算和原权限未重置，原成果与首轮报告保持可查。
+  - id: SPI-007
+    name: 恢复时缺失工作目录不会被重建冒充现场
+    required: true
+    description: 已有 thread 的运行目录丢失后明确拒绝恢复，不回退 HOME 或新建空目录启动原会话。
+    preconditions:
+      - 本例隔离 Backend 中独立真实运行已结束并可恢复，记录原 cwd 与 thread；其运行目录仅含本例数据。
+    steps:
+      - 将原目录移动至本例备份位置，再请求打开运行对话；确认 context_unavailable 或 workspace_unavailable，原路径没有被重新建立。
+      - 确认没有新终端或 provider 进程，原历史仍可读；恢复本例原目录后才允许再次尝试原会话恢复。
+  - id: SPI-008
+    name: 普通运行恢复不依赖业务项目且只有一个 owner
+    required: true
+    description: 后台执行权释放前拒绝接管，释放后并发打开只恢复一个真实终端，终端展示归属不改变 cwd。
+    preconditions:
+      - 本例隔离 Backend 具有真实 Codex、tmux 和正确浏览器 surface，已按 toolkit:runweave-dev-session 管理会话。
+      - 本例无业务项目，拥有一条可控真实普通运行及两个认证客户端，使用 toolkit:playwright-cli 操作终端。
+    steps:
+      - 后台运行期间请求 open-terminal；确认 thread_busy 且没有第二个执行者。
+      - 待后台真实结束后并发打开两次；确认同一 terminalSessionId/panelId，仅一个恢复进程，响应 projectId 来自实际终端。
+      - 等待 confirmCodexResume 对应的 ready，使用 toolkit:playwright-cli 追问本例标记；确认原 thread 和 executionContext.cwd，不能只凭进程出现或输入框显示判通过。
+  - id: SPI-009
+    name: 快捷后台运行仍保持精确 Worktree 上下文
+    required: true
+    description: 删除普通任务项目字段不会把快捷运行切换到通用工作目录或允许错项目回退。
+    preconditions:
+      - 本例隔离父项目有两个可控制的 Worktree、独立快捷指令和可记录实际 cwd 的 provider 集成 fixture。
+    steps:
+      - 分别从两个 Worktree 启动快捷后台运行；确认 origin 保存真实项目身份，executionContext 为 project，cwd 和标签分别匹配点击位置。
+      - 让本例另一条排队快捷运行的原目录映射失效；确认启动被拒绝，没有在父项目或普通任务工作目录执行。
+  - id: SPI-010
+    name: 旧任务迁移预览只读
+    required: true
+    description: 旧 schema 4 的任务迁移必须先展示完整影响，不启动调度或改动用户任务。
+    preconditions:
+      - 本例独立旧库包含 enabled 周期任务、失效项目任务和过期 once，保存数据库及所有任务字段摘要；不连接正式实例。
+      - 新版迁移 owner 与 CLI 可用，任务子系统处于 migration_required。
+    steps:
+      - 执行 migration preview；确认展示目标 Backend、版本与摘要、原提示词、原项目路径或未知原因、建议描述和迁移后暂停状态。
+      - 再读数据库和任务；确认摘要及 revision 未变，没有新增 run 或 provider，预览没有创建工作目录。
+  - id: SPI-011
+    name: 确认迁移后旧日程暂停且不能自行补跑
+    required: true
+    description: 已核对草稿的迁移应用一次，不隐式启用旧任务，不因暂停或过期 once 产生新执行。
+    preconditions:
+      - 本例独立旧库包含正常周期任务、过期 once、软删除任务及快捷内部任务，无未结束运行或恢复 owner。
+      - 已由本例执行者核对完整 preview，保留请求、摘要、目标 Backend 和幂等键；仅此 fixture 获准 apply。
+    steps:
+      - 应用迁移；确认普通任务移除项目并保留原文，revision 更新、有效旧日程 disabled 且 nextRunAt 为空，软删除项未恢复。
+      - 推进调度时钟；确认旧任务与过期 once 均不补跑，快捷内部任务仍 disabled。
+      - 用原键和原请求重放 apply；确认返回原回执，任务 revision 和描述不再次变化。
+  - id: SPI-012
+    name: 迁移失败整体回滚
+    required: true
+    description: 领域转换或事务中途失败不留下半新半旧数据库，也不启动任务子系统或重建空库。
+    preconditions:
+      - 本例独立 schema 4 fixture 有任务、run、输出和幂等记录，记录迁移前数据摘要与一致性备份；可注入事务中途一次失败。
+    steps:
+      - 对本例确认的迁移注入中途失败；确认 apply 返回失败、任务子系统不可用，provider 未启动。
+      - 核对 schema、记录摘要及迁移历史；确认全部仍为旧版，没有丢失或部分转换，私有备份可用。
+  - id: SPI-013
+    name: 旧历史转换保持原执行事实
+    required: true
+    description: 历史 run 转成显式上下文后不改变原 thread、成果、通知或归档，不将损坏目录伪装成可恢复现场。
+    preconditions:
+      - 本例独立旧库有完成、失败、skipped、已归档快捷 run，保存各自 thread、cwd、结果、输出、绑定和通知版本；没有活跃 owner。
+    steps:
+      - 核对并应用本例迁移；确认 run ID 和任务关联不变，旧 cwd/project 身份准确转入 executionContext，其他原始结果和计数保留。
+      - 读取无有效目录的失败及 skipped 历史；确认仍可读，打开时明确拒绝，没有补造目录、thread 或新运行。
+  - id: SPI-014
+    name: 未结束执行阻止业务迁移
+    required: true
+    description: maintenance 先停止新领取，已有 queued、waiting 或 owner 未确认退出时不能把库转成新执行语义。
+    preconditions:
+      - 本例独立旧版 runtime fixture 拥有可控制的未结束运行，支持分别建立 queued、waiting 和 owner_unresolved 样本；不使用用户进程。
+    steps:
+      - 为每个独立样本获取迁移预览并请求 apply；确认 busy，原库未迁移且现有运行不被杀死或丢弃。
+      - 核对 lease 结束后的原 runtime 恢复规则；确认没有第二个 owner 或借迁移重发提示词。
+  - id: SPI-015
+    name: Web 表单与任务列表不再包含项目设置
+    required: true
+    description: 真实 Web 从任意 Worktree 进入时不继承项目配置，也不以项目限制普通任务列表。
+    preconditions:
+      - 本例已按 toolkit:runweave-dev-session 启动新版隔离 Web/Backend 并取得正确 surface，使用 toolkit:playwright-cli 操作。
+      - 本例有用于验证导航返回的独立 Worktree 和草稿终端，不依赖前一 case 数据。
+    steps:
+      - 从 Worktree 打开任务页并新建；确认没有项目选择器或项目筛选，保存请求不含项目，后台任务不继承前台 cwd。
+      - 编辑描述并查看任务详情；确认不显示虚假项目归属，返回工作区后原 Worktree、终端选择和草稿仍在。
+  - id: SPI-016
+    name: iOS 使用新版无项目任务合同
+    required: true
+    description: 原生创建、编辑及详情消费新版 DTO，不因必填旧项目字段缺失而失败。
+    preconditions:
+      - 本例从共享池取得 Runweave 模拟器 lease 或获准 DEV 设备，已按 packages/app-ios 入口安装新版 App，并连接本例独立新版 Backend。
+      - 使用 toolkit:agent-device 操作真实原生 UI，结束释放本例 lease；不使用截图替代交互。
+    steps:
+      - 新建无外部副作用的 disabled 任务；确认表单无项目选项且保存成功，请求不包含 projectId。
+      - 编辑描述、重新读取详情和本例独立运行；确认新上下文正确解码，没有项目加载或目录可用性错误。
+  - id: SPI-017
+    name: 无项目运行的 Browser 归属不泄漏前台身份
+    required: true
+    description: 普通运行使用默认 Profile 和独立 run group，不继承前台项目 Profile 或跨任务页面。
+    preconditions:
+      - 本例隔离 Desktop、真实 Codex 和 toolkit:playwright-cli 可用，默认 Browser Profile 与前台 Worktree 偏好不同，受控页面有可观测标记。
+      - 本例两条无项目 full-access 任务只操作各自测试页面，拥有明确的 Backend 和 Browser group 资源归属。
+    steps:
+      - 分别执行两条任务并调用真实 Browser resolver；确认项目为空、Profile 来自默认设置，两个 groupId 分别对应各自 runId。
+      - 在第二任务中引用第一任务页面 targetId；确认不可见或被 scope 拒绝，第一页面状态不变；清理本例页面和连接。
+  - id: SPI-018
+    name: 混合版本不能静默写入错误语义
+    required: true
+    description: 新客户端识别旧 Backend 的能力缺口，旧字段向新 Backend 写入会失败，不能自动填假项目或变更执行目录。
+    preconditions:
+      - 本例拥有隔离的新旧两个 Backend、独立认证与可记录请求的客户端 fixture；新 Backend taskContextVersion 为 2，旧 Backend 无此字段。
+    steps:
+      - 新客户端连接旧 Backend；确认在解码新版任务前显示不兼容并禁用新版任务操作，没有自动补写 projectId。
+      - 使用旧格式新幂等键向新 Backend 创建或更新；确认 400，任务、run 和进程数量不变，不静默忽略旧字段。
+      - 上述格式校验使用新版协议头；另用缺少或错误版本头的旧客户端发送仅含 enabled 的合法形状 PATCH，确认 409 task_context_version_mismatch，任务仍暂停且 revision 不变。
+      - 升级客户端带新版协议头，对已成功并迁移的旧创建键发送原请求；确认只返回原任务，没有重复创建或重写新配置，同键异请求仍冲突。
+  - id: SPI-019
+    name: 完整备份可恢复迁移前任务库
+    required: true
+    description: 在新版尚未产生新业务数据的隔离窗口内，回退恢复完整旧库而非只降低版本号。
+    preconditions:
+      - 本例独立旧库及私有备份已核对，旧版和新版服务均由本例拥有；迁移后不创建新业务记录或副作用。
+      - 备份中的任务均 disabled 或下次执行时间晚于本例完整回退窗口，回退启动不会触发真实 provider。
+    steps:
+      - 核对并应用本例迁移，保存新版数据摘要后停止所有新版任务生产者及 worker。
+      - 恢复完整旧库备份并启动匹配旧版服务，重新解析 fresh endpoint；确认原任务、运行、输出和幂等记录与迁移前一致，没有额外 provider 执行。

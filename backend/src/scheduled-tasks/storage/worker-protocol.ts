@@ -7,6 +7,7 @@ import type {
 } from "@runweave/shared/scheduled-tasks";
 
 export type ScheduledTaskWorkerCommand =
+  | { id: number; op: "replay-create"; requestHash: string; key: string }
   | { id: number; op: "list-attempts"; runId: string }
   | {
       id: number;
@@ -38,7 +39,6 @@ export type ScheduledTaskWorkerCommand =
       id: number;
       op: "create-task";
       task: ScheduledTask;
-      parentProjectId: string;
       idempotencyKey: string;
       requestHash: string;
     }
@@ -49,7 +49,6 @@ export type ScheduledTaskWorkerCommand =
       op: "update-task";
       task: ScheduledTask;
       expectedRevision: number;
-      parentProjectId: string;
     }
   | { id: number; op: "list-due-tasks"; through: string }
   | {
@@ -80,7 +79,6 @@ export type ScheduledTaskWorkerCommand =
       id: number;
       op: "create-quick-input-run";
       task: ScheduledTask;
-      parentProjectId: string;
       cwd: string;
       idempotencyKey: string;
       requestHash: string;

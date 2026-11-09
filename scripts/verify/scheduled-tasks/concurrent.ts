@@ -18,7 +18,7 @@ export async function verifyConcurrent(
     ...taskFixture(), id: randomUUID(), enabled: false, nextRunAt: null,
   }));
   for (const task of tasks) {
-    await store.createTask(task, task.projectId, task.id, "hash");
+    await store.createTask(task, task.id, "hash");
     await store.createManualRun(runFixture(task, "manual"), task.id, "hash");
   }
   let release: () => void = () => undefined;
@@ -77,10 +77,10 @@ export async function verifyArchive(
   runFixture: (task: ScheduledTask, trigger: ScheduledRun["trigger"]) => ScheduledRun,
 ): Promise<void> {
   const task = { ...taskFixture(), enabled: false, nextRunAt: null,
-    origin: { kind: "quick-input" as const, quickInputId: crypto.randomUUID(),
+    origin: { kind: "quick-input" as const, quickInputId: crypto.randomUUID(), projectId: "fixture-project",
       projectName: "archive fixture", worktreeName: null } };
-  const queued = await store.createQuickInputRun(task, task.projectId, os.tmpdir(), "archive-1", "archive-1");
-  const service = new ScheduledTaskService(store, {} as TerminalSessionManager, { enabled: true, providers: [] });
+  const queued = await store.createQuickInputRun(task, os.tmpdir(), "archive-1", "archive-1");
+  const service = new ScheduledTaskService(store, {} as TerminalSessionManager, { taskContextVersion: 2, enabled: true, providers: [], limits: { maxConcurrentRuns: 4, timeoutMs: 1000, maxOutputBytes: 1000 } });
   for (const status of ["queued", "running", "stopping", "waiting"] as const) {
     await store.putRun({ ...queued, status });
     await assert.rejects(service.archiveQuickInputRun(queued.id),
@@ -101,11 +101,11 @@ export async function verifyArchive(
   assert.equal((await store.putRun(finished)).archivedAt, archived.archivedAt);
   await store.putBinding(finished.id, { terminalSessionId: "fixture-terminal", panelId: "fixture-panel", attachmentState: "ready" });
   assert.equal((await service.listQuickInputRuns({})).items[0]?.archivedAt, archived.archivedAt);
-  const next = await store.createQuickInputRun(task, task.projectId, os.tmpdir(), "archive-2", "archive-2");
+  const next = await store.createQuickInputRun(task, os.tmpdir(), "archive-2", "archive-2");
   assert.notEqual(next.id, finished.id);
   assert.equal(next.archivedAt, undefined);
   const ordinaryTask = taskFixture();
-  await store.createTask(ordinaryTask, ordinaryTask.projectId, ordinaryTask.id, ordinaryTask.id);
+  await store.createTask(ordinaryTask, ordinaryTask.id, ordinaryTask.id);
   const ordinary = await store.createManualRun(runFixture(ordinaryTask, "manual"), "ordinary", "ordinary");
   await store.putRun({ ...ordinary, status: "completed", finishedAt: new Date().toISOString() });
   await assert.rejects(service.archiveQuickInputRun(ordinary.id),
