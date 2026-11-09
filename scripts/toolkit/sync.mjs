@@ -5,10 +5,10 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
-import { buildAgentAssets } from "../agents/build.mjs";
 import {
   bridgeAssets,
   installPi,
@@ -35,6 +35,7 @@ import {
 } from "./release.mjs";
 
 const args = new Set(process.argv.slice(2));
+const packaged = args.has("--packaged");
 const ifStaged = args.has("--if-staged");
 const shouldStageAssets = ifStaged || args.has("--stage-cachebuster");
 
@@ -75,7 +76,7 @@ if (!marketplaceName || !pluginName) {
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
-const primaryWorktree = runCapture(
+const primaryWorktree = packaged ? repoRoot : runCapture(
   "git",
   ["worktree", "list", "--porcelain", "-z"],
   { quiet: true },
@@ -95,13 +96,14 @@ if (ifStaged && repoRoot !== primaryWorktree) {
 const releaseLock = await lockToolkitSync(codexHome, log);
 process.once("exit", releaseLock);
 
-await buildAgentAssets();
-await installPi({
+if (!packaged) await buildAgentAssets();
+const piInstallation = await installPi({
   agentDir:
     process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"),
   assetsDir: path.join(repoRoot, "plugins", "pi", "dist"),
 });
-const release = toolkitRelease(repoRoot);
+log(`Pi integration ${piInstallation.status}.`);
+const release = toolkitRelease(repoRoot, { packaged });
 publishedPluginDir = publishToolkitRelease(publishRoot, marketplace, release);
 log(`Toolkit content release ${release.version}.`);
 
@@ -193,6 +195,11 @@ function hasStagedToolkitChanges() {
   return output.length > 0;
 }
 
+async function buildAgentAssets() {
+  const { buildAgentAssets: build } = await import("../agents/build.mjs");
+  await build();
+}
+
 
 function installForCodex(pluginName, marketplaceName) {
   if (!commandExists("codex")) {
@@ -228,7 +235,7 @@ function collectCodexCompatibilityVersions(pluginName, marketplaceName) {
     addVersion(versions, version);
   }
 
-  const manifestRevisions = runCapture(
+  const manifestRevisions = packaged ? [] : runCapture(
     "git",
     ["log", "--format=%H", "--", path.relative(repoRoot, manifestPath)],
     { quiet: true },
@@ -378,7 +385,7 @@ function updateCodexLatestCacheAlias(cacheRoot, currentCachePath) {
   if (latestState !== "missing") {
     rmSync(latestPath, { recursive: true, force: true });
   }
-  symlinkSync(currentCachePath, latestPath, "dir");
+  symlinkSync(currentCachePath, latestPath, process.platform === "win32" ? "junction" : "dir");
 }
 
 function cleanupCompatibilitySnapshot(cacheSnapshot) {
@@ -482,16 +489,7 @@ function listDirectoryNames(directoryPath) {
   if (!existsSync(directoryPath)) {
     return [];
   }
-  return runCapture(
-    "find",
-    [directoryPath, "-maxdepth", "1", "-mindepth", "1"],
-    {
-      quiet: true,
-    },
-  )
-    .split("\n")
-    .map((entry) => path.basename(entry.trim()))
-    .filter(Boolean);
+  return readdirSync(directoryPath);
 }
 
 function addVersion(versions, version) {

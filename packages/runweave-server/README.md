@@ -14,6 +14,19 @@ rw server doctor --json
 rw server start
 ```
 
+发行包同时携带 Toolkit 技能、Hooks 和 Pi 集成资源。安装并认证 Agent CLI 后，以 Agent 所属用户执行：
+
+```sh
+rw server toolkit install --dry-run --json
+rw server toolkit install --json
+# rw server update 激活新版后同步插件
+rw server toolkit update --json
+```
+
+不需要源码、pnpm 或本地编译。同步使用当前 active Server 的资源，为可用的 Codex、Trae 安装插件，
+并更新已有 Pi 目录中的托管集成；跳过原因输出到 stderr。安装后新建 Agent 会话加载技能。
+两个命令都可重复执行；npm 安装与服务升级不会自动修改 Agent 插件。
+
 交互初始化生成强密码，显示一次，请保存。非交互初始化使用仅当前用户可读的绝对路径 JSON 文件，
 内容为 username、password（至少 16 字符）：
 

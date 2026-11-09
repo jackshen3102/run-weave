@@ -46,6 +46,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
   if (process.platform !== "win32") rmSync(socket, { force: true });
   writeJson(path.join(ctx.home, "foreground.json"), {
     foregroundProtocolVersion: 1,
+    databaseUpgradeVersion: 1,
     configuration: CONFIGURATION_COMPATIBILITY,
     pid: process.pid,
     startedAt: processStart(process.pid),
@@ -115,6 +116,7 @@ export async function foreground(ctx: ServerContext): Promise<void> {
     }
     writeJson(path.join(ctx.home, "foreground.json"), {
       foregroundProtocolVersion: 1,
+      databaseUpgradeVersion: 1,
     configuration: CONFIGURATION_COMPATIBILITY, pid: process.pid, startedAt: processStart(process.pid),
       version: next.manifest.version, release,
     });
@@ -243,6 +245,9 @@ interface UpdateJob { requestId: string; digest: string; request: UpdateRequest;
 /** Submission is durable before acknowledgement. A caller disconnect cannot cancel execution. */
 export async function submitForegroundUpdate(ctx: ServerContext, request: UpdateRequest, requestId: string = randomUUID()): Promise<unknown> {
   if (!/^[a-f0-9-]{36}$/.test(requestId)) throw new Error("Invalid --request-id");
+  const receipt = path.join(ctx.home, "updates", `${requestId}.json`);
+  if (!existsSync(receipt) && identity(ctx, "foreground")?.databaseUpgradeVersion !== 1)
+    throw new Error("SERVER_UPDATER_RESTART_REQUIRED: the running foreground manager uses an older CLI; from system PowerShell run rw.cmd server stop, update while stopped, then rw.cmd server start with the updated CLI. The independent PTY Host is preserved.");
   await new Promise<void>((resolve, reject) => {
     const client = createConnection(controlSocket(ctx));
     let source = "";
@@ -253,7 +258,6 @@ export async function submitForegroundUpdate(ctx: ServerContext, request: Update
     client.on("data", chunk => { source += chunk.toString(); if (source.length > 8192) client.destroy(new Error("Invalid control response")); });
     client.on("end", () => { try { const value = JSON.parse(source); if (!value.accepted) throw new Error(value.error ?? "SERVER_UPDATE_NOT_ACCEPTED"); resolve(); } catch (error) { reject(error); } });
   });
-  const receipt = path.join(ctx.home, "updates", `${requestId}.json`);
   process.stderr.write(`Update accepted: ${requestId}; receipt: ${receipt}\n`);
   while (true) {
     const job = readJson<UpdateJob>(receipt);

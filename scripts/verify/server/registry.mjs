@@ -95,7 +95,14 @@ try {
         writeFileSync(file, JSON.stringify(pkg));
       }
       const file = path.join(candidate, `${process.platform}-${process.arch}`, "manifest.json");
-      const manifest = JSON.parse(readFileSync(file, "utf8")); manifest.version = "0.1.999"; writeFileSync(file, JSON.stringify(manifest));
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+      assert(manifest.databaseUpgradeFrom?.includes("394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26"),
+        "Built Windows release does not declare the reviewed Server 0.1.7 database upgrade");
+      manifest.version = "0.1.999";
+      // Exercise the declared one-way database bridge through the real foreground updater and PTY Host.
+      manifest.databaseUpgradeFrom = [manifest.databaseCompatibility];
+      manifest.databaseCompatibility = "a".repeat(64);
+      writeFileSync(file, JSON.stringify(manifest));
     }
     registry = await localRegistry(source, fixture, candidate);
     env.npm_config_registry = registry.url;

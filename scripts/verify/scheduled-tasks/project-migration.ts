@@ -37,6 +37,11 @@ export async function verifyProjectMigration(): Promise<void> {
     assert.deepEqual(migration.preview(), preview);
     const input = { expectedDatabaseDigest: preview.databaseDigest,
       tasks: preview.tasks.map(task => ({ id: task.id, expectedRevision: task.revision, prompt: task.prompt })) };
+    const reader = new Database(file, { readonly: true });
+    try {
+      reader.prepare("SELECT count(*) FROM scheduled_tasks").get();
+      await assert.rejects(migration.apply(input, "open-reader-key"), error => (error as { code: string }).code === "migration_busy");
+    } finally { reader.close(); }
     const busy = new Database(file);
     busy.prepare("UPDATE scheduled_runs SET status='waiting', payload_json=json_set(payload_json, '$.status', 'waiting')").run();
     busy.close();

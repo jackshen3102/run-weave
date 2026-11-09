@@ -8,6 +8,7 @@ import { SCHEDULED_TASK_PROMPT_MAX_LENGTH } from "@runweave/shared/scheduled-tas
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { ServerMaintenance } from "./server-maintenance";
 import { ScheduledTaskError } from "./errors";
+import { assertWindowsDatabaseOffline } from "./windows-database-offline";
 import { migrateScheduledTasks, SCHEDULED_TASK_SCHEMA_VERSION } from "./storage/migrations";
 
 type Row = { id: string; revision: number; payload_json: string };
@@ -124,6 +125,11 @@ export class ScheduledTaskMigration {
   }
 
   private assertOffline(): void {
+    if (process.platform === "win32") {
+      try { assertWindowsDatabaseOffline(this.databasePath); }
+      catch { throw failure("migration_busy", "无法独占打开任务数据库或 WAL/SHM；请停止旧任务服务，并确认 PowerShell 可用后重试。"); }
+      return;
+    }
     let output: string;
     try {
       output = execFileSync(process.platform === "darwin" ? "/usr/sbin/lsof" : "lsof", ["-t", "--", this.databasePath, `${this.databasePath}-wal`, `${this.databasePath}-shm`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 5000 });

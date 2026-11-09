@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { commandExists, runResult } from "./sync-runtime.mjs";
 import { packageMatches } from "./release.mjs";
@@ -18,7 +18,7 @@ export function codexReleaseInstalled(release, { marketplaceName, pluginName, pu
   );
   return (
     installed?.version === release.version &&
-    installed?.marketplaceSource?.source === publishRoot &&
+    sameDirectory(installed?.marketplaceSource?.source, publishRoot) &&
     packageMatches(
       path.join(
         cacheRoot,
@@ -26,6 +26,12 @@ export function codexReleaseInstalled(release, { marketplaceName, pluginName, pu
       ),
       release.files,
     )
+  );
+}
+
+function sameDirectory(left, right) {
+  return typeof left === "string" && (
+    left === right || existsSync(left) && existsSync(right) && realpathSync(left) === realpathSync(right)
   );
 }
 

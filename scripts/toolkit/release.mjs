@@ -15,8 +15,15 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 // Git's distribution inputs exclude local browser logs, Python caches and other ignored output.
-export function toolkitRelease(root) {
-  const result = spawnSync(
+export function toolkitRelease(root, { packaged = false } = {}) {
+  const pluginRoot = path.join(root, "plugins/toolkit");
+  const result = packaged ? {
+    status: 0,
+    stdout: readdirSync(pluginRoot, { recursive: true, withFileTypes: true })
+      .filter(entry => entry.isFile())
+      .map(entry => path.relative(root, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"))
+      .join("\0"),
+  } : spawnSync(
     "git",
     [
       "ls-files",

@@ -60,6 +60,7 @@ export interface ProcessIdentity {
   release: string;
   configuration?: unknown;
   foregroundProtocolVersion?: number;
+  databaseUpgradeVersion?: 1;
 }
 
 export function controlSocket(ctx: ServerContext): string {
@@ -234,6 +235,11 @@ export function verifyRelease(root: string): ServerReleaseManifest {
     manifest.nodeModuleAbi !== process.versions.modules ||
     !manifest.dataCompatibility ||
     manifest.configurationUpgradeVersion !== undefined && manifest.configurationUpgradeVersion !== 1 ||
+    manifest.databaseUpgradeFrom !== undefined && (
+      manifest.configurationUpgradeVersion !== 1 ||
+      !Array.isArray(manifest.databaseUpgradeFrom) ||
+      manifest.databaseUpgradeFrom.some(digest => typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest))
+    ) ||
     manifest.configurationUpgradeVersion === 1 && (
       !/^[a-f0-9]{64}$/.test(manifest.databaseCompatibility ?? "") ||
       !Array.isArray(manifest.legacyDataCompatibility) ||

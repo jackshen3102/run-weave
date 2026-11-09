@@ -18,7 +18,13 @@
 
 当前 Server 发行包通过 `configurationUpgradeVersion: 1` 声明迁移协议，数据库指纹
 `databaseCompatibility` 与配置迁移分开判断。入口为 [build-server.mjs](../../scripts/release/build-server.mjs)
-和 [update.ts](../../packages/runweave-cli/src/server/update.ts)。数据库指纹仍须一致，不自动迁移数据库。
+和 [update.ts](../../packages/runweave-cli/src/server/update.ts)。数据库指纹须一致，或由候选包的
+`databaseUpgradeFrom` 明确接受源指纹；不按版本大小、平台或 `--force` 放开任意数据库差异。
+发行构建只在平台及目标数据库指纹精确匹配
+[database-upgrades.json](../../scripts/release/database-upgrades.json) 的审核记录时生成单向声明；
+后续 storage 源码变化不会自动继承权限。Windows 已发布 0.1.7 的 v4 与 0.1.8 的 v5 存储到当前
+v5 存储已登记；历史字节指纹受 checkout 换行符影响，目标分别记录 LF 与 CRLF。
+有旧任务时升级只交付迁移入口，不自动执行需要确认的 preview/apply，任务子系统在确认前不可用。
 旧发行包只有组合指纹时，构建脚本使用已记录的历史配置源码摘要与**当前数据库源码**计算
 `legacyDataCompatibility`；只有旧组合指纹匹配才能升级，不按 npm 版本号猜测数据兼容性。
 历史摘要来源在 [legacy-configuration-fingerprints.json](../../scripts/release/legacy-configuration-fingerprints.json)。

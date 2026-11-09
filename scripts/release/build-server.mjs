@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { copyNativeLockRuntime } from "../../packages/config-node/scripts/native-runtime.mjs";
+import { packageToolkit } from "../toolkit/package.mjs";
 
 const repo = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -128,6 +129,7 @@ function files(dir, prefix = "") {
       ];
     });
 }
+await packageToolkit(repo, payload);
 const backendManifest = files(payload);
 const nativeFiles = ["backend", "server", "app-server", "pty-host"].flatMap((component) =>
   files(path.join(platform, "native", component), `${component}/node_modules`),
@@ -147,6 +149,9 @@ const configurationSources = files(path.join(repo, "packages/shared/src/configur
   .map(file => `packages/shared/src/configuration/${file.path}:${file.sha256}\n`).join("");
 // A legacy snapshot can only authorize exactly the same database source tree.
 const legacyConfigurations = JSON.parse(readFileSync(path.join(repo, "scripts/release/legacy-configuration-fingerprints.json"), "utf8"));
+const databaseCompatibility = createHash("sha256").update(databaseSources).digest("hex");
+// Approvals bind both ends: a future storage edit must not inherit an old upgrade permission.
+const databaseUpgrades = JSON.parse(readFileSync(path.join(repo, "scripts/release/database-upgrades.json"), "utf8"));
 const manifest = {
   schemaVersion: 1,
   managementApiVersion: 1,
@@ -163,7 +168,10 @@ const manifest = {
   sqlitePrebuild: `${process.platform}-${process.arch}.node`,
   dataCompatibility: createHash("sha256").update(databaseSources + configurationSources).digest("hex"),
   configurationUpgradeVersion: 1,
-  databaseCompatibility: createHash("sha256").update(databaseSources).digest("hex"),
+  databaseCompatibility,
+  databaseUpgradeFrom: databaseUpgrades
+    .filter(upgrade => upgrade.platform === process.platform && upgrade.target === databaseCompatibility)
+    .flatMap(upgrade => upgrade.from),
   legacyDataCompatibility: legacyConfigurations.map(snapshot => createHash("sha256")
     .update(databaseSources + snapshot.files.map(file => `${file.path}:${file.sha256}\n`).join("")).digest("hex")),
   files: [...backendManifest, ...nativeFiles],
