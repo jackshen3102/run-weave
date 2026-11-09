@@ -127,6 +127,10 @@ macOS 使用系统 LaunchDaemon，不把登录启动当开机启动。
 能否读取目标配置。`--dry-run` 下载和校验候选包，但不停止服务、不切换 current、不写配置或更新回执。
 数据库指纹不同时，仅接受候选包 `databaseUpgradeFrom` 中明确声明的源指纹；声明只允许单向升级，
 不授权回退，也不自动确认有业务影响的任务数据转换。未声明的差异仍返回 `SERVER_DATA_INCOMPATIBLE`。
+已核对的源、目标指纹与适用平台记录在 [数据库升级声明](../../scripts/release/database-upgrades.json)。
+Linux Server `0.1.3` 的声明允许先升级 Backend，再通过
+[`rw scheduled-task migration preview/apply`](./scheduled-task-cli.md#旧项目任务的显式迁移)
+迁移有数据的旧任务库；升级 Backend 本身不会转换或启动这些任务。
 调用前先确认 `server status --json` 的 `cliCapabilities.updateDryRun` 为 true；旧 CLI 可能
 接受但忽略 `--dry-run`，缺少该声明时不能通过执行更新来试探能力。
 预检可能物化候选 release 和 npm 缓存，不承诺文件系统完全无写入。

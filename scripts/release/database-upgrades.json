@@ -1,5 +1,14 @@
 [
   {
+    "platform": "linux",
+    "target": "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+    "from": [
+      "83d0999909b1e5a50f6f5e56ed81693a960a709965e17822b5ad198a096a46f7"
+    ],
+    "sourceRevisions": ["f866322b32d9c3896ed3c60bc387f1184a104614"],
+    "reason": "Published Linux Server 0.1.3 to the reviewed v5 storage tree. Activity and App Server schemas are unchanged; Evolution adds removal tables and triggers at initialization. Populated v4 scheduled task databases remain untouched until explicit preview/apply, with scheduling unavailable before migration."
+  },
+  {
     "platform": "win32",
     "target": "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877",
     "from": [

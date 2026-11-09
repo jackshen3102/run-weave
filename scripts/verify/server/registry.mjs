@@ -1,7 +1,8 @@
 // Exercise the real public npm packages in an isolated HOME and prefix.
 import { createServer } from "node:net";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import {
   mkdtempSync,
   mkdirSync,
@@ -22,6 +23,10 @@ const serverVersion = JSON.parse(
 const cliVersion = JSON.parse(
   readFileSync("packages/runweave-cli/package.json"),
 ).version;
+const upgradeFrom = process.argv.find(arg => arg.startsWith("--upgrade-from="))?.slice(15);
+if (upgradeFrom && (upgradeFrom !== "0.1.3" || process.platform !== "linux"))
+  throw new Error("Published database upgrade verification supports Linux Server 0.1.3");
+const initialVersion = upgradeFrom ?? serverVersion;
 const fixture = mkdtempSync(path.join(process.platform === "win32" ? os.homedir() : os.tmpdir(), "rw registry 中文-"));
 const home = path.join(fixture, "home"),
   prefix = path.join(fixture, "prefix");
@@ -48,12 +53,12 @@ for (const key of Object.keys(env))
 const assert = (ok, message) => {
   if (!ok) throw new Error(message);
 };
-function run(command, args) {
+function run(command, args, input) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       env,
       cwd: fixture,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       timeout: 120_000,
     });
     let stdout = "",
@@ -65,6 +70,7 @@ function run(command, args) {
       stderr += data;
     });
     child.on("error", reject);
+    if (input !== undefined) child.stdin.end(input);
     child.on("exit", (code) =>
       code === 0
         ? resolve(stdout)
@@ -116,8 +122,11 @@ try {
     "--no-audit",
     "--no-fund",
     `@runweave/cli@${cliVersion}`,
-    `@runweave/server@${serverVersion}`,
+    ...upgradeFrom ? [] : [`@runweave/server@${serverVersion}`],
   ]);
+  if (upgradeFrom) await run(npmCommand[0], [...npmCommand.slice(1), "install", "-g", "--prefix", prefix,
+    "--ignore-scripts", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/",
+    `@runweave/server@${upgradeFrom}`]);
   if (process.platform === "win32") {
     console.log("Verify Windows native file lock");
     const nativeLock = path.join(prefix, "node_modules/@runweave/cli/node_modules/fs-native-extensions");
@@ -186,8 +195,8 @@ try {
   }
   assert(
     status?.healthy &&
-      status.runningVersion === serverVersion &&
-      status.installedVersion === serverVersion,
+      status.runningVersion === initialVersion &&
+      status.installedVersion === initialVersion,
     `Wrong/unhealthy running release: ${JSON.stringify(status)}`,
   );
   const url = `http://127.0.0.1:${port}`;
@@ -206,6 +215,106 @@ try {
     signal: AbortSignal.timeout(30_000),
   });
   assert(verified.ok, "Authenticated request failed");
+  if (upgradeFrom) {
+    console.log(`Verify published Server ${upgradeFrom} upgrade and explicit task migration`);
+    const headers = { "content-type": "application/json", authorization: `Bearer ${session.accessToken}` };
+    const api = async (route, body, extraHeaders = {}) => {
+      const response = await fetch(`${url}${route}`, {
+        method: body === undefined ? "GET" : "POST", headers: { ...headers, ...extraHeaders },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000),
+      });
+      assert(response.ok, `${route} failed (${response.status}): ${await response.clone().text()}`);
+      return response.json();
+    };
+    const project = await api("/api/terminal/project", { name: "published upgrade", path: fixture });
+    const config = {
+      name: "preserve old task", projectId: project.projectId, provider: "codex", prompt: "Preserve this original prompt.",
+      schedule: { kind: "once", timezone: "UTC", runAt: "2100-01-01T00:00:00.000Z" },
+      misfirePolicy: { mode: "skip" },
+    };
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    const task = { ...config, id: randomUUID(), revision: 1, enabled: true, nextRunAt: config.schedule.runAt,
+      createdAt, updatedAt: createdAt, deletedAt: null };
+    const oldRun = { id: randomUUID(), taskId: task.id, taskRevision: task.revision, snapshot: config, trigger: "manual",
+      scheduledFor: createdAt, dispatch: null, status: "completed", startedAt: createdAt, finishedAt: createdAt,
+      summary: "original result", error: null, artifacts: [], outputCursor: "15", executionProjectId: project.projectId,
+      cwd: fixture, threadRef: { provider: "codex", threadId: "original-thread" }, recoverable: true, terminalBinding: null };
+    const storage = JSON.parse(await run(cliCommand[0], [...cliCommand.slice(1), "config", "explain",
+      "storage.scheduledTasksDirectory", "--instance", "stable", "--json"]));
+    const databaseFile = path.join(storage.resolved.value, "scheduled-tasks.sqlite");
+    const current = path.join(home, ".runweave/server/current");
+    const Database = createRequire(path.join(current, "backend/index.cjs"))("better-sqlite3");
+    // Seed prior user data in this isolated fixture without requiring a provider login or executing an Agent.
+    const seed = new Database(databaseFile);
+    try {
+      seed.transaction(() => {
+        seed.prepare("INSERT INTO scheduled_tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          .run(task.id, task.revision, project.projectId, project.projectId, task.name, 1, task.nextRunAt, null, JSON.stringify(task));
+        seed.prepare("INSERT INTO scheduled_runs(id,task_id,status,trigger_kind,scheduled_for,occurrence_key,created_at,payload_json) VALUES (?,?,?,?,?,?,?,?)")
+          .run(oldRun.id, task.id, oldRun.status, oldRun.trigger, createdAt, "published-occurrence", createdAt, JSON.stringify(oldRun));
+        seed.prepare("INSERT INTO scheduled_run_output_chunks VALUES (?, ?, ?)").run(oldRun.id, 15, Buffer.from("original output"));
+        seed.prepare("INSERT INTO scheduled_idempotency VALUES (?, ?, ?, ?, ?)")
+          .run("create-task", "original-key", "original-hash", task.id, createdAt);
+      }).immediate();
+    } finally { seed.close(); }
+    assert((await api(`/api/scheduled-tasks/${task.id}`)).prompt === task.prompt, "Old Backend could not read the seeded v4 task");
+    const snapshot = (file = databaseFile) => {
+      const db = new Database(file, { readonly: true });
+      try {
+        return db.transaction(() => ({ version: db.pragma("user_version", { simple: true }),
+          records: db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'scheduled_%' ORDER BY name").all()
+            .map(({ name }) => [name, db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all()]),
+        }))();
+      } finally { db.close(); }
+    };
+    const before = snapshot();
+    assert(before.version === 4, "Published source did not create the expected v4 database");
+    const beforePid = status.backend.pid;
+    const preview = JSON.parse(await rw("update", "--version", serverVersion, "--dry-run"));
+    assert(preview.databaseCompatible && JSON.parse(await rw("status", "--json")).backend.pid === beforePid,
+      "Upgrade preview failed or stopped the old Backend");
+    await rw("update", "--version", serverVersion);
+    status = JSON.parse(await rw("status", "--json"));
+    assert(status.healthy && status.runningVersion === serverVersion && status.backend.pid !== beforePid,
+      "Published source did not upgrade to the built Server");
+    assert(JSON.stringify(snapshot()) === JSON.stringify(before), "Backend upgrade changed the old task database before explicit migration");
+    const capabilities = await api("/api/scheduled-tasks/capabilities");
+    assert(capabilities.taskContextVersion === 2 && capabilities.enabled === false && capabilities.reason.includes("migration_required"),
+      "New Backend did not expose the pending migration safely");
+    await run(cliCommand[0], [...cliCommand.slice(1), "auth", "login", "--instance", "stable",
+      "--base-url", url, "--username", auth.username, "--json"], auth.password + "\n");
+    const tasks = (...args) => run(cliCommand[0], [...cliCommand.slice(1), "scheduled-task", ...args, "--instance", "stable", "--json"]);
+    const draftFile = path.join(fixture, "migration.json");
+    const migrationPreview = JSON.parse(await tasks("migration", "preview", "--file", draftFile));
+    assert(migrationPreview.preview.tasks.length === 1 && migrationPreview.preview.tasks[0].id === task.id
+      && migrationPreview.preview.tasks[0].originalPrompt === task.prompt && migrationPreview.preview.tasks[0].enabled,
+      "Migration preview lost the old task or its original state");
+    assert(JSON.stringify(snapshot()) === JSON.stringify(before), "Migration preview wrote the task database");
+    const migrationArgs = ["migration", "apply", "--file", draftFile, "--sha256", migrationPreview.sha256,
+      "--expected-backend", migrationPreview.backend, "--idempotency-key", "published-upgrade-migration"];
+    const receipt = JSON.parse(await tasks(...migrationArgs));
+    assert(receipt.sourceVersion === 4 && receipt.targetVersion === 5 && receipt.restartRequired
+      && JSON.stringify(snapshot(receipt.backupPath)) === JSON.stringify(before), "Migration did not preserve a complete old database backup");
+    assert(JSON.stringify(JSON.parse(await tasks(...migrationArgs))) === JSON.stringify(receipt), "Migration replay changed the receipt");
+    await rw("restart");
+    const migrated = JSON.parse(await tasks("get", task.id));
+    assert(migrated.id === task.id && migrated.revision === task.revision + 1 && migrated.prompt.startsWith(task.prompt)
+      && !migrated.enabled && migrated.nextRunAt === null && !("projectId" in migrated), "Migrated task was lost, enabled or kept its old project binding");
+    const migratedRun = JSON.parse(await tasks("run", "get", oldRun.id));
+    assert(migratedRun.threadRef.threadId === oldRun.threadRef.threadId && migratedRun.summary === oldRun.summary
+      && migratedRun.executionContext.kind === "project" && migratedRun.executionContext.cwd === fixture
+      && migratedRun.executionContext.projectId === project.projectId, "Migration lost the historical run or its execution context");
+    assert(JSON.parse(await tasks("run", "output", oldRun.id, "--cursor", "0")).text === "original output", "Migration lost historical output");
+    assert((await api("/api/scheduled-tasks/capabilities")).enabled, "Task subsystem did not recover after migration and restart");
+    const targetRegistry = env.npm_config_registry;
+    env.npm_config_registry = "https://registry.npmjs.org/";
+    let rollbackRejected = false;
+    try { await rw("update", "--version", upgradeFrom, "--dry-run"); }
+    catch (error) { assert(error.message.includes("SERVER_DATA_INCOMPATIBLE"), error.message); rollbackRejected = true; }
+    finally { env.npm_config_registry = targetRegistry; }
+    assert(rollbackRejected && JSON.parse(await rw("status", "--json")).healthy, "One-way upgrade allowed rollback to the old database writer");
+    console.log("Published v4 upgrade, read-only previews, explicit migration, backup, replay and rollback rejection verified");
+  }
   console.log("Login verified; verify terminal runtime");
   const terminal = process.platform === "win32"
     ? await verifyWindowsTerminal(url, session.accessToken, home, {
@@ -233,6 +342,7 @@ try {
       platform: `${process.platform}-${process.arch}`,
       serverVersion,
       cliVersion,
+      ...(upgradeFrom ? { upgradeFrom, taskMigrationVerified: true } : {}),
       healthy: true,
       loginVerified: true,
       terminal,
