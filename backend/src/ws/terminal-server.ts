@@ -26,6 +26,8 @@ import { validateTerminalWebSocketHandshake } from "./terminal-handshake";
 import {
   delay,
   resolveInitialSnapshot,
+  resolveLiveScrollback,
+  parseTerminalClientMessage,
   sendEvent,
   sendStatusEvent,
   shouldSendInitialSnapshot,
@@ -164,15 +166,43 @@ export function attachTerminalWebSocketServer(
           terminalSessionId,
           error,
         });
-        sendEvent(socket, {
-          type: "error",
-          message: `Failed to recreate terminal runtime: ${String(error)}`,
-        });
-        socket.close(1011, "Failed to recreate terminal runtime");
-        return;
+        if (terminalSessionManager.getSession(terminalSessionId)?.status !== "exited") {
+          sendEvent(socket, {
+            type: "error",
+            message: `Failed to recreate terminal runtime: ${String(error)}`,
+          });
+          socket.close(1011, "Failed to recreate terminal runtime");
+          return;
+        }
       }
     }
     if (!runtime) {
+      const archived = terminalSessionManager.getSession(terminalSessionId);
+      if (archived?.status === "exited") {
+        // Exited terminals remain readable without creating a replacement PTY.
+        handleClientMessage = (data) => {
+          if (parseTerminalClientMessage(data)?.type === "request-status") {
+            sendStatusEvent(socket, "exited", archived.exitCode);
+          }
+        };
+        pendingClientMessages.length = 0;
+        sendEvent(socket, { type: "connected", terminalSessionId, runtimeKind: archived.runtimeKind });
+        if (sendInitialSnapshot) {
+          sendEvent(socket, {
+            type: "snapshot",
+            data: await resolveLiveScrollback(terminalSessionManager, terminalSessionId, archived.scrollback),
+            modes: { bracketedPasteMode: false },
+          });
+        }
+        sendStatusEvent(socket, "exited", archived.exitCode);
+        const heartbeat = createHeartbeatController(socket, { heartbeatTimer: null, isAlive: true });
+        socket.on("pong", heartbeat.markAlive);
+        socket.on("close", heartbeat.stop);
+        socket.on("error", heartbeat.stop);
+        socket.on("terminal-output-stopped", heartbeat.stop);
+        if (socket.readyState === 1) heartbeat.start();
+        return;
+      }
       terminalWsLogger.error("terminal.runtime.missing", {
         message: "Terminal runtime not found",
         terminalSessionId,

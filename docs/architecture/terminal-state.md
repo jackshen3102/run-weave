@@ -34,6 +34,11 @@ Codex 终端 session 还可以记录 `threadId` 和短 preview。它们用于 Ap
 
 Terminal session 与 panel metadata 中的 current/last thread 必须同时携带 provider 和 thread ID。Codex、Trae、TraeX、TraeCLI 的 thread ID 不能只作为裸字符串保存或展示；同一 pane 从 Codex 切到 TraeX 时，旧 Codex last thread 与新 TraeX current thread 依靠 provider 字段区分。App Home、Terminal list、panel workspace 和 App Server ThreadRef 查询都只能消费这种 provider-aware identity，不能用 cwd、时间接近度或最近 hook 猜测归属。
 
+公共 Hook bridge 对 Trae、TraeX、TraeCLI 均投递 SessionStart、UserPromptSubmit 和 Stop 生命周期事件，
+普通 PTY 无 tmux pane 时按 terminalSessionId 登记 thread。显式 provider 保持原值；从命令推断时识别
+Windows 的 `.exe`、`.cmd`、`.bat` 后缀与不区分大小写的命令名；这些新增归一化仅在 Windows 生效，
+macOS/Linux 保持原命令识别规则。终端退出只更新运行状态，不清空已保存的 current/last thread。
+
 ## iOS 当前终端模型设置
 
 `GET/PUT /api/terminal/session/:id/agent-settings` 只面向运行中的 tmux Codex / TraeX 面板。Backend 从当前 panel metadata 核对 provider、threadId 与 pane；一次 turn 完成后，仍在前台的空闲 TUI 可使用同一 panel 的 `lastThreadId/lastThreadProvider`（状态为 idle）。Pi 和普通 shell 不展示入口。模型目录按 provider 从本机 CLI 动态读取，手机只显示当前 thread 的结构化设置。独立 app-server 的 `thread/list` 能读取 TUI 会话写入的 model/reasoningEffort；全局 CLI 配置和终端文本都不是当前设置的权威值。

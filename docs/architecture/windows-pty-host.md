@@ -18,7 +18,11 @@ Host 根目录为 `<configRoot>/runtime/pty-host`，私有记录包含管道、�
 内核文件锁保证同一实例只有一个 Host；发现记录与 PID 创建身份不符时拒绝接管，不能杀掉身份不明的进程。
 
 每个会话持久保存 `hostInstanceId + sessionInstanceId`。Backend 在发送 create 前先保存绑定；
-重启后先与 Host 对账，再连接原会话。找不到原绑定或 Host 失联时报告错误，不启动同名替代 shell。
+重启后先与 Host 对账，再连接原会话。通过私有发现与 hello 校验的新 Host 若与保存的绑定不同，
+或同一 Host 已找不到原会话，Backend 将旧终端标记为 exited，保留 current/last thread 的 provider 与 ID。
+启动对账和后续连接共用此处理。Host 暂时失联、凭据或配置范围不匹配仍报告错误，不推断会话已退出。
+退出终端通过既有 connected/snapshot/status WebSocket 消息提供已保存的历史，输入不再执行；
+用户可以新建终端。此路径不启动同名替代 shell，也不声称保存的历史包含 Host 未交付的输出。
 新的 Backend 通过比较并交换取得 writer generation；旧代不能输入、resize 或 close。
 只读快照、输出和操作查询不取得写权限。
 
