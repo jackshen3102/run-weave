@@ -158,12 +158,13 @@ function serializeHyperlinks(
 export function serializeOutputScreen(
   terminal: Terminal,
   addon: SerializeAddon,
+  scrollback = 0,
 ): string {
   const state = core(terminal);
   const buffer = state._bufferService.buffer;
   // Serialize both screens first in default coordinates; set origin mode last
   // because DECSET 6 moves the cursor. Snapshot consumers reset before feeding.
-  let result = addon.serialize({ scrollback: 0, excludeModes: true });
+  let result = addon.serialize({ scrollback, excludeModes: true });
   const normalLinks = serializeHyperlinks(
     terminal,
     terminal.buffer.normal,
@@ -173,7 +174,7 @@ export function serializeOutputScreen(
     // Insert normal-screen links BEFORE 1049h saves that screen. Switching back
     // afterwards would clear or overwrite the already serialized alternate screen.
     const normal = addon.serialize({
-      scrollback: 0,
+      scrollback,
       excludeModes: true,
       excludeAltBuffer: true,
     });

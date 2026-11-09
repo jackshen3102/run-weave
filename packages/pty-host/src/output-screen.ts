@@ -1,6 +1,7 @@
 import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
 import unicode11 from "@xterm/addon-unicode11";
+import type { Terminal } from "@xterm/headless";
 import type { TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
 import { RESUME_MAX_BYTES, type TerminalOutputFrame } from "./output-recovery";
 import {
@@ -19,15 +20,10 @@ type Operation =
   | { frame: TerminalOutputFrame }
   | { cols: number; rows: number };
 
-/** A viewport-only mirror of the SAME attach stream, never another tmux client. */
+/** A mirror of the SAME output stream, never another tmux client. */
 export class TerminalOutputScreen {
   private static pendingSnapshots = 0;
-  private readonly terminal = new headless.Terminal({
-    cols: 80,
-    rows: 24,
-    scrollback: 0,
-    allowProposedApi: true,
-  });
+  private readonly terminal: Terminal;
   private readonly serializer = new serialize.SerializeAddon();
   private queue: Operation[] = [];
   private pendingBytes = 0;
@@ -42,8 +38,15 @@ export class TerminalOutputScreen {
   constructor(
     cursor: TerminalOutputCursor,
     private readonly onFailure: () => void,
+    scrollback = 0,
   ) {
     this.cursor = cursor;
+    this.terminal = new headless.Terminal({
+      cols: 80,
+      rows: 24,
+      scrollback,
+      allowProposedApi: true,
+    });
     this.terminal.loadAddon(this.serializer);
     // Match the Web renderer's character widths, including modern emoji.
     this.terminal.loadAddon(new unicode11.Unicode11Addon());
@@ -104,7 +107,13 @@ export class TerminalOutputScreen {
           return;
         }
         try {
-          const data = serializeOutputScreen(this.terminal, this.serializer);
+          let scrollback = this.terminal.buffer.normal.baseY;
+          let data = serializeOutputScreen(this.terminal, this.serializer, scrollback);
+          // Trim parsed history, never raw ANSI bytes or the current screen.
+          while (Buffer.byteLength(data, "utf8") > RESUME_MAX_BYTES && scrollback > 0) {
+            scrollback = Math.floor(scrollback / 2);
+            data = serializeOutputScreen(this.terminal, this.serializer, scrollback);
+          }
           if (Buffer.byteLength(data, "utf8") > RESUME_MAX_BYTES)
             throw new Error("Terminal snapshot exceeds 512 KiB");
           resolve({

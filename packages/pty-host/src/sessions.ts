@@ -7,6 +7,7 @@ import { isInteractiveShellLaunch } from "@runweave/shared/terminal/shell";
 import { InputOperations } from "./input-operations";
 import { TerminalOutputRecoveryBuffer, type TerminalOutputFrame } from "./output-recovery";
 import { TerminalOutputScreen } from "./output-screen";
+import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
 
 const requireNative = createRequire(fileURLToPath(import.meta.url));
 export class HostSession {
@@ -33,7 +34,7 @@ export class HostSession {
       projectId: options.projectId, gatewayToken: randomUUID() + randomUUID(), pid: 0,
       status: "running", cols: options.cols, rows: options.rows, nextSequence: 1,
     };
-    this.screen = new TerminalOutputScreen(this.buffer.cursor, () => { this.degraded = true; });
+    this.screen = new TerminalOutputScreen(this.buffer.cursor, () => { this.degraded = true; }, TERMINAL_CLIENT_SCROLLBACK_LINES);
     this.screen.resize(options.cols, options.rows);
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
     try { this.spawn(options); }
