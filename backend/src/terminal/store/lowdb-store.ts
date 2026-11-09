@@ -4,6 +4,7 @@ import type {
   PersistedTerminalSessionMetadataRecord,
   PersistedTerminalSessionRecord,
   TerminalSessionStore,
+  TerminalBrowserBindingOwner,
   UpdateTerminalProjectParams,
   UpdateTerminalSessionActivityParams,
   UpdateTerminalSessionAliasParams,
@@ -26,6 +27,19 @@ export class LowDbTerminalSessionStore
   extends LowDbPanelStore
   implements TerminalSessionStore
 {
+  async updateSessionBrowserBinding(terminalSessionId: string, owner: TerminalBrowserBindingOwner): Promise<void> {
+    const browserBinding = structuredClone(owner);
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      if (!database.data.sessions.some((session) => session.id === terminalSessionId))
+        throw new Error("Terminal session not found");
+      const sessions = database.data.sessions.map((session) => session.id === terminalSessionId
+        ? { ...session, browserBinding } : session);
+      await database.adapter.write({ ...database.data, sessions });
+      database.data.sessions = sessions;
+    });
+  }
+
   async moveSession(terminalSessionId: string, projectId: string, orderedIds: string[]): Promise<void> {
     await this.enqueueWrite(async () => {
       const database = this.getDatabase();

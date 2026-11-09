@@ -27,7 +27,16 @@ export interface PersistedTerminalProjectRecord {
   pinnedChildProjectIds?: string[];
 }
 
+/** Confirmed Browser owner; live bindings and access tickets remain ephemeral. */
+export interface TerminalBrowserBindingOwner {
+  desktopId: string;
+  hostId: string;
+  ownerSessionId: string;
+  ownerKeyHash?: string;
+}
+
 export interface PersistedTerminalSessionRecord {
+  browserBinding?: TerminalBrowserBindingOwner;
   feishuNotificationState?: FeishuNotificationState;
   source?: ScheduledTaskSource;
   pinnedAt?: string | null;
@@ -260,6 +269,7 @@ export interface UpdateTerminalProjectParams {
 }
 
 export interface TerminalSessionStore {
+  updateSessionBrowserBinding(terminalSessionId: string, owner: TerminalBrowserBindingOwner): Promise<void>;
   /** Atomically move and append to the target project's session order. */
   moveSession(terminalSessionId: string, projectId: string, orderedIds: string[]): Promise<void>;
   updateLatestReply(

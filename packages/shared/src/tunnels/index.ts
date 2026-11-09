@@ -79,6 +79,7 @@ export interface TunnelState {
     | "disabled"
     | "waiting"
     | "starting"
+    | "reconnecting"
     | "ready"
     | "needs_auth"
     | "failed";

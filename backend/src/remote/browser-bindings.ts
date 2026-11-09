@@ -1,5 +1,5 @@
 import { isRemoteBrowserProfileState } from "@runweave/shared/remote";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type {
   DesktopBrowserBinding,
   DesktopBrowserBindingRequest,
@@ -8,12 +8,20 @@ import type {
   RemoteBrowserGatewayResponse,
 } from "@runweave/shared/remote";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalBrowserBindingOwner } from "../terminal/store/store";
 
 interface BindingRecord extends DesktopBrowserBinding {
   ownerSessionId: string;
+  ownerKeyHash?: string;
   reversePort: number;
   gatewayKey: string;
   registeredAt: number;
+}
+
+function matchesOwner(owner: TerminalBrowserBindingOwner, binding: BindingRecord): boolean {
+  return owner.desktopId === binding.desktopId && owner.hostId === binding.hostId &&
+    (owner.ownerKeyHash ? owner.ownerKeyHash === binding.ownerKeyHash
+      : owner.ownerSessionId === binding.ownerSessionId);
 }
 
 interface CapabilityRecord {
@@ -36,10 +44,7 @@ export class RemoteBrowserError extends Error {
 
 export class DesktopBrowserBindings {
   private readonly bindings = new Map<string, BindingRecord>();
-  private readonly terminalBindings = new Map<
-    string,
-    { desktopId: string; hostId: string; ownerSessionId: string }
-  >();
+  private pendingSelection: Promise<void> = Promise.resolve();
   private readonly capabilities = new Map<string, CapabilityRecord>();
 
   constructor(private readonly sessions: TerminalSessionManager) {}
@@ -58,7 +63,9 @@ export class DesktopBrowserBindings {
       !Number.isInteger(input.reversePort) ||
       input.reversePort < 1 ||
       input.reversePort > 65535 ||
-      !/^[0-9a-f]{64}$/.test(input.gatewayKey)
+      !/^[0-9a-f]{64}$/.test(input.gatewayKey) ||
+      (input.ownerKey !== undefined &&
+        (typeof input.ownerKey !== "string" || !/^[0-9a-f]{64}$/.test(input.ownerKey)))
     ) {
       throw new RemoteBrowserError(
         "BROWSER_SCOPE_DENIED",
@@ -99,14 +106,17 @@ export class DesktopBrowserBindings {
         "Desktop bridge identity does not match",
       );
     }
+    const ownerKeyHash = input.ownerKey
+      ? createHash("sha256").update(input.ownerKey).digest("hex") : undefined;
     let existingId: string | undefined;
     for (const [id, binding] of this.bindings) {
       if (
-        binding.ownerSessionId === ownerSessionId &&
+        (binding.ownerSessionId === ownerSessionId ||
+          (!!ownerKeyHash && binding.ownerKeyHash === ownerKeyHash)) &&
         binding.desktopId === input.desktopId &&
         binding.hostId === input.hostId
       ) {
-        if (binding.generation === input.generation) existingId = id;
+        if (binding.ownerSessionId === ownerSessionId && binding.generation === input.generation) existingId = id;
         this.bindings.delete(id);
       }
     }
@@ -114,6 +124,7 @@ export class DesktopBrowserBindings {
       id: existingId ?? randomUUID(),
       protocolVersion: 2,
       ownerSessionId,
+      ownerKeyHash,
       desktopId: input.desktopId,
       hostId: input.hostId,
       generation: input.generation,
@@ -160,8 +171,21 @@ export class DesktopBrowserBindings {
     ownerSessionId: string,
     terminalSessionId: string,
     bindingId: string,
-  ): void {
-    if (!this.sessions.getSession(terminalSessionId))
+  ): Promise<void> {
+    // Keep ownership checks and durable selection ordered across competing desktops.
+    const operation = this.pendingSelection.then(() =>
+      this.selectBinding(ownerSessionId, terminalSessionId, bindingId),
+    );
+    this.pendingSelection = operation.catch(() => {});
+    return operation;
+  }
+  private async selectBinding(
+    ownerSessionId: string,
+    terminalSessionId: string,
+    bindingId: string,
+  ): Promise<void> {
+    const session = this.sessions.getSession(terminalSessionId);
+    if (!session)
       throw new RemoteBrowserError(
         "BROWSER_SCOPE_DENIED",
         404,
@@ -178,17 +202,15 @@ export class DesktopBrowserBindings {
         403,
         "Desktop binding is not owned by this session",
       );
-    const previous = this.terminalBindings.get(terminalSessionId);
+    const previous = session.browserBinding;
+    if (previous && matchesOwner(previous, binding) && previous.ownerKeyHash === binding.ownerKeyHash)
+      return;
     if (
       previous &&
-      (previous.desktopId !== binding.desktopId ||
-        previous.hostId !== binding.hostId ||
-        previous.ownerSessionId !== binding.ownerSessionId) &&
+      !matchesOwner(previous, binding) &&
       this.liveBindings().some(
         (candidate) =>
-          candidate.desktopId === previous.desktopId &&
-          candidate.hostId === previous.hostId &&
-          candidate.ownerSessionId === previous.ownerSessionId,
+          matchesOwner(previous, candidate),
       )
     ) {
       throw new RemoteBrowserError(
@@ -197,23 +219,22 @@ export class DesktopBrowserBindings {
         "Terminal already belongs to another desktop",
       );
     }
-    this.terminalBindings.set(terminalSessionId, {
+    await this.sessions.updateSessionBrowserBinding(terminalSessionId, {
       desktopId: binding.desktopId,
       hostId: binding.hostId,
       ownerSessionId: binding.ownerSessionId,
+      ownerKeyHash: binding.ownerKeyHash,
     });
   }
   private selectedBinding(terminalSessionId: string): BindingRecord {
     const candidates = this.liveBindings();
-    const owner = this.terminalBindings.get(terminalSessionId);
+    const owner = this.sessions.getSession(terminalSessionId)?.browserBinding;
     const selected = candidates.find(
       (binding) =>
-        binding.desktopId === owner?.desktopId &&
-        binding.hostId === owner.hostId &&
-        binding.ownerSessionId === owner.ownerSessionId,
+        !!owner && matchesOwner(owner, binding),
     );
     if (selected) return selected;
-    if (this.terminalBindings.has(terminalSessionId))
+    if (owner)
       throw new RemoteBrowserError(
         "DESKTOP_UNAVAILABLE",
         503,

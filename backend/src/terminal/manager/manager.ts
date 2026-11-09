@@ -12,6 +12,7 @@ import {
 import { getInitialTerminalActiveCommand } from "../runtime/session-launch";
 import { createUniqueTerminalSessionId } from "../runtime/session-id";
 import { TerminalManagerPanelOperations } from "./panel-operations";
+import type { TerminalBrowserBindingOwner } from "../store/store";
 
 export type {
   CreateTerminalSessionOptions,
@@ -28,6 +29,14 @@ export type {
 
 export class TerminalSessionManager extends TerminalManagerPanelOperations {
   private pendingSessionMove: Promise<void> = Promise.resolve();
+
+  async updateSessionBrowserBinding(terminalSessionId: string, owner: TerminalBrowserBindingOwner): Promise<void> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) throw new Error("Terminal session not found");
+    const browserBinding = structuredClone(owner);
+    await this.sessionStore.updateSessionBrowserBinding(terminalSessionId, browserBinding);
+    session.browserBinding = browserBinding;
+  }
 
   moveSession(terminalSessionId: string, projectId: string): Promise<{
     session: TerminalSessionRecord; previousProjectId: string;

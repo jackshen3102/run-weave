@@ -21,7 +21,7 @@ import {
   stopRemoteAccess,
 } from "./remote-access-owner.js";
 import { createTunnelHost, type Host } from "./host-state.js";
-import { childState, failure } from "./runtime-state.js";
+import { browserRefreshFailure, childState, failure } from "./runtime-state.js";
 
 export class TunnelManager {
   readonly store = new TunnelStore();
@@ -207,6 +207,7 @@ export class TunnelManager {
     const channel = h.channel;
     h.channel = null;
     h.lastBrowserRefresh = 0;
+    h.browserRetryAt = 0;
     h.runtime.bindingId = null;
     h.runtime.browser = childState(
       h.config.browser.enabled ? "waiting" : "disabled",
@@ -362,6 +363,7 @@ export class TunnelManager {
     if (
       !h.config.browser.enabled ||
       h.browserBusy ||
+      Date.now() < h.browserRetryAt ||
       Date.now() - h.lastBrowserRefresh < 20000
     )
       return;
@@ -396,16 +398,15 @@ export class TunnelManager {
       }
       h.runtime.bindingId = binding.id;
       h.runtime.installationId = channel.installationId;
+      h.browserFailures = 0; h.browserRetryAt = 0;
       h.runtime.browser = childState("ready");
     } catch (error) {
       if (this.current(h, generation) && h.browserEpoch === epoch) {
-        const fail = failure(error);
-        await this.stopBrowser(h);
-        h.lastBrowserRefresh = Date.now();
-        h.runtime.browser = childState(
-          fail.code === "NEEDS_AUTH" ? "needs_auth" : "failed",
-          fail,
-        );
+        const recovery = browserRefreshFailure(error, !!h.channel?.connected, h.browserFailures++);
+        if (!recovery.preserve) await this.stopBrowser(h);
+        h.lastBrowserRefresh = 0;
+        h.browserRetryAt = recovery.retryAt;
+        h.runtime.browser = recovery.browser;
       }
     } finally {
       h.browserBusy = false;

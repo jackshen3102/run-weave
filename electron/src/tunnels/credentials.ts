@@ -1,4 +1,5 @@
 import { safeStorage } from "electron";
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { desktopStateRoot, writePrivateJson } from "../desktop/local-state.js";
@@ -8,6 +9,7 @@ interface Credential {
   refreshToken: string;
   expiresAt: number;
   installationId: string | null;
+  browserOwner?: { installationId: string; key: string };
 }
 export class TunnelCredentials {
   private readonly file = path.join(
@@ -94,12 +96,14 @@ export class TunnelCredentials {
     password: string,
   ) {
     const result = await this.request(base, "login", { username, password });
+    const previous = this.values[id];
     this.values[id] = {
       target,
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       expiresAt: Date.now() + result.expiresIn * 1000,
       installationId: null,
+      ...(previous?.target === target ? { browserOwner: previous.browserOwner } : {}),
     };
     this.persist();
   }
@@ -137,6 +141,16 @@ export class TunnelCredentials {
       );
     current.installationId = installationId;
     this.persist();
+  }
+  browserOwnerKey(id: string, installationId: string): string {
+    const current = this.values[id];
+    if (!current || current.installationId !== installationId) throw new Error("NEEDS_AUTH");
+    if (current.browserOwner?.installationId === installationId) return current.browserOwner.key;
+    const browserOwner = { installationId, key: randomBytes(32).toString("hex") };
+    const next = { ...current, browserOwner };
+    this.values[id] = next;
+    try { this.persist(); } catch (error) { this.values[id] = current; throw error; }
+    return browserOwner.key;
   }
   invalidateAccess(id: string) {
     const current = this.values[id];
