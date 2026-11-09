@@ -132,6 +132,8 @@ public struct BrowserScreen: View {
   private func webContent(_ page: BrowserPage) -> some View {
     ZStack {
       BrowserWebView(page: page, bottomContentInset: 76)
+        // Extend the webpage to the screen edge; floating controls keep their safe-area layout.
+        .ignoresSafeArea(.container, edges: .bottom)
       if let failure = page.failure {
         VStack(spacing: 16) {
           Image(systemName: "globe")
