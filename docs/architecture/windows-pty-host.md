@@ -19,15 +19,19 @@ Host 根目录为 `<configRoot>/runtime/pty-host`，私有记录包含管道、�
 
 每个会话持久保存 `hostInstanceId + sessionInstanceId`。Backend 在发送 create 前先保存绑定；
 重启后先与 Host 对账，再连接原会话。通过私有发现与 hello 校验的新 Host 若与保存的绑定不同，
-或同一 Host 已找不到原会话，Backend 将旧终端标记为 exited，保留 current/last thread 的 provider 与 ID。
-启动对账和后续连接共用此处理。Host 暂时失联、凭据或配置范围不匹配仍报告错误，不推断会话已退出。
-退出终端通过既有 connected/snapshot/status WebSocket 消息提供已保存的历史，输入不再执行；
-用户可以新建终端。此路径不启动同名替代 shell，也不声称保存的历史包含 Host 未交付的输出。
+或同一 Host 已找不到原会话，Backend 对仍标记 running 的终端沿用 macOS/tmux 的恢复策略：
+清理失效运行时绑定，在同一终端记录下创建新的 shell/会话实例；交互 shell 按匹配的 provider 与
+current/last threadId 启动 Agent resume，没有匹配 thread 时创建空 shell。前台命令不能识别 Agent 时，
+允许使用已持久化的 Agent Hook 状态；shell_idle 不作为恢复 Agent 的依据。一次性命令不重跑，返回默认 shell。
+交互终端每 60 秒最多重建 3 次，超限标为不可恢复并结束。启动对账和后续连接共用此处理。
+Host 暂时失联、凭据或配置范围不匹配仍报告错误，不推断会话丢失。原始未确认输入不会自动重发。
+已明确 exited 的终端仍提供保存的历史，输入不再执行，也不会因打开历史页面自行恢复 Agent。
+恢复保留终端 ID 与历史，但使用新的 Host/PTY 绑定；不声称原进程仍在，也不保证包含 Host 未交付的输出。
 新的 Backend 通过比较并交换取得 writer generation；旧代不能输入、resize 或 close。
 只读快照、输出和操作查询不取得写权限。
 
 Backend 的 registry dispose 只释放托管连接；显式结束终端发送 close 并等待退出。
-Host 本身崩溃、用户注销或 Windows 重启无法保留原进程，不自动 resume Agent 冒充原终端。
+Host 本身崩溃、用户注销或 Windows 重启无法保留原进程；管理进程启动新 Host 后，Backend 才能按上述规则重建并恢复已保存的对话。
 Windows profile 锁另记录进程创建身份，异常退出后结合 HasExited 和创建身份判断旧锁；无法探测时保留锁。
 
 ## 输入与画面

@@ -22,7 +22,7 @@ export async function ensureHost(scope: EnvironmentContext, release: string): Pr
   }
   const entry = path.join(release, "pty-host/index.cjs");
   if (!existsSync(entry)) throw new Error("HOST_PAYLOAD_MISSING");
-  writeHostJson(paths.launch, { scope, release });
+  await writeHostJson(paths.launch, { scope, release });
   const log = openSync(path.join(paths.root, "host.log"), "a", 0o600);
   try {
     const child = spawn(process.execPath, [entry, "--root", paths.root], {

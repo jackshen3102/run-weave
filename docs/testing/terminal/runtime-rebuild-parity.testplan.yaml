@@ -1,0 +1,53 @@
+version: 1
+name: tmux 与 Windows PTY Host 丢失后的恢复一致性
+description: >
+  只在自己拥有的隔离实例验证运行时丢失后的重建。macOS/tmux 与 Windows/ConPTY 使用同一身份选择和重建限制；
+  恢复原对话不表示保留了原进程。每例独立建立并清理自己的 Host/tmux、Backend、终端和无副作用 Agent 会话。
+cases:
+  - id: REBUILD-001
+    name: 运行时丢失只恢复匹配的 Agent 对话一次
+    required: true
+    description: 相同终端重建新 shell 后按 provider 和保存的 thread 恢复，并发重连不重复启动 Agent。
+    preconditions:
+      - 本例拥有一个正在运行的交互 shell 和可恢复的 Agent 对话，已记录当前及 last thread 的 provider 和 ID。
+      - Windows 使用 PowerShell 或 cmd，Agent 可执行文件路径包含空格和单引号；本例允许终止自己拥有的 Host 或 tmux 会话。
+    steps:
+      - 终止原运行时并启动新的 Host（tmux 使用原服务），并发连接同一终端；确认只创建一个新 shell 和一个 Agent resume。
+      - 重新取得连接，通过 $toolkit:playwright-cli 检查真实页面；确认恢复的是保存的 provider 和 thread，终端 ID 不变且实际进程身份已改变。
+      - 检查无前台 Agent 命令但有 agent_idle Hook 的 Windows 等价样本仍恢复同一对话；保存证据并清理。
+  - id: REBUILD-002
+    name: provider 不匹配时不恢复历史对话
+    required: true
+    description: 当前 Agent 与 current/last thread 的 provider 都不匹配时只建立空 shell，不能猜最新对话。
+    preconditions:
+      - 本例拥有可重建的交互终端，其前台或 Hook Agent 与保存 current 和 last thread 的 provider 均不匹配。
+    steps:
+      - 终止并重建自己的运行时，重新连接终端；确认只出现新 shell，没有任何 Agent resume 命令或进程。
+      - 确认保存的 thread 身份没有被改成当前 Agent 的 provider；保存证据并清理。
+  - id: REBUILD-003
+    name: 交互终端每分钟最多重建三次
+    required: true
+    description: 两端共用三次重建限制，第四次不创建进程，标记 exited 且 recoverable 为 false。
+    preconditions:
+      - 本例拥有允许连续丢失的交互终端，所有四次重建请求能在 60 秒内发生。
+    steps:
+      - 在 60 秒内连续丢失并重建三次本例运行时，确认各次有唯一新绑定和 shell。
+      - 第四次丢失后请求重连，确认明确报告超限、终端 exited 且 recoverable 为 false，没有第四个 shell 或 Agent；保存证据并清理。
+  - id: REBUILD-004
+    name: 活着的运行时只重新附着
+    required: true
+    description: Backend 连接释放后运行时仍存在时不重建 shell，不再次恢复 Agent。
+    preconditions:
+      - 本例拥有活着的 Host 或 tmux 会话，其中 Agent 已连接到固定 thread，已记录全部运行时身份。
+    steps:
+      - 断开并重新建立本例 Backend 连接；确认 Host/tmux、shell 和 Agent 的身份不变，thread 不变，resume 计数不增加。
+      - 保存重新附着和进程身份的证据，清理本例资源。
+  - id: REBUILD-005
+    name: 明确结束的终端保持只读历史
+    required: true
+    description: 主动结束并标为 exited 的终端不能因打开历史页面自行启动 Agent。
+    preconditions:
+      - 本例拥有已明确结束的终端，记录内保留带 provider 的 threadId。
+    steps:
+      - 通过 $toolkit:playwright-cli 打开该终端历史页，确认可以查看历史、不能发送输入，且没有新 shell 或 Agent 进程。
+      - 保存状态和进程证据，清理本例资源。

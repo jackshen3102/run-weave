@@ -190,7 +190,7 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
     if (!startedAt) throw new Error("HOST_IDENTITY_UNAVAILABLE");
     descriptor = { protocolVersion: PTY_HOST_PROTOCOL_VERSION, hostInstanceId, pid: process.pid, startedAt,
       scope, endpoint: hostPaths(scope).endpoint, gatewayUrl: gateway.url, release };
-    writeHostJson(paths.descriptor, descriptor);
+    await writeHostJson(paths.descriptor, descriptor);
     process.once("SIGTERM", () => { void shutdown(); });
     process.once("SIGINT", () => { void shutdown(); });
   } catch (error) { await shutdown(); throw error; }

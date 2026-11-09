@@ -18,8 +18,8 @@ import { createTerminalRuntimeRecorder } from "./recorder";
 import type { TmuxService, TmuxTarget } from "../tmux/service";
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
 import { TmuxRebuildLimitError } from "../tmux/service";
-import { getAgentForCommand } from "../state/terminal-state-service";
-import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import { resolveAgentThreadToResume } from "./recovery-policy";
+export { resolveAgentThreadToResume } from "./recovery-policy";
 import {
   buildTerminalRuntimeEnvironment,
   buildTmuxSessionRuntimeEnvironment,
@@ -340,7 +340,7 @@ export async function ensureTerminalRuntime(
     });
   }
 
-  if (options.session.ptyHost || usesPtyHost()) return { runtime: await ensureHostedTerminal(options) };
+  if (options.session.ptyHost || usesPtyHost()) return ensureHostedTerminal(options);
 
   const runtime = options.ptyService.spawnSession({
     command: options.session.command,
@@ -381,28 +381,6 @@ export async function ensureTerminalRuntime(
 
 function isInteractiveShellLaunch(command: string, args: string[]): boolean {
   return isShellLaunch({ command, args });
-}
-
-export function resolveAgentThreadToResume(
-  session: TerminalSessionRecord,
-): { provider: TerminalAgentKind; threadId: string } | null {
-  const activeProvider = getAgentForCommand(session.activeCommand);
-  if (!activeProvider) {
-    return null;
-  }
-
-  const currentThreadId = session.threadId?.trim();
-  const currentProvider =
-    session.threadProvider ?? (currentThreadId ? "codex" : undefined);
-
-  if (currentThreadId && currentProvider === activeProvider) {
-    return { provider: activeProvider, threadId: currentThreadId };
-  }
-
-  const recentThreadId = session.lastThreadId?.trim();
-  return recentThreadId && session.lastThreadProvider === activeProvider
-    ? { provider: activeProvider, threadId: recentThreadId }
-    : null;
 }
 
 function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {

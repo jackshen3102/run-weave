@@ -12,8 +12,7 @@ import type {
 
 export const RUNWEAVE_TMUX_PREFIX = "runweave-";
 export const TmuxCommandTimeoutMs = 5_000;
-export const RebuildWindowMs = 60_000;
-export const MaxRebuildAttempts = 3;
+export { RebuildWindowMs, MaxRebuildAttempts } from "../runtime/recovery-policy";
 export const CaptureHistoryLines = 5_000;
 export const InteractivePaneReadyMinWaitMs = 1_000;
 export const InteractivePaneReadyStableMs = 200;
