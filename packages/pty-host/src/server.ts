@@ -18,6 +18,7 @@ const createSchema = z.object({
   projectId: z.string().min(1).max(256), command: z.string().min(1).max(32768), args: z.array(z.string()).max(256),
   cwd: z.string().min(1), cols: z.number().int().min(2).max(500), rows: z.number().int().min(1).max(200),
   env: z.record(z.string().optional()),
+  fallback: z.object({ command: z.string().min(1).max(32768), args: z.array(z.string()).max(256), env: z.record(z.string().optional()) }).optional(),
 });
 const wireSchema = z.object({ requestId: z.string().uuid(), token: z.string(), hostInstanceId: z.string().uuid(), action: z.string(), body: z.unknown() });
 
@@ -162,10 +163,12 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
           const resized = (cols: number, rows: number) => {
             if (ready) sendJson(socket, { type: "resize", terminalSessionId: session.info.terminalSessionId, cols, rows, cursor: session.buffer.cursor });
           };
+          const launched = (launch: NonNullable<import("@runweave/shared/terminal/pty-host").PtyHostSession["launch"]>) => { if (ready) sendJson(socket, { type: "launch", terminalSessionId: session.info.terminalSessionId, launch }); };
+          session.launchListeners.add(launched);
           session.outputListeners.add(output);
           session.exitListeners.add(exited);
           session.resizeListeners.add(resized);
-          subscriptions.set(session.info.terminalSessionId, () => { session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized); });
+          subscriptions.set(session.info.terminalSessionId, () => { session.launchListeners.delete(launched); session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized); });
           const snapshot = await session.snapshot();
           const tail = session.buffer.read(snapshot.cursor);
           if (!tail.ok) throw new Error("HOST_OUTPUT_GAP");

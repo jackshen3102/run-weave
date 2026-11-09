@@ -8,5 +8,6 @@ export const CONFIGURATION_DOMAIN_LABELS: Readonly<Record<string, string>> = {
   "agents.companion": "伴随窗口", "desktop.browser": "桌面浏览器", "desktop.preferences": "桌面偏好",
   "desktop.tunnels": "远程访问", cli: "CLI 连接", developer: "开发与签名", knowledge: "知识库",
   logging: "日志", scheduledTasks: "后台任务", storage: "数据存储", terminal: "终端",
+  "terminal.defaultShell": "默认 Shell",
   updates: "更新", voice: "语音", appServer: "App Server",
 };

@@ -3,6 +3,7 @@ import type { IPty } from "node-pty";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type { PtyHostBinding, PtyHostCreateSession, PtyHostSession } from "@runweave/shared/terminal/pty-host";
+import { isInteractiveShellLaunch } from "@runweave/shared/terminal/shell";
 import { InputOperations } from "./input-operations";
 import { TerminalOutputRecoveryBuffer, type TerminalOutputFrame } from "./output-recovery";
 import { TerminalOutputScreen } from "./output-screen";
@@ -17,10 +18,15 @@ export class HostSession {
   readonly outputListeners = new Set<(frame: TerminalOutputFrame) => void>();
   readonly exitListeners = new Set<(exitCode: number) => void>();
   readonly resizeListeners = new Set<(cols: number, rows: number) => void>();
+  readonly launchListeners = new Set<(launch: NonNullable<PtyHostSession["launch"]>) => void>();
   degraded = false;
-  private readonly terminal: IPty;
+  private terminal!: IPty;
+  private fallbackActivated = false;
+  private closing = false;
+  private processGeneration = 0;
+  private startupDeadline = 0;
 
-  constructor(hostInstanceId: string, options: PtyHostCreateSession, prepareEnv: (token: string, sessionId: string) => Record<string, string | undefined>) {
+  constructor(hostInstanceId: string, private readonly options: PtyHostCreateSession, private readonly prepareEnv: (token: string, sessionId: string) => Record<string, string | undefined>) {
     this.createDigest = createHash("sha256").update(JSON.stringify(options)).digest("hex");
     this.info = {
       hostInstanceId, sessionInstanceId: options.sessionInstanceId, terminalSessionId: options.terminalSessionId,
@@ -29,20 +35,49 @@ export class HostSession {
     };
     this.screen = new TerminalOutputScreen(this.buffer.cursor, () => { this.degraded = true; });
     this.screen.resize(options.cols, options.rows);
+    this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
+    try { this.spawn(options); }
+    catch (error) {
+      try { if (!this.activateFallback(String(error))) throw error; }
+      catch (fallbackError) { this.screen.dispose(); throw fallbackError; }
+    }
+  }
+
+  private emitOutput(data: string): void {
+    for (const frame of this.buffer.append(data)) {
+      if (!this.degraded) this.screen.append(frame);
+      for (const listener of this.outputListeners) listener(frame);
+    }
+  }
+
+  private activateFallback(reason: string): boolean {
+    if (!this.options.fallback || this.fallbackActivated || this.closing || !isInteractiveShellLaunch(this.options)) return false;
+    this.fallbackActivated = true;
+    this.emitOutput("[Runweave: shell failed to start; using system default: " + this.options.fallback.command + "]\r\n");
+    this.spawn(this.options.fallback, reason);
+    return true;
+  }
+
+  private spawn(launch: { command: string; args: string[]; env: Record<string, string | undefined> }, fallbackReason?: string): void {
     const pty = requireNative("node-pty") as typeof import("node-pty");
-    try { this.terminal = pty.spawn(options.command, options.args, {
-      name: "xterm-256color", cols: options.cols, rows: options.rows, cwd: options.cwd,
-      env: { ...options.env, ...prepareEnv(this.info.gatewayToken, this.info.terminalSessionId) },
-    }); } catch (error) { this.screen.dispose(); throw error; }
-    this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running");
-    this.terminal.onData(data => {
-      this.info.pid = this.terminal.pid;
-      for (const frame of this.buffer.append(data)) {
-        if (!this.degraded) this.screen.append(frame);
-        for (const listener of this.outputListeners) listener(frame);
-      }
+    const started = Date.now();
+    const terminal = pty.spawn(launch.command, launch.args, {
+      name: "xterm-256color", cols: this.info.cols, rows: this.info.rows, cwd: this.options.cwd,
+      env: { ...launch.env, ...this.prepareEnv(this.info.gatewayToken, this.info.terminalSessionId) },
     });
-    this.terminal.onExit(event => {
+    this.startupDeadline = this.options.fallback && isInteractiveShellLaunch(this.options) ? Date.now() + 1000 : 0;
+    this.processGeneration++;
+    this.terminal = terminal;
+    this.info.pid = terminal.pid;
+    this.info.launch = { command: launch.command, args: [...launch.args], ...(fallbackReason ? { fallbackReason } : {}) };
+    for (const listener of this.launchListeners) listener(this.info.launch);
+    terminal.onData(data => { if (this.terminal === terminal) this.emitOutput(data); });
+    terminal.onExit(event => {
+      if (this.terminal !== terminal) return;
+      if (event.exitCode > 0 && Date.now() - started < 1000) {
+        try { if (this.activateFallback(`Shell exited with code ${event.exitCode}`)) return; }
+        catch (error) { this.emitOutput(`[Runweave: system shell failed to start: ${String(error)}]\r\n`); }
+      }
       this.info.status = "exited";
       this.info.exitCode = event.exitCode;
       for (const listener of this.exitListeners) listener(event.exitCode);
@@ -51,7 +86,7 @@ export class HostSession {
 
   async ready(): Promise<PtyHostSession> {
     const deadline = Date.now() + 10_000;
-    while (this.terminal.pid < 1 && this.info.status === "running" && Date.now() < deadline)
+    while ((this.terminal.pid < 1 || Date.now() < this.startupDeadline) && this.info.status === "running" && Date.now() < deadline)
       await new Promise(resolve => setTimeout(resolve, 20));
     this.info.pid = this.terminal.pid;
     if (this.info.pid < 1) { this.close(); throw new Error("HOST_SESSION_START_FAILED"); }
@@ -77,6 +112,7 @@ export class HostSession {
 
   signal(signal: string): void {
     if (!["SIGINT", "SIGTERM", "SIGKILL"].includes(signal)) throw new Error("HOST_SIGNAL_INVALID");
+    this.closing = true;
     if (process.platform === "win32") {
       if (signal === "SIGINT") this.terminal.write("\x03"); else this.close();
     } else this.terminal.kill(signal);
@@ -84,6 +120,7 @@ export class HostSession {
 
   close(): void {
     if (this.info.status !== "running") return;
+    this.closing = true;
     this.terminal.kill();
   }
 

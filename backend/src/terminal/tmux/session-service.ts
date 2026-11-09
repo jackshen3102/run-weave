@@ -157,7 +157,8 @@ export class TmuxSessionService extends TmuxProcess {
     target: TmuxTarget,
     cwd: string,
     launchCommand: TmuxLaunchCommand,
-  ): Promise<void> {
+  ): Promise<TmuxLaunchCommand & { fallbackReason?: string }> {
+    const fallback = this.shellFallback(launchCommand);
     await this.runTmux(
       [
         ...TMUX_SANITIZE_ENV_ARGS,
@@ -172,10 +173,20 @@ export class TmuxSessionService extends TmuxProcess {
         ...this.buildExtraEnvArgs(),
         "-c",
         cwd,
-        formatShellCommand(launchCommand),
+        // A bounded staging process keeps the pane alive while its startup
+        // retention is installed; no user shell or queued input runs here.
+        ...(fallback ? ["/bin/sleep", "30"] : [formatShellCommand(launchCommand)]),
       ],
       target,
     );
+    if (!fallback) return launchCommand;
+    try {
+      const pane = await this.runTmux(["display-message", "-p", "-t", target.sessionName, "#{pane_id}"], target);
+      return await this.startShellInPane({ ...target, paneId: pane.stdout.trim() }, cwd, launchCommand, fallback);
+    } catch (error) {
+      await this.killSession(target);
+      throw error;
+    }
   }
 
   async syncSessionEnvironment(

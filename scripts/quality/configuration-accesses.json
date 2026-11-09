@@ -1386,18 +1386,34 @@
   {
     "file": "backend/src/terminal/runtime/default-shell.ts",
     "kind": "environment",
-    "expression": "process.env.COMSPEC",
+    "expression": "env.ComSpec",
     "count": 1,
     "category": "system",
-    "reason": "COMSPEC：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+    "reason": "ComSpec：用于执行电脑的系统 Shell 及可执行文件查询，用户覆盖仍由 settings.yaml 保存。"
   },
   {
     "file": "backend/src/terminal/runtime/default-shell.ts",
     "kind": "environment",
-    "expression": "process.env.SHELL",
+    "expression": "env.COMSPEC",
     "count": 1,
     "category": "system",
-    "reason": "SHELL：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+    "reason": "COMSPEC：用于执行电脑的系统 Shell 及可执行文件查询，用户覆盖仍由 settings.yaml 保存。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/default-shell.ts",
+    "kind": "environment",
+    "expression": "env.SHELL",
+    "count": 1,
+    "category": "system",
+    "reason": "SHELL：用于执行电脑的系统 Shell 及可执行文件查询，用户覆盖仍由 settings.yaml 保存。"
+  },
+  {
+    "file": "backend/src/terminal/runtime/default-shell.ts",
+    "kind": "environment",
+    "expression": "env.PATH",
+    "count": 1,
+    "category": "system",
+    "reason": "PATH：用于执行电脑的系统 Shell 及可执行文件查询，用户覆盖仍由 settings.yaml 保存。"
   },
   {
     "file": "backend/src/terminal/runtime/env.ts",

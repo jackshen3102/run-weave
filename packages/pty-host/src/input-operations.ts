@@ -20,7 +20,7 @@ export class InputOperations {
   private pendingBytes = 0;
   private tail: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly write: (data: string) => void, private readonly isRunning: () => boolean) {}
+  constructor(private readonly write: (data: string) => void, private readonly isRunning: () => boolean, private readonly generation: () => number = () => 0) {}
 
   get nextSequence(): number { return this.highest + 1; }
 
@@ -66,13 +66,16 @@ export class InputOperations {
     };
     this.operations.set(input.operationId, operation);
     this.sequences.set(input.sequence, input.operationId);
+    const acceptedGeneration = this.generation();
     operation.done = this.tail.then(async () => {
       try {
         for (const step of input.steps) {
+          if (acceptedGeneration !== this.generation()) throw new Error("HOST_PROCESS_CHANGED");
           if (!this.isRunning()) throw new Error("HOST_SESSION_GONE");
           if (step.type === "text") this.write(step.data);
           else await new Promise(resolve => setTimeout(resolve, step.ms));
         }
+        if (acceptedGeneration !== this.generation()) throw new Error("HOST_PROCESS_CHANGED");
         operation.result.state = "written";
       } catch (error) {
         operation.result.state = "failed";

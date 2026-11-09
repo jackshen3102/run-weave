@@ -31,6 +31,7 @@ export async function createHostedPty(options: {
   terminalSessionId: string;
   binding: PtyHostBinding;
   create?: PtyHostCreateSession;
+  onLaunch?: (launch: NonNullable<PtyHostSession["launch"]>) => Promise<void>;
 }): Promise<PtyRuntime> {
   const client = await getPtyHost();
   if (client.descriptor.hostInstanceId !== options.binding.hostInstanceId) {
@@ -60,6 +61,7 @@ export async function createHostedPty(options: {
   const receive: Parameters<typeof client.events.add>[0] = event => {
     if (event.terminalSessionId !== options.terminalSessionId) return;
     if (initializing) { early.push(event); return; }
+    if (event.type === "launch" && options.onLaunch) void options.onLaunch(event.launch).catch(disconnected);
     if (event.type === "output") emitFrame(event);
     if (event.type === "resize") { grid = { cols: event.cols, rows: event.rows }; for (const listener of resizeListeners) listener(event.cols, event.rows); }
     if (event.type === "exit") { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
@@ -69,6 +71,10 @@ export async function createHostedPty(options: {
   let attached: { session: PtyHostSession; snapshot: PtyHostSnapshot; frames: TerminalOutputFrame[] };
   try { attached = await client.request("attachSession", target); }
   catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); throw error; }
+  if (attached.session.launch && options.onLaunch) {
+    try { await options.onLaunch(attached.session.launch); }
+    catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); throw error; }
+  }
   cursor = attached.snapshot.cursor;
   grid = { cols: attached.snapshot.cols, rows: attached.snapshot.rows };
   for (const frame of attached.frames) emitFrame(frame);

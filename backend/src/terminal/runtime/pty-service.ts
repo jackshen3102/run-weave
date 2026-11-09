@@ -11,6 +11,7 @@ import {
   summarizeTerminalChunk,
 } from "./perf-logging";
 import { sanitizeTerminalProcessEnv } from "./env";
+import { isInteractiveShellLaunch } from "@runweave/shared/terminal/shell";
 import { applyShellIntegration } from "./shell-integration";
 import backendPackageJson from "../../../package.json";
 
@@ -210,7 +211,7 @@ export class PtyService {
       (event: { exitCode: number; signal?: number }) => void
     >();
     const normalizedArgs = [...(options.args ?? [])];
-    const fallback = options.fallback
+    const fallback = options.fallback && isInteractiveShellLaunch(options)
       ? {
           command: options.fallback.command,
           args: [...options.fallback.args],
@@ -222,6 +223,7 @@ export class PtyService {
     let currentPid = -1;
     let disposed = false;
     let fallbackActivated = false;
+    let inputStarted = false;
     let launchStartedAt = Date.now();
     let lastWriteAt: number | null = null;
     let writeSequence = 0;
@@ -322,7 +324,7 @@ export class PtyService {
       reasonLines: string[],
       error?: unknown,
     ): void => {
-      if (!fallback || fallbackActivated || disposed) {
+      if (!fallback || fallbackActivated || disposed || inputStarted) {
         if (reasonLines.length > 0) {
           emitData(formatFallbackMessage(reasonLines));
         }
@@ -412,6 +414,7 @@ export class PtyService {
         const shouldFallback =
           !usingFallback &&
           !fallbackActivated &&
+          !inputStarted &&
           event.exitCode > 0 &&
           runDuration < QUICK_EXIT_FALLBACK_THRESHOLD_MS;
         if (shouldFallback) {
@@ -470,6 +473,7 @@ export class PtyService {
         }
       },
       write(data) {
+        inputStarted = true;
         writeSequence += 1;
         lastWriteAt = Date.now();
         logTerminalPerf("pty.write", {
@@ -485,6 +489,7 @@ export class PtyService {
         currentRuntime?.resize(cols, rows);
       },
       signal(signal) {
+        inputStarted = true;
         currentRuntime?.signal(signal);
       },
       dispose() {

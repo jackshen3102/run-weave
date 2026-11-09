@@ -1,3 +1,4 @@
+import { resolveTerminalFallbackLaunchConfig, type TerminalLaunchConfig } from "../runtime/default-shell";
 import { configuration, settingText } from "@runweave/config-node";
 import { constants } from "node:fs";
 import { access, mkdir, writeFile } from "node:fs/promises";
@@ -8,6 +9,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { sanitizeTerminalProcessEnv } from "../runtime/env";
 import { applyShellIntegration } from "../runtime/shell-integration";
+import { TmuxShellStartupError } from "./types";
 import type {
   TmuxAvailability,
   TmuxExecFile,
@@ -21,9 +23,13 @@ import {
   TmuxCommandTimeoutMs,
   categorizeTmuxCommand,
   isTimeoutError,
+  isInteractiveShellLaunchCommand,
   isUnsetEnvValue,
   isUtf8Locale,
   resolveExecutableFromPath,
+  formatShellCommand,
+  shellQuote,
+  delay,
   resolveUtf8Locale,
   tmuxLogger,
 } from "./internals";
@@ -150,7 +156,7 @@ export abstract class TmuxProcess {
   protected buildShellIntegrationEnvArgs(
     launchCommand: TmuxLaunchCommand,
   ): string[] {
-    if (launchCommand.args.some((arg) => arg === "-c" || arg === "-lc")) {
+    if (!isInteractiveShellLaunchCommand(launchCommand)) {
       return [];
     }
     const integratedEnv = applyShellIntegration(launchCommand.command, {
@@ -215,6 +221,54 @@ export abstract class TmuxProcess {
     }
     args.push("-e", `COLORTERM=${this.env.COLORTERM?.trim() || "truecolor"}`);
     return args;
+  }
+
+  /** Called only for a newly allocated pane, before it is exposed to input. */
+  protected async startShellInPane(
+    target: TmuxTarget & { paneId: string }, cwd: string, launch: TmuxLaunchCommand,
+    fallback: TerminalLaunchConfig,
+  ): Promise<TmuxLaunchCommand & { fallbackReason?: string }> {
+    const spawn = (next: TmuxLaunchCommand, message?: string) => this.runTmux([
+      "respawn-pane", "-k", "-t", target.paneId, "-c", cwd,
+      ...this.buildShellIntegrationEnvArgs(next), ...this.buildLaunchEnvArgs(next.env),
+      message ? `printf '%s\\r\\n' ${shellQuote(message)}; exec ${formatShellCommand(next)}` : formatShellCommand(next),
+    ], target);
+    const wait = async (): Promise<number | null> => {
+      const deadline = Date.now() + 1000;
+      do {
+        const result = await this.runTmux(["display-message", "-p", "-t", target.paneId, "#{pane_dead}:#{pane_dead_status}"], target, { sensitiveOutput: true });
+        const [dead, status] = result.stdout.trim().split(":");
+        if (dead === "1") return Number(status);
+        await delay(100);
+      } while (Date.now() < deadline);
+      return null;
+    };
+    try {
+      await this.runTmux(["set-option", "-p", "-t", target.paneId, "remain-on-exit", "on"], target);
+      let actual: TmuxLaunchCommand & { fallbackReason?: string } = launch;
+      await spawn(launch);
+      const exit = await wait();
+      if (exit !== null) {
+        if (exit === 0) throw new Error("Shell exited during startup (code 0)");
+        const message = `Runweave: shell exited with code ${exit}; using system default ${fallback.command}`;
+        actual = { ...fallback, env: launch.env, fallbackReason: message };
+        tmuxLogger.warn("terminal.tmux.shell-fallback", { message, command: launch.command, fallbackCommand: fallback.command, paneId: target.paneId });
+        await spawn(actual, message);
+        const fallbackExit = await wait();
+        if (fallbackExit !== null) throw new Error(`System shell exited during startup (code ${fallbackExit})`);
+      }
+      await this.runTmux(["set-option", "-p", "-u", "-t", target.paneId, "remain-on-exit"], target);
+      return actual;
+    } catch (error) {
+      await this.runTmux(["kill-pane", "-t", target.paneId], target).catch(cleanupError => {
+        tmuxLogger.warn("terminal.tmux.shell-startup.cleanup-failed", { paneId: target.paneId, error: cleanupError });
+      });
+      throw new TmuxShellStartupError(error);
+    }
+  }
+
+  protected shellFallback(launch: TmuxLaunchCommand): TerminalLaunchConfig | null {
+    return resolveTerminalFallbackLaunchConfig(launch);
   }
 
   protected async runTmux(
