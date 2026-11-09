@@ -119,7 +119,8 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
         try await SharedCaptureStore.setConnection(connection, ifCurrent: { self.generation == current })
         guard generation == current else { return }
         captureConnection = connection; refreshCaptures()
-        action.stage(.confirmed); action.stage(.stateUpdated); complete = true
+      } catch { captureMessage = error.localizedDescription }
+      action.stage(.confirmed); action.stage(.stateUpdated); complete = true
     } catch {
       action.stage(.failed, error: error); complete = true
       if generation == current { message = error.localizedDescription }

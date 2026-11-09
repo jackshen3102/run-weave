@@ -1,3 +1,4 @@
+import { clearInputLagTimer } from "./input-lag-timer";
 import { useDraftInsertion } from "./use-draft-insertion";
 import { useSendDiagnostics } from "./use-send-diagnostics";
 import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
@@ -70,10 +71,7 @@ export function useTerminalFloatingDraftController({
     `${codexContext?.generation ?? "unknown"}:${codexContext?.displayedThreadId ?? "unknown"}`;
 
   useEffect(() => {
-    if (inputLagFallbackTimerRef.current !== null) {
-      window.clearTimeout(inputLagFallbackTimerRef.current);
-      inputLagFallbackTimerRef.current = null;
-    }
+    clearInputLagTimer(inputLagFallbackTimerRef);
     const target = JSON.stringify([
       apiBase,
       terminalSessionId,
@@ -177,11 +175,7 @@ export function useTerminalFloatingDraftController({
   });
 
   const clearInputLagFallbackTimer = useMemoizedFn(() => {
-    if (inputLagFallbackTimerRef.current === null) {
-      return;
-    }
-    window.clearTimeout(inputLagFallbackTimerRef.current);
-    inputLagFallbackTimerRef.current = null;
+    clearInputLagTimer(inputLagFallbackTimerRef);
   });
 
   const handleOutputReceived = useMemoizedFn(() => {

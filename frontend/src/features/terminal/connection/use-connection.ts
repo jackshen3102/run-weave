@@ -2,7 +2,6 @@ import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import type {
-  TerminalClientMessage,
   TerminalModeState,
   TerminalServerMessage,
 } from "@runweave/shared/terminal/websocket";
@@ -15,7 +14,7 @@ import {
   shouldAutoReconnectTerminalClose,
 } from "./reconnect-policy";
 import { logTerminalPerf, summarizeTerminalChunk } from "../output/performance";
-import { toWebSocketBase } from "../navigation/url";
+import { buildTerminalWsUrl, sendMessage } from "./socket-transport";
 import {
   TerminalClientOutputRecovery,
   hasTerminalDimensions,
@@ -25,33 +24,6 @@ import {
 type ConnectionStatus = "connecting" | "connected" | "closed";
 type TerminalRuntimeStatus = "running" | "exited" | null;
 type TerminalRuntimeKind = "tmux" | "pty" | null;
-
-function buildTerminalWsUrl(
-  apiBase: string,
-  terminalSessionId: string,
-  ticket: string,
-  includeSnapshot: boolean,
-): string {
-  const searchParams = new URLSearchParams({
-    terminalSessionId,
-    token: ticket,
-  });
-  if (!includeSnapshot) {
-    searchParams.set("snapshot", "0");
-  }
-  return `${toWebSocketBase(apiBase)}/ws/terminal?${searchParams.toString()}`;
-}
-
-function sendMessage(
-  socket: WebSocket | null,
-  payload: TerminalClientMessage,
-): void {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
-  socket.send(JSON.stringify(payload));
-}
 
 export function useTerminalConnection(params: {
   apiBase: string;
