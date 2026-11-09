@@ -18,6 +18,7 @@ const cli = JSON.parse(readFileSync("packages/runweave-cli/package.json"));
 const revision = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
+const candidateTag = `release-${revision.slice(0, 12)}`;
 const channel = process.env.RELEASE_CHANNEL ?? "next";
 if (!["next", "latest"].includes(channel))
   throw new Error("Invalid release channel");
@@ -137,7 +138,14 @@ assert(
     process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
   "Publishing requires GitHub Actions OIDC",
 );
-const receipt = { revision, channel, scope, packages: [], phase: "preflight" };
+const receipt = {
+  revision,
+  channel,
+  scope,
+  candidateTag,
+  packages: [],
+  phase: "preflight",
+};
 const save = () =>
   writeFileSync(
     path.join(root, "release-receipt.json"),
@@ -218,7 +226,13 @@ async function publishGroup(group) {
         !process.argv.includes("--promote"),
         `Cannot promote missing package: ${pkg.name}`,
       );
-      npm(["publish", file, "--access=public", "--tag=next", "--provenance"]);
+      npm([
+        "publish",
+        file,
+        "--access=public",
+        `--tag=${candidateTag}`,
+        "--provenance",
+      ]);
     }
   }
   await checkedTogether(
@@ -263,17 +277,9 @@ try {
   );
   receipt.phase = "publishing";
   save();
-  await checkedTogether([
-    publishGroup(packages.filter((a) => a.pkg.name === cli.name)),
-    (async () => {
-      await publishGroup(
-        packages.filter((a) => ![server.name, cli.name].includes(a.pkg.name)),
-      );
-      // Keep the main package installable: its exact platform dependencies must
-      // be publicly downloadable before moving the main package's next tag.
-      await publishGroup(packages.filter((a) => a.pkg.name === server.name));
-    })(),
-  ]);
+  // All uploads use a revision-specific candidate tag. Public next/latest tags
+  // stay untouched until every dependency and installed package has passed.
+  await publishGroup(packages);
   receipt.packages.sort(
     (a, b) =>
       packages.findIndex((p) => p.pkg.name === a.name) -
@@ -290,6 +296,18 @@ try {
     npm(["dist-tag", "add", `${pkg.name}@${pkg.version}`, channel]);
   }
   await checkedTogether(packages.map(verifyTag));
+  // Cleanup is idempotent when a promotion job is retried after partial tagging.
+  await checkedTogether(
+    packages.map(async ({ pkg }) => {
+      const response = await fetch(
+        `${registry}/-/package/${encodeURIComponent(pkg.name)}/dist-tags`,
+        { signal: AbortSignal.timeout(30_000) },
+      );
+      assert(response.ok, `Cannot read candidate tags: ${pkg.name}`);
+      if ((await response.json())[candidateTag] === pkg.version)
+        npm(["dist-tag", "rm", pkg.name, candidateTag]);
+    }),
+  );
   receipt.phase = "complete";
   save();
   if (process.env.GITHUB_STEP_SUMMARY)

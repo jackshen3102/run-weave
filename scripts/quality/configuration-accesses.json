@@ -13095,5 +13095,21 @@
     "count": 1,
     "category": "build",
     "reason": "读取发行范围、GitHub 运行上下文和 package 版本，输出 CI 发行计划；不作为实例业务配置来源。"
+  },
+  {
+    "file": "scripts/release/restore-server-artifacts.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_SCOPE",
+    "count": 1,
+    "category": "build",
+    "reason": "CI 发版选择范围，限制恢复候选包集合；不作为运行时实例配置。"
+  },
+  {
+    "file": "scripts/release/restore-server-artifacts.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(`packages/runweave-${name}/package.json`)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取待发版包版本元数据，与不可变候选包交叉验证；不读取用户配置。"
   }
 ]

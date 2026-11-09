@@ -21,13 +21,15 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     const session = await api(`session/${id}`, undefined, "GET");
     assert(session.command.toLowerCase().endsWith("powershell.exe"), "Explicit PowerShell override was not preserved");
     assert(!session.tmuxSessionName, "Windows unexpectedly created tmux");
+    const nonce = randomBytes(6).toString("hex");
     async function connect() {
       const { ticket } = await api(`session/${id}/ws-ticket`, {});
       const ws = new WebSocket(`${url.replace("http", "ws")}/ws/terminal?terminalSessionId=${id}&token=${encodeURIComponent(ticket)}&resizeMode=ordered`);
-      let output = "", connected = false, failure, size;
+      let output = "", liveOutput = "", connected = false, failure, size;
       ws.addEventListener("message", event => {
         const message = JSON.parse(event.data);
         if (["output", "snapshot"].includes(message.type)) output += message.data;
+        if (message.type === "output") liveOutput += message.data;
         if (message.type === "connected") connected = message.runtimeKind === "pty";
         if (message.type === "error") failure = message.message;
         if (message.type === "resize") size = `${message.cols}x${message.rows}`;
@@ -42,26 +44,33 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
         }
       }
       await wait(() => connected, "PTY connected");
+      // A unique prompt cannot be confused with an old snapshot or command echo.
+      // eslint-disable-next-line no-control-regex -- Normalize ConPTY cursor/color escapes before observing the prompt.
+      const visible = text => text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "");
       return {
         ws,
         send: message => ws.send(JSON.stringify(message)),
+        waitPrompt: () => wait(() => visible(output).includes(`RW_PROMPT_${nonce}>`), "PowerShell prompt installed"),
+        async interrupt() {
+          const since = liveOutput.length;
+          ws.send(JSON.stringify({ type: "signal", signal: "SIGINT" }));
+          await wait(() => visible(liveOutput.slice(since)).includes(`RW_PROMPT_${nonce}>`), "fresh PowerShell prompt after interrupt");
+        },
         waitResize: expected => wait(() => size === expected, `ordered resize ${expected}`),
-        // eslint-disable-next-line no-control-regex -- Strip terminal ANSI controls before checking visible output.
-        waitOutput: marker => wait(() => output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "").includes(marker), marker),
+        waitOutput: marker => wait(() => visible(output).includes(marker), marker),
       };
     }
-    const nonce = randomBytes(6).toString("hex");
     socket = await connect();
-    socket.send({ type: "input", data: `$rwProbe='${nonce}'; Write-Output ('READY_'+$rwProbe)\r` });
+    socket.send({ type: "input", data: `$global:rwProbe='${nonce}'; function global:prompt { 'RW_'+'PROMPT_'+$global:rwProbe+'>' }; Write-Output ('READY_'+$rwProbe)\r` });
     await socket.waitOutput(`READY_${nonce}`);
+    await socket.waitPrompt();
     socket.send({ type: "resize", cols: 112, rows: 35 });
     await socket.waitResize("112x35");
     socket.send({ type: "input", data: "Write-Output ('SIZE_'+$Host.UI.RawUI.WindowSize.Width+'x'+$Host.UI.RawUI.WindowSize.Height)\r" });
     await socket.waitOutput("SIZE_112x35");
     socket.send({ type: "input", data: "Write-Output ('WAIT_'+$rwProbe); Start-Sleep -Seconds 60\r" });
     await socket.waitOutput(`WAIT_${nonce}`);
-    socket.send({ type: "signal", signal: "SIGINT" });
-    await sleep(300);
+    await socket.interrupt();
     socket.send({ type: "input", data: "Write-Output ('INTERRUPTED_'+$rwProbe)\r" });
     await socket.waitOutput(`INTERRUPTED_${nonce}`);
     socket.ws.close();

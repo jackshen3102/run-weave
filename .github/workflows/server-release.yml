@@ -28,6 +28,7 @@ on:
         default: next
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: npm-server-release
   cancel-in-progress: false
@@ -86,14 +87,56 @@ jobs:
           JS
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Find immutable candidate from an earlier attempt
+        if: ${{ !inputs.pty_spike_only }}
+        id: candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: npm-server-${{ matrix.target }}
+        run: |
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
+            artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.name == env.ARTIFACT_NAME and .expired == false) | .id')
+            if [ -n "$artifact_id" ]; then
+              echo "reuse=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.candidate.outputs.reuse == 'true'
+        with:
+          name: npm-server-${{ matrix.target }}
+          path: .runtime-artifacts/server
       - name: Build distributable
-        if: ${{ needs.plan.outputs.server == 'true' && !inputs.pty_spike_only }}
+        if: ${{ needs.plan.outputs.server == 'true' && !inputs.pty_spike_only && steps.candidate.outputs.reuse != 'true' }}
         run: pnpm server:build
       - name: Build independent CLI distributable
-        if: needs.plan.outputs.scope == 'cli'
+        if: ${{ needs.plan.outputs.scope == 'cli' && steps.candidate.outputs.reuse != 'true' }}
         run: |
           node scripts/release/build-cli.mjs --out=.runtime-artifacts/server/cli-package
           node .runtime-artifacts/server/cli-package/dist/index.js --version
+      - name: Pack immutable candidates
+        if: ${{ !inputs.pty_spike_only && steps.candidate.outputs.reuse != 'true' }}
+        shell: bash
+        env:
+          SERVER_TARGET: ${{ matrix.target }}
+        run: |
+          if [ "$RELEASE_SCOPE" = cli ]; then
+            release_packages=(cli-package)
+          else
+            release_packages=(cli-package "$SERVER_TARGET" package)
+          fi
+          for package in "${release_packages[@]}"; do
+            (cd ".runtime-artifacts/server/$package" && npm pack --pack-destination ..)
+          done
+      - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.pty_spike_only && steps.candidate.outputs.reuse != 'true' }}
+        with:
+          name: npm-server-${{ matrix.target }}
+          path: .runtime-artifacts/server/*.tgz
+          if-no-files-found: error
+      - name: Restore exact candidate bytes for verification
+        if: ${{ !inputs.pty_spike_only }}
+        run: node scripts/release/restore-server-artifacts.mjs --target=${{ matrix.target }}
       - name: Verify independent Windows PTY Host
         if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' }}
         timeout-minutes: 3
@@ -117,26 +160,6 @@ jobs:
         if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' && !inputs.pty_spike_only }}
         timeout-minutes: 3
         run: pnpm scheduled-tasks:verify-runtime --case projectMigration
-      - name: Pack verified packages
-        if: ${{ !inputs.pty_spike_only }}
-        shell: bash
-        env:
-          SERVER_TARGET: ${{ matrix.target }}
-        run: |
-          if [ "$RELEASE_SCOPE" = cli ]; then
-            release_packages=(cli-package)
-          else
-            release_packages=(cli-package "$SERVER_TARGET" package)
-          fi
-          for package in "${release_packages[@]}"; do
-            (cd ".runtime-artifacts/server/$package" && npm pack --pack-destination ..)
-          done
-      - uses: actions/upload-artifact@v4
-        if: ${{ !inputs.pty_spike_only }}
-        with:
-          name: npm-server-${{ matrix.target }}
-          path: .runtime-artifacts/server/*.tgz
-          if-no-files-found: error
   validate:
     if: ${{ !inputs.windows_only && !inputs.pty_spike_only }}
     needs: [plan, package]
