@@ -59,6 +59,11 @@ Host 只对已识别的交互 Shell 执行启动失败回退，交付前等待�
 每会话使用单独 token；Origin、会话/项目范围、路由和请求体大小受限。Backend 完成 App Server 发现后，
 把新上游地址和凭据发布给 Host，活着的 Agent 环境无需修改。
 
+Browser CLI 仍向 Backend 查询终端身份并申请 Browser capability。Backend 同时接受原有 Hook
+令牌和该终端的 Host 会话令牌；后者通过已认证的 Host 管道核对 Host、会话实例及运行状态，
+只能授权 URL 指定的同一终端。Host 无需新增 Browser 网关路由或重启，已有终端也可使用；
+Backend 无法核对 Host 时明确拒绝，不把会话令牌作为全局 Hook 令牌。
+
 App Server `/events` 先带 dedupeKey 写入私有 outbox，fsync 后返回 202，再按接收顺序补投；
 上游事件中心负责去重。outbox 最多 16 MiB / 4096 个文件。上游拒绝的无效事件隔离保留，
 后续事件继续投递；容量耗尽或拒绝事件留下持久 incomplete 标记，`host status` 显示该状态。
