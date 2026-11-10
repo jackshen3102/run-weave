@@ -20,7 +20,7 @@ import type {
   TerminalSessionRecord,
 } from "../manager/manager";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
-import type { PtyService } from "../runtime/pty-service";
+import type { PtyRuntime, PtyService } from "../runtime/pty-service";
 import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
 import { resolveTmuxTarget } from "../runtime/launcher";
 import {
@@ -29,6 +29,7 @@ import {
 } from "../runtime/input-admission";
 import {
   pasteTextAttachmentReference,
+  pastePtyTextAttachmentReference,
   sendInputToSession,
 } from "../application/input-dispatcher";
 import {
@@ -39,11 +40,12 @@ import {
 
 type Target = {
   session: TerminalSessionRecord;
-  panel: TerminalPanelRecord;
-  pane: TmuxPaneTarget;
+  panelId: string;
   threadId: string | null;
-  codexInputContext?: CodexInputContext;
-};
+} & (
+  | { kind: "tmux"; panel: TerminalPanelRecord; pane: TmuxPaneTarget; codexInputContext?: CodexInputContext }
+  | { kind: "pty"; runtime: PtyRuntime; pid: number; hostInstanceId?: string; sessionInstanceId?: string }
+);
 
 export class TerminalTextAttachmentDelivery {
   private closed = false;
@@ -96,6 +98,19 @@ export class TerminalTextAttachmentDelivery {
 
   private target(sessionId: string, panelId: string): Target {
     const session = this.manager.getSession(sessionId);
+    if (!session || session.status !== "running")
+      throw new TextAttachmentError(409, "终端已退出，原文已保留");
+    if (session.runtimeKind === "pty") {
+      const runtime = this.registry.getSessionRuntime(sessionId);
+      if (panelId !== "default" || !runtime)
+        throw new TextAttachmentError(409, "PTY 终端目标尚未就绪，原文已保留");
+      return {
+        kind: "pty", session, panelId, runtime, pid: runtime.pid,
+        hostInstanceId: session.ptyHost?.hostInstanceId,
+        sessionInstanceId: session.ptyHost?.sessionInstanceId,
+        threadId: session.threadId ?? session.lastThreadId ?? null,
+      };
+    }
     const panel = this.manager.getPanel(panelId);
     if (
       !session ||
@@ -111,6 +126,8 @@ export class TerminalTextAttachmentDelivery {
     if (observed.managed && (!observed.context?.displayedThreadId || !observed.context.inputReady))
       throw new TextAttachmentError(409, "Codex 会话身份尚未就绪，原文已保留");
     return {
+      kind: "tmux",
+      panelId,
       ...(observed.context?.displayedThreadId ? { codexInputContext: { generation: observed.context.generation, revision: observed.context.revision, threadId: observed.context.displayedThreadId } } : {}),
       session,
       panel,
@@ -122,6 +139,16 @@ export class TerminalTextAttachmentDelivery {
     };
   }
   private recheck(target: Target, active = true): void {
+    if (this.manager.getSession(target.session.id) !== target.session || target.session.status !== "running" || target.session.runtimeKind !== target.kind)
+      throw new TextAttachmentError(409, "附件目标已变化，未插入路径");
+    if (target.kind === "pty") {
+      if (this.registry.getSessionRuntime(target.session.id) !== target.runtime ||
+        target.runtime.pid !== target.pid ||
+        target.session.ptyHost?.hostInstanceId !== target.hostInstanceId ||
+        target.session.ptyHost?.sessionInstanceId !== target.sessionInstanceId)
+        throw new TextAttachmentError(409, "PTY 终端进程已变化，附件已保留，未插入路径");
+      return;
+    }
     const context = readCodexContext(target.panel);
     if (context.managed && (!context.context?.inputReady || context.context.displayedThreadId !== target.threadId))
       throw new TextAttachmentError(409, "Codex 会话已切换，附件已保留，未插入路径");
@@ -137,6 +164,11 @@ export class TerminalTextAttachmentDelivery {
           panel.id)
     )
       throw new TextAttachmentError(409, "附件目标已变化，未插入路径");
+  }
+  private currentThreadId(target: Target): string | null {
+    const owner = target.kind === "tmux" ? target.panel : target.session;
+    return (target.kind === "tmux" ? readCodexContext(target.panel).context?.displayedThreadId : undefined)
+      ?? owner.threadId ?? owner.lastThreadId ?? null;
   }
   async capability(
     sessionId: string,
@@ -205,7 +237,7 @@ export class TerminalTextAttachmentDelivery {
         !prepared ||
         prepared.expiresAt <= Date.now() ||
         prepared.target.session.id !== sessionId ||
-        prepared.target.panel.id !== request.panelId
+        prepared.target.panelId !== request.panelId
       ) {
         target = undefined;
         targetError = new TextAttachmentError(
@@ -266,7 +298,7 @@ export class TerminalTextAttachmentDelivery {
         if (
           binding.expiresAt !== undefined &&
           (binding.expiresAt <= Date.now() ||
-            (readCodexContext(binding.target.panel).context?.displayedThreadId ?? binding.target.panel.threadId ?? binding.target.panel.lastThreadId ?? null) !== binding.target.threadId)
+            this.currentThreadId(binding.target) !== binding.target.threadId)
         )
           throw new TextAttachmentError(
             409,
@@ -288,7 +320,7 @@ export class TerminalTextAttachmentDelivery {
         binding.target.session,
         binding.revision,
         false,
-        binding.target.panel.tmuxPaneId,
+        binding.target.kind === "tmux" ? binding.target.panel.tmuxPaneId : null,
       );
       let dispatching = false;
       try {
@@ -304,7 +336,12 @@ export class TerminalTextAttachmentDelivery {
         );
         recheck(false);
         dispatching = true;
-        if (binding.target.codexInputContext) {
+        if (binding.target.kind === "pty") {
+          await pastePtyTextAttachmentReference(
+            binding.target.runtime, content, () => recheck(false),
+            getAgentForCommand(binding.target.session.activeCommand) === "codex", request.operationId,
+          );
+        } else if (binding.target.codexInputContext) {
           await replaceManagedCodexPrompt({ panel: binding.target.panel, target: binding.target.pane, tmux: this.tmux, expected: binding.target.codexInputContext, supervisor: false, text: content, append: true, submit: false, submitKey: "Enter" });
         } else await pasteTextAttachmentReference(
           this.tmux,
@@ -380,7 +417,7 @@ export class TerminalTextAttachmentDelivery {
           terminalSessionId: sessionId,
           inputAccepted: true,
           inputEnqueued: true,
-          runtimeKind: "tmux",
+          runtimeKind: this.manager.getSession(sessionId)?.runtimeKind ?? "pty",
           acceptedAt: new Date().toISOString(),
         };
       }
@@ -390,8 +427,8 @@ export class TerminalTextAttachmentDelivery {
       for (const id of ids) {
         const file = await this.files.get(sessionId, id);
         await this.files.read(sessionId, id);
-        if (file.panelId !== target.panel.id || file.purpose !== "composer" ||
-          (readCodexContext(target.panel).managed && file.threadId !== target.threadId))
+        if (file.panelId !== target.panelId || file.purpose !== "composer" ||
+          (target.kind === "tmux" && readCodexContext(target.panel).managed && file.threadId !== target.threadId))
           throw new TextAttachmentError(409, "附件不属于当前草稿");
         references.push(JSON.stringify(file.filePath));
       }
@@ -400,7 +437,7 @@ export class TerminalTextAttachmentDelivery {
         target.session,
         revision,
         false,
-        target.panel.tmuxPaneId,
+        target.kind === "tmux" ? target.panel.tmuxPaneId : null,
         true,
       );
       try {
@@ -431,7 +468,7 @@ export class TerminalTextAttachmentDelivery {
           `${request.data}\n\n文本附件，请读取文件内容：\n${references.join("\n")}`,
           "prompt_replace",
           operationId,
-          target.pane,
+          target.kind === "tmux" ? target.pane : undefined,
           true,
           request.submitKey,
         );

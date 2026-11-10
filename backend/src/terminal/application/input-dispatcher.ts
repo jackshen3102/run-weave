@@ -184,10 +184,12 @@ async function writePromptReplacePtyInput(
   submitKey: TerminalPromptSubmitKey,
   attachClipboardImages = false,
   operationId?: string,
+  beforeWrite?: () => void,
 ): Promise<void> {
   if (runtime.hosted) {
     const paste = (attachClipboardImages ? buildClipboardImagePaste(text) : null)
       ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text));
+    beforeWrite?.();
     await runtime.hosted.writeSteps([
       { type: "text", data: "\x15" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
       { type: "text", data: "\x01" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
@@ -198,18 +200,23 @@ async function writePromptReplacePtyInput(
     ], operationId);
     return;
   }
+  beforeWrite?.();
   runtime.write("\x15");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
+  beforeWrite?.();
   runtime.write("\x01");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
+  beforeWrite?.();
   runtime.write("\x0b");
   await delay(PROMPT_REPLACE_CLEAR_DELAY_MS);
   if (text) {
+    beforeWrite?.();
     runtime.write((attachClipboardImages ? buildClipboardImagePaste(text) : null)
       ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text)));
   }
   if (submit) {
     await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
+    beforeWrite?.();
     runtime.write(
       submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r",
     );
@@ -285,7 +292,10 @@ export async function sendInputToSession(
     } catch (error) { logger.warn("terminal-reply.input.failed", { error }); }
   };
   try {
-    const ensured = options.supervisorInput ? null : await ensureTerminalRuntime({
+    const attachmentPty = options.textAttachmentLease && !isTmuxBackedSession(session);
+    const existing = attachmentPty ? options.runtimeRegistry.getSessionRuntime(session.id) : undefined;
+    if (attachmentPty && !existing) throw new Error("PTY attachment target is unavailable; no runtime was restored");
+    const ensured = options.supervisorInput ? null : existing ? { runtime: existing } : await ensureTerminalRuntime({
       session,
       terminalSessionManager,
       runtimeRegistry: options.runtimeRegistry,
@@ -450,6 +460,7 @@ export async function sendInputToSession(
             submitKey,
             attachClipboardImages,
             operationId,
+            options.beforeTextAttachmentWrite,
           );
         } else if (mode === "line") {
           // Match tmux: a TUI can treat text and Enter in one PTY write as paste.
@@ -494,6 +505,20 @@ export async function sendInputToSession(
   } finally {
     release();
   }
+}
+
+/** Caller owns input admission; paste into the captured PTY without clearing or submitting. */
+export async function pastePtyTextAttachmentReference(
+  runtime: PtyRuntime,
+  reference: string,
+  recheck: () => void,
+  attachClipboardImages = false,
+  operationId?: string,
+): Promise<void> {
+  const data = buildPromptPasteInput(reference, attachClipboardImages);
+  recheck();
+  if (runtime.hosted) await runtime.hosted.writeSteps([{ type: "text", data }], operationId);
+  else runtime.write(data);
 }
 
 /** Caller owns input admission and supplies a fixed pane; never submits or replaces a draft. */

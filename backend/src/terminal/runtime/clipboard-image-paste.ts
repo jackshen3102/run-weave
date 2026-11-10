@@ -4,7 +4,7 @@ import os from "node:os";
 export function splitClipboardImagePaste(text: string): string[] {
   // Codex recognizes an image only when its path is a standalone paste event.
   // Match only our uploaded-image path format, preserving all intervening text.
-  const directory = `${path.join(os.tmpdir(), "runweave-terminal-images")}/`
+  const directory = `${path.join(os.tmpdir(), "runweave-terminal-images")}${path.sep}`
     .replaceAll("'", "'\"'\"'").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const references = new RegExp(`'${directory}runweave-terminal-image-\\d{8}-\\d{6}-[a-f0-9]{6}\\.(?:png|jpg|webp|gif)'`, "g");
   const parts: string[] = [];
