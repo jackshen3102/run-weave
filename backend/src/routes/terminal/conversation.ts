@@ -1,6 +1,7 @@
 import type { Router } from "express";
 import { z } from "zod";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
+import type { TmuxService } from "../../terminal/tmux/service";
 import { readTerminalConversation, TerminalConversationError } from "../../terminal/application/conversation";
 
 const querySchema = z.object({
@@ -8,7 +9,7 @@ const querySchema = z.object({
   expectedThreadId: z.string().trim().min(1).max(200).optional(),
 }).strict();
 
-export function registerTerminalConversationRoutes(router: Router, manager: TerminalSessionManager): void {
+export function registerTerminalConversationRoutes(router: Router, manager: TerminalSessionManager, tmux?: TmuxService): void {
   router.get("/session/:id/conversation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const query = querySchema.safeParse(req.query);
@@ -17,7 +18,7 @@ export function registerTerminalConversationRoutes(router: Router, manager: Term
     const cancel = () => { if (!res.writableEnded) controller.abort(); };
     res.on("close", cancel);
     try {
-      const response = await readTerminalConversation(manager, req.params.id, query.data, controller.signal);
+      const response = await readTerminalConversation(manager, req.params.id, query.data, controller.signal, tmux);
       if (!controller.signal.aborted) res.json(response);
     } catch (error) {
       if (!controller.signal.aborted) res.status(error instanceof TerminalConversationError ? error.status : 503).json({
