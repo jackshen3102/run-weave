@@ -6,7 +6,7 @@ Terminal 附件由所属 Backend 保存。身份鉴权沿用 Terminal router，�
 
 ## 能力边界
 
-长文本附件适用于当前运行的 tmux 面板，不按 Agent 类型、空闲状态、thread、
+长文本附件适用于当前运行的 tmux 面板及 PTY 会话的 `default` 面板，不按 Agent 类型、空闲状态、thread、
 Codex 启动参数、操作系统或客户端地址关闭功能。普通 shell 和首次启动、尚未建立
 thread 的 Agent 也可以保存和插入文件。沿用终端的登录鉴权，不另加附件权限门槛，
 不修改 Agent 的沙箱或审批配置。
@@ -33,10 +33,13 @@ session 明确删除后再保留 7 天。损坏或归属不明 metadata 跳过�
 
 ## 投递与恢复
 
-TUI 创建在任何异步工作前固定 panel 与输入 revision。保存期间不锁终端；继续
+TUI 创建在任何异步工作前固定 panel 与输入 revision；PTY 同时固定 runtime、PID 与 Host 会话身份，
+仅使用现有运行进程，投递不触发进程重建。保存期间不锁终端；继续
 输入、目标切换或其他客户端输入使旧资格失效。插入在同步复核后取得短时 session 独占权，
 退出 copy mode 后再次检查显式 pane，粘贴 `空格 + JSON 字符串路径 + 空格`，不发送
 Ctrl-U 或 Enter。独占期间的正常 HTTP / WS 输入固定原目标并按序等待。
+PTY 使用相同的 bracketed paste 与输入保护；独立 Host 通过带 operationId 的 `writeSteps` 确认接收。
+进程被替换或 Host 会话变化后拒绝旧资格，保留附件，不向替代进程重发。
 
 浮动提交携带 `textAttachmentIds`，Backend 按 ID 顺序校验归属及文件可读，追加路径说明，
 在写入之前保护文件。无附件输入保持旧合同。发送和 Tab 排队使用同一保护入口。
