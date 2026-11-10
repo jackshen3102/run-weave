@@ -1,7 +1,7 @@
 import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPreviewContentSide } from "./preview.js";
 
 export type CodeReviewPhase = "preparing" | "starting" | "reviewing" | "completed" | "blocked" | "failed" | "cancelled";
-export type CodeReviewDeliveryState = "not_ready" | "pending" | "writing" | "written" | "target_changed" | "unavailable" | "unknown";
+export type CodeReviewDeliveryState = "not_ready" | "skipped" | "pending" | "writing" | "written" | "target_changed" | "unavailable" | "unknown";
 export type CodeReviewCaseStatus = "open" | "passed" | "closed";
 export interface CodeReviewExpectedTarget {
   projectId: string;

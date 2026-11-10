@@ -10,7 +10,7 @@ export function codeReviewStatus(run: CodeReviewRun): string {
   if (run.caseStatus === "passed" && (run.findingCount ?? 0) > 0) return `审查事项已完成 · 本轮发现 ${run.findingCount} 个问题`;
   if (run.error) return run.error.message;
   if (run.phase === "completed") {
-    const delivery = { not_ready: "", pending: "等待回传", writing: "正在回传", written: "已回传", target_changed: "来源已变化", unavailable: "仅展示报告", unknown: "回传未确认" }[run.delivery];
+    const delivery = { not_ready: "", skipped: "无需回传", pending: "等待回传", writing: "正在回传", written: "已回传", target_changed: "来源已变化", unavailable: "仅展示报告", unknown: "回传未确认" }[run.delivery];
     return `${run.findingCount === 0 ? "审查完成 · 未发现 Bug" : `待修复／复审 · ${run.findingCount ?? 0} 个问题`} · ${delivery}${run.stale ? " · 代码已变化" : ""}`;
   }
   return { preparing: "准备审查", starting: "启动审查终端", reviewing: "正在审查", blocked: "审查已阻塞", failed: "审查失败", cancelled: "审查已中断" }[run.phase];
