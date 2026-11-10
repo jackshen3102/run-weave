@@ -319,6 +319,7 @@ function isRunweaveHookObject(hook: Record<string, unknown>): boolean {
   return (
     typeof command === "string" &&
     (command.includes(BRIDGE_BASENAME) ||
+      command.includes("runweave-hook-dispatch.cjs") ||
       command.includes(LEGACY_BRIDGE_BASENAME))
   );
 }

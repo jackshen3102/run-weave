@@ -56,11 +56,13 @@ const CLAUDE_EVENTS = [
   "SessionStart",
   "SessionEnd",
   "Stop",
+  "StopFailure",
   "PermissionRequest",
   "Notification",
   "UserPromptSubmit",
   "PreToolUse",
   "PostToolUse",
+  "PostToolUseFailure",
 ];
 
 export async function installHooksIfNeeded(
@@ -80,9 +82,9 @@ export async function installAllHooks(
   const context = resolveHookInstallerContext(options);
   await installNotifyAssets(context);
   await writeLauncherScript(context);
-  // Codex, Trae and Pi have complete lifecycle adapters. Claude
-  // installer stays in-source for a future re-enable but is not invoked yet,
-  // so the green-dot path remains strictly limited to known AI CLIs.
+  // Claude notifications use native idle confirmation, independently of its
+  // still-unavailable state/preparation adapter.
+  await installClaudeHooks(context);
   await installCodexHooks(context);
   await installTraeHooks(context);
   await installPiExtension(context);
@@ -149,9 +151,13 @@ export async function writeLauncherScript(
       path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
-  for (const asset of ["runweave-hook-completion.cjs", "runweave-task-supervision.cjs"]) {
+  for (const asset of ["runweave-hook-completion.cjs", "runweave-task-supervision.cjs", FEISHU_SCRIPT_BASENAME]) {
     const source = await resolveHookAssetPath(context, asset);
-    if (await fileExists(source)) await copyFile(source, path.join(launcherDir, asset));
+    if (await fileExists(source)) {
+      const target = path.join(launcherDir, asset);
+      await copyFile(source, target);
+      if (asset === FEISHU_SCRIPT_BASENAME) await chmod(target, 0o755);
+    }
   }
 }
 
@@ -427,6 +433,12 @@ async function resolveHookAssetPath(
     return packagedAsset;
   }
 
+  // Packaged hooks are external resources; app.asar contains only the shell.
+  const externalAsset = process.resourcesPath && path.join(
+    process.resourcesPath, "runweave-hook-runtime", "hooks", basename,
+  );
+  if (externalAsset && await fileExists(externalAsset)) return externalAsset;
+
   const toolkitAsset = basename.startsWith("pi/")
     ? path.resolve(
         getDefaultToolkitHooksDir(),
@@ -484,6 +496,7 @@ async function hasAnyConfigDir(
   context: HookInstallerContext,
 ): Promise<boolean> {
   // Install only for providers already configured on the host.
+  if (await directoryExists(getClaudeDir(context.homeDir))) return true;
   if (await directoryExists(getCodexDir(context.homeDir))) {
     return true;
   }

@@ -15,6 +15,8 @@ import {
 } from "../../terminal/completion/source-gate";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import { getTerminalSessionAgent } from "../../terminal/state/terminal-state-service";
+import { isTmuxBackedSession, resolveTmuxTarget } from "../../terminal/runtime/launcher";
+import type { TmuxService } from "../../terminal/tmux/service";
 
 const completionReasonEnum = z.enum([
   "hook_stop",
@@ -28,6 +30,10 @@ const terminalCompletionLogger = logger.child({
 
 const completionEventSchema = z
   .object({
+    claude: z.object({
+      instanceId: z.string().min(1).max(256), eventId: z.string().uuid(),
+      notificationType: z.string().max(128).optional(), query: z.string().max(8_000).optional(),
+    }).strict().optional(),
     pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
     feishuNotificationOnly: z.boolean().optional(),
     terminalSessionId: z.string().trim().min(1),
@@ -52,6 +58,7 @@ export function createInternalTerminalCompletionRouter(options: {
   completionEventService: TerminalCompletionEventService;
   terminalSessionManager: TerminalSessionManager;
   hookToken: string | undefined;
+  tmuxService?: TmuxService;
   feishuConnector?: FeishuBridgeConnector;
 }): Router {
   const router = Router();
@@ -125,10 +132,8 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
-    // Claude Stop is a response-end candidate, not a verified settled turn.
-    // Keep legacy hooks silent until the generation-bound lifecycle adapter is
-    // available; inferring Codex from the foreground command must not bypass it.
-    if (parsed.data.source === "claude") {
+    // Legacy Claude hooks have no native process identity or settled proof.
+    if (parsed.data.source === "claude" && !parsed.data.claude) {
       res.status(202).json({ event: null, ignored: true, reason: "claude_lifecycle_unverified" });
       return;
     }
@@ -165,7 +170,21 @@ export function createInternalTerminalCompletionRouter(options: {
       res.status(202).json({ event: null, ignored: true, reason: "codex_context_mismatch" });
       return;
     }
-    const paneActiveCommand = targetPanel?.activeCommand ?? null;
+    let paneActiveCommand = targetPanel?.activeCommand ?? null;
+    if (parsed.data.source === "claude" && parsed.data.claude && targetPanel?.tmuxPaneId &&
+        options.tmuxService && isTmuxBackedSession(session)) {
+      // Manual Claude launches may leave the Panel projection behind the live
+      // pane. Read this exact pane; the session's selected pane may be another CLI.
+      try {
+        const metadata = await options.tmuxService.readPaneMetadata({
+          ...resolveTmuxTarget(session, options.tmuxService), paneId: targetPanel.tmuxPaneId,
+        }, session.command);
+        paneActiveCommand = metadata?.activeCommand ?? null;
+      } catch (error) {
+        terminalCompletionLogger.warn("terminal-completion.pane-read.failed", { terminalSessionId: session.id, panelId, error });
+        res.status(503).json({ message: "Terminal pane identity unavailable" }); return;
+      }
+    }
     const targetActiveCommand = panelId
       ? paneActiveCommand
       : session.activeCommand;
@@ -175,7 +194,8 @@ export function createInternalTerminalCompletionRouter(options: {
       sessionActiveCommand: session.activeCommand,
       commandName: parsed.data.commandName ?? null,
     });
-    if (effectiveSource === "claude") {
+    if ((effectiveSource === "claude" && !parsed.data.claude) ||
+        (parsed.data.source === "claude" && effectiveSource !== "claude")) {
       res.status(202).json({ event: null, ignored: true, reason: "claude_lifecycle_unverified" });
       return;
     }
@@ -256,6 +276,26 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
+    let feishuTurnId: string | undefined;
+    let summary = parsed.data.summary ?? null;
+    let completionReason = parsed.data.completionReason ?? "hook_stop";
+    let completionHookEvent = rawHookEvent;
+    if (effectiveSource === "claude") {
+      if (session.status !== "running" || targetCommandSource !== "claude" ||
+          parsed.data.source !== "claude" || !parsed.data.claude) {
+        res.status(202).json({ ignored: true }); return;
+      }
+      const result = await options.terminalSessionManager.feishuNotifications.observeClaudeHook({
+        ...parsed.data, source: effectiveSource, completionReason, rawHookEvent, panelId,
+        claude: parsed.data.claude,
+      });
+      if (!result.settled) { res.status(202).json(result); return; }
+      feishuTurnId = result.turnId;
+      summary = result.summary;
+      completionReason = "hook_stop";
+      completionHookEvent = "Stop";
+    }
+
     if (parsed.data.feishuNotificationOnly) {
       if (parsed.data.completionReason !== "notify") {
         res.status(400).json({ message: "Notification-only requests require notify reason" }); return;
@@ -298,17 +338,18 @@ export function createInternalTerminalCompletionRouter(options: {
         {
           terminalSessionId: parsed.data.terminalSessionId,
           source: effectiveSource,
-          completionReason: parsed.data.completionReason ?? "hook_stop",
+          completionReason,
           commandName: parsed.data.commandName ?? null,
-          rawHookEvent,
+          rawHookEvent: completionHookEvent,
           cwd: parsed.data.cwd ?? null,
-          summary: parsed.data.summary ?? null,
+          summary,
           threadId: parsed.data.threadId ?? null,
           operationId: parsed.data.operationId ?? null,
           panelId,
           tmuxPaneId,
         },
         session,
+        feishuTurnId,
       );
     } catch (error) {
       if (piKey) piCompletions.delete(piKey);

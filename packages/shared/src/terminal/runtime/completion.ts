@@ -12,6 +12,14 @@ export interface TerminalFeishuNotificationRequest {
   claim: boolean;
 }
 
+/** Native process identity carried by Claude's normal completion Hook request. */
+export interface ClaudeHookContext {
+  instanceId: string;
+  eventId: string;
+  notificationType?: string;
+  query?: string;
+}
+
 export interface TerminalCompletionViewedRequest {
   completionRevision: number;
   panelIds: string[];
