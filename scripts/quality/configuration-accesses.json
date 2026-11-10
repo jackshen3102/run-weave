@@ -1,5 +1,29 @@
 [
   {
+    "file": "backend/src/agent-capabilities/service.ts",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Snapshot the Backend environment for bounded native CLI probes; credentials remain native and are never logged or returned."
+  },
+  {
+    "file": "backend/src/agent-capabilities/service.ts",
+    "kind": "environment-forward",
+    "expression": "...this.env",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Forward native authentication context with the configured Claude directory to read-only version/auth probes, not to model execution."
+  },
+  {
+    "file": "packages/config-node/src/claude.ts",
+    "kind": "environment",
+    "expression": "env.CLAUDE_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Reference the native Claude-owned configuration directory only when the instance has no explicit directory; never read or copy credentials."
+  },
+  {
     "file": "electron/src/browser/automation/simulators.ts",
     "kind": "file-io",
     "expression": "readFile(join(base, \"agent-device\", \"observations\", `${udid}.json`))",
@@ -8642,6 +8666,22 @@
   {
     "file": "scripts/verify/app-server/event-center.mjs",
     "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "Create the isolated native Claude transcript fixture for descriptor and symlink guards; never write Claude user configuration or history."
+  },
+  {
+    "file": "scripts/verify/app-server/event-center.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(replacement)",
+    "count": 1,
+    "category": "test",
+    "reason": "Create the disposable same-session replacement fixture to verify rejection of inode changes during a read."
+  },
+  {
+    "file": "scripts/verify/app-server/event-center.mjs",
+    "kind": "file-io",
     "expression": "writeFile(eventLogPath)",
     "count": 1,
     "category": "test",
@@ -9283,7 +9323,7 @@
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
     "expression": "appendFile(file)",
-    "count": 7,
+    "count": 12,
     "category": "test",
     "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
   },
@@ -9315,15 +9355,31 @@
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
     "expression": "readFile(file)",
-    "count": 2,
+    "count": 3,
     "category": "test",
     "reason": "隔离 App Server 预览验证的临时会话 JSONL 及源删除恢复夹具，不读取或写入业务配置。"
   },
   {
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
-    "expression": "writeFile(external)",
+    "expression": "writeFile(duplicate)",
     "count": 1,
+    "category": "test",
+    "reason": "Create a second isolated Claude project fixture with the same session ID to prove ambiguous source identities are rejected."
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(subagentFile)",
+    "count": 1,
+    "category": "test",
+    "reason": "Create a disposable nested subagent transcript to prove main-session discovery never recurses into subagent history."
+  },
+  {
+    "file": "scripts/lib/app-server-event-center-client.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(external)",
+    "count": 2,
     "category": "test",
     "reason": "隔离 App Server 会话验证的临时符号链接目标夹具，不读取或写入业务配置。"
   },
@@ -9331,7 +9387,7 @@
     "file": "scripts/lib/app-server-event-center-client.mjs",
     "kind": "file-io",
     "expression": "writeFile(file)",
-    "count": 7,
+    "count": 15,
     "category": "test",
     "reason": "隔离 App Server 验证使用的原生会话 JSONL 与追加数据，不作为业务配置来源。"
   },
@@ -12911,6 +12967,38 @@
     "count": 1,
     "category": "test",
     "reason": "Align detached Host temporary socket paths with the isolated lifecycle fixture."
+  },
+  {
+    "file": "scripts/verify/recovery/lifecycle-fixture.mjs",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "test",
+    "reason": "Remove the fixed installed-worker and SQLite override allowlist from isolated lifecycle children so verification uses source-owned runtimes."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 4,
+    "category": "test",
+    "reason": "Use only isolated fake Agent executables for native Host recovery, then restore the fixture process PATH; never invoke user CLIs."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(directory, `${provider}.args`))",
+    "count": 2,
+    "category": "test",
+    "reason": "Read only fixture-owned native resume argument captures to verify exact provider/thread and no replay."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(bin, `${provider}${process.platform === \"win32\" ? \".cmd\" : \"\"}`))",
+    "count": 1,
+    "category": "test",
+    "reason": "Create private deterministic Agent executable fixtures; no user configuration or native Agent binary is modified."
   },
   {
     "file": "scripts/verify/backend/hosted-terminal-loss.ts",

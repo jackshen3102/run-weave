@@ -6,6 +6,7 @@ import type {
 import type { CodexThreadDetailReader } from "../codex/client.js";
 import type { TraeThreadLifecycleReader } from "../trae/lifecycle-reader.js";
 import type { PiSessionReader } from "../pi/session-reader.js";
+import type { ClaudeConversationReader } from "../claude/conversation-reader.js";
 
 interface ThreadReader {
   supports: (thread: AppServerThreadRef) => boolean;
@@ -22,8 +23,19 @@ export function createThreadReaders(options: {
   piSessionReader: PiSessionReader;
   traeLifecycleReader: TraeThreadLifecycleReader;
   codexThreadDetailReader: CodexThreadDetailReader;
+  claudeConversationReader?: ClaudeConversationReader;
 }) {
   const readers: ThreadReader[] = [
+    {
+      supports: (thread) => thread.agent === "claude",
+      summary: async (thread) => (await options.claudeConversationReader?.summary(thread)) ?? null,
+      detail: async (thread) => {
+        const detail = await options.claudeConversationReader?.summary(thread);
+        return { thread,
+          availability: !options.claudeConversationReader ? "provider_unavailable" : detail ? "available" : "thread_not_found",
+          ...(detail ? { detail } : {}) };
+      },
+    },
     {
       supports: (thread) => thread.agent === "pi",
       summary: async (thread) =>

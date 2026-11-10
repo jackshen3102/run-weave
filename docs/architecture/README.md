@@ -119,6 +119,9 @@ Pi 原生 CLI 的生命周期、输入与恢复合同见 [Pi Agent](./pi-agent.m
 
 ### Agent 系统
 
+实例级 Claude 原生目录引用和登录后的只读能力响应见[配置与能力边界](../cli/configuration.md#claude-code-原生引用与能力)。
+CLI 探测成功不等同当前会话就绪，未验证的 Claude 操作保持不可用。
+
 外部主 Agent 持续控制专用终端、核对原生轮次并记录验收，见
 [终端任务控制](../cli/terminal-task-control.md)。任务决策由主 Agent 负责，Backend 保存执行关联和回执。
 终端页面的独立代码 Review 由 Backend owner 复用任务执行能力，来源 Agent 不参与调度；

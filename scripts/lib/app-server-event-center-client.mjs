@@ -279,7 +279,8 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   assert.equal(traeNext.agentText, null);
   await verifyTraeConversation(baseUrl, token, traeRoot, hook);
 
-  await hook("unsupported-provider", "claude");
+  await verifyClaudeConversation(baseUrl, token, stateDir, hook, wait);
+  await hook("unsupported-provider", "unknown");
   const unsupported = await wait("unsupported-provider", (value) => value.availability === "provider_unsupported");
   assert.equal(unsupported.available, false);
 
@@ -312,6 +313,183 @@ export async function verifyThreadPreviews(baseUrl, token, stateDir) {
   assert.equal(branchB.agentText, "分支 B 的回复");
   await assertHttpStatus(`${baseUrl}/threads/previews?threadId=${piId}`, { expectedStatus: 401 });
   console.log("thread previews: late hooks, unregistered Codex, Trae messages, incremental append, identity, Pi branch and auth passed");
+}
+
+async function verifyClaudeConversation(baseUrl, token, stateDir, hook, wait) {
+  const id = "77777777-7777-4777-8777-777777777777";
+  const root = path.join(stateDir, "claude-config", "projects");
+  const project = path.join(root, "controlled-project");
+  const file = path.join(project, `${id}.jsonl`);
+  const cwd = path.join(stateDir, "controlled-workspace");
+  const url = `${baseUrl}/threads/${id}/conversation`;
+  const line = value => `${JSON.stringify(value)}\n`;
+  const msg = (uuid, parentUuid, role, content, extra = {}) => ({ type: role, uuid, parentUuid,
+    sessionId: id, cwd, isSidechain: false, timestamp: "2026-11-10T00:00:00.000Z",
+    message: { role, content: typeof content === "string" ? [{ type: "text", text: content }] : content }, ...extra });
+  const original = [
+    { type: "file-history-snapshot", messageId: "u1", snapshot: {}, isSnapshotUpdate: false },
+    msg("u1", null, "user", "**Claude 原生提问**"),
+    // Sanitized CLI 2.1.319 shape: attachments are graph ancestors, not visible messages.
+    { type: "attachment", uuid: "environment", parentUuid: "u1", sessionId: id, cwd, isSidechain: false,
+      attachment: { type: "environment" }, rendered: [{ content: "PRIVATE_ENVIRONMENT" }], renderedRole: "system" },
+    { type: "attachment", uuid: "snapshot", parentUuid: "environment", sessionId: id, cwd, isSidechain: false,
+      attachment: { type: "prompt_snapshot", systemPrompt: ["PRIVATE_PROMPT_SNAPSHOT"] } },
+    msg("a1", "snapshot", "assistant", [
+      { type: "thinking", thinking: "PRIVATE_THINKING", signature: "PRIVATE_SIGNATURE" },
+      { type: "text", text: "可见的进度" }, { type: "tool_use", id: "tool-1", name: "Read", input: { secret: "PRIVATE_TOOL" } },
+    ]),
+    msg("tool", "a1", "user", [{ type: "tool_result", tool_use_id: "tool-1", content: "PRIVATE_TOOL_RESULT" },
+      { type: "text", text: "PRIVATE_TOOL_ANNOTATION" }]),
+    msg("meta", "tool", "user", "PRIVATE_SYSTEM_INJECTION", { isMeta: true }),
+    msg("a2", "meta", "assistant", "# 完整回答\n\n" + "保留原文。".repeat(2000)),
+    msg("a2", "meta", "assistant", "# 完整回答\n\n" + "保留原文。".repeat(2000)),
+    { type: "system", subtype: "turn_duration", uuid: "system", parentUuid: "a2", sessionId: id, cwd, content: "PRIVATE_SYSTEM" },
+    msg("side-u", null, "user", "PRIVATE_SUBAGENT", { isSidechain: true }),
+    msg("side-a", "side-u", "assistant", "PRIVATE_SUBAGENT", { isSidechain: true }),
+    { type: "progress", uuid: "progress", parentUuid: "system", sessionId: id, data: { message: "PRIVATE_NESTED" } },
+    msg("discarded", "u1", "user", "PRIVATE_DISCARDED_BRANCH"),
+    { type: "last-prompt", sessionId: id, leafUuid: "system", lastPrompt: "PRIVATE_DUPLICATE_PROMPT" },
+  ].map(line).join("");
+  await mkdir(project, { recursive: true });
+  await writeFile(file, original);
+  const historical = await getJson(`${url}?provider=claude`, token);
+  assert.equal(historical.availability, "available", "native history can outlive hook retention");
+  await assertHttpStatus(`${baseUrl}/threads/${id}`, { expectedStatus: 404, token });
+  await hook(id, "claude");
+  const threadBefore = (await getJson(`${baseUrl}/threads/${id}`, token)).thread;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const body = await response.json();
+  assert.equal(body.provider, "claude");
+  assert.equal(body.availability, "available");
+  assert.equal(body.partial, false);
+  assert.deepEqual(body.turns.flatMap(turn => turn.messages.map(message => message.id)), ["u1", "a1", "a2"]);
+  assert.equal(body.turns[0].messages[2].text.length, 10008);
+  assert.doesNotMatch(JSON.stringify(body), /PRIVATE_|sourcePath/);
+  assert.deepEqual((await getJson(url, token)).turns, body.turns);
+  assert.equal(await readFile(file, "utf8"), original, "native transcript must remain read-only");
+  const preview = await wait(id, value => value.available);
+  assert.equal(preview.userText, "Claude 原生提问");
+  assert.ok(preview.agentText.startsWith("完整回答"));
+  const detail = await getJson(`${baseUrl}/threads/${id}/detail`, token);
+  assert.equal(detail.availability, "available");
+  assert.equal(detail.detail.status, "unknown");
+  assert.deepEqual(detail.detail.lifecycle, []);
+  assert.deepEqual(detail.detail.turns, [], "native text must not manufacture completed turns");
+  assert.deepEqual((await getJson(`${baseUrl}/threads/${id}`, token)).thread, threadBefore,
+    "reading text must not write lifecycle state or completion events");
+
+  // Latest main-chain leaf selects only its ancestors, never concatenates sibling branches.
+  await appendFile(file, line(msg("branch-u", "u1", "user", "新分支提问")) +
+    line(msg("branch-a", "branch-u", "assistant", "新分支回答")));
+  assert.deepEqual((await getJson(url, token)).turns.flatMap(t => t.messages.map(m => m.id)), ["u1", "branch-u", "branch-a"]);
+  const pending = JSON.stringify(msg("pending", "branch-a", "user", "完整末行"));
+  await appendFile(file, pending);
+  assert.equal((await getJson(url, token)).turns.at(-1).id, "branch-u");
+  await appendFile(file, "\nBROKEN_JSON\n");
+  const partial = await getJson(url, token);
+  assert.equal(partial.partial, true);
+  assert.equal(partial.turns.at(-1).id, "pending");
+  await hook(id, "claude");
+  const next = await wait(id, value => value.userText === "完整末行");
+  assert.equal(next.agentText, null, "a new user turn cannot borrow a previous answer");
+  await appendFile(file, line({ type: "system", subtype: "compact_boundary", uuid: "compact",
+    parentUuid: null, logicalParentUuid: "pending", sessionId: id, cwd }) +
+    line(msg("summary", "compact", "user", "PRIVATE_COMPACT_SUMMARY", { isCompactSummary: true })) +
+    line(msg("after-compact", "summary", "assistant", "压缩后继续")));
+  const compacted = await getJson(url, token);
+  assert.deepEqual(compacted.turns.flatMap(t => t.messages.map(m => m.id)), ["u1", "branch-u", "branch-a", "pending", "after-compact"]);
+  assert.doesNotMatch(JSON.stringify(compacted), /PRIVATE_COMPACT/);
+
+  // CLI 2.1.319 manual compaction may point at an unpersisted command node.
+  // The retained segment, not the latest sibling, identifies original prose.
+  const nativeCompact = (segment = {}) => original + [
+    { type: "system", subtype: "compact_boundary", uuid: "native-compact", parentUuid: null,
+      logicalParentUuid: "not-persisted", sessionId: id, cwd, compactMetadata: {
+        preservedSegment: { headUuid: "a1", tailUuid: "system", anchorUuid: "native-summary", ...segment },
+        preservedMessages: { anchorUuid: "native-summary", uuids: ["a1", "a2", "system"] },
+      } },
+    msg("native-summary", "native-compact", "user", "PRIVATE_COMPACT_SUMMARY", { isCompactSummary: true, isVisibleInTranscriptOnly: true }),
+    msg("native-command", "native-summary", "user", "<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args>PRIVATE_COMMAND</command-args>"),
+    msg("native-stdout", "native-command", "user", "<local-command-stdout>PRIVATE_STDOUT</local-command-stdout>"),
+    msg("native-repeat", "native-stdout", "user", "PRIVATE_REPEAT_SUMMARY", { repeatsCompactSummary: true }),
+    msg("native-user", "native-repeat", "user", "请解释 <local-command-stdout>quoted</local-command-stdout>，不要执行。"),
+    msg("native-answer", "native-user", "assistant", "压缩后原生回答"),
+  ].map(line).join("");
+  await writeFile(file, nativeCompact());
+  const retained = await getJson(url, token);
+  assert.equal(retained.partial, false);
+  assert.deepEqual(retained.turns.flatMap(t => t.messages.map(m => m.id)), ["u1", "a1", "a2", "native-user", "native-answer"]);
+  assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_|<command-name>|<command-message>|<command-args>/);
+  assert.match(retained.turns.at(-1).messages[0].text, /<local-command-stdout>quoted<\/local-command-stdout>/,
+    "ordinary discussion of native tags remains visible");
+  await hook(id, "claude");
+  assert.equal((await wait(id, value => value.agentText === "压缩后原生回答")).available, true);
+  for (const segment of [{ headUuid: "discarded" }, { tailUuid: "missing" }, { anchorUuid: "other-summary" }]) {
+    await writeFile(file, nativeCompact(segment));
+    const incomplete = await getJson(url, token);
+    assert.equal(incomplete.partial, true);
+    assert.deepEqual(incomplete.turns.flatMap(t => t.messages.map(m => m.id)), ["native-user", "native-answer"],
+      "unverified retained history must not borrow another branch");
+  }
+  await assertHttpStatus(url, { expectedStatus: 401 });
+  await assertHttpStatus(`${url}?sourcePath=${encodeURIComponent(file)}`, { expectedStatus: 400, token });
+  await assertHttpStatus(`${url}?provider=codex`, { expectedStatus: 409, token });
+  await assertHttpStatus(`${baseUrl}/threads/${encodeURIComponent("../escape")}/conversation?provider=claude`, { expectedStatus: 404, token });
+
+  await writeFile(file, original.replaceAll(`"sessionId":"${id}"`, '"sessionId":"wrong-session"'));
+  await assertHttpStatus(url, { expectedStatus: 409, token });
+  await assertHttpStatus(`${baseUrl}/threads/${id}`, { expectedStatus: 409, token });
+  await assertHttpStatus(`${baseUrl}/threads/${id}/detail`, { expectedStatus: 409, token });
+  await hook(id, "claude");
+  await wait(id, value => !value.available && value.availability === "read_failed");
+  await writeFile(file, "BROKEN_JSON\n");
+  await assertHttpStatus(url, { expectedStatus: 422, token });
+  await writeFile(file, original);
+  const duplicate = path.join(root, "other-project", `${id}.jsonl`);
+  await mkdir(path.dirname(duplicate), { recursive: true });
+  await writeFile(duplicate, original);
+  await assertHttpStatus(url, { expectedStatus: 409, token });
+  await unlink(duplicate);
+  // CWD comes only from the registered target, never from a client-supplied path.
+  const scoped = await postEvent(baseUrl, token, { ...validAgentHookEvent(),
+    scope: { terminalSessionId: "terminal-verify", cwd: path.join(stateDir, "wrong-workspace") },
+    payload: { source: "claude", threadId: id, stateHookEvent: "UserPromptSubmit" } });
+  assert.equal(scoped.status, 201);
+  await assertHttpStatus(url, { expectedStatus: 409, token });
+  await postEvent(baseUrl, token, { ...validAgentHookEvent(), scope: { terminalSessionId: "terminal-verify", cwd },
+    payload: { source: "claude", threadId: id, stateHookEvent: "UserPromptSubmit" } });
+  assert.equal((await getJson(url, token)).availability, "available");
+  await unlink(file);
+  assert.equal((await getJson(url, token)).availability, "source_missing");
+  const external = path.join(stateDir, "external-claude.jsonl");
+  await writeFile(external, original);
+  await symlink(external, file);
+  await assertHttpStatus(url, { expectedStatus: 409, token });
+  await unlink(file);
+  await unlink(external);
+  const subagentFile = path.join(project, id, "subagents", `${id}.jsonl`);
+  await mkdir(path.dirname(subagentFile), { recursive: true });
+  await writeFile(subagentFile, original);
+  assert.equal((await getJson(url, token)).availability, "source_missing", "subagent directories are never searched");
+
+  // Keep the latest complete native messages even when their ancestors left the source window.
+  await writeFile(file, line(msg("old", null, "user", "窗口外提问")));
+  await appendFile(file, " ".repeat(65 * 1024 * 1024) + "\n" +
+    line(msg("tail-u", "outside-window", "user", "末尾提问")) + line(msg("tail-a", "tail-u", "assistant", "最新回答")));
+  const bounded = await getJson(url, token);
+  assert.equal(bounded.partial, true);
+  assert.deepEqual(bounded.turns.flatMap(t => t.messages.map(m => m.id)), ["tail-u", "tail-a"]);
+  await writeFile(file, line(msg("huge-u", null, "user", "超长正文")) +
+    line(msg("huge-a", "huge-u", "assistant", "中😀\"\n".repeat(1_100_000) + "CLAUDE_LATEST_MARKER")));
+  const hugeBytes = await (await fetch(url, { headers: { Authorization: `Bearer ${token}` } })).text();
+  const huge = JSON.parse(hugeBytes);
+  assert.equal(huge.partial, true);
+  assert.ok(Buffer.byteLength(hugeBytes) < 8 * 1024 * 1024);
+  assert.ok(huge.turns.at(-1).messages.at(-1).text.endsWith("CLAUDE_LATEST_MARKER"));
+  await unlink(file);
+  console.log("Claude native conversation: filtering, branch/UUID stability, incomplete append, compaction, identity/CWD, ambiguity, symlinks, bounds, preview/detail, read-only state and auth passed");
 }
 
 async function verifyTraeConversation(baseUrl, token, root, hook) {

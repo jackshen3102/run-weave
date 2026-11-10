@@ -209,8 +209,26 @@ async function verifyIsolationAndFallbackKeys(context) {
     context,
     "thread-claude-source-codex-command",
   );
-  assert.equal(codexCommandThread.thread.agent, "codex");
-  assert.equal(codexCommandThread.thread.status, "running");
+  assert.equal(codexCommandThread.thread.agent, "claude");
+  assert.equal(codexCommandThread.thread.status, "unknown");
+  await postEvent(context, hookEvent("Stop", {
+    correlationId: "thread-claude-source-codex-command",
+    payload: { source: "claude", commandName: "claude", stateHookEvent: "Stop" },
+  }));
+  assert.equal((await getThread(context, "thread-claude-source-codex-command")).thread.status, "unknown",
+    "Claude Stop is not verified settled-turn evidence");
+  await postEvent(context, hookEvent("UserPromptSubmit", {
+    correlationId: ids.threadId,
+    payload: { source: "claude", commandName: "codex", stateHookEvent: "UserPromptSubmit" },
+  }));
+  assert.equal((await getThread(context, ids.threadId)).thread.agent, "codex",
+    "same-ID Claude events cannot replace an existing Codex identity");
+  await postEvent(context, hookEvent("UserPromptSubmit", {
+    correlationId: "thread-claude-source-codex-command",
+    payload: { source: "codex", commandName: "codex", stateHookEvent: "UserPromptSubmit" },
+  }));
+  assert.equal((await getThread(context, "thread-claude-source-codex-command")).thread.agent, "claude",
+    "same-ID Codex events cannot replace an existing Claude identity");
 
   await postEvent(
     context,

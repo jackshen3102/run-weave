@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./claude": "./src/claude.ts",
     "./app-server/discovery": "./src/app-server/discovery.ts",
     "./app-server/paths": "./src/app-server/paths.ts",
     "./app-server/runtime-release": "./src/app-server/runtime-release.ts"

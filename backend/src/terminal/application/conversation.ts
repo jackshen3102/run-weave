@@ -45,7 +45,7 @@ export async function readTerminalConversation(
   const before = resolveConversationTarget(manager, sessionId, query.panelId);
   if (query.expectedThreadId && before.target?.threadId !== query.expectedThreadId) changed();
   const target = before.target;
-  const supported = ["codex", "pi", "trae", "traecli", "traex"];
+  const supported = ["codex", "claude", "pi", "trae", "traecli", "traex"];
   if (!target || !supported.includes(target.provider)) return {
     target, availability: (target || (before.agent && !supported.includes(before.agent)))
       ? "provider_unsupported" : "no_thread",
@@ -63,6 +63,7 @@ export async function readTerminalConversation(
       partial: response.partial, turns: response.turns };
   } catch (error) {
     if (error instanceof TerminalConversationError) throw error;
+    if (error instanceof AppServerConversationError && error.status === 409) changed();
     if (error instanceof AppServerConversationError && error.status === 413)
       throw new TerminalConversationError(413, "CONVERSATION_TOO_LARGE", "会话记录超过读取上限");
     throw new TerminalConversationError(503, "CONVERSATION_UNAVAILABLE", "会话读取暂不可用，请手动重试");

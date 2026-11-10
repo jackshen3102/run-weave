@@ -8,6 +8,7 @@ const allowedActiveCommandsBySource: Partial<
 > = {
   pi: new Set(["pi"]),
   codex: new Set(["codex"]),
+  claude: new Set(["claude"]),
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),
   traex: new Set(["traex"]),

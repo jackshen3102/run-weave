@@ -217,6 +217,7 @@ export interface TerminalStateResponse {
 }
 
 export type AgentHookIgnoreReason =
+  | "agent_lifecycle_unavailable"
   | "codex_context_mismatch"
   | "panel_identity_mismatch"
   | "operation_identity_mismatch"

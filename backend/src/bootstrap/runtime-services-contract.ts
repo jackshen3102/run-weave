@@ -75,6 +75,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   terminalStateService: TerminalStateService;
   agentModelCatalogStore: AgentModelCatalogStore;
   agentModelCatalogService: import("../agent-model-catalog/service").AgentModelCatalogService;
+  agentCapabilitiesService: import("../agent-capabilities/service").AgentCapabilitiesService;
   raceService: RaceService;
   appServerHistoryGateway: AppServerHistoryGateway;
   workHistoryService: WorkHistoryService;

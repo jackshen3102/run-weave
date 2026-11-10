@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { renameSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +42,7 @@ try {
   await run("pnpm", ["--filter", "@runweave/app-server", "build"]);
   await verifyConcurrentEventAppend();
   await verifyEventLogRetention();
+  await verifyClaudeSourceGuards();
   await writeFakeCodexBin(fakeCodexBinPath);
   await writeVerificationConfiguration(verificationRoot, {
     "appServer.stateDirectory": stateDir,
@@ -47,6 +50,7 @@ try {
     "agents.codex.binary": fakeCodexBinPath,
     "agents.codex.sessionsDirectory": path.join(stateDir, "codex-sessions"),
     "agents.traex.sessionsDirectory": path.join(stateDir, "trae-sessions"),
+    "agents.claude.configDirectory": path.join(stateDir, "claude-config"),
   });
   appServer = await startAppServer();
   const lock = await readLock();
@@ -253,6 +257,33 @@ async function readLock() {
   return JSON.parse(
     await readFile(path.join(stateDir, "app-server.lock.json"), "utf8"),
   );
+}
+
+async function verifyClaudeSourceGuards() {
+  const { tsImport } = await import(createRequire(new URL("../../../backend/package.json", import.meta.url)).resolve("tsx/esm/api"));
+  const { ClaudeSessionReader } = await tsImport("../../../app-server/dist/claude/session-reader.js", import.meta.url);
+  const root = path.join(verificationRoot, "claude-source-guards");
+  const project = path.join(root, "project");
+  const id = "99999999-9999-4999-8999-999999999999";
+  const file = path.join(project, `${id}.jsonl`);
+  const replacement = path.join(project, "replacement.jsonl");
+  const source = JSON.stringify({ type: "user", sessionId: id, uuid: "message", parentUuid: null }) + "\n";
+  await mkdir(project, { recursive: true });
+  await writeFile(file, source);
+  await writeFile(replacement, source);
+  const reader = new ClaudeSessionReader(root);
+  await assert.rejects(reader.scan(id, () => renameSync(replacement, file)),
+    error => error.code === "CLAUDE_SOURCE_CHANGED", "same-session replacement during a read must be rejected");
+  const linkedRoot = path.join(verificationRoot, "claude-root-symlink");
+  await symlink(root, linkedRoot);
+  await assert.rejects(new ClaudeSessionReader(linkedRoot).scan(id, () => assert.fail("symlink source consumed")),
+    error => error.code === "CLAUDE_SOURCE_CHANGED");
+  const otherRoot = path.join(verificationRoot, "claude-project-symlink");
+  await mkdir(otherRoot);
+  await symlink(project, path.join(otherRoot, "linked-project"));
+  assert.equal(await new ClaudeSessionReader(otherRoot).scan(id, () => assert.fail("symlink project consumed")), null);
+  assert.equal(await reader.scan("../escape", () => assert.fail("traversal consumed")), null);
+  console.log("Claude source guards: descriptor replacement, root/project symlinks and traversal passed");
 }
 
 async function verifyConcurrentEventAppend() {

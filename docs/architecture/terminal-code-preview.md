@@ -99,7 +99,7 @@ Web/Electron 阅读工具已打开时，切换终端或 panel 会跟随当前选
 Codex 从受控 rollout 目录定位源文件，只投影 `response_item` 中的 user 和 assistant
 可见 commentary/final 正文；明确的注入环境上下文、analysis、工具和重复事件不进入结果。
 旧会话缺少 App Server 的 ThreadRef 时，Backend 仍传递终端保存的 provider，按原 Agent
-和 thread ID 定位并核对 Codex 或 Trae 源身份；未传 provider 的旧调用保留 Codex 默认值。
+和 thread ID 定位并核对 Codex、Trae 或 Claude 源身份；未传 provider 的旧调用保留 Codex 默认值。
 已登记来源与传入 provider 冲突时返回 409。读取不补写事件或登记状态，源不存在或身份不匹配时仍返回 404。
 独立的 `<skill>…</skill>` 注入消息整条过滤；用户输入的 `$技能名`、普通引用与讨论保持原文。
 TraeX（含 trae/traecli）从受控会话目录读取 `history_mutation` 的用户与助手可见正文，
@@ -107,6 +107,17 @@ TraeX（含 trae/traecli）从受控会话目录读取 `history_mutation` 的用
 替代摘要与重复消息；普通 replace 则重新建立当前历史。工具、思考和注入上下文不进入正文。
 Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 user/assistant text，
 不拼接 sibling branch 或摘要。既有首页短摘要、detail 和终端 History 保持独立语义。
+
+Claude 的[原生只读 reader](../../app-server/src/claude/conversation-reader.ts)从
+[实例配置引用](../cli/configuration.md#claude-code-原生引用与能力)下的 `projects/<project>/<session UUID>.jsonl`
+定位唯一源，拒绝路径参数、重复位置、符号链接、硬链接及读取期间的源替换。
+仅投影选定 UUID 祖先链的 user/assistant text；attachment 只保留图关系，不显示环境或系统提示。
+`last-prompt.leafUuid` 可选择原生分支，工具、thinking、sidechain 和压缩摘要不作为正文。
+压缩的逻辑 parent 未落盘时，只通过 `preservedSegment` 明示且祖先链、summary anchor 均可核对的
+保留段衔接原对话；不按最近消息猜分支。完整的原生 command/stdout/stderr 控制封装不渲染，
+用户普通文字中引用这些标签仍保留。缺失祖先或损坏完整行标记 partial；身份/CWD 冲突及不安全来源明确拒绝。
+正文可读不等于终端已绑定或任务结束：Claude detail 的状态为 unknown，生命周期数组为空，
+不参与 idle/completion 补偿；受管启动与跨端能力仍受未完成的集成验收门禁约束。
 
 每次读取固定文件起点长度，分块扫描完整 JSONL 行；未完成末行留待下次主动读取。
 损坏完整行标记 `partial`，不存在、身份不匹配或 symlink 源返回 `source_missing`。

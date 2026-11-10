@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import path from "node:path";
 import { asRecord } from "../codex/helpers.js";
@@ -14,14 +14,19 @@ export async function scanConversationSource(
   file: string,
   consume: (record: Record<string, unknown>, offset: number, truncated: boolean) => void,
   signal?: AbortSignal,
+  validateSource?: (stat: Stats) => Promise<void>,
 ): Promise<{ partial: boolean; truncated: boolean } | null> {
   if (!path.isAbsolute(file) || path.extname(file) !== ".jsonl") return null;
   let handle;
   try {
     if (await realpath(file) !== file) return null;
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // A guarded source can be replaced by a FIFO between lstat and open. Do
+    // not block before the descriptor/ancestor validation gets a chance to run.
+    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW |
+      (validateSource ? constants.O_NONBLOCK : 0));
     const stat = await handle.stat();
     if (!stat.isFile()) return null;
+    await validateSource?.(stat);
     const windowBytes = 64 * 1024 * 1024;
     const truncated = stat.size > windowBytes;
     let partial = truncated;
@@ -69,6 +74,7 @@ export async function scanConversationSource(
       }
     }
     signal?.throwIfAborted();
+    await validateSource?.(await handle.stat());
     return { partial, truncated };
   } catch (error) {
     if (["ENOENT", "ELOOP", "ENOTDIR"].includes(String((error as NodeJS.ErrnoException).code))) return null;

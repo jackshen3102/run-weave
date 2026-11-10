@@ -18,6 +18,7 @@ const SHELL_IDLE: TerminalState = { state: "shell_idle", agent: null };
 const AGENT_COMMANDS: Record<TerminalAgentKind, ReadonlySet<string>> = {
   pi: new Set(["pi"]),
   codex: new Set(["codex"]),
+  claude: new Set(["claude"]),
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),
   traex: new Set(["traex"]),

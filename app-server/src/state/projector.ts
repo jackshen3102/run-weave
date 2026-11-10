@@ -48,6 +48,11 @@ export class AppServerStateProjector {
       return { threadChange: null };
     }
 
+    const previous = this.stateStore.getThread(projection.threadId);
+    if (previous && previous.agent !== projection.agent &&
+        (previous.agent === "claude" || projection.agent === "claude")) {
+      return { threadChange: null };
+    }
     if (projection.agent === "pi" && (!projection.pi || projection.pi.sessionId !== projection.threadId || !isNewerPiContext(projection.pi, this.stateStore.getThread(projection.threadId)?.pi))) return { threadChange: null };
     const threadChange = this.stateStore.upsertThread(projection);
     return { threadChange };
@@ -57,7 +62,10 @@ export class AppServerStateProjector {
 function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
   const payload = readPayloadRecord(event.payload);
   const agent = readAgent(payload);
-  const status =
+  // Native Claude Stop can be blocked by another hook. Until a settled
+  // lifecycle adapter is verified, preserve identity but never infer idle or
+  // completion (including from transcript/assistant text).
+  const status = agent === "claude" ? "unknown" :
     event.kind === "agent.hook"
       ? readHookStatus(payload)
       : event.kind === "agent.completion"
@@ -205,6 +213,7 @@ function readCompletionReason(
 }
 
 function readAgent(payload: Record<string, unknown>): AppServerAgentKind {
+  if (readString(payload, "source") === "claude" || readString(payload, "agent") === "claude") return "claude";
   const commandAgent = readAgentFromCommand(readString(payload, "commandName"));
   if (commandAgent) {
     return commandAgent;

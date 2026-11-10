@@ -287,7 +287,7 @@ interface CodexLaunchPlan {
   description: string;
 }
 
-function resolveCodexLaunchPlan(
+export function resolveCodexLaunchPlan(
   env: NodeJS.ProcessEnv,
   provider: "codex" | "traex",
 ): CodexLaunchPlan {
@@ -331,7 +331,7 @@ function buildCodexAppServerArgs(): string[] {
   return [...CODEX_SKIP_UPDATE_ON_STARTUP_ARGS, ...CODEX_APP_SERVER_ARGS];
 }
 
-function buildCodexProcessEnv(
+export function buildCodexProcessEnv(
   env: NodeJS.ProcessEnv,
   launchPlan: CodexLaunchPlan,
 ): NodeJS.ProcessEnv {

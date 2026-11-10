@@ -70,6 +70,20 @@ rw config reload --instance stable --profile local --json
 `reload` 通过当前 profile 调用 Backend，由各消费者分别报告 appliedRevision、error、
 unconfigured 或 restartRequired。坏文件保留原件，不自动生成替代配置。
 
+## Claude Code 原生引用与能力
+
+`agents.claude.binary` 只接受可执行文件绝对路径或 PATH 中的程序名，不能包含启动参数；
+`agents.claude.configDirectory` 是 Claude 自有目录的绝对路径引用，缺省使用原生
+`CLAUDE_CONFIG_DIR` 或操作系统用户目录下 `.claude`。会话根从其 `projects` 子目录派生。
+两项只允许实例本机修改，重启后采用；不会更换默认 provider、写入 Claude 设置或复制账号凭据。
+新增可选域兼容版本 1 配置，无需写盘迁移；显式环境导入仍通过既有 `import-env` 入口。
+
+登录后的 `GET /api/agent-capabilities` 不接受客户端命令或路径，返回固定原因码及逐项能力。
+原生版本和登录探测成功只表示 CLI 可用，不证明模型调用、Hook、会话就绪或交互已验证；
+Claude 的操作能力仍为 `unavailable / integration_unverified`。`unsupported` 与暂不可用分开表达，
+不能将未接通的 Runweave adapter 宣称为上游不支持。既有 provider 的操作入口和默认值不变，
+具体操作仍重新核对当前目标。合同入口为 [共享能力类型](../../packages/shared/src/agent-capabilities.ts)。
+
 ## 默认终端 Shell
 
 `terminal.defaultShell.command` 和 `terminal.defaultShell.args` 都可不设置，缺失或 `null`

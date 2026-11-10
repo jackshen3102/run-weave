@@ -7,6 +7,7 @@ import {
 } from "@runweave/shared/app-server-events";
 import { asRecord, readString } from "../codex/helpers.js";
 import type { CodexRolloutLifecycleReader } from "../codex/lifecycle-reader.js";
+import type { ClaudeConversationReader } from "../claude/conversation-reader.js";
 import { TraeThreadLifecycleReader } from "../trae/lifecycle-reader.js";
 import { conversationText, isInjectedCodexContext } from "./conversation-source.js";
 
@@ -29,6 +30,7 @@ type Entry = {
   hidden: boolean;
   reading: boolean;
   availability: NonNullable<AppServerThreadPreview["availability"]>;
+  claudeSignature?: string;
 };
 const empty = (): TextSnapshot => ({ turnId: null, userText: null, agentText: null });
 const READ_BYTES = 256 * 1024;
@@ -46,12 +48,14 @@ export class ThreadPreviewReader {
   constructor(
     private readonly codex: CodexRolloutLifecycleReader,
     private readonly trae = new TraeThreadLifecycleReader(),
+    private readonly claude?: ClaudeConversationReader,
   ) {}
 
   read(threads: PreviewThread[]): AppServerThreadPreview[] {
     return threads.map((thread) => {
       let entry = this.entries.get(thread.threadId);
       if (entry?.thread.agent !== thread.agent ||
+          (entry && thread.agent === "claude" && entry.thread.cwd !== thread.cwd) ||
           (entry && entry.thread.pi?.sessionFile !== thread.pi?.sessionFile)) {
         if (entry) this.queued.delete(entry);
         entry = undefined;
@@ -124,6 +128,23 @@ export class ThreadPreviewReader {
   private async refresh(entry: Entry): Promise<void> {
     const thread = entry.thread;
     entry.checkedAt = Date.now();
+    if (thread.agent === "claude") {
+      // Share the bounded, branch-aware and identity-checked reader. No raw transcript cache
+      // or lifecycle inference; HTTP still reads only this disposable text projection.
+      if (entry.ready && entry.valid && entry.claudeSignature &&
+          await this.claude?.isSourceUnchanged(thread.threadId, entry.claudeSignature)) return;
+      const result = await this.claude?.read(thread);
+      if (entry.thread.cwd !== thread.cwd) return;
+      entry.claudeSignature = result?.signature;
+      entry.file = result?.file ?? null;
+      entry.ready = entry.valid = Boolean(result);
+      entry.availability = !this.claude ? "read_failed" : result ? "available" : "source_missing";
+      const turn = result?.turns.at(-1);
+      entry.value = { turnId: turn?.id ?? null,
+        userText: formatThreadPreviewText(turn?.messages.find(message => message.role === "user")?.text),
+        agentText: formatThreadPreviewText(turn?.messages.filter(message => message.role === "assistant").at(-1)?.text) };
+      return;
+    }
     if (thread.agent !== "codex" && thread.agent !== "pi" && !this.trae.supports(thread.agent)) {
       entry.availability = "provider_unsupported";
       return;

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { cp, readFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { configuration } from "@runweave/config-node";
+import type { PtyHostSession } from "@runweave/shared/terminal/pty-host";
 import { isolateLifecycle as isolate } from "../recovery/lifecycle-fixture.mjs";
 
 // Integration fixture: real native Host, durable terminal store and WebSocket.
@@ -52,6 +53,20 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
   const server = createServer();
   const sockets: InstanceType<typeof WebSocket>[] = [];
   const terminalIds: string[] = [];
+  const originalBindings = new Map<string, string>();
+  // Recovery must not launch real user CLIs. Exercise the native Host and shell
+  // with tiny executable fixtures that capture the actual resume arguments.
+  const bin = path.join(directory, "bin");
+  await mkdir(bin, { recursive: true });
+  for (const provider of ["traex", "traecli"]) {
+    const capture = path.join(directory, `${provider}.args`);
+    const script = process.platform === "win32"
+      ? `@echo off\r\n>> "${capture}" echo %1\r\n>> "${capture}" echo %2\r\necho HOST_RESUME_${provider}\r\n`
+      : `#!/bin/sh\nprintf '%s\\n' "$@" >> '${capture.replaceAll("'", "'\\''")}'\nprintf 'HOST_RESUME_${provider}\\n'\n`;
+    await writeFile(path.join(bin, `${provider}${process.platform === "win32" ? ".cmd" : ""}`), script, { mode: 0o700 });
+  }
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
   const command = process.platform === "win32" ? "powershell.exe" : "/bin/sh";
   const args = process.platform === "win32" ? ["-NoProfile", "-NoLogo"] : [];
   const wait = async (predicate: () => boolean, label: string) => {
@@ -78,6 +93,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
       const session = await manager.createSession({ command, args, cwd: directory });
       terminalIds.push(session.id);
       await ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry });
+      originalBindings.set(session.id, session.ptyHost!.sessionInstanceId);
       // Provider facts are supplied explicitly; no CLI conversation is fabricated.
       const started = await processTerminalAgentHook({ terminalSessionManager: manager, terminalStateService: state }, {
         terminalSessionId: session.id, agent: provider, hookEvent: "SessionStart", threadId: `saved-${provider}`, commandName: providerCommand,
@@ -114,15 +130,32 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     for (const id of terminalIds) {
       const session = manager.getSession(id)!;
       assert.equal(session.status, "running");
-      await assert.rejects(ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry }), /HOST_SESSION_GONE/);
-      assert.equal(session.status, "exited");
       const provider = session.threadProvider ?? session.lastThreadProvider;
+      const { runtime, warning } = await ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry });
+      assert.match(warning!, /Original PTY Host session was lost; starting .* resume/);
+      assert.equal(session.status, "running");
+      assert.equal(session.ptyHost!.hostInstanceId, observer.descriptor.hostInstanceId);
+      assert.notEqual(session.ptyHost!.sessionInstanceId, originalBindings.get(id));
       assert.equal(session.threadId ?? session.lastThreadId, `saved-${provider}`);
+      await wait(() => session.scrollback.includes(`HOST_RESUME_${provider}`), "saved provider resumed in replacement Host");
+      const captured = await readFile(path.join(directory, `${provider}.args`), "utf8");
+      assert.deepEqual(captured.trim().split(/\r?\n/).map(value => value.trim()), ["resume", `saved-${provider}`]);
+      assert.equal((await ensureHostedTerminal({ session, terminalSessionManager: manager, runtimeRegistry: registry })).runtime, runtime,
+        "reattach reuses the replacement instead of replaying resume");
+      assert.equal(await readFile(path.join(directory, `${provider}.args`), "utf8"), captured);
     }
     // Creating with the wrong Host identity still rejects as an identity violation.
     await assert.rejects(createHostedPty({ terminalSessionId: terminalIds[0], binding: { hostInstanceId: oldHostId, sessionInstanceId: crypto.randomUUID() },
       create: { terminalSessionId: terminalIds[0], sessionInstanceId: crypto.randomUUID(), projectId: "fixture", command, args, cwd: directory, cols: 80, rows: 24, env: {} } }), /HOST_IDENTITY_MISMATCH/);
-    assert.equal((await observer.request<unknown[]>("listSessions")).length, 0, "loss must not create a replacement shell");
+    assert.equal((await observer.request<unknown[]>("listSessions")).length, terminalIds.length,
+      "each lost running terminal creates exactly one replacement");
+    // Explicitly exited terminals remain historical. Losing a Host alone no
+    // longer archives a running terminal under the current recovery contract.
+    for (const id of terminalIds) {
+      await registry.getSessionRuntime(id)!.hosted!.close();
+      await wait(() => manager.getSession(id)!.status === "exited", "explicit terminal exit recorded");
+      await registry.disposeRuntime(id);
+    }
     await manager.dispose();
     manager = new TerminalSessionManager(new LowDbTerminalSessionStore(storeFile));
     await manager.initialize();
@@ -157,13 +190,17 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
       await wait(() => messages.filter(message => message.type === "status").length === 2, "archived status response");
       socket.close();
     }
-    assert.equal((await observer.request<unknown[]>("listSessions")).length, 0);
+    const archived = await observer.request<PtyHostSession[]>("listSessions");
+    assert.equal(archived.length, terminalIds.length, "reading archived history must not create new PTYs");
+    assert.ok(archived.every(session => session.status === "exited" && terminalIds.includes(session.terminalSessionId)));
     const fresh = await manager.createSession({ command, args, cwd: directory });
-    const runtime = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
+    const { runtime } = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
     await runtime.hosted!.writeSteps([{ type: "text", data: "echo FRESH_TERMINAL_OK\r" }]);
     await wait(() => /\r?\nFRESH_TERMINAL_OK\r?\n/.test(manager.getSession(fresh.id)!.scrollback), "new terminal executes input");
-    return "verified Host replacement marks old terminals exited; current/last Traex/TraeCLI IDs persist across Backend reopens; archived WS history/status readable; no implicit shell; new PTY accepts input";
+    return "verified Host replacement resumes exact current/last Traex/TraeCLI IDs once with new bindings; explicitly exited terminals preserve WS history across Backend reopens; new PTY accepts input";
   } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
     for (const socket of sockets) socket.terminate();
     if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
     for (const session of manager.listSessions()) await registry.disposeRuntime(session.id);

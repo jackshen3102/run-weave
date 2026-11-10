@@ -99,6 +99,7 @@
     "./service-management": "./src/monitoring/service-management.ts",
     "./feishu/bridge": "./src/feishu/bridge.ts",
     "./agent-model-catalog": "./src/agent-model-catalog.ts",
+    "./agent-capabilities": "./src/agent-capabilities.ts",
     "./daily-record": "./src/daily-record.ts",
     "./browser-history": "./src/browser/history.ts",
     "./browser-plugins": "./src/browser/plugins.ts",

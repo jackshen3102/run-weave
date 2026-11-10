@@ -16,7 +16,7 @@ export const CONFIGURATION_COMPATIBILITY = {
 /** App Server does not consume Desktop or Backend service configuration. */
 export const APP_SERVER_CONFIGURATION_COMPATIBILITY = {
   ...CONFIGURATION_COMPATIBILITY,
-  domainVersions: Object.fromEntries(["appServer", "agents.codex", "agents.traex"].map(domain => [domain, [CONFIGURATION_DOMAIN_VERSIONS[domain]!]])),
+  domainVersions: Object.fromEntries(["appServer", "agents.codex", "agents.traex", "agents.claude"].map(domain => [domain, [CONFIGURATION_DOMAIN_VERSIONS[domain]!]])),
 };
 
 export function supportsConfiguration(target: unknown, value: Pick<ConfigurationFile, "schemaVersion" | "domainVersions">): boolean {
