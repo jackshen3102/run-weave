@@ -434,12 +434,7 @@ struct TerminalScreen: View {
           .accessibilityFocused($composerTriggerFocused)
         TerminalNextCompletionButton(session: session)
         if !quickActionsVisible {
-          Button { quickActionsVisible = true } label: {
-            Image(systemName: quickActionMode == .shortcuts ? "keyboard" : "bolt.fill")
-              .frame(width: 44, height: 44)
-          }
-          .accessibilityLabel(quickActionMode == .shortcuts ? "展开快捷键" : "展开快捷回复")
-          .accessibilityIdentifier("terminal-quick-actions-expand")
+          TerminalQuickActionsExpandButton(mode: quickActionMode) { quickActionsVisible = true }
         }
       }
       .font(.system(size: 20, weight: .medium))
@@ -457,43 +452,16 @@ struct TerminalScreen: View {
         }
       }
       .padding(.horizontal, 16)
-      if quickActionsVisible { quickActionBar }
+      if quickActionsVisible {
+        TerminalQuickActionBar(mode: $quickActionMode, visible: $quickActionsVisible,
+          enabled: quickActionsEnabled, sending: sendingInstantReply,
+          sendShortcut: sendShortcut, sendReply: sendInstantReply)
+      }
     }
     .frame(maxWidth: .infinity)
     .buttonStyle(.plain)
     .padding(.vertical, 4)
     .background(TerminalAppearance.background)
-  }
-
-  private var quickActionBar: some View {
-    HStack(spacing: 4) {
-      if quickActionMode == .shortcuts {
-        ShortcutBar(enabled: quickActionsEnabled, send: sendShortcut)
-      } else {
-        ScrollView(.horizontal, showsIndicators: false) {
-          TerminalInstantReplyBar(enabled: quickActionsEnabled, sending: sendingInstantReply, send: sendInstantReply)
-        }
-        .frame(height: 44)
-      }
-      Menu {
-        Button {
-          quickActionMode = quickActionMode == .shortcuts ? .replies : .shortcuts
-        } label: {
-          Label(quickActionMode == .shortcuts ? "切换到快捷回复" : "切换到快捷键",
-            systemImage: quickActionMode == .shortcuts ? "bolt.fill" : "keyboard")
-        }
-        Button { quickActionsVisible = false } label: {
-          Label("收起", systemImage: "chevron.down")
-        }
-      } label: {
-        Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle())
-      }
-      .accessibilityLabel("快捷操作")
-      .accessibilityValue(quickActionMode == .shortcuts ? "快捷键" : "快捷回复")
-      .accessibilityIdentifier("terminal-quick-actions-menu")
-    }
-    .padding(.horizontal, 8)
-    .accessibilityIdentifier("terminal-quick-actions-bar")
   }
 
   private var quickActionsEnabled: Bool {
