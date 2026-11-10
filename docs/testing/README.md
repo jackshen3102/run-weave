@@ -41,6 +41,25 @@ Daily Record 的[浏览来源接入计划](./skills/daily-record-browser.testpla
 原生 iOS 使用[手机专项计划](./app/ios-development-resources.testplan.yaml)，
 产品边界见[开发资源合同](../architecture/development-resources.md)。
 
+## Claude Code 集成验收
+
+Claude 的[配置与能力](../cli/configuration.md#claude-code-原生引用与能力)、
+[正文读取](../architecture/terminal-code-preview.md)和
+[原生空闲通知](../architecture/terminal-completion-notifications.md#claude-原生空闲确认)分别描述当前接入。
+以下三份计划保留完整能力的验收要求，不是已实现清单，也没有完整通过记录：
+
+- [基础闭环](./terminal/runtime/claude-code-foundation.testplan.yaml)：安装、身份、生命周期、只读会话和精确恢复。
+- [跨端交互](./terminal/claude-code-interaction.testplan.yaml)：输入、附件、问答、模型设置、fork 与旁聊。
+- [后台与内部 Agent](./scheduled-tasks/claude-code-automation.testplan.yaml)：执行策略、取消、续跑、接管与内部消费者。
+
+原生 CLI 请求、resume/fork 和结构化输出的受控验证不能替代 Runweave 受管恢复或后台执行；
+reader fixture 不能替代真实压缩、浏览器或 iOS 阅读验收。版本和登录探测不证明模型调用成功，
+进程退出 0 也不证明业务成功。没有可核对的实际 verdict 时，未完成项继续保持未验收。
+
+执行时为每例建立独立项目、pane、进程与通知 sink，不使用用户活跃任务或向真实联系人发测试通知。
+证据分别记录源码/fixture、真实 Claude 请求、浏览器、iOS、安装态与操作系统平台；
+保留版本及目标身份，脱敏凭据和原生记录。某一平台通过不能扩写为全部平台通过。
+
 ## 桌面全局设置与管理导航合同
 
 桌面全局设置已接入现有领域组件，当前导航与作用域见

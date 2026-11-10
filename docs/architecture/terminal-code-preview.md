@@ -244,6 +244,15 @@ Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值
 
 静态路由只接受 GET/HEAD，并对 project root、prototype root、prototype dir 和最终文件执行 realpath containment。响应禁用缓存，允许 opaque-origin iframe 读取本地资源，但不授予 iframe `allow-same-origin`。选择状态按 `{projectId, slug}` 保存到当前 `apiBase` 对应的 localStorage key；切换工具或重开 Sidecar 后恢复，列表刷新时再对磁盘事实做校验。
 
+## 终端文本附件
+
+长文本保存、插入和未知投递结果的权威合同见
+[Terminal 文本附件](../../backend/docs/terminal-text-attachments.md)。当前支持运行中的 tmux 面板及
+PTY 会话的 `default` 面板；PTY 投递固定 runtime、PID 和 Host 会话身份，只向原有进程写入，
+不重建进程，也不向替代进程自动重发。文件保存在所属 Backend，远程 shell 或容器未必可访问。
+保存成功、终端接收和 Agent 已读取是三种不同结果，行为验收见
+[文本附件计划](../testing/terminal/runtime/text-attachments.testplan.yaml)。
+
 ## 快捷指令
 
 Terminal 顶栏右侧外露 `快捷指令` 入口，用户可通过固定快捷指令或最近输入复用提交类提示。前端不读取 Git 状态、不提交、不 push、不处理 rebase 冲突；这些仍由当前 terminal 中运行的 Codex、Coco 或其他 AI agent 完成。

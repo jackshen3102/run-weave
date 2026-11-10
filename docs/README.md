@@ -10,6 +10,7 @@
 | 先理解代码目录、运行时和依赖方向                       | [architecture/README.md](./architecture/README.md)                                                                                                         |
 | 查看重要架构选择及其取舍背景                           | [adr/README.md](./adr/README.md)                                                                                                                           |
 | 管理定时任务、后台执行与终端恢复                       | [接入边界](../frontend/docs/scheduled-tasks.md)、[CLI、按需运行与后台续接](./cli/scheduled-task-cli.md)、[运行配置](./deployment/overview.md#定时任务运行) |
+| 查看 Claude Code 接入范围与验收缺口 | [配置与能力](./cli/configuration.md#claude-code-原生引用与能力)、[验收入口](./testing/README.md#claude-code-集成验收) |
 | 使用或修改 `rw` CLI、终端快照分享                      | [cli/README.md](./cli/README.md)                                                                                                                           |
 | 启动、部署、管理 Beta / Dev Session 或接入 ChatGPT MCP | [deployment/README.md](./deployment/README.md)                                                                                                             |
 | 选择质量门禁、日志或运行证据                           | [quality/README.md](./quality/README.md)                                                                                                                   |
