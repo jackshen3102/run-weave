@@ -111,6 +111,8 @@ Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 u
 Claude 的[原生只读 reader](../../app-server/src/claude/conversation-reader.ts)从
 [实例配置引用](../cli/configuration.md#claude-code-原生引用与能力)下的 `projects/<project>/<session UUID>.jsonl`
 定位唯一源，拒绝路径参数、重复位置、符号链接、硬链接及读取期间的源替换。
+Claude 源的长度或修改元数据在扫描期间变化时，本次读取返回 `CLAUDE_SOURCE_CHANGED`；
+长度增长也不能证明旧前缀未被改写。写入稳定后的新请求可正常读取，不发布混合快照，也不自动重试。
 仅投影选定 UUID 祖先链的 user/assistant text；attachment 只保留图关系，不显示环境或系统提示。
 `last-prompt.leafUuid` 可选择原生分支，工具、thinking、sidechain 和压缩摘要不作为正文。
 压缩的逻辑 parent 未落盘时，只通过 `preservedSegment` 明示且祖先链、summary anchor 均可核对的

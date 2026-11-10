@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { renameSync } from "node:fs";
+import { appendFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -274,6 +274,29 @@ async function verifyClaudeSourceGuards() {
   const reader = new ClaudeSessionReader(root);
   await assert.rejects(reader.scan(id, () => renameSync(replacement, file)),
     error => error.code === "CLAUDE_SOURCE_CHANGED", "same-session replacement during a read must be rejected");
+  // Mutate a real open file after the first chunk was consumed. Larger length
+  // with the same inode is not evidence that its old prefix stayed unchanged.
+  const suffix = text => JSON.stringify({ type: "assistant", sessionId: id,
+    uuid: "reply", parentUuid: "message", message: { role: "assistant", content: text } }) + "\n";
+  const initial = source + " ".repeat(300_000) + "\n" + suffix("OLD");
+  for (const kind of ["rewrite", "append"]) {
+    await writeFile(file, initial);
+    const inode = statSync(file).ino;
+    let mutated = false;
+    await assert.rejects(reader.scan(id, () => {
+      if (mutated) return;
+      mutated = true;
+      if (kind === "rewrite") writeFileSync(file, source + " ".repeat(300_000) + "\n" + suffix("NEW") + source);
+      else appendFileSync(file, source);
+    }), error => error.code === "CLAUDE_SOURCE_CHANGED", `${kind} during scanning must not publish a mixed snapshot`);
+    assert.equal(statSync(file).ino, inode);
+    assert.ok(statSync(file).size > Buffer.byteLength(initial));
+    const rows = [];
+    const stable = await reader.scan(id, row => rows.push(row));
+    assert.equal(stable.partial, false, "a fresh stable read succeeds after the writer settles");
+    assert.equal(rows.find(row => row.type === "assistant").message.content, kind === "rewrite" ? "NEW" : "OLD");
+    assert.equal(await reader.isUnchanged(id, stable.signature), true);
+  }
   const linkedRoot = path.join(verificationRoot, "claude-root-symlink");
   await symlink(root, linkedRoot);
   await assert.rejects(new ClaudeSessionReader(linkedRoot).scan(id, () => assert.fail("symlink source consumed")),
@@ -283,7 +306,7 @@ async function verifyClaudeSourceGuards() {
   await symlink(project, path.join(otherRoot, "linked-project"));
   assert.equal(await new ClaudeSessionReader(otherRoot).scan(id, () => assert.fail("symlink project consumed")), null);
   assert.equal(await reader.scan("../escape", () => assert.fail("traversal consumed")), null);
-  console.log("Claude source guards: descriptor replacement, root/project symlinks and traversal passed");
+  console.log("Claude source guards: descriptor replacement, same-inode rewrite, concurrent append, stable retry, root/project symlinks and traversal passed");
 }
 
 async function verifyConcurrentEventAppend() {

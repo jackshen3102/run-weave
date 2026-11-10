@@ -48,7 +48,8 @@ const panelLogger = logger.child({ component: "terminal" });
  * operation generation(启动租约),说明它的 agent turn 早已结束、只是 codex 仍停在
  * 前台交互提示符,不会再有 hook 把它推进到 idle。此时按 `agent_idle` 收敛,避免它
  * 污染 `aggregatePanelTerminalState` 的整体折叠结果。判据只用确定性的 operation
- * generation,不看运行时长、不放松 hook 门禁。
+ * generation,不看运行时长、不放松 hook 门禁。Pi / Claude 必须保留原生就绪证据门禁，
+ * 缺少 Runweave 启动租约不能证明这两类原生 CLI 可输入。
  */
 export function convergeStaleStartingWithoutLease(
   terminalSessionManager: Pick<
@@ -62,6 +63,7 @@ export function convergeStaleStartingWithoutLease(
   if (
     nextTerminalState.state !== "agent_starting" ||
     nextTerminalState.agent === "pi" ||
+    nextTerminalState.agent === "claude" ||
     terminalSessionManager.hasPanelAgentOperationGeneration(
       terminalSessionId,
       panelId,
