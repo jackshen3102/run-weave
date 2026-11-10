@@ -111,6 +111,10 @@ Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 u
 Claude 的[原生只读 reader](../../app-server/src/claude/conversation-reader.ts)从
 [实例配置引用](../cli/configuration.md#claude-code-原生引用与能力)下的 `projects/<project>/<session UUID>.jsonl`
 定位唯一源，拒绝路径参数、重复位置、符号链接、硬链接及读取期间的源替换。
+当前 panel 运行 Claude 时，Backend 通过该 tmux pane 的进程祖先链定位唯一主 Claude，
+核对原生 `sessions/<pid>.json` 的 PID、平台、UTC 进程启动时间和工作目录，按登记的 session ID
+读取正文；不使用该 panel 遗留的其他 Agent thread，也不按最近文件猜测会话。无有效登记时返回
+`no_thread`。正文读取前后再次核对进程代际与 session ID；阅读不修改终端绑定、生命周期或输入就绪状态。
 Claude 源的长度或修改元数据在扫描期间变化时，本次读取返回 `CLAUDE_SOURCE_CHANGED`；
 长度增长也不能证明旧前缀未被改写。写入稳定后的新请求可正常读取，不发布混合快照，也不自动重试。
 仅投影选定 UUID 祖先链的 user/assistant text；attachment 只保留图关系，不显示环境或系统提示。

@@ -223,7 +223,7 @@ export function createTerminalRouter(
     ownerHooks: options?.worktreeDeletionOwnerHooks,
   });
   registerTerminalPreviewRoutes(router, terminalSessionManager);
-  registerTerminalConversationRoutes(router, terminalSessionManager);
+  registerTerminalConversationRoutes(router, terminalSessionManager, options?.tmuxService);
 
   const reorderSessionsSchema = z
     .object({

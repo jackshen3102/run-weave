@@ -24,6 +24,11 @@ import {
 } from "./internals";
 
 export class TmuxSessionService extends TmuxProcess {
+  async readPaneProcessId(target: TmuxPaneTarget): Promise<number> {
+    const pane = await this.runTmux(["display-message", "-p", "-t", target.paneId, "#{pane_pid}"], target, { sensitiveOutput: true });
+    return Number(pane.stdout.trim());
+  }
+
   async textAttachmentProcessIdentity(target: TmuxPaneTarget): Promise<{ panePid: number; clientPids: number[] }> {
     const pane = await this.runTmux(["display-message", "-p", "-t", target.paneId, "#{pane_pid}"], target, { sensitiveOutput: true });
     const clients = await this.runTmux(["list-clients", "-t", target.sessionName, "-F", "#{client_pid}"], target, { sensitiveOutput: true });
