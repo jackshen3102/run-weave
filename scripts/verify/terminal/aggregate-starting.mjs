@@ -146,6 +146,24 @@ const runningPanel = (id, terminalState) => ({
   );
 }
 
+// Native providers requiring lifecycle evidence must not become ready solely
+// because a manually started CLI has no Runweave preparation lease.
+for (const agent of ["claude", "pi"]) {
+  for (const leased of [false, true]) {
+    const pending = state("agent_starting", agent);
+    const kept = convergeStaleStartingWithoutLease(
+      fakeManager(leased ? ["native"] : []), SID, "native", pending,
+    );
+    check(`${agent}-starting-preserved-with-${leased ? "active" : "no"}-lease`,
+      kept === pending, kept);
+    const aggregate = aggregatePanelTerminalState([
+      runningPanel("native", kept), runningPanel("codex", state("agent_idle")),
+    ]);
+    check(`${agent}-starting-not-hidden-in-aggregate-${leased}`,
+      aggregate.state === "agent_starting" && aggregate.agent === agent, aggregate);
+  }
+}
+
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`);
   process.exit(1);

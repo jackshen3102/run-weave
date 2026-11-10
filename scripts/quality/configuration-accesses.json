@@ -8666,8 +8666,24 @@
   {
     "file": "scripts/verify/app-server/event-center.mjs",
     "kind": "file-io",
-    "expression": "writeFile(file)",
+    "expression": "appendFileSync(file)",
     "count": 1,
+    "category": "test",
+    "reason": "Append only to a disposable Claude source fixture during its bounded scan, proving changed snapshots are rejected and a stable retry succeeds."
+  },
+  {
+    "file": "scripts/verify/app-server/event-center.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(file)",
+    "count": 1,
+    "category": "test",
+    "reason": "Rewrite only the isolated same-inode Claude transcript fixture during a read to verify mixed snapshots cannot escape source validation."
+  },
+  {
+    "file": "scripts/verify/app-server/event-center.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 2,
     "category": "test",
     "reason": "Create the isolated native Claude transcript fixture for descriptor and symlink guards; never write Claude user configuration or history."
   },

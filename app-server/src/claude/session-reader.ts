@@ -23,13 +23,11 @@ export class ClaudeSessionReader {
   ) {
     const source = await this.locate(threadId, signal);
     if (!source) return null;
-    let stable = true;
     const signature = sourceSignature(source);
     const result = await scanConversationSource(source.file, consume, signal, async (stat) => {
       await this.validateSource(source, stat);
-      stable &&= sourceSignature({ ...source, stat }) === signature;
     });
-    return result ? { ...result, file: source.file, signature: stable ? signature : undefined } : null;
+    return result ? { ...result, file: source.file, signature } : null;
   }
 
   /** Revalidate the unique source before reusing only an existing short-text projection. */
@@ -55,10 +53,11 @@ export class ClaudeSessionReader {
     const [root, project, current] = await Promise.all([
       lstat(this.projectsRoot), lstat(path.dirname(source.file)), lstat(source.file),
     ]);
+    // Growth alone cannot distinguish an append from an in-place rewrite.
+    // Publish only a stable snapshot; a concurrent append is readable on the
+    // next request, never as mixed old/new records or a reusable preview.
     if (!sameFile(root, source.root) || !sameFile(project, source.project) ||
-        !sameFile(current, source.stat) || !sameFile(stat, source.stat) ||
-        !stat.isFile() || stat.nlink !== 1 || stat.size < source.stat.size ||
-        (stat.size === source.stat.size && stat.ctimeMs !== source.stat.ctimeMs) ||
+        !sameSourceVersion(current, source.stat) || !sameSourceVersion(stat, source.stat) ||
         await realpath(source.file) !== source.file) {
       throw unsafeSource();
     }
@@ -111,6 +110,12 @@ function sourceSignature(source: SessionSource): string {
 
 function sameFile(left: Stats, right: Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino && !left.isSymbolicLink();
+}
+
+function sameSourceVersion(current: Stats, expected: Stats): boolean {
+  return sameFile(current, expected) && current.isFile() && current.nlink === 1 &&
+    current.size === expected.size && current.mtimeMs === expected.mtimeMs &&
+    current.ctimeMs === expected.ctimeMs;
 }
 
 function missing(error: unknown): boolean {
