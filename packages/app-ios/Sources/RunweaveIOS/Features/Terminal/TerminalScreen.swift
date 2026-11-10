@@ -441,16 +441,7 @@ struct TerminalScreen: View {
       .foregroundColor(TerminalAppearance.accent)
       .padding(4).terminalGlass(in: Capsule())
       .frame(maxWidth: .infinity)
-      .overlay(alignment: .trailing) {
-        if controller.scrolledBack {
-          Button { controller.returnToBottom() } label: {
-            Image(systemName: "arrow.down").frame(width: 44, height: 44)
-              .terminalGlass(in: Circle()).contentShape(Circle())
-          }
-          .accessibilityLabel("回到底部").accessibilityIdentifier("terminal-return-to-bottom")
-          .disabled(!session.canWrite || !controller.canSend)
-        }
-      }
+      .modifier(TerminalReturnToBottomOverlay(controller: controller, canWrite: session.canWrite))
       .padding(.horizontal, 16)
       if quickActionsVisible {
         TerminalQuickActionBar(mode: $quickActionMode, visible: $quickActionsVisible,

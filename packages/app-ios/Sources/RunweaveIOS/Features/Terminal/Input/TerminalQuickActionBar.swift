@@ -54,3 +54,22 @@ struct TerminalQuickActionsExpandButton: View {
     .accessibilityIdentifier("terminal-quick-actions-expand")
   }
 }
+
+struct TerminalReturnToBottomOverlay: ViewModifier {
+  @ObservedObject var controller: SessionController
+  let canWrite: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .overlay(alignment: .trailing) {
+        if controller.scrolledBack {
+          Button { controller.returnToBottom() } label: {
+            Image(systemName: "arrow.down").frame(width: 44, height: 44)
+              .terminalGlass(in: Circle()).contentShape(Circle())
+          }
+          .accessibilityLabel("回到底部").accessibilityIdentifier("terminal-return-to-bottom")
+          .disabled(!canWrite || !controller.canSend)
+        }
+      }
+  }
+}
