@@ -253,13 +253,15 @@ export class CodeReviewService {
     try { run.stale = (await captureReviewSnapshot(record.source.projectId, record.source.rootPath)).fingerprint !== snapshot.fingerprint; }
     catch { run.stale = true; }
     run.reportId = id; run.summary = report.summary; run.findingCount = report.findings.length;
-    run.phase = "completed"; run.delivery = "pending";
+    const unverified = !report.findings.length && !report.coverageComplete;
+    run.phase = unverified ? "blocked" : "completed"; run.delivery = report.findings.length ? "pending" : "skipped";
+    run.error = unverified ? { code: "review_incomplete", message: "审查存在覆盖或复现缺口，未判定通过" } : null;
     for (const item of this.store.records.values()) {
-      if (item.run.caseId === run.caseId) item.run.caseStatus = report.findings.length === 0 ? "passed" : "open";
+      if (item.run.caseId === run.caseId) item.run.caseStatus = !report.findings.length && !unverified ? "passed" : "open";
     }
     record.delivery.reportHash = reviewDigest(report);
     await this.touch(record);
-    // A following serial tick handles delivery only after the independent report is durable.
+    // Findings are delivered on a following serial tick after the report is durable.
   }
   async dispose() {
     this.closing = true; if (this.timer) clearTimeout(this.timer); this.unlisten?.();

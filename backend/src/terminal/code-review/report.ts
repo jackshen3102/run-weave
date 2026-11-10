@@ -16,7 +16,7 @@ export const codeReviewReportSchema = z.object({
   checks: z.array(z.object({ description: text, status: z.enum(["passed", "failed", "not_run"]),
     environment: text, observedResult: text, evidenceRefs: refs,
     beforeFingerprint: z.string().nullable(), afterFingerprint: z.string().nullable(),
-  }).strict()).min(1).max(500),
+  }).strict()).max(500),
   reviewedChanges: z.array(z.object({ path: text, changeKind: kind }).strict()).max(10000),
   limitations: z.array(text).max(10000), coverageComplete: z.boolean(), cleanup: text,
   artifacts: z.array(z.object({ artifactId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), path: text,
@@ -41,11 +41,12 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
     if (!entry.omission && !reviewed.has(key(entry))) invalid("报告未逐项交代受审文件");
   }
   for (const finding of report.findings) {
+    if (finding.basis !== "runtime") invalid("只接受已实际复现的问题，静态推断不能作为问题提交");
     const entry = entries.get(key(finding));
     const content = entry?.[finding.side].content;
     if (content === null || content === undefined || finding.lineEnd < finding.lineStart || finding.lineEnd > content.split("\n").length)
       invalid("问题位置不属于快照可读侧");
-    if (finding.basis === "runtime" && !finding.evidenceRefs.length) invalid("运行时问题缺少证据引用");
+    if (!finding.evidenceRefs.length) invalid("问题缺少复现证据引用");
   }
   for (const check of report.checks) {
     if (check.status !== "not_run" && (check.beforeFingerprint !== snapshot.fingerprint || check.afterFingerprint !== snapshot.fingerprint || !check.evidenceRefs.length)) {
@@ -55,7 +56,7 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
     }
   }
   for (const finding of report.findings) {
-    if (finding.basis === "runtime" && !report.checks.some((check) => check.status !== "not_run" &&
+    if (!report.checks.some((check) => check.status !== "not_run" &&
         check.beforeFingerprint === snapshot.fingerprint && check.afterFingerprint === snapshot.fingerprint &&
         finding.evidenceRefs.every((id) => check.evidenceRefs.includes(id))))
       invalid("运行时问题缺少关联的同版已执行检查");

@@ -28,7 +28,7 @@ struct TerminalCodeReviewRun: Decodable, Identifiable {
     if caseStatus == "passed", (findingCount ?? 0) > 0 { return "审查事项已完成 · 本轮发现 \(findingCount ?? 0) 个问题" }
     if let error { return error.message }
     if phase == "completed" {
-      let label = ["pending": "等待回传", "writing": "正在回传", "written": "已回传", "unavailable": "仅展示报告", "target_changed": "来源已变化", "unknown": "回传未确认"][delivery] ?? ""
+      let label = ["skipped": "无需回传", "pending": "等待回传", "writing": "正在回传", "written": "已回传", "unavailable": "仅展示报告", "target_changed": "来源已变化", "unknown": "回传未确认"][delivery] ?? ""
       let result = findingCount == 0 ? "审查完成 · 未发现 Bug" : "待修复／复审 · \(findingCount ?? 0) 个问题"
       return "\(result) · \(label)" + (stale ? " · 代码已变化" : "")
     }

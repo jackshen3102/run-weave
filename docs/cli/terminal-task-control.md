@@ -115,8 +115,11 @@ Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执
 `POST /api/terminal/session/:id/code-reviews` 按 requestId 去重，同来源正在执行的一轮不会重复派发；
 GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
-每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 时 caseStatus 为 passed，
-事项自动结束、状态条隐藏；有 Bug 时事项保持 open，结果回传来源终端供处理。
+每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 且覆盖完整时 caseStatus 为 passed，
+事项自动结束、状态条隐藏，delivery 为 skipped，不向来源终端发送消息；有 Bug 时事项保持 open，
+只回传问题的级别、位置、标题和触发影响，请来源 Agent 核对并修复，不附总结、覆盖清单或例行说明。
+问题必须由 Reviewer 实际复现并提供同版检查与证据；静态推断不能进入新报告的问题列表，也不回传旧报告中的静态问题。
+无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，不判定通过、不投递疑点。
 此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
 仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
 `POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；
@@ -132,6 +135,8 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 
 来源身份、工作区及回传账本仅存于 Backend。Reviewer prompt 通过白名单模板构造，只包含
 本轮编号、代码路径、冻结快照、通用规则和自有输出目录，不读取来源历史、目标或交接。
+Reviewer 自行选择审查方法和必要验证，省略例行步骤播报；最终 JSON 由 Backend 保存，无需重复写报告文件。
+没有待复现疑点或必要运行检查时 checks 可为空；有问题时必须关联已执行的同版复现检查，记录步骤、预期与实际结果及证据。
 新 Reviewer 使用现有 Codex provider 和用户模型配置；缺少原生 thread/final 或工具环境时
 明确阻塞或记录未执行，不切换模型制造通过。本功能没有新增文件系统安全沙箱。
 Reviewer 专用启动参数显式固定 `--sandbox danger-full-access --ask-for-approval never`，
