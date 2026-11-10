@@ -4362,10 +4362,18 @@
   {
     "file": "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalScreen.swift",
     "kind": "native-or-shell",
-    "expression": "@AppStorage(DevicePreferences.instantRepliesVisibleKey, store: DevicePreferences.store) private var showingInstantReplies = false",
+    "expression": "@AppStorage(DevicePreferences.terminalQuickActionModeKey, store: DevicePreferences.store) private var quickActionMode: TerminalQuickActionMode = .shortcuts",
     "count": 1,
     "category": "device-adapter",
-    "reason": "Existing instant-reply visibility key stays in iOS UserDefaults through the device preference adapter."
+    "reason": "Terminal quick-action mode is a device-local UI preference stored through DevicePreferences in iOS UserDefaults."
+  },
+  {
+    "file": "packages/app-ios/Sources/RunweaveIOS/Features/Terminal/TerminalScreen.swift",
+    "kind": "native-or-shell",
+    "expression": "@AppStorage(DevicePreferences.terminalQuickActionsVisibleKey, store: DevicePreferences.store) private var quickActionsVisible = true",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "Terminal quick-action visibility is a device-local UI preference stored through DevicePreferences in iOS UserDefaults."
   },
   {
     "file": "packages/app-ios/Sources/RunweaveIOS/State/DevicePreferences.swift",
