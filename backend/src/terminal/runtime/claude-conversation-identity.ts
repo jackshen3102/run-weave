@@ -17,7 +17,7 @@ export async function readClaudeConversationIdentity(
   const pane = { ...resolveTmuxTarget(session, tmux), paneId: panel.tmuxPaneId };
   const panePid = await tmux.readPaneProcessId(pane);
   if (!Number.isSafeInteger(panePid) || panePid <= 0) return null;
-  const psOptions = { env: { ...process.env, TZ: "UTC", LC_ALL: "C" }, timeout: 2_000, maxBuffer: 4 * 1024 * 1024 };
+  const psOptions = { env: { TZ: "UTC", LC_ALL: "C" }, timeout: 2_000, maxBuffer: 4 * 1024 * 1024 };
   const { stdout } = await tmux.execFileImpl("ps", ["-axo", "pid=,ppid=,comm="], psOptions);
   const processes = new Map<number, { parent: number; agent: string | null }>();
   for (const line of stdout.split("\n")) {
