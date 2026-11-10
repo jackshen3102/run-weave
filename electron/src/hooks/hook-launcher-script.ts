@@ -307,6 +307,8 @@ export function buildLauncherScript(): string {
     "  const rawEvent = readHookEvent(payload);",
     "  const normalizedEvent = normalizeEventName(rawEvent);",
     "  const source = normalizeSource(args.source);",
+    // Missing packaged assets cannot fall back to treating Claude Stop as settled.
+    '  if (source === "claude") return;',
     "  const completionReason = normalizeReason(args.reason);",
     "  const threadId = readThreadId(payload);",
     '  const stateHookEvent = (source === "codex" || source === "trae" || source === "traecli" || source === "traex") ? toAgentHookStateEvent(normalizedEvent) : null;',

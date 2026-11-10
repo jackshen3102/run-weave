@@ -6,6 +6,11 @@ interface Turn {
   startedAt: number;
   completed: boolean;
   feishuReply: boolean;
+  claude?: {
+    instanceId: string;
+    attentionPending?: boolean;
+    stop?: { at: number; summary: string; settled: boolean };
+  };
 }
 
 interface Completion {

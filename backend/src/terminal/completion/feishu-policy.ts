@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { TerminalFeishuDecision, TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
+import type { ClaudeHookContext, TerminalFeishuDecision, TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 import type { FeishuNotificationState } from "./feishu-state";
 
 const MIN_DURATION_MS = 60_000;
@@ -50,19 +50,22 @@ export class TerminalFeishuPolicy {
     await this.save(id, state);
   }
 
-  async complete(input: CompletionInput, revision: number): Promise<void> {
+  async complete(input: CompletionInput, revision: number, expectedTurnId?: string): Promise<void> {
     const state = this.state(input.terminalSessionId);
     if (!state) return;
     const panelId = input.panelId ?? null;
     const turn = state.turns[panelId ?? ""];
-    const matches = Boolean(turn && turn.source === input.source &&
+    const matches = Boolean(turn && (!expectedTurnId || turn.id === expectedTurnId) && turn.source === input.source &&
       (!input.threadId || input.threadId === turn.threadId));
     const attention = input.completionReason === "notify";
     const mainStop = input.completionReason === "hook_stop" && input.rawHookEvent?.toLowerCase() === "stop";
     const bypass = attention || Boolean(matches && turn?.feishuReply);
     const now = Date.now();
+    // Claude's native idle notification confirms a prior Stop. Measure work at
+    // Stop, so the native idle delay cannot turn a short task into a long one.
+    const finishedAt = input.source === "claude" ? turn?.claude?.stop?.at ?? now : now;
     if (attention || (mainStop && matches && turn && !turn.completed &&
-      (bypass || now - turn.startedAt >= MIN_DURATION_MS))) {
+      (bypass || finishedAt - turn.startedAt >= MIN_DURATION_MS))) {
       state.completions[String(revision)] = {
         panelId, turnId: matches ? turn!.id : null, dueAt: now + (bypass ? 0 : GRACE_MS),
         bypass, seen: false, claimed: false,
@@ -74,6 +77,50 @@ export class TerminalFeishuPolicy {
       if (Number(key) <= revision - 200) delete state.completions[key];
     }
     await this.save(input.terminalSessionId, state);
+  }
+
+  async observeClaudeHook(input: CompletionInput & { claude: ClaudeHookContext; summary?: string | null }): Promise<
+    { settled: true; summary: string; turnId: string } | { settled: false; notificationId?: string }
+  > {
+    const state = this.state(input.terminalSessionId);
+    if (!state || !input.threadId) return { settled: false };
+    const panelId = input.panelId ?? null;
+    const key = panelId ?? "";
+    const event = input.rawHookEvent?.toLowerCase().replace(/[_\s-]/g, "");
+    const { instanceId, eventId, query, notificationType } = input.claude;
+    if (event === "userpromptsubmit") {
+      await this.beginTurn(input.terminalSessionId, panelId, input.threadId, "claude", query, eventId);
+      state.turns[key]!.claude = { instanceId };
+      await this.save(input.terminalSessionId, state);
+      return { settled: false };
+    }
+    const turn = state.turns[key];
+    if (turn?.source !== "claude" || turn.threadId !== input.threadId || turn.claude?.instanceId !== instanceId) return { settled: false };
+    const native = turn.claude;
+    if (event === "sessionend") {
+      delete state.turns[key];
+    } else if (input.completionReason === "notify") {
+      delete native.stop;
+      if (native.attentionPending) return { settled: false };
+      native.attentionPending = true;
+      const notificationId = await this.attention(input.terminalSessionId, panelId);
+      return { settled: false, ...(notificationId ? { notificationId } : {}) };
+    } else if (!turn.completed) {
+      if (["pretooluse", "posttooluse", "posttoolusefailure", "stopfailure"].includes(event ?? "")) {
+        native.attentionPending = false;
+        delete native.stop;
+      }
+      if (event === "stop" && input.summary && !native.stop?.settled && native.stop?.summary !== input.summary) {
+        native.stop = { at: Date.now(), summary: input.summary, settled: false };
+      }
+      if (event === "notification" && notificationType === "idle_prompt" && native.stop && !native.stop.settled) {
+        native.stop.settled = true; // Claim before publishing; unknown outcomes never replay.
+        await this.save(input.terminalSessionId, state);
+        return { settled: true, summary: native.stop.summary, turnId: turn.id };
+      }
+    }
+    await this.save(input.terminalSessionId, state);
+    return { settled: false };
   }
 
   async viewed(id: string, revision: number, panelIds: string[]): Promise<void> {

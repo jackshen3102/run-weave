@@ -350,8 +350,8 @@ async function main() {
   const effectiveCompletionReason = isTraexAttentionNotification
     ? "notify"
     : completionReason;
-  // Claude Stop is only a candidate. Do not notify (including against an older
-  // Backend) until a generation-bound settled lifecycle adapter is available.
+  // Claude Stop is only a candidate; its notification adapter waits for native
+  // idle confirmation and publishes through the Backend's canonical feed.
   const shouldRecordCompletion = source !== "claude" && (source !== "pi" || payload.pi?.outcome === "completed") && (
     isTraexAttentionNotification ||
     effectiveCompletionReason !== "hook_stop" ||
@@ -494,7 +494,16 @@ async function main() {
     });
   }
 
-  if (source !== "claude" && isFeishuAttentionHook(payload, source) && !shouldRecordCompletion && completionEndpoint) {
+  if (source === "claude") {
+    const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
+      payload, source, completionReason, rawEvent, commandName });
+    if (result.accepted) notifyFeishu({ ...payload, hook_event_name: "Stop",
+      last_assistant_message: result.summary || "任务需要你确认或处理，请回到对应终端。",
+      feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+    return;
+  }
+
+  if (isFeishuAttentionHook(payload, source) && !shouldRecordCompletion && completionEndpoint) {
     const attentionPayload = { ...payload, feishuNotificationOnly: true, last_assistant_message: "任务需要你确认或处理，请回到对应终端。" };
     const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
       payload: attentionPayload, source, completionReason: "notify", rawEvent, commandName });

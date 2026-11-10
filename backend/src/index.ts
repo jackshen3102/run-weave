@@ -196,6 +196,7 @@ function createHttpApp(
       completionEventService: services.terminalCompletionEventService,
       terminalSessionManager: services.terminalSessionManager,
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
+      tmuxService: services.tmuxService,
     }),
   );
   registerActivityRoutes(app, {
