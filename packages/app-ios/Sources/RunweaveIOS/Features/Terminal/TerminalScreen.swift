@@ -446,7 +446,7 @@ struct TerminalScreen: View {
       if quickActionsVisible {
         TerminalQuickActionBar(mode: $quickActionMode, visible: $quickActionsVisible,
           enabled: quickActionsEnabled, sending: sendingInstantReply,
-          sendShortcut: sendShortcut, sendReply: sendInstantReply)
+          sendShortcut: { if quickActionsEnabled { controller.sendRaw($0) } }, sendReply: sendInstantReply)
       }
     }
     .frame(maxWidth: .infinity)
@@ -458,11 +458,6 @@ struct TerminalScreen: View {
   private var quickActionsEnabled: Bool {
     session.terminal?.id == details.id && session.terminalController === controller
       && session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand
-  }
-
-  private func sendShortcut(_ sequence: String) {
-    guard quickActionsEnabled else { return }
-    controller.sendRaw(sequence)
   }
 
   private func openComposer() {
