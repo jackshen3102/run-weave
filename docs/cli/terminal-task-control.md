@@ -117,9 +117,9 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
 每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 且覆盖完整时 caseStatus 为 passed，
 事项自动结束、状态条隐藏，delivery 为 skipped，不向来源终端发送消息；有 Bug 时事项保持 open，
-只回传问题的级别、位置、标题和触发影响，请来源 Agent 核对并修复，不附总结、覆盖清单或例行说明。
+只回传问题的级别、位置、标题和触发影响，陈述已观察事实，不主动要求来源 Agent 修复或补做验收，不附总结、覆盖清单或例行说明。
 问题必须由 Reviewer 实际复现并提供同版检查与证据；静态推断不能进入新报告的问题列表，也不回传旧报告中的静态问题。
-无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，不判定通过、不投递疑点。
+无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不投递疑点。
 此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
 仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
 `POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；

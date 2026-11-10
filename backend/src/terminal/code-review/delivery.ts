@@ -34,7 +34,7 @@ export async function deliverCodeReview(store: CodeReviewStore, record: ReviewRe
   run.delivery = "writing";
   await store.save();
   try {
-    const text = [run.stale ? "代码已变化，请按当前代码核对并修复以下 Review 问题：" : "请核对并修复以下 Review 问题：",
+    const text = [run.stale ? "以下为冻结快照中已复现的 Review 问题；当前代码已变化：" : "以下为本轮 Review 已复现的问题：",
       ...findings.map((finding) => `${finding.severity} ${finding.path}:${finding.lineStart}-${finding.lineEnd} (${finding.changeKind}/${finding.side}) ${finding.title}\n${finding.impact}`),
       ].join("\n\n");
     // Use exactly the ordinary terminal input path. Its normal sending/queuing

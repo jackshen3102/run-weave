@@ -14,7 +14,6 @@ struct TerminalInstantReplyBar: View {
   let enabled: Bool
   let sending: Bool
   let send: (String) -> Void
-  let close: () -> Void
 
   var body: some View {
     HStack(spacing: 4) {
@@ -32,13 +31,6 @@ struct TerminalInstantReplyBar: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
       }
-      Button(action: close) {
-        Image(systemName: "chevron.down").font(.caption)
-          .frame(width: 44, height: 44).contentShape(Rectangle())
-      }
-      .foregroundColor(.secondary)
-      .accessibilityLabel("收起一键回复")
-      .accessibilityIdentifier("terminal-instant-replies-close")
     }
     .buttonStyle(.plain)
     .foregroundColor(TerminalAppearance.accent)

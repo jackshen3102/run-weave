@@ -26,10 +26,10 @@ struct TerminalCodeReviewRun: Decodable, Identifiable {
   var status: String {
     if caseStatus == "closed" { return "审查已结束 · 用户结束" }
     if caseStatus == "passed", (findingCount ?? 0) > 0 { return "审查事项已完成 · 本轮发现 \(findingCount ?? 0) 个问题" }
-    if let error { return error.message }
+    if let error { return error.code == "review_incomplete" ? "验收阻塞：存在覆盖或复现缺口" : error.message }
     if phase == "completed" {
       let label = ["skipped": "无需回传", "pending": "等待回传", "writing": "正在回传", "written": "已回传", "unavailable": "仅展示报告", "target_changed": "来源已变化", "unknown": "回传未确认"][delivery] ?? ""
-      let result = findingCount == 0 ? "审查完成 · 未发现 Bug" : "待修复／复审 · \(findingCount ?? 0) 个问题"
+      let result = findingCount == 0 ? "审查完成 · 未发现 Bug" : "审查完成 · 发现 \(findingCount ?? 0) 个问题"
       return "\(result) · \(label)" + (stale ? " · 代码已变化" : "")
     }
     return ["preparing": "准备审查", "starting": "启动审查终端", "reviewing": "正在审查", "blocked": "审查已阻塞", "failed": "审查失败", "cancelled": "审查已中断"][phase] ?? phase
