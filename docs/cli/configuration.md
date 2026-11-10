@@ -84,6 +84,19 @@ Claude 的操作能力仍为 `unavailable / integration_unverified`。`unsupport
 不能将未接通的 Runweave adapter 宣称为上游不支持。既有 provider 的操作入口和默认值不变，
 具体操作仍重新核对当前目标。合同入口为 [共享能力类型](../../packages/shared/src/agent-capabilities.ts)。
 
+Claude 当前接入分为三条独立路径：
+
+- [原生正文阅读](../architecture/terminal-code-preview.md)按当前 pane 的真实进程和 session 定位只读记录；
+  可读不表示已完成受管 prepare/resume 或生命周期接入。
+- [飞书完成通知](../architecture/terminal-completion-notifications.md#claude-原生空闲确认)等待同代次的原生空闲确认，
+  不改变 TerminalState，也不启用 Claude 桌面通知或声音。
+- 结构化问答与权限回传、实时模型设置、fork、旁聊、后台任务和内部 Agent 的 Claude 接入仍未开放；
+  原生 CLI 能执行相应命令不能代替产品 adapter、权限边界和跨端验收。
+
+不把 Codex 执行权限机械映射为 Claude 权限模式，也不通过默认 bypass 补齐缺失能力。
+现有任务、默认 provider 和活跃会话保持原归属；后续接入须分别核对平台、版本和实际执行策略。
+验收入口与未完成边界见[Claude 集成验收](../testing/README.md#claude-code-集成验收)。
+
 ## 默认终端 Shell
 
 `terminal.defaultShell.command` 和 `terminal.defaultShell.args` 都可不设置，缺失或 `null`
