@@ -9,6 +9,7 @@ struct TerminalComposerSheet: View {
   let editor: CommandTextEditor
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
+  var shortcutsInitiallyVisible = false
   var sideChat: SideChatModel?
   var onSideChat: (() -> Void)?
   let onDismiss: () -> Void
@@ -25,6 +26,7 @@ struct TerminalComposerSheet: View {
           session: session, controller: controller, terminalID: terminalID,
           availableHeight: geometry.size.height, preventsDismissal: $preventsDismissal,
           showingInstantReplies: $showingInstantReplies,
+          shortcutsInitiallyVisible: shortcutsInitiallyVisible,
           onActionSucceeded: onDismiss, onClose: onDismiss, closeDisabled: busy, onSideChat: onSideChat, sideChat: sideChat, textEditor: editor
         )
         .id(ObjectIdentifier(controller))
@@ -76,6 +78,7 @@ struct ComposerView: View {
     session: AppSession, controller: SessionController, terminalID: String, active: Bool = true,
     availableHeight: CGFloat, preventsDismissal: Binding<Bool>,
     showingInstantReplies: Binding<Bool>,
+    shortcutsInitiallyVisible: Bool = false,
     onActionSucceeded: @escaping () -> Void, onClose: @escaping () -> Void, closeDisabled: Bool, onSideChat: (() -> Void)? = nil, sideChat: SideChatModel? = nil, textEditor: CommandTextEditor
   ) {
     self.session = session
@@ -90,6 +93,7 @@ struct ComposerView: View {
       session: session, controller: controller, terminalID: terminalID))
     _preventsDismissal = preventsDismissal
     _showingInstantReplies = showingInstantReplies
+    _showingShortcuts = State(initialValue: shortcutsInitiallyVisible)
     self.onActionSucceeded = onActionSucceeded
     self.onSideChat = onSideChat
     self.sideChat = sideChat
@@ -141,7 +145,11 @@ struct ComposerView: View {
                 .font(.caption).foregroundColor(.secondary).lineLimit(2)
             }
             if showingShortcuts {
-              ShortcutBar(controller: controller, enabled: state.snapshot.canWrite && state.snapshot.canSend)
+              ShortcutBar(enabled: state.snapshot.canWrite && state.snapshot.canSend && !stopping && !submitting) { sequence in
+                guard session.terminal?.id == terminalID, session.terminalController === controller,
+                  session.canWrite, controller.canSend, !stopping, !submitting else { return }
+                controller.sendRaw(sequence)
+              }
             }
             if let failure {
               Button { showingFailure = true } label: {

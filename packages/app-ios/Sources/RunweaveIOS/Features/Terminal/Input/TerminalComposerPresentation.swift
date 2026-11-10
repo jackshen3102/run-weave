@@ -10,6 +10,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
   @Binding var isPresented: Bool
   @Binding var preventsDismissal: Bool
   @Binding var showingInstantReplies: Bool
+  var shortcutsInitiallyVisible = false
   var sideChatAvailable = false
   var sideChat: SideChatModel?
   var onSideChat: (() -> Void)?
@@ -52,6 +53,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
         session: session, controller: controller, terminalID: terminalID,
         editor: editor,
         preventsDismissal: $preventsDismissal, showingInstantReplies: $showingInstantReplies,
+        shortcutsInitiallyVisible: shortcutsInitiallyVisible,
         sideChat: sideChat,
         onSideChat: sideChatAvailable ? onSideChat : nil,
         onDismiss: onDismiss
@@ -143,6 +145,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
     let sideChat: ObjectIdentifier?
     let preventsDismissal: Bool
     let showingInstantReplies: Bool
+    let shortcutsInitiallyVisible: Bool
     let scenePhase: ScenePhase
     let colorScheme: ColorScheme
 
@@ -156,6 +159,7 @@ struct TerminalComposerPresentation: UIViewControllerRepresentable {
       sideChat = presentation.sideChat.map { ObjectIdentifier($0) }
       preventsDismissal = presentation.preventsDismissal
       showingInstantReplies = presentation.showingInstantReplies
+      shortcutsInitiallyVisible = presentation.shortcutsInitiallyVisible
       scenePhase = presentation.scenePhase
       colorScheme = presentation.colorScheme
     }

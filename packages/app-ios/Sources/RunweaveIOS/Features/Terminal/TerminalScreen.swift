@@ -32,7 +32,8 @@ struct TerminalScreen: View {
   @State private var shareFailure: String?
   @State private var showingComposer = false
   @State private var composerViewportCovered = false
-  @AppStorage(DevicePreferences.instantRepliesVisibleKey, store: DevicePreferences.store) private var showingInstantReplies = false
+  @AppStorage(DevicePreferences.terminalQuickActionModeKey, store: DevicePreferences.store) private var quickActionMode: TerminalQuickActionMode = .shortcuts
+  @AppStorage(DevicePreferences.terminalQuickActionsVisibleKey, store: DevicePreferences.store) private var quickActionsVisible = true
   @State private var sendingInstantReply = false
   @AccessibilityFocusState private var composerTriggerFocused: Bool
   @State private var browserPresentationID = UUID()
@@ -45,6 +46,7 @@ struct TerminalScreen: View {
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
   init(session: AppSession, controller: SessionController, details: TerminalDetails, sourceIsParent: Bool = false) {
+    DevicePreferences.migrateTerminalQuickActions()
     self.session = session
     self.controller = controller
     self.browser = session.browser
@@ -283,7 +285,13 @@ struct TerminalScreen: View {
         session: session, controller: controller, terminalID: details.id,
         editor: composerEditor,
         isPresented: $showingComposer, preventsDismissal: $composerPreventsDismissal,
-        showingInstantReplies: $showingInstantReplies,
+        showingInstantReplies: Binding(
+          get: { quickActionsVisible && quickActionMode == .replies },
+          set: { visible in
+            if visible { quickActionMode = .replies }
+            quickActionsVisible = visible
+          }),
+        shortcutsInitiallyVisible: quickActionsVisible && quickActionMode == .shortcuts,
         sideChatAvailable: sideChat.capabilities != nil,
         sideChat: sideChat,
         onSideChat: { Task { await sideChat.open() } },
@@ -400,12 +408,7 @@ struct TerminalScreen: View {
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
       TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible || showingConversation).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 8)
-        .ignoresSafeArea(.container, edges: .bottom)
-    }
-    .overlay(alignment: .bottom) {
       terminalDock
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .ignoresSafeArea(.container, edges: showingInstantReplies ? .bottom : [])
     }
   }
 
@@ -416,7 +419,7 @@ struct TerminalScreen: View {
   }
 
   private var terminalDock: some View {
-    VStack(spacing: showingInstantReplies ? 0 : 8) {
+    VStack(spacing: 0) {
       if let failure = sideChat.failure, !sideChat.visible {
         Text(failure).font(.caption).foregroundColor(.red).frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal, 16)
@@ -430,6 +433,14 @@ struct TerminalScreen: View {
           unconfirmedInput: session.unconfirmedInputDrafts.contains(details.id), open: openComposer)
           .accessibilityFocused($composerTriggerFocused)
         TerminalNextCompletionButton(session: session)
+        if !quickActionsVisible {
+          Button { quickActionsVisible = true } label: {
+            Image(systemName: quickActionMode == .shortcuts ? "keyboard" : "bolt.fill")
+              .frame(width: 44, height: 44)
+          }
+          .accessibilityLabel(quickActionMode == .shortcuts ? "展开快捷键" : "展开快捷回复")
+          .accessibilityIdentifier("terminal-quick-actions-expand")
+        }
       }
       .font(.system(size: 20, weight: .medium))
       .foregroundColor(TerminalAppearance.accent)
@@ -446,19 +457,53 @@ struct TerminalScreen: View {
         }
       }
       .padding(.horizontal, 16)
-      if showingInstantReplies {
-        TerminalInstantReplyBar(
-          enabled: session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand,
-          sending: sendingInstantReply,
-          send: sendInstantReply, close: { showingInstantReplies = false })
-          .fixedSize(horizontal: true, vertical: false)
-          .frame(maxWidth: .infinity)
-          .background(TerminalAppearance.background)
-      }
+      if quickActionsVisible { quickActionBar }
     }
     .frame(maxWidth: .infinity)
     .buttonStyle(.plain)
-    .padding(.vertical, showingInstantReplies ? 0 : 8)
+    .padding(.vertical, 4)
+    .background(TerminalAppearance.background)
+  }
+
+  private var quickActionBar: some View {
+    HStack(spacing: 4) {
+      if quickActionMode == .shortcuts {
+        ShortcutBar(enabled: quickActionsEnabled, send: sendShortcut)
+      } else {
+        ScrollView(.horizontal, showsIndicators: false) {
+          TerminalInstantReplyBar(enabled: quickActionsEnabled, sending: sendingInstantReply, send: sendInstantReply)
+        }
+        .frame(height: 44)
+      }
+      Menu {
+        Button {
+          quickActionMode = quickActionMode == .shortcuts ? .replies : .shortcuts
+        } label: {
+          Label(quickActionMode == .shortcuts ? "切换到快捷回复" : "切换到快捷键",
+            systemImage: quickActionMode == .shortcuts ? "bolt.fill" : "keyboard")
+        }
+        Button { quickActionsVisible = false } label: {
+          Label("收起", systemImage: "chevron.down")
+        }
+      } label: {
+        Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle())
+      }
+      .accessibilityLabel("快捷操作")
+      .accessibilityValue(quickActionMode == .shortcuts ? "快捷键" : "快捷回复")
+      .accessibilityIdentifier("terminal-quick-actions-menu")
+    }
+    .padding(.horizontal, 8)
+    .accessibilityIdentifier("terminal-quick-actions-bar")
+  }
+
+  private var quickActionsEnabled: Bool {
+    session.terminal?.id == details.id && session.terminalController === controller
+      && session.canWrite && controller.canSend && !sendingInstantReply && !stoppingCommand
+  }
+
+  private func sendShortcut(_ sequence: String) {
+    guard quickActionsEnabled else { return }
+    controller.sendRaw(sequence)
   }
 
   private func openComposer() {

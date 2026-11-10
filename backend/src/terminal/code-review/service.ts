@@ -255,7 +255,7 @@ export class CodeReviewService {
     run.reportId = id; run.summary = report.summary; run.findingCount = report.findings.length;
     const unverified = !report.findings.length && !report.coverageComplete;
     run.phase = unverified ? "blocked" : "completed"; run.delivery = report.findings.length ? "pending" : "skipped";
-    run.error = unverified ? { code: "review_incomplete", message: "审查存在覆盖或复现缺口，未判定通过" } : null;
+    run.error = unverified ? { code: "review_incomplete", message: "验收阻塞：存在覆盖或复现缺口" } : null;
     for (const item of this.store.records.values()) {
       if (item.run.caseId === run.caseId) item.run.caseStatus = !report.findings.length && !unverified ? "passed" : "open";
     }
