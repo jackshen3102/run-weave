@@ -33,5 +33,57 @@
       "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
     ],
     "reason": "Same reviewed storage tree with LF checkout; the existing byte-based fingerprint includes checkout line endings."
+  },
+  {
+    "platform": "linux",
+    "target": "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+    "from": [
+      "83d0999909b1e5a50f6f5e56ed81693a960a709965e17822b5ad198a096a46f7",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003"
+    ],
+    "sourceRevisions": [
+      "f866322b32d9c3896ed3c60bc387f1184a104614",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe"
+    ],
+    "reason": "Reviewed storage-source delta from Server 0.1.14 changes only App Server projector agent classification and event filtering; persisted schemas and storage readers/writers are unchanged. Preserve the existing explicit Linux 0.1.3 v4-to-v5 task migration bridge."
+  },
+  {
+    "platform": "darwin",
+    "target": "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+    "from": [
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003"
+    ],
+    "sourceRevisions": ["9301bc5fbeb157ec84245bf38efb0073647b86fe"],
+    "reason": "Server 0.1.14 LF storage tree to the reviewed Claude projector update. No persisted schema or storage format changed; only event classification and filtering changed."
+  },
+  {
+    "platform": "win32",
+    "target": "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003"
+    ],
+    "sourceRevisions": [
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe"
+    ],
+    "reason": "Reviewed Claude projector update with LF checkout. No persisted schema or storage format changed from Server 0.1.14. Retain the reviewed Windows v4/v5 bridge; populated v4 scheduled tasks still require explicit preview/apply."
+  },
+  {
+    "platform": "win32",
+    "target": "a2587197ffe98093d8d57f40a686b5de2efef5c2e767dafa155e938da94ae5e5",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003"
+    ],
+    "sourceRevisions": [
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe"
+    ],
+    "reason": "Reviewed Claude projector update with CRLF checkout. No persisted schema or storage format changed from Server 0.1.14. Retain the reviewed Windows v4/v5 bridge; populated v4 scheduled tasks still require explicit preview/apply."
   }
 ]
