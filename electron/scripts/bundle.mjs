@@ -135,14 +135,14 @@ await build({
   entryPoints: ["../backend/src/activity/database/sqlite-worker.ts"],
   outfile: activityWorkerEntry,
   format: "cjs",
-  external: ["better-sqlite3"],
+  external: ["better-sqlite3", "fs-native-extensions"],
 });
 await build({
   ...shared,
   entryPoints: ["../backend/src/evolution/storage/sqlite-worker.ts"],
   outfile: evolutionWorkerEntry,
   format: "cjs",
-  external: ["better-sqlite3"],
+  external: ["better-sqlite3", "fs-native-extensions"],
 });
 const scheduledTasksWorkerEntry = path.resolve(
   outputDir,

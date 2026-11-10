@@ -20,7 +20,7 @@ import crypto from "node:crypto";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
-const AGENT_HOOKS = ["codex", "trae", "traecli", "traex", "pi"] as const;
+const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi"] as const;
 
 const agentHookStateSchema = z
   .object({
@@ -161,7 +161,7 @@ export function createInternalTerminalAgentHookRouter(options: {
         if (target.panel) await recoverCodexToolConversation(options.terminalSessionManager,
           target.panel, parsed.data.threadId, parsed.data.operationId);
       }
-      if (parsed.data.agent === "pi") {
+      if (parsed.data.agent === "pi" || parsed.data.agent === "claude") {
         const result = await processTerminalAgentHook(options, {
           ...parsed.data,
           hookEvent: "AgentMetadata",

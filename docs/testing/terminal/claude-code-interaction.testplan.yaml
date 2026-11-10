@@ -1,0 +1,254 @@
+version: 1
+name: Claude Code 跨端日常交互
+description: >
+  候选 Claude 输入、附件、设置、原任务问答、分叉与工具调用的待执行合同，不代表当前已实现。
+  每例自行建立独立 fixture，浏览器使用 toolkit:playwright-cli，原生 iOS 使用 toolkit:agent-device
+  和已分配的共享测试设备，不以 HTTP 接收、构建、技能发现或模拟事件代替真实采用回执。
+
+cases:
+  - id: CCI-001
+    name: Web 多行草稿完整投递且只提交一次
+    required: true
+    description: >
+      浮动输入框替换含旧内容的原生草稿后，Claude 接受的文本与新草稿逐字一致。
+    preconditions:
+      - 本例独立真实页面连接专属 Claude pane，已通过基础身份验收，原生有多行旧草稿且光标位于中间。
+      - 本例可核对原生记录中的用户消息和投递回执。
+    steps:
+      - 使用 toolkit:playwright-cli 输入含中文、emoji、换行及斜杠样例的新草稿并提交；确认原生只接受一次完整内容，没有旧行残留或被解释为额外命令。
+      - 确认接受前草稿未清除，确认后才清除；清理本例页面和会话。
+
+  - id: CCI-002
+    name: 原生 iOS 输入只投递当前 Claude 目标
+    required: true
+    description: >
+      手机发送的多行内容被原 panel 接受，切换目标后迟到结果不能清除新目标草稿。
+    preconditions:
+      - 本例候选原生 App 已安装到测试设备，建立独立 agent-device 会话并连接专属 Backend。
+      - 本例有两个内容不同的 Claude terminal，可延迟第一个目标的输入回执并核对原生消息。
+    steps:
+      - 使用 toolkit:agent-device 向第一个目标发送多行 marker，回执延迟期间切到第二个目标并填写新草稿。
+      - 释放第一个回执；确认 marker 只在第一个 session 出现一次，第二个草稿保持不变。
+      - 结束本例设备会话并清理两个测试 terminal。
+
+  - id: CCI-003
+    name: 忙碌期间后续输入按 Claude 队列语义执行
+    required: true
+    description: >
+      忙碌时排入的消息不提前执行、不打断当前任务，也不进入 shell；原任务结束后仅执行一次。
+    preconditions:
+      - 本例真实页面有正在运行可控长请求的 Claude pane，候选 queue capability 已验证为 available。
+      - 本例能观察原生轮次顺序与接受的消息。
+    steps:
+      - 使用 toolkit:playwright-cli 在运行期间排入唯一 marker 后续输入；确认原请求继续运行，后续未被当作立即指令或 shell 输入。
+      - 等待原请求结束；确认 marker 在后续轮次只被消费一次，清理本例资源。
+
+  - id: CCI-004
+    name: 图文与文件被原模型实际读取后才确认采用
+    required: true
+    description: >
+      图文附件使用执行 Backend 可访问的内容，上传完成不能提前清除待交付草稿。
+    preconditions:
+      - 本例独立 Claude 与真实页面可用，有带唯一视觉 marker 的测试图和独立文本文件，均属于本例。
+      - 本例可延迟附件交付确认，图片内容未直接写入 prompt 文本。
+    steps:
+      - 使用 toolkit:playwright-cli 提交图文混排和文件，确认交付未确认前草稿仍可恢复。
+      - 让真实 Claude 只读说明图片 marker 与文件内容；确认来源可核对且同一消息只采用一次，随后才清除草稿。
+      - 清理本例上传文件、页面和会话。
+
+  - id: CCI-005
+    name: Web 当前模型设置必须由原生读回确认
+    required: true
+    description: >
+      实时模型和 effort 的成功响应对应当前 session 的真实采用值，旧 revision 或不可确认结果不会显示为生效。
+    preconditions:
+      - 本例独立 Claude 支持已验证的实时设置与两个可用模型选项，真实页面已打开目标设置。
+      - 本例可读取原生设置，并可仅延迟自己的采用确认。
+    steps:
+      - 使用 toolkit:playwright-cli 选择支持的模型与 effort；确认原生读回匹配才显示生效。
+      - 使用旧 revision 提交，确认 409 且未改变设置；延迟一次新的采用确认，确认显示未确认并且不自动重发。
+      - 核对最终原生值后清理本例资源。
+
+  - id: CCI-006
+    name: iOS 模型选项遵守当前 Claude 能力与目标
+    required: true
+    description: >
+      原生 App 展示实际模型及合法 effort，提交只改变当前 session，其他 panel 和默认值保持原值。
+    preconditions:
+      - 本例候选 App 和独立 agent-device 会话已连接包含两个 Claude panel 的测试 Backend。
+      - 当前 panel 的实时设置已通过原生能力验证，已记录另一 panel 和下次启动默认值。
+    steps:
+      - 使用 toolkit:agent-device 打开当前模型设置并选择合法组合；确认选项来自实际目录，原生采用后 App 显示一致。
+      - 确认另一个 panel 与新会话默认值未被改变，关闭设置后原草稿保留；结束本例设备会话并清理资源。
+
+  - id: CCI-007
+    name: 下次启动默认配置不伪装为活跃会话生效
+    required: true
+    description: >
+      修改 Claude 默认模型仅作用新启动，当前会话不被静默重启或改模型，实时设置不支持时明确提示。
+    preconditions:
+      - 本例独立 Backend 有活跃 Claude 会话和受控模型默认配置，已记录原进程与模型。
+      - 本例真实设置页面可区分新会话默认值与当前会话设置。
+    steps:
+      - 使用 toolkit:playwright-cli 修改下次启动默认值；确认活跃进程和原生模型保持原值，页面标注作用范围。
+      - 在本例新 pane 启动 Claude；确认采用新默认值；将本例实时设置 capability 设为不支持并刷新，确认不展示可成功修改的假入口。
+      - 清理本例会话与配置。
+
+  - id: CCI-008
+    name: 手机回答真实问题后同一 Claude 任务继续
+    required: true
+    description: >
+      AskUserQuestion 的答案通过原生等待请求回到原任务，不启动替代任务或向 TUI 输入答案文本。
+    preconditions:
+      - 本例候选 App 已建立独立 agent-device 会话，连接专属正在等待真实 AskUserQuestion 的 Claude pane。
+      - 已记录 session、进程、requestId 和用户输入计数，问题含可核对的选项。
+    steps:
+      - 使用 toolkit:agent-device 打开问题并作答；确认原生工具收到对应 answers，同一进程/session 继续执行且没有新建 turn 替代或终端输入。
+      - 确认原草稿、附件与队列保持不变，关闭本例问题页并清理设备会话和 pane。
+
+  - id: CCI-009
+    name: 手机权限决定仅作用原请求且不扩大持久权限
+    required: true
+    description: >
+      手机一次性允许或拒绝的结果送回原生权限请求，不修改全局规则或自动启用 bypass。
+    preconditions:
+      - 本例隔离 Claude 项目有可控制的无害读操作权限请求，已记录原权限设置和请求归属。
+      - 本例候选 App 建立独立 agent-device 会话，具备写权限，能够观察原生采用结果。
+    steps:
+      - 使用 toolkit:agent-device 对本例第一次请求选择拒绝；确认原调用未执行，Claude 收到拒绝。
+      - 对本例下一次独立同类请求选择一次性允许；确认只有对应请求被允许，原配置和权限模式未变化。
+      - 清理本例设备会话和测试项目。
+
+  - id: CCI-010
+    name: 同一原生待答请求只有一个有效决定
+    required: true
+    description: >
+      手机、电脑以及重复点击竞争同一请求时最多一个决定被原执行者采用，冲突不会形成第二次投递。
+    preconditions:
+      - 本例独立 Claude 正在等待真实问题，电脑与手机均连接同一测试目标。
+      - 本例可控制提交先后、记录 operationId，并核对原生采用次数。
+    steps:
+      - 使用 toolkit:agent-device 发起答案提交，同时在本例电脑处理同一请求；重放同 operationId 同答案及冲突答案。
+      - 确认同内容幂等、冲突或已处理请求失效，原生只采用一个决定，结果未知时保留草稿且不自动重试。
+      - 清理本例设备会话和等待请求。
+
+  - id: CCI-011
+    name: 连接目标变化使旧问题失效
+    required: true
+    description: >
+      旧 requestId 和 generation 不能提交到切换后的目标，迟到响应不影响新问题与草稿。
+    preconditions:
+      - 本例测试 App 连接两个专属目标，第一个 Claude 有真实问题，已建立独立 agent-device 会话。
+      - 本例可延迟自己的问答响应并记录新旧 generation。
+    steps:
+      - 使用 toolkit:agent-device 保留第一个问题草稿并切换目标；确认旧页失效，新目标无旧问题或答案。
+      - 释放本例迟到响应并提交旧请求；确认 409 或 expired，旧响应不影响新目标且未重放答案。
+      - 结束本例设备会话并清理资源。
+
+  - id: CCI-012
+    name: Claude 分叉保留原会话并确认新身份
+    required: true
+    description: >
+      分叉精确来源 session 后生成新 session，来源历史和 cwd 保留，旧 revision 不触发额外分叉。
+    preconditions:
+      - 本例真实页面有已 idle 的专属 Claude session，带来源 marker，可读取原生新旧 ID 和文件哈希。
+      - 本例候选 fork 入口与 operationId 幂等校验已实现。
+    steps:
+      - 使用 toolkit:playwright-cli 分叉，确认实际使用精确 resume 与 fork-session，新 session ID 与来源不同且 cwd 和来源 marker 正确。
+      - 重放相同 operation 与旧 target revision；确认不生成额外分叉，来源 session 内容保持原值；清理本例会话。
+
+  - id: CCI-013
+    name: 独立旁聊落实只读边界且不接管主任务
+    required: true
+    description: >
+      Claude 旁聊有独立进程与 session，无法写项目或访问网络，结束和取消不改变主任务身份与通知。
+    preconditions:
+      - 本例平台声明 Claude sideChat available，专属主任务和旁聊执行器可核对进程归属。
+      - 本例有允许只读的测试项目及独立网络探测 sink，可观察写入和联网尝试是否被实际边界拒绝。
+    steps:
+      - 使用 toolkit:playwright-cli 从选定内容打开旁聊；确认新进程/session 独立，读取范围正确，写文件与联网尝试被实际限制。
+      - 取消旁聊；确认只回收旁聊 owner，主任务仍可继续且无旁聊制造的主任务 completion，清理本例资源。
+
+  - id: CCI-014
+    name: Claude 加载同源技能和仓库规则并完成 rw 调用
+    required: true
+    description: >
+      Toolkit 技能发现、就近仓库规则加载与真实 rw 只读执行分别得到证据，安装不改写其他项目配置。
+    preconditions:
+      - 本例独立 Claude 已安装候选 Toolkit，测试项目有根和就近规则的不同 marker，另一项目配置摘要已记录。
+      - 本例拥有可供只读查询的隔离 Backend，rw 鉴权可用。
+    steps:
+      - 让本例 Claude 按 Toolkit 技能执行一次 rw 只读查询并说明当前目录的规则 marker；确认规则与真实 rw 输出可回查。
+      - 确认另一项目配置摘要不变，证据无凭据；清理本例项目与安装。
+
+  - id: CCI-015
+    name: Claude 通过已声明工具完成真实浏览器只读操作
+    required: true
+    description: >
+      Claude 使用实际可调用的浏览器工具读取现有测试页面，不能把技能说明或伪造截图当作操作结果。
+    preconditions:
+      - 本例专属 Claude 已接入候选浏览器工具，独立测试页面有动态唯一 marker，可观察页面操作。
+      - 本例已按 toolkit:playwright-cli 解析并附着正确 Profile 和 Group，不使用用户业务页面。
+    steps:
+      - 让 Claude 使用已安装能力读取该页面 marker，并在本例页面执行一次无副作用展开操作；确认工具记录与真实 UI 的 marker 和展开结果一致。
+      - 清理本例页面和会话，保留脱敏调用证据。
+
+  - id: CCI-016
+    name: Claude 通过设备工具完成模拟器只读检查
+    required: true
+    description: >
+      Claude 能实际调用声明的设备工具读取指定模拟器内容，技能被加载或存在截图不能代替设备调用证据。
+    preconditions:
+      - 本例已按共享设备池分配独立测试模拟器和 task-dir，候选设备工具可被专属 Claude 调用。
+      - 本例模拟器测试 App 有可观察的唯一 marker，设备会话与真实用户设备分离。
+    steps:
+      - 让 Claude 按 toolkit:agent-device 读取本例模拟器界面 marker；确认实际工具调用命中已分配的设备，读取结果与真实界面一致。
+      - 结束本例设备会话并完成设备池 finish，清理专属 Claude 会话。
+
+  - id: CCI-017
+    name: 手机计划确认回到原 Claude 计划请求
+    required: true
+    description: >
+      ExitPlanMode 的接受或拒绝遵循原生 schema，不通过终端文本绕过用户选择，也不持久扩大权限。
+    preconditions:
+      - 本例独立 Claude 正在等待真实计划确认，候选 App 已建立 agent-device 会话并能展示计划内容。
+      - 已记录原 session、权限设置与待处理请求，计划仅包含本例无害操作。
+    steps:
+      - 使用 toolkit:agent-device 检查计划并选择拒绝；确认决定回到原生请求，计划未被自动执行，权限设置保持原值。
+      - 结束本例等待和设备会话，清理专属项目。
+
+  - id: CCI-018
+    name: 原生 Hook 等待超时不会自动授权或重放答案
+    required: true
+    description: >
+      手机未能在原生 Hook 的有界等待内交付时，请求失效并按已验证原生策略退出，不能自动允许或继续等待到无界。
+    preconditions:
+      - 本例独立 Claude 正在等待真实权限请求，Hook timeout 明确且不超过 300 秒。
+      - 本例可只断开自己的问答通道，观察原生请求结束与 Backend request 状态，不影响用户任务。
+    steps:
+      - 断开本例问答通道并等待原生期限；确认原请求 expired，没有自动 allow 或持久权限修改，原生回退到可处理交互或明确取消。
+      - 恢复连接并提交旧答案；确认拒绝且无自动重放，清理本例请求和会话。
+
+  - id: CCI-019
+    name: 旧客户端不会把权限决定当成普通问题
+    required: true
+    description: >
+      无新协议支持的客户端无法提交 Claude permission/plan 决定，原任务仍可回原终端处理。
+    preconditions:
+      - 本例独立 Claude 有真实权限请求，测试接口可通过旧协议客户端访问。
+      - 本例可观察原生请求是否采用决定与权限是否改变。
+    steps:
+      - 以旧协议读取本例问题；确认不会将权限决定伪装成普通文本问题，返回明确回原终端处理的能力说明。
+      - 以旧协议尝试提交文本答案；确认不能转成权限允许，原请求未被处理、权限不变，清理本例资源。
+
+  - id: CCI-020
+    name: 只读登录态不能回答权限请求
+    required: true
+    description: >
+      客户端即使知道 requestId 和 generation，没有写权限也不能向原 Claude 提交权限决定。
+    preconditions:
+      - 本例独立 Claude 有真实权限请求，测试者有合法只读登录态并知道该请求的非敏感定位信息。
+      - 本例可观察原生请求是否采用决定与权限设置是否改变。
+    steps:
+      - 以只读登录态提交结构合法的权限允许决定；确认鉴权拒绝，原请求未被处理、权限设置保持原值。
+      - 清理本例请求和测试资源。

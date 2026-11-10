@@ -116,6 +116,17 @@ export async function processTerminalAgentHook(
     };
   }
 
+  // The native Claude adapter is not yet generation-bound. Recognize the
+  // provider without accepting legacy hooks as state, input or completion proof.
+  if (input.agent === "claude") {
+    return {
+      status: "ignored", terminalSessionId: session.id, agent: input.agent,
+      hookEvent: input.hookEvent, activeCommand: session.activeCommand,
+      terminalState: options.terminalStateService.getCurrent(session.id, session),
+      panelId: null, ignoreReason: "agent_lifecycle_unavailable",
+    };
+  }
+
   const panelResolution = resolveHookPanel(
     options.terminalSessionManager,
     session.id,

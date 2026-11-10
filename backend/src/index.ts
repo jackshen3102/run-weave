@@ -40,6 +40,7 @@ import { createAppHomeOverviewRouter } from "./routes/app/home-overview";
 import { createAppServerStateRouter } from "./routes/app-server/state";
 import { createDiagnosticLogsRouter } from "./routes/diagnostics/logs";
 import { createAgentModelCatalogRouter } from "./routes/agent-model-catalog";
+import { createAgentCapabilitiesRouter } from "./routes/agent-capabilities";
 import { createRaceRouter } from "./routes/race";
 import { registerActivityRoutes } from "./routes/activity/registration";
 import {
@@ -290,6 +291,7 @@ function createHttpApp(
     requireAuth,
     createAgentModelCatalogRouter(services.agentModelCatalogService),
   );
+  app.use("/api/agent-capabilities", requireAuth, createAgentCapabilitiesRouter(services.agentCapabilitiesService));
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
   app.use("/api/side-chats", requireTunnelAuth, requireAuth, createSideChatRouter(services.sideChatService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
@@ -484,7 +486,7 @@ async function startRuntime(): Promise<void> {
       `backend:${profileLock.getOwner().backendId}`,
     );
     resources.defer("runtime-services", () => services.dispose());
-    config.markApplied("backend.server", "backend.auth", "backend.tunnelAuth", "storage", "terminal", "logging", "agents.codex", "agents.traex");
+    config.markApplied("backend.server", "backend.auth", "backend.tunnelAuth", "storage", "terminal", "logging", "agents.codex", "agents.traex", "agents.claude");
     for (const domain of ["scheduledTasks", "knowledge", "appServer"]) {
       try { config.requireDomain(domain); config.markApplied(domain); } catch { config.reportError(domain); }
     }

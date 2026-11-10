@@ -485,11 +485,8 @@ try {
 
     assert.equal(appServerRequests[10].kind, "agent.hook");
     assert.equal(appServerRequests[10].payload.source, "claude");
-    assert.equal(appServerRequests[11].kind, "agent.completion");
-    assert.equal(appServerRequests[11].payload.source, "claude");
-    assert.equal(requests[12].url, "/internal/terminal-completion");
-    assert.equal(requests[12].body.source, "claude");
-    assert.equal(requests[12].body.commandName, "claude");
+    assert.equal(appServerRequests.length, 11, "unverified Claude Stop only records a raw hook fact");
+    assert.equal(requests.length, 12, "unverified Claude Stop must not publish a completion");
 
     await runToolkitHookCommand(
       getToolkitHookCommand(toolkitHooksConfig, "UserPromptSubmit"),
@@ -516,17 +513,17 @@ try {
       { replacePluginDirPlaceholder: false, setHookSource: false },
     );
 
-    assert.equal(appServerRequests[12].kind, "agent.hook");
-    assert.equal(appServerRequests[12].payload.source, "trae");
+    assert.equal(appServerRequests[11].kind, "agent.hook");
+    assert.equal(appServerRequests[11].payload.source, "trae");
     assert.equal(
-      appServerRequests[12].payload.stateHookEvent,
+      appServerRequests[11].payload.stateHookEvent,
       "UserPromptSubmit",
     );
-    assert.equal(requests[13].url, "/internal/terminal/agent-hook");
-    assert.equal(requests[13].body.agent, "trae");
-    assert.equal(requests[13].body.hookEvent, "UserPromptSubmit");
-    assert.equal(requests[13].body.threadId, "thread-trae-query");
-    assert.equal(requests[13].body.query, "safe query");
+    assert.equal(requests[12].url, "/internal/terminal/agent-hook");
+    assert.equal(requests[12].body.agent, "trae");
+    assert.equal(requests[12].body.hookEvent, "UserPromptSubmit");
+    assert.equal(requests[12].body.threadId, "thread-trae-query");
+    assert.equal(requests[12].body.query, "safe query");
 
     const ptyProviderFixture = {
       userPromptCommand: getToolkitHookCommand(

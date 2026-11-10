@@ -4,6 +4,7 @@ import { createThreadReaders } from "../agents/thread-readers.js";
 import { PiSessionReader } from "../pi/session-reader.js";
 import type { ThreadPreviewReader } from "../agents/thread-previews.js";
 import type { ConversationReader } from "../agents/conversation-reader.js";
+import type { ClaudeConversationReader } from "../claude/conversation-reader.js";
 import { ConversationReadError } from "../agents/conversation-source.js";
 import type { AppServerConversationQuery } from "@runweave/shared/terminal/conversation";
 import express from "express";
@@ -141,6 +142,7 @@ export function createHttpApp(options: {
   codexQuota?: CodexQuotaService;
   threadPreviews?: ThreadPreviewReader;
   conversations?: ConversationReader;
+  claudeConversationReader?: ClaudeConversationReader;
   getRuntimeStatusReport: () => RuntimeStatusReport;
 }): express.Express {
   const threadReader = createThreadReaders({
@@ -277,6 +279,10 @@ export function createHttpApp(options: {
       const response: AppServerThreadResponse = { thread, detail };
       res.json(response);
     } catch (error) {
+      if (error instanceof ConversationReadError) {
+        res.status(error.status).json({ code: error.code, message: error.message });
+        return;
+      }
       next(error);
     }
   });
@@ -359,6 +365,10 @@ export function createHttpApp(options: {
       const response = await threadReader(thread).detail(thread);
       res.json(response);
     } catch (error) {
+      if (error instanceof ConversationReadError) {
+        res.status(error.status).json({ code: error.code, message: error.message });
+        return;
+      }
       next(error);
     }
   });

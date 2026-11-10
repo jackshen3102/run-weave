@@ -1037,6 +1037,38 @@ Trae 可执行文件；多个入口统一
 | 约束              | 按字段类型校验                                  |
 | 显式迁移来源      | RUNWEAVE_TRAE_SESSIONS_DIR                      |
 
+## Claude Code
+
+配置域：`agents.claude`。
+
+### agents.claude.binary
+
+Claude Code 可执行文件；仅限程序名或绝对路径，不接受命令参数
+
+| 属性              | 合同                                                            |
+| ----------------- | --------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                      |
+| 默认              | 使用当前 Backend 的 PATH 查找 claude；不改变现有默认 provider。 |
+| 所属模块          | backend+app-server                                              |
+| 生效              | 所属进程重启                                                    |
+| 敏感 / 远端可修改 | 否 / 否                                                         |
+| 约束              | 按字段类型校验                                                  |
+| 显式迁移来源      | new-field:no-legacy-source                                      |
+
+### agents.claude.configDirectory
+
+Claude 原生配置目录的外部引用；会话根为其 projects 子目录，不复制凭据
+
+| 属性              | 合同                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                                                      |
+| 默认              | 显式实例目录优先，否则引用外部 CLAUDE_CONFIG_DIR 或操作系统用户目录下 .claude；必须为绝对路径。 |
+| 所属模块          | backend+app-server                                                                              |
+| 生效              | 所属进程重启                                                                                    |
+| 敏感 / 远端可修改 | 否 / 否                                                                                         |
+| 约束              | 按字段类型校验                                                                                  |
+| 显式迁移来源      | CLAUDE_CONFIG_DIR                                                                               |
+
 ## 伴随窗口
 
 配置域：`agents.companion`。

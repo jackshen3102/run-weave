@@ -1,0 +1,221 @@
+version: 1
+name: Claude Code 基础接入闭环
+description: >
+  Claude Code 候选实现的待执行验收合同，覆盖受管安装、真实生命周期、原生历史与精确恢复。
+  当前新增本文件不表示实现或验收通过。每例自行建立并清理独立资源，禁止使用用户活跃任务，
+  外发通知使用本例 sink，凭据不进入证据。受控事件检查与真实模型请求分别报告。
+
+cases:
+  - id: CCF-001
+    name: 重复安装只保留一个受管入口并保留第三方配置
+    required: true
+    description: >
+      同一内容版本重复安装及升级不增加有效 Runweave handler，用户认证、模型和第三方 hook 保持原值。
+    preconditions:
+      - 本例有独立配置目录与临时安装 home，含可识别的旧 Runweave hook 和第三方 hook，已记录非敏感配置摘要。
+      - 候选 Toolkit 安装器可在本例目录运行，所有通知指向本例 sink，不使用用户真实配置。
+    steps:
+      - 执行候选安装两次再升级一个候选内容版本；确认每个已支持事件只有一个有效 Runweave handler，第三方配置摘要不变且首次备份存在。
+      - 使用安装后的 Claude 在本例 pane 完成一次请求；确认上报来自当前插件版本，没有因多个安装入口重复完成提醒。
+      - 清理本例插件、配置和 pane，不触碰用户现有缓存。
+
+  - id: CCF-002
+    name: 无法解析的用户配置不会被安装器覆盖
+    required: true
+    description: >
+      配置格式损坏时安装明确失败并保留原始字节，不能用默认对象覆盖用户文件。
+    preconditions:
+      - 本例临时安装 home 的 Claude settings.json 是预先记录哈希的无效 JSON。
+      - 本例可以独立运行候选安装器并读取退出结果。
+    steps:
+      - 运行安装；确认报告配置解析失败，文件哈希不变，没有创建替代的空配置或启用重复入口。
+      - 清理本例安装 home。
+
+  - id: CCF-003
+    name: 准备命令提交不被误报为 Agent 就绪
+    required: true
+    description: >
+      未完成 trust 或认证的 Claude 只能处于 starting 或明确阻塞，业务 prompt 不进入 shell 或交互选择菜单。
+    preconditions:
+      - 本例独立项目和 pane 可确定性停留在 Claude trust 或认证界面，候选 rw prepare 已接入。
+      - 本例能读取 prepare 响应、目标状态及原生接受的消息，业务 prompt 含唯一 marker。
+    steps:
+      - 从 rw 准备 Claude；确认初始响应仅表示命令已提交，未出现 ready，唯一业务 marker 未被 shell 执行或当成菜单选择。
+      - 在本例 fixture 中明确完成原生前置后继续准备；确认原生 session 与当前 operation 已绑定才允许业务投递，marker 只被接受一次。
+      - 结束本例 Agent 和 pane。
+
+  - id: CCF-004
+    name: 真实 Claude 请求驱动对应面板状态
+    required: true
+    description: >
+      Claude 的真实活动与结束事实只改变其面板，普通 shell 输出不改变 Agent 生命周期。
+    preconditions:
+      - 本例隔离 Backend 和 App Server 已运行候选版本，Claude 模型及认证可用。
+      - 本例有专属 tmux pane，可读取原生记录、terminal-events 与状态，通知使用 sink。
+    steps:
+      - 启动 Claude 并提交只读请求；确认 provider 为 claude，真实执行期间为 agent_running，可信 settled 后回到 agent_idle。
+      - 退出 Claude 并执行输出 working 和 ready 的普通 shell 命令；确认状态为 shell_idle，没有成功 completion。
+      - 清理本例进程和服务。
+
+  - id: CCF-005
+    name: 错误归属和旧代 Hook 不污染当前任务
+    required: true
+    description: >
+      token、Backend、provider、panel、session 或 operation 不匹配的事件均不能改变目标状态或完成计数。
+    preconditions:
+      - 本例有两个独立 Backend 和专属 pane，其中一个当前运行 Claude，已记录身份与事件 cursor。
+      - 本例可延迟和重放自己的脱敏事件，不输出 token，也不访问其他任务。
+    steps:
+      - 依次发送错误 token、错误 Backend、错误 provider、错误 panel 和旧 operation 的本例事件；确认当前 Claude 状态和两个 Backend 的完成计数均未被污染。
+      - 发送匹配当前归属的原生事件；确认合法链路仍可推进，不因拒绝记录而失效。
+      - 清理本例服务和重放工具。
+
+  - id: CCF-006
+    name: 子 Agent 和嵌套 CLI 不结束主任务
+    required: true
+    description: >
+      主任务仍在活动时，子 Agent 或嵌套 Claude 的结束不能将主 panel 设为 idle 或产生主任务完成通知。
+    preconditions:
+      - 本例独立 Claude 任务可稳定触发子 Agent 或嵌套 CLI，并在其结束后保持主任务继续执行。
+      - 本例可核对主子 session、进程归属和通知 sink。
+    steps:
+      - 运行本例任务并等待子活动结束；确认主 panel 仍属原 session 且未出现主任务成功完成提醒。
+      - 等待主任务真正 settled；确认其结束事实才作用主 panel，清理本例进程。
+
+  - id: CCF-007
+    name: 压缩后继续执行不提前结束活动
+    required: true
+    description: >
+      同一活动的上下文压缩及后续继续执行期间不被消费为完成。
+    preconditions:
+      - 本例真实 Claude fixture 可稳定触发上下文压缩后继续执行。
+      - 本例能观察压缩、继续与最终 settled，通知仅进入本例 sink。
+    steps:
+      - 执行该活动并观察压缩及继续窗口；确认当前活动未结束且没有成功 completion。
+      - 等待最终 settled；确认仅最终结束产生有效结束事实，清理本例资源。
+
+  - id: CCF-008
+    name: 中断或不可恢复错误不被标成业务成功
+    required: true
+    description: >
+      原生中断和最终错误保留各自结果，不以 Stop、助手文本或进程退出码推导 succeeded。
+    preconditions:
+      - 本例独立 Claude fixture 可运行可中断请求和稳定失败请求，结果与 sink 可观察。
+    steps:
+      - 中断本例请求；确认回到可继续输入或明确退出状态，记录中断结果且没有业务成功标记。
+      - 在同一 fixture 运行稳定失败请求；确认记录失败与原因，不被助手解释文本或退出 0 转成业务成功。
+      - 清理本例 fixture。
+
+  - id: CCF-009
+    name: 同一结束事件重放只形成一次完成提醒
+    required: true
+    description: >
+      Backend 直连和 App Server 双写以及同一事件重放，不增加完成提醒；新轮次仍可独立完成。
+    preconditions:
+      - 本例真实 Claude 已完成一轮，保存该轮可重放的原生结束身份和 sink 计数。
+      - 本例隔离环境允许重复投递自己的直连及 Event Center 事件。
+    steps:
+      - 重放同一结束事实并等待双写消费；确认有效 completion 和通知计数保持一次。
+      - 在同一 session 提交同文的新一轮；确认新轮次结束可再产生一次提醒，不被正文相同错误去重。
+      - 清理本例重放工具和会话。
+
+  - id: CCF-010
+    name: 丢失结束 Hook 时只按可证明原生事实补偿
+    required: true
+    description: >
+      当前 session 有可信持久化 settled 时允许补偿；只有助手文本或静默时保持明确降级，不能猜测 idle。
+    preconditions:
+      - 本例独立 fixture 可以只丢弃自己的结束 Hook，并分别提供已核对的原生 settled 和缺少 settled 的完整源样本。
+      - 候选 reconciler 可在该 fixture 中运行，原生样本不会被当作真实模型执行证据。
+    steps:
+      - 对有可信 settled 的本例源执行补偿；确认仅匹配当前身份与代次时校正状态，不补播历史通知。
+      - 对只有助手文本而无可靠结束事实的本例源执行补偿；确认能力或状态明确降级，没有推断任务结束。
+      - 清理本例服务和样本。
+
+  - id: CCF-011
+    name: Backend 重启刷新连接身份并拒绝旧代写入
+    required: true
+    description: >
+      原 Claude pane 保活时重启自己的 Backend，重连只使用新 endpoint 与 token，旧回调不覆盖当前代次。
+    preconditions:
+      - 本例独立 Dev Session 中 Claude pane 已有明确 session 和 operation，允许停启自己的 Backend。
+      - 本例已记录重启前 cursor、连接身份及未投递的旧事件，通知使用 sink。
+    steps:
+      - 按 toolkit:runweave-dev-session 操作本例重启，重新取得 fresh endpoint 与 UI 引用并核对仍为原 pane/session。
+      - 提交本例新请求并延迟投递旧事件；确认新事件被正确接受，旧事件不改变新运行状态，没有自动重发业务输入或补播通知。
+      - 清理本例服务和会话。
+
+  - id: CCF-012
+    name: 原生正文保留选定分支且容忍追加半行
+    required: true
+    description: >
+      Claude reader 返回当前原生分支的用户和助手可见正文，消息身份稳定，工具、thinking、系统和子 Agent 正文不混入。
+    preconditions:
+      - 本例已登记的独立 Claude 原生样本含分支、压缩、工具、thinking、子 Agent 与唯一正文 marker，尾部允许追加半行。
+      - 本例 reader、预览和全文接口使用相同受控源，已记录文件哈希。
+    steps:
+      - 读取预览和全文；确认当前分支顺序与 marker 正确，非正文内容未展示，重复读取消息 ID 不变且源文件不被写入。
+      - 追加半行后读取，再补全后读取；确认旧完整正文仍可读，新记录只在完整后出现一次。
+      - 清理本例样本与服务。
+
+  - id: CCF-013
+    name: 会话读取拒绝客户端路径和越界源替换
+    required: true
+    description: >
+      客户端无法指定任意 transcript，源被替换为 symlink 或错误 session 时不泄露目标内容。
+    preconditions:
+      - 本例独立 reader 有合法凭据、受控源和不属于会话根的外部 marker 文件。
+      - 本例可在自己的 fixture 内替换源路径和 header，不操作用户会话。
+    steps:
+      - 向接口提交额外路径参数；确认拒绝且响应没有外部 marker。
+      - 在同一 fixture 分别将源替换为越界 symlink 和身份不符源；确认均不返回正文，也不回退其他会话。
+      - 恢复本例文件并清理全部资源。
+
+  - id: CCF-014
+    name: 精确恢复不会回退到最近会话
+    required: true
+    description: >
+      恢复始终使用指定原生 session 和 cwd，目标缺失或身份不符时明确失败，不打开最近会话。
+    preconditions:
+      - 本例独立项目有较早目标会话和另一最近会话，内容 marker 不同，候选恢复入口可用。
+      - 本例可安全移动自己的目标源文件，并可观察恢复后的原生 session。
+    steps:
+      - 恢复较早目标；确认实际命令采用 --resume、原生 session 与 cwd 对应目标且历史 marker 正确。
+      - 退出本例 Claude 后移动目标源再恢复；确认失败且没有打开最近会话，没有修改其他源。
+      - 恢复并清理本例文件和会话。
+
+  - id: CCF-015
+    name: Stop 被原生 Hook 要求继续时不提前完成
+    required: true
+    description: >
+      其他原生 Hook 要求继续的 Stop 候选不能形成最终完成，主活动只在最终 settled 后结束。
+    preconditions:
+      - 本例独立真实 Claude 有一次性要求继续的受控 Stop Hook，模型和原生事件可观察。
+      - 本例通知仅进入 sink，可核对 Stop 候选与最终 settled 的次序。
+    steps:
+      - 提交只读请求并触发一次要求继续；确认该 Stop 后主活动仍运行，未出现成功 completion。
+      - 等待最终 settled；确认仅最终结束产生一次有效完成，移除本例 Hook 并清理会话。
+
+  - id: CCF-016
+    name: 超大源按有界窗口返回最新完整消息
+    required: true
+    description: >
+      超过读取预算的 Claude 源保留身份验证、最新完整消息及 partial 标记，不扫描无界历史。
+    preconditions:
+      - 本例受控 Claude 源超过 64MiB，截断边界位于工具记录内部，末尾窗口有唯一正文 marker 和半行，完整可见正文小于响应预算。
+      - 本例 reader 可读取该已登记源，原始文件哈希与大小已记录。
+    steps:
+      - 读取本例会话；确认 partial=true，最新完整消息末尾 marker 保留，半行和被截断的工具记录未展示，读取保留身份校验。
+      - 重复读取确认消息 ID 稳定、源文件哈希与大小不变；清理本例源和服务。
+
+  - id: CCF-017
+    name: 超大正文响应按预算保留消息末尾
+    required: true
+    description: >
+      正文超出 8MiB 响应预算时保留最新内容并标记 partial，序列化转义与多字节字符不造成超限或损坏。
+    preconditions:
+      - 本例受控 Claude 源小于 64MiB，完整正文序列化后超过 8MiB，最新长消息末尾有唯一 marker、中文、emoji 和转义字符。
+      - 本例 reader 可读取已登记源，原始文件哈希与大小已记录。
+    steps:
+      - 读取本例会话；确认 partial=true，最新消息末尾 marker 保留，序列化响应小于 8MiB，没有孤立代理字符。
+      - 重复读取确认保留消息 ID 稳定、源文件哈希与大小不变；清理本例源和服务。

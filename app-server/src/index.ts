@@ -3,7 +3,9 @@ import path from "node:path";
 import { SupervisionConversationReader } from "./agents/supervision-reader.js";
 import { ConversationReader } from "./agents/conversation-reader.js";
 import { CodexConversationReader } from "./codex/conversation-reader.js";
-import { configuration, acquireConfigurationOwner } from "@runweave/config-node";
+import { ClaudeConversationReader } from "./claude/conversation-reader.js";
+import { ClaudeSessionReader } from "./claude/session-reader.js";
+import { configuration, acquireConfigurationOwner, ConfigurationError } from "@runweave/config-node";
 import { settingText } from "@runweave/config-node";
 import { PiSessionReader } from "./pi/session-reader.js";
 import { ThreadPreviewReader } from "./agents/thread-previews.js";
@@ -94,8 +96,17 @@ export async function startAppServer(prepareRuntime?: () => void): Promise<void>
   const piSessionReader = new PiSessionReader();
   const codexAppServerClient = new CodexAppServerClient();
   const codexRolloutLifecycleReader = new CodexRolloutLifecycleReader();
-  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader);
-  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader));
+  let claudeConversationReader: ClaudeConversationReader | undefined;
+  try {
+    claudeConversationReader = new ClaudeConversationReader(new ClaudeSessionReader());
+  } catch (error) {
+    // Invalid saved domains remain fatal; an unusable native environment reference
+    // disables only the optional reader, without choosing another user's directory.
+    if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_FIELD_VALUE_INVALID") throw error;
+    logInfo("Claude conversation reader unavailable", { reason: "configuration_invalid" });
+  }
+  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader, claudeConversationReader);
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader), claudeConversationReader);
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,
@@ -125,6 +136,7 @@ export async function startAppServer(prepareRuntime?: () => void): Promise<void>
     codexQuota: new CodexQuotaService(codexAppServerClient),
     threadPreviews,
     conversations,
+    claudeConversationReader,
     getRuntimeStatusReport: () =>
       createAppServerRuntimeStatusReport({
         eventCenter,

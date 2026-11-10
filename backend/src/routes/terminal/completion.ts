@@ -125,6 +125,14 @@ export function createInternalTerminalCompletionRouter(options: {
       return;
     }
 
+    // Claude Stop is a response-end candidate, not a verified settled turn.
+    // Keep legacy hooks silent until the generation-bound lifecycle adapter is
+    // available; inferring Codex from the foreground command must not bypass it.
+    if (parsed.data.source === "claude") {
+      res.status(202).json({ event: null, ignored: true, reason: "claude_lifecycle_unverified" });
+      return;
+    }
+
     const rawHookEvent =
       parsed.data.rawHookEvent ?? parsed.data.hookEvent ?? null;
     const resolvedPane = resolveCompletionPane(
@@ -167,6 +175,10 @@ export function createInternalTerminalCompletionRouter(options: {
       sessionActiveCommand: session.activeCommand,
       commandName: parsed.data.commandName ?? null,
     });
+    if (effectiveSource === "claude") {
+      res.status(202).json({ event: null, ignored: true, reason: "claude_lifecycle_unverified" });
+      return;
+    }
     const recentAgentActivity =
       options.terminalSessionManager.getRecentAgentActivity(
         session.id,

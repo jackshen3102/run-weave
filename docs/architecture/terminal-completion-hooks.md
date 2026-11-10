@@ -57,11 +57,16 @@ App Server 的地址与认证信息由 Backend 在发现、校验并建立连接
 
 Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI 配置目录时安装 Runweave hook：
 
-- Claude：`~/.claude/settings.json`
+- Claude：历史安装器仍在，但 `installAllHooks()` **未调用** `installClaudeHooks()`，当前不会自动安装或迁移 `~/.claude/settings.json`。
 - Codex：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.codex/hooks.json` 只保留为历史全局配置的兼容/清理层
 - Trae/Coco：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.trae/traecli.toml` 只保留为历史全局配置的兼容/清理层
 
 安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
+
+Claude 的受管生命周期尚未开放。公共 bridge 可记录原始 Hook 事实，但不发送 Claude completion、
+桌面或飞书通知；Backend 也拒绝旧版 Claude completion（202 ignored，`claude_lifecycle_unverified`），
+不按 foreground command 借认成 Codex/Trae。单次 Stop、退出 0 或助手正文均不能证明业务完成。
+此限制不改写用户已有配置，旧安装态需采用新版资产才获得 bridge 侧门禁。
 
 launcher 行为很窄：
 

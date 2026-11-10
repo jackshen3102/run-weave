@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { createInternalTerminalCompletionRouter } from "../../../backend/src/routes/terminal/completion.ts";
+import { createInternalTerminalAgentHookRouter } from "../../../backend/src/routes/terminal/state.ts";
+import { resolveAppServerTerminalAgent } from "../../../backend/src/app-server/handlers/terminal-agent-context.ts";
+import { getAgentForCommand } from "../../../backend/src/terminal/state/terminal-state-service.ts";
 import { processTerminalAgentHook } from "../../../backend/src/terminal/application/agent-hook-processor.ts";
 import {
   buildAgentResumeCommand,
@@ -8,7 +13,64 @@ import {
 export async function verifyToolkitHookProviderGuards() {
   await verifyDelayedCrossProviderHookGuard();
   await verifyTmuxPaneFallbackUniqueness();
+  await verifyClaudeCapabilityIsolation();
   verifyAgentThreadResumeFallback();
+  assert.equal(buildAgentResumeCommand({ provider: "claude", threadId: "session-claude" }),
+    "claude --resume session-claude\n");
+  assert.equal(resolveAgentThreadToResume({ activeCommand: "claude", threadId: "session-claude",
+    threadProvider: "claude", terminalState: { state: "agent_idle", agent: "claude" } }), null,
+    "unverified Claude lifecycle must not trigger an automatic relaunch");
+}
+
+async function verifyClaudeCapabilityIsolation() {
+  const express = createRequire(new URL("../../../backend/package.json", import.meta.url))("express");
+  const session = { id: "claude-isolation", projectId: "fixture", status: "running",
+    activeCommand: "codex", terminalState: { state: "agent_running", agent: "codex" } };
+  let mutations = 0;
+  const manager = { getSession: () => session, listPanels: () => [] };
+  const state = { getCurrent: () => session.terminalState };
+  const app = express();
+  app.use(express.json());
+  app.use("/state", createInternalTerminalAgentHookRouter({ terminalSessionManager: manager,
+    terminalStateService: state, hookToken: "fixture-token" }));
+  app.use("/completion", createInternalTerminalCompletionRouter({ terminalSessionManager: manager,
+    completionEventService: { record: () => { mutations++; throw new Error("unexpected completion"); } },
+    hookToken: "fixture-token" }));
+  const server = await new Promise(resolve => {
+    const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+  });
+  const post = (route, body, token = "fixture-token") => fetch(`http://127.0.0.1:${server.address().port}/${route}`, {
+    method: "POST", headers: { "content-type": "application/json", "x-runweave-hook-token": token },
+    body: JSON.stringify({ terminalSessionId: session.id, ...body }),
+  });
+  try {
+    assert.equal(getAgentForCommand("/opt/native/claude --resume exact-id"), "claude");
+    assert.equal(resolveAppServerTerminalAgent({ terminalSessionManager: manager,
+      terminalSessionId: session.id, reportedSource: "claude", panelId: null,
+      tmuxPaneId: null, commandName: "codex" }), null);
+    assert.equal((await post("state", { agent: "claude", hookEvent: "Stop" }, "wrong-token")).status, 401);
+    for (const hookEvent of ["SessionStart", "UserPromptSubmit", "Stop", "AgentMetadata", "ToolRequested", "ToolCompleted"]) {
+      const response = await post("state", { agent: "claude", hookEvent,
+        toolUseId: "fixture-tool", toolName: "Read", threadId: "fixture-claude" });
+      assert.equal(response.status, 202);
+      assert.equal((await response.json()).disposition, "ignored");
+    }
+    for (const activeCommand of ["codex", "claude", null]) {
+      session.activeCommand = activeCommand;
+      const response = await post("completion", { source: "claude", commandName: "codex",
+        completionReason: "hook_stop", rawHookEvent: "Stop", threadId: "fixture-claude" });
+      assert.equal(response.status, 202);
+      assert.equal((await response.json()).reason, "claude_lifecycle_unverified");
+    }
+    session.activeCommand = "claude";
+    const inferred = await post("completion", { source: "unknown", commandName: "claude", rawHookEvent: "Stop" });
+    assert.equal((await inferred.json()).reason, "claude_lifecycle_unverified");
+    assert.equal(mutations, 0);
+    assert.deepEqual(session.terminalState, { state: "agent_running", agent: "codex" });
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 }
 
 function verifyAgentThreadResumeFallback() {

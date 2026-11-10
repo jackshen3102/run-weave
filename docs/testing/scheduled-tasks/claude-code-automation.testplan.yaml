@@ -1,0 +1,189 @@
+version: 1
+name: Claude Code 后台与内部 Agent
+description: >
+  候选 Claude 自动化 provider 的待执行验收合同，分别覆盖执行结果、权限、owner 回收、恢复和独立消费者。
+  每例使用专属服务、run 和项目，不改变默认 provider，不以单个 smoke 覆盖所有内部服务。
+  格式校验、受控 fixture、真实 Claude 请求和各交付平台分别报告。
+
+cases:
+  - id: CCA-001
+    name: 后台结果必须符合业务 schema 并保留真实 session
+    required: true
+    description: >
+      Claude 的 native result、业务结果和进程退出分别判断，缺失或无效业务结构不能成为 succeeded。
+    preconditions:
+      - 本例独立 Backend 的 Claude 后台能力已开放，认证和模型可用，具有专属私有任务目录。
+      - 本例可观察真实 run 的 session、schema 校验结果及已脱敏流事件，并有无效结果的受控 adapter fixture。
+    steps:
+      - 显式创建 Claude 任务并运行一次只读真实请求；确认保存真实 session、冻结 provider/cwd/策略，业务输出符合 schema 才可 succeeded。
+      - 对本例无效结果 fixture 返回退出 0 但 schema 错误的结果；确认 failed 或明确无效结果，未误标 succeeded。
+      - 清理本例任务、run 和 fixture。
+
+  - id: CCA-002
+    name: Claude 执行策略缺失或不受支持时不自动放权
+    required: true
+    description: >
+      provider 与策略必须匹配，无法表达或落实的策略拒绝启动，不能把 Codex 策略自动转换为 bypass。
+    preconditions:
+      - 本例独立 Backend 可记录任务启动次数与实际 Claude 权限策略。
+      - 本例可提交缺失策略、旧客户端格式和明确支持策略的任务草稿。
+    steps:
+      - 分别提交缺失 Claude 策略、沿用 Codex 专属策略及当前平台不支持的策略；确认创建或执行明确拒绝且没有启动 Claude。
+      - 提交明确支持的受限策略；确认实际原生权限与保存策略一致，未出现 bypass fallback，清理本例任务。
+
+  - id: CCA-003
+    name: 取消只回收当前 run 的 owner
+    required: true
+    description: >
+      停止请求幂等，只有自己拥有的进程被回收，进程确认退出前不能报告已释放执行权。
+    preconditions:
+      - 本例独立环境有受控长时间 Claude run 及不属于该 run 的对照进程。
+      - 本例能观察进程组、AbortSignal、退出回执及 owner 状态。
+    steps:
+      - 对本例 run 重复发送取消；确认只回收对应 owner，未误杀对照进程。
+      - 确认仅在进程确认退出后报告可恢复，重复停止不产生额外信号或新执行；清理本例资源。
+
+  - id: CCA-004
+    name: Backend 崩溃后的未知执行不自动重放
+    required: true
+    description: >
+      提交结果未知时重启不再次执行业务，原 run/attempt 和不确定状态保留供用户核对。
+    preconditions:
+      - 本例独立 Dev Session 的 Claude 后台 run 正在执行可计数的本例无害操作，已记录 attempt 和进程身份。
+      - 本例可在提交后确认前仅终止自己的 Backend，并读取持久化记录。
+    steps:
+      - 在结果未知窗口终止本例 Backend，再按 toolkit:runweave-dev-session 恢复并重新取得 fresh endpoint。
+      - 确认原 run 保留且状态说明未知或待核对，计数未因恢复增加，没有自动创建新 attempt 或重发 prompt。
+      - 核对并结束本例 owner，清理服务和 run。
+
+  - id: CCA-005
+    name: 后台接管精确恢复且并发只绑定一个前台终端
+    required: true
+    description: >
+      后台 owner 释放后才能精确恢复原 session，并发打开不产生两个执行者或回退最近会话。
+    preconditions:
+      - 本例 Claude 后台 run 已进入可接管状态并有明确原生 session 和 cwd，另有不同的最近会话作对照。
+      - 本例真实页面支持并发打开恢复，能够核对 owner 与 binding。
+    steps:
+      - 使用 toolkit:playwright-cli 并发打开同一 run；确认后台 owner 先退出，只有一个 terminal/panel binding。
+      - 确认恢复实际 session 与 cwd 对应原 run，历史 marker 正确且未打开对照会话；清理本例资源。
+
+  - id: CCA-006
+    name: 续跑只消费一次显式输入并遵守预算
+    required: true
+    description: >
+      continuation 使用冻结 provider 与精确 session，重复提交不重复消费用户输入，预算耗尽后不再自动尝试。
+    preconditions:
+      - 本例独立 Claude run 启用有界 continuation policy，已记录 attempt 预算和用户唯一输入 marker。
+      - 本例可以制造可恢复限流并观察后续原生消息，不涉及真实外部业务写入。
+    steps:
+      - 提交一次输入并重放相同请求；确认 marker 在精确原 session 只消费一次，新 attempt 仍采用原 provider 和策略。
+      - 触发本例预算耗尽；确认停止续跑并明确原因，没有无限重试，清理本例 run。
+
+  - id: CCA-007
+    name: 快捷指令后台运行保留实际项目和 worktree
+    required: true
+    description: >
+      显式选择 Claude 的快捷指令使用保存的项目上下文，普通任务私有 cwd 与其他 provider 默认值不被改变。
+    preconditions:
+      - 本例专属项目和 worktree 有已保存只读快捷指令，可通过真实页面显式选择 Claude 后台运行。
+      - 本例已记录普通任务 cwd 规则与现有默认 provider。
+    steps:
+      - 使用 toolkit:playwright-cli 触发快捷指令后台运行；确认冻结的项目、worktree、cwd 与原指令一致，run 中 provider 为 claude。
+      - 确认默认 provider 与普通任务上下文规则未变化，结果和恢复入口指向本例 session；清理本例指令与 run。
+
+  - id: CCA-008
+    name: Claude 任务控制以原生轮次确认就绪与完成
+    required: true
+    description: >
+      task 控制在 bootstrap 和当前 native turn 可核对后才接受业务输入，结果回执不能由 shell 输出替代。
+    preconditions:
+      - 本例隔离任务控制服务已选择 Claude，原生 reader 和专属 panel 归属可观察。
+      - 本例可发起 bootstrap、业务输入和 observe，能够临时延迟自己的原生就绪事件。
+    steps:
+      - 延迟 bootstrap 就绪并尝试业务投递；确认拒绝且业务 marker 未写入 shell 或未就绪的 CLI。
+      - 恢复事件后投递一次真实只读任务；确认 observe 对应原生 turn/session，完成回执与实际结果一致，清理本例 task。
+
+  - id: CCA-009
+    name: Claude Reviewer 只消费冻结快照并持久化报告
+    required: true
+    description: >
+      来源 Agent 与 Claude Reviewer 隔离，报告沿用既有 artifact 与 schema 持久化。
+    preconditions:
+      - 本例独立 Review 服务有冻结变更快照，来源对话有禁止提供给 Reviewer 的唯一 marker。
+      - 本例显式配置 Claude Reviewer，可核对其输入、允许范围、报告 artifact 与 case 状态。
+    steps:
+      - 发起本例 Review；确认 Claude 只获得冻结快照与规则，输入及工具读取中没有来源对话 marker，报告通过既有 schema 持久化。
+      - 确认报告 artifact 可按本例 reviewId 读取，清理本例 Reviewer 和快照。
+
+  - id: CCA-010
+    name: 长任务监控正确关联 Claude executor 与判断 provider
+    required: true
+    description: >
+      监控读取原 Claude 任务的可信证据，判断模型的 provider 不改变被监控执行者身份，结论只回到原目标。
+    preconditions:
+      - 本例隔离监控服务有专属 Claude 长任务，并显式配置判断 provider，另一 pane 用作归属对照。
+      - 本例可读取原生证据定位、监控判断和投递记录。
+    steps:
+      - 触发一次监控判断；确认输入证据对应原 Claude session 和当前代次，判断输出按业务 schema 校验。
+      - 确认结论和后续操作只关联原任务，另一 pane 和 provider 身份不受影响；清理本例监控。
+
+  - id: CCA-011
+    name: 自进化的 Claude adapter 保留受限工具与结果边界
+    required: true
+    description: >
+      Claude 自进化执行按显式策略使用受限能力，返回结构化结果，原有 mixed provider 组合不被静默改变。
+    preconditions:
+      - 本例隔离自进化环境显式选择 Claude，具有受控只读项目与专属 MCP 权限。
+      - 本例可观察实际工具访问、输出 schema 和原 mixed 配置。
+    steps:
+      - 执行一次真实 Claude 分析；确认只访问已允许范围，结果符合自进化 schema，没有扩大网络、文件或工具权限。
+      - 确认原 mixed 策略与默认 provider 不变，清理本例分析和临时配置。
+
+  - id: CCA-012
+    name: 屏幕分析的 Claude 执行器只读取指定图像范围
+    required: true
+    description: >
+      Claude 屏幕分析只消费指定图像范围，结果满足既有 schema 且可以回查输入归属。
+    preconditions:
+      - 本例隔离 ScreenJournal 分析环境有非个人敏感的专属测试图像，并显式选择 Claude。
+      - 本例可以核对图像输入和输出 schema，测试图像与其他录屏内容分离。
+    steps:
+      - 运行一次真实分析；确认结果 marker 对应指定图像范围，结果满足现有 schema，证据没有用户凭据或其他录屏内容。
+      - 确认结果没有引用本例范围外图像，清理本例数据和分析服务。
+
+  - id: CCA-013
+    name: 执行期限到达后确认进程退出才释放 owner
+    required: true
+    description: >
+      Claude 后台超时按期限回收自己的进程组，不能在子进程尚存时开放前台接管。
+    preconditions:
+      - 本例隔离 Backend 有超出短测试期限的专属 Claude run，以及不属于该 run 的对照进程。
+      - 本例能观察超时、进程退出与 owner 释放的时间顺序。
+    steps:
+      - 等待本例执行期限到达；确认当前进程组被回收，对照进程不受影响。
+      - 确认进程确认退出后才报告 owner 已释放，超时结果未变为 succeeded；清理本例资源。
+
+  - id: CCA-014
+    name: Claude Review 的 finding 保持未处理事项状态
+    required: true
+    description: >
+      Reviewer 提交带 finding 的报告后，事项保存结论并保持需处理状态，不因 CLI 完成而自动关闭或合并。
+    preconditions:
+      - 本例独立 Review 使用专属冻结快照，包含可确定复现的缺陷，显式选择 Claude Reviewer。
+      - 本例可以观察 report artifact、finding、case 状态及合并动作记录。
+    steps:
+      - 完成本例真实 Review；确认缺陷 finding 与报告持久化且可回查，case 保持需处理状态。
+      - 确认没有因 Reviewer Stop 或退出触发自动关闭、提交或合并；清理本例 Reviewer 和快照。
+
+  - id: CCA-015
+    name: 取消 Claude 屏幕分析不停止采集 owner
+    required: true
+    description: >
+      取消只回收本次分析的进程和输入资源，独立采集 owner 持续工作。
+    preconditions:
+      - 本例隔离 ScreenJournal 正在采集非敏感测试内容，专属 Claude 分析处于可中断运行。
+      - 本例能观察采集 owner、分析进程、输入文件和退出回执。
+    steps:
+      - 取消本例分析；确认仅对应分析 owner 退出，输入按既有合同清理，分析结果未误标 succeeded。
+      - 确认采集 owner 未重启或退出且继续产生本例采集记录，清理本例服务和数据。

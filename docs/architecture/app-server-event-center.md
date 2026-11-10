@@ -178,7 +178,12 @@ app-server 会从 `agent.hook` 与 `agent.completion` 投影轻量 ThreadRef。T
 
 ThreadRef identity 是 provider-aware 的：`threadId` 必须和 `agent`、`detailRef` 一起解释。Codex 仍由 hook 和 Codex App Server 状态补偿提供轻量 projection；Trae family（`trae` / `traex` / `traecli`）的真实 thread identity 来自 hook payload 与 `~/.trae/cli/sessions/**/*.jsonl` 中的 `session_meta.payload.id`，不得按 cwd 或时间窗口猜测。reader 暂时不可用时可以保留 degraded / unresolved 状态，但恢复后必须收敛到同一个 provider + thread ID。
 
-状态映射：
+Claude 原始事件保留 `agent=claude`，不会借用 `commandName=codex` 等命令身份；同名 thread ID
+已由另一 provider 占用时拒绝跨 Claude/provider 覆盖。Claude 生命周期尚未经过代次和 settled
+协议验收，状态保持 unknown，Stop 或助手文本不推导 idle/completed，也不补偿 Backend 状态。
+只读正文与生命周期分开，见[会话阅读](./terminal-code-preview.md)。
+
+其它已接通 provider 的状态映射：
 
 - `agent.hook` + `SessionStart` -> `starting`
 - `agent.hook` + `UserPromptSubmit` -> `running`
@@ -230,6 +235,8 @@ Codex 与 Pi 的原生 JSONL 使用追加位置增量读取；两个后台任务
 事件循环。目录查找合并并限制未命中重扫频率。缓存最多 256 个会话；Pi 每个会话保留最近 2000
 个分支节点，目标分支已超出窗口时返回不可用，不借用其他分支内容。文件更换、截断或身份不符
 时丢弃旧投影。工具调用、工具结果和推理内容不会成为回复文案。
+Claude 复用同一个身份与分支校验 reader，按需有界重读，不维护第二套 transcript 缓存；
+HTTP 仍只读内存短文本，来源失败不阻塞首页。
 
 Backend 的 `POST /api/app/home/conversation-previews` 将短文本映射到当前面板的 provider/thread，
 读取期间切换面板或会话则丢弃旧结果。iOS 只在首页前台在线时，每 5 秒请求可见会话；进入终端、

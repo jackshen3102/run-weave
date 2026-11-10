@@ -1,6 +1,6 @@
 # 终端任务完成通知链路
 
-本文描述 Runweave 如何在 Codex、Coco/Trae、Claude 等 AI CLI 任务完成时，向用户发出**主动通知**（macOS 系统通知 + 声音、飞书消息）。
+本文描述 Runweave 如何在已接通的 Codex、Coco/Trae、Pi 等 AI CLI 任务完成时，向用户发出**主动通知**（macOS 系统通知 + 声音、飞书消息）。Claude 的代次与 settled 协议未开放，当前公共 bridge 和 Backend 均禁止其完成通知，详见[Hook 门禁](./terminal-completion-hooks.md#hook-安装与上报行为)。
 
 本文是 [terminal-completion-hooks.md](./terminal-completion-hooks.md) 的 **channel 细节补充**。canonical 的 hook 架构与 launcher 职责（含身份门禁、launcher 是否允许做通知副作用）以那篇为准；本文只展开通知 channel（桌面/声音/飞书）的实现、脚本与配置。两者共用同一条 hook 链路与同一个 launcher。
 
@@ -72,7 +72,7 @@ Backend 的 `POST /internal/terminal-completion/feishu` 负责资格判断与单
 
 历史上存在两套实现（codex 走本机 `~/.codex/` 脚本，coco/trae 走 launcher 内联），导致逻辑分裂、重复通知、飞书脚本散落本机不归仓库管。现已统一为**唯一实现**：
 
-> 所有来源（codex / coco / trae / claude）的桌面通知 + 声音 + 飞书，全部由 Runweave 的 launcher `~/.runweave/bin/runweave-hook-bridge` 负责，不再有任何 `source === "codex"` 特判。
+> 已接通来源的桌面通知、声音和飞书共用 Runweave launcher `~/.runweave/bin/runweave-hook-bridge`。Claude 的标题映射与历史兼容代码仍存在，但不表示其通知链路已启用。
 
 ```text
 AI CLI 任务完成
@@ -85,7 +85,7 @@ AI CLI 任务完成
       -> 接受后 notifyFeishu(...)           # 分离进程执行飞书过滤、等待与发送
 ```
 
-hook 安装进用户全局 Claude/Codex/Trae 配置，会覆盖所有 AI CLI（含 Runweave 之外的终端）。因此通知与上报都以 `RUNWEAVE_*` 身份为门禁：**只有从 Runweave terminal 启动、pane 带有 `RUNWEAVE_HOOK_ENDPOINT` / `RUNWEAVE_HOOK_TOKEN` / `RUNWEAVE_TERMINAL_SESSION_ID` 的完成事件才会触发桌面通知和飞书**；外部终端的 AI CLI stop 事件静默退出，不产生任何通知。这样隐私与噪声边界由已认证的 Runweave session 控制。
+原生插件与历史全局 Hook 可能覆盖 Runweave 之外的终端；当前安装器不自动安装 Claude Hook，也不迁移其用户配置。因此已接通来源的通知与上报都以 `RUNWEAVE_*` 身份为门禁：**只有从 Runweave terminal 启动、pane 带有 `RUNWEAVE_HOOK_ENDPOINT` / `RUNWEAVE_HOOK_TOKEN` / `RUNWEAVE_TERMINAL_SESSION_ID` 的完成事件才会触发桌面通知和飞书**；外部终端的 AI CLI stop 事件静默退出，不产生任何通知。这样隐私与噪声边界由已认证的 Runweave session 控制。
 
 ## 飞书脚本随仓库分发
 

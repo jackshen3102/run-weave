@@ -38,7 +38,9 @@ export function resolveAgentThreadToResume(
   // lifecycle hook can still identify the active Agent, but a shell-idle state cannot.
   const activeProvider = getAgentForCommand(session.activeCommand) ??
     (session.terminalState?.state.startsWith("agent_") ? session.terminalState.agent : null);
-  if (!activeProvider) return null;
+  // Claude command identity alone does not prove a recoverable pane generation.
+  // Keep automatic relaunch disabled until its launch/settled contract is verified.
+  if (!activeProvider || activeProvider === "claude") return null;
   const currentThreadId = session.threadId?.trim();
   const currentProvider = session.threadProvider ?? (currentThreadId ? "codex" : undefined);
   if (currentThreadId && currentProvider === activeProvider)

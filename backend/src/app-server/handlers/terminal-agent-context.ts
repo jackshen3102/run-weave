@@ -1,18 +1,10 @@
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import { getCompletionSourceForCommand } from "../../terminal/completion/source-gate";
-import type {
-  TerminalPanelRecord,
-  TerminalSessionManager,
-  TerminalSessionRecord,
-} from "../../terminal/manager/manager";
-import { getAgentForCommand } from "../../terminal/state/terminal-state-service";
+import type { TerminalSessionManager } from "../../terminal/manager/manager";
 
 const TERMINAL_AGENT_KINDS = new Set<TerminalAgentKind>([
-  "codex",
-  "trae",
-  "traecli",
-  "traex", "pi",
+  "codex", "trae", "traecli", "traex", "pi",
 ]);
 
 export function resolveAppServerTerminalAgent(options: {
@@ -23,64 +15,10 @@ export function resolveAppServerTerminalAgent(options: {
   tmuxPaneId: string | null;
   commandName: string | null;
 }): TerminalAgentKind | null {
-  const commandSource = getCompletionSourceForCommand(options.commandName);
-  if (isTerminalAgentKind(commandSource)) {
-    return commandSource;
-  }
-
-  if (options.reportedSource !== "claude") {
-    return null;
-  }
-
-  const session = options.terminalSessionManager.getSession(
-    options.terminalSessionId,
-  );
-  if (!session) {
-    return null;
-  }
-  const panel = resolvePanel({
-    terminalSessionManager: options.terminalSessionManager,
-    terminalSessionId: options.terminalSessionId,
-    panelId: options.panelId,
-    tmuxPaneId: options.tmuxPaneId,
-  });
-
-  return getRecordAgent(panel) ?? getRecordAgent(session);
-}
-
-function resolvePanel(options: {
-  terminalSessionManager: TerminalSessionManager;
-  terminalSessionId: string;
-  panelId: string | null;
-  tmuxPaneId: string | null;
-}): TerminalPanelRecord | null {
-  if (options.panelId) {
-    const panel = options.terminalSessionManager.getPanel(options.panelId);
-    return panel?.terminalSessionId === options.terminalSessionId ? panel : null;
-  }
-  if (!options.tmuxPaneId) {
-    return null;
-  }
-  return (
-    options.terminalSessionManager
-      .listPanels(options.terminalSessionId)
-      .find((panel) => panel.tmuxPaneId === options.tmuxPaneId) ?? null
-  );
-}
-
-function getRecordAgent(
-  record: Pick<TerminalSessionRecord, "activeCommand" | "terminalState"> | null,
-): TerminalAgentKind | null {
-  const storedAgent = record?.terminalState?.agent ?? null;
-  if (isTerminalAgentKind(storedAgent)) {
-    return storedAgent;
-  }
-  const activeCommandAgent = getAgentForCommand(record?.activeCommand ?? null);
-  return isTerminalAgentKind(activeCommandAgent) ? activeCommandAgent : null;
-}
-
-function isTerminalAgentKind(
-  value: TerminalCompletionEvent["source"] | TerminalAgentKind | null,
-): value is TerminalAgentKind {
-  return Boolean(value && TERMINAL_AGENT_KINDS.has(value as TerminalAgentKind));
+  // Legacy Claude hooks have no verified process-generation/settled identity.
+  // Never borrow the foreground Codex/Trae identity to make them actionable.
+  if (options.reportedSource === "claude") return null;
+  const source = getCompletionSourceForCommand(options.commandName);
+  return source && TERMINAL_AGENT_KINDS.has(source as TerminalAgentKind)
+    ? source as TerminalAgentKind : null;
 }

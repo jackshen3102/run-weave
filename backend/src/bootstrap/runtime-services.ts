@@ -31,6 +31,7 @@ import path from "node:path";
 import { createExperienceLearning } from "../experience/bootstrap";
 import { AgentModelCatalogStore } from "../agent-model-catalog/store";
 import { AgentModelCatalogService } from "../agent-model-catalog/service";
+import { AgentCapabilitiesService } from "../agent-capabilities/service";
 import { ActivityRuntime } from "../activity/runtime";
 import { ResourceScope } from "./resource-scope";
 import { logger } from "../logging/index";
@@ -61,9 +62,7 @@ import { WorkHistoryService } from "../work-history/work-history-service";
 import { AttentionService } from "../attention/attention-service";
 import { EvolutionAnalysisOrchestrator } from "../evolution/analysis/orchestrator";
 import { EvolutionContextPackBuilder } from "../evolution/context-pack";
-
 import { EvolutionEvidenceReconciler } from "../evolution/knowledge/evidence-reconciler";
-
 import { EvolutionRuntime } from "../evolution/runtime";
 import { DefaultEvolutionSupplementalSourceReader } from "../evolution/supplemental-sources";
 import { RaceRecordStore } from "../race/race-record-store";
@@ -74,7 +73,6 @@ import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
 } from "./tmux-paths";
-
 
 function resolveTerminalHookToken(
   env: NodeJS.ProcessEnv,
@@ -513,6 +511,8 @@ async function assembleRuntimeServices(
     ),
   );
   resources.defer("local-browser", () => localBrowserService.dispose());
+  const agentCapabilitiesService = new AgentCapabilitiesService(() => scheduledTasks.service.capabilities());
+  resources.defer("agent-capabilities", () => agentCapabilitiesService.dispose());
   const screenRecording = new ScreenRecordingService();
   resources.defer("screen-recording", () => screenRecording.dispose());
   const screenRecordingAnalysis = new ScreenRecordingAnalysisRuntime(workHistoryService);
@@ -564,6 +564,7 @@ async function assembleRuntimeServices(
     terminalStateService,
     agentModelCatalogStore,
     agentModelCatalogService,
+    agentCapabilitiesService,
     raceService,
     appServerHistoryGateway,
     workHistoryService,

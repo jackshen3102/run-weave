@@ -539,6 +539,7 @@ export abstract class TerminalManagerBase {
 function isTerminalAgentKind(value: string): value is TerminalAgentKind {
   return (
     value === "codex" ||
+    value === "claude" ||
     value === "trae" ||
     value === "traecli" ||
     value === "pi" || value === "traex"

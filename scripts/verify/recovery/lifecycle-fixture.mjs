@@ -77,6 +77,13 @@ export async function runLifecycleCase(
     channel === "stable" ? "stable" : "dev",
   );
   const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+  const env = {
+    ...process.env,
+    RUNWEAVE_ACTIVITY_WORKER_ENTRY: "",
+    RUNWEAVE_EVOLUTION_WORKER_ENTRY: "",
+  };
+  // Source verification must not load the installed app's worker or SQLite ABI.
+  for (const key of ["RUNWEAVE_SCHEDULED_TASKS_WORKER_ENTRY", "RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR", "RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING"]) delete env[key];
   const child = spawn(
     process.execPath,
     [
@@ -93,11 +100,7 @@ export async function runLifecycleCase(
     ],
     {
       cwd: repoRoot,
-      env: {
-        ...process.env,
-        RUNWEAVE_ACTIVITY_WORKER_ENTRY: "",
-        RUNWEAVE_EVOLUTION_WORKER_ENTRY: "",
-      },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
