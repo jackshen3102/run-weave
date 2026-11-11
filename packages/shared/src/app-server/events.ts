@@ -1,3 +1,4 @@
+import type { ClaudeAgentContext } from "../terminal/claude-agent";
 import type { PiAgentContext } from "../terminal/pi-agent";
 export { formatThreadPreviewText } from "./thread-preview";
 export type { AppServerThreadPreview, AppServerThreadPreviewsResponse } from "./thread-preview";
@@ -127,6 +128,7 @@ export interface AppServerThreadDetail {
 }
 
 export interface AppServerThreadRef {
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   threadId: string;
   agent: AppServerAgentKind;

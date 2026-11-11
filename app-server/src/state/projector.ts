@@ -1,3 +1,4 @@
+import { isClaudeAgentContext, isNewerClaudeContext, claudeHookStatus } from "@runweave/shared/terminal/claude-agent";
 import { isPiAgentContext, isNewerPiContext } from "@runweave/shared/terminal/pi-agent";
 import type {
   AppServerAgentKind,
@@ -53,6 +54,19 @@ export class AppServerStateProjector {
         (previous.agent === "claude" || projection.agent === "claude")) {
       return { threadChange: null };
     }
+    if (projection.agent === "claude") {
+      const native = projection.claude;
+      if (native) {
+        const status = claudeHookStatus(native);
+        if (native.sessionId !== projection.threadId || !isNewerClaudeContext(native, previous?.claude) ||
+            ((!previous?.claude || previous.claude.instanceId !== native.instanceId) &&
+              native.event !== "sessionstart" && status !== "running")) return { threadChange: null };
+        projection.status = status ?? previous?.status ?? "unknown";
+      } else if (previous?.claude) {
+        // A legacy generic/completion event cannot undo a native observation.
+        return { threadChange: null };
+      }
+    }
     if (projection.agent === "pi" && (!projection.pi || projection.pi.sessionId !== projection.threadId || !isNewerPiContext(projection.pi, this.stateStore.getThread(projection.threadId)?.pi))) return { threadChange: null };
     const threadChange = this.stateStore.upsertThread(projection);
     return { threadChange };
@@ -62,9 +76,8 @@ export class AppServerStateProjector {
 function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
   const payload = readPayloadRecord(event.payload);
   const agent = readAgent(payload);
-  // Native Claude Stop can be blocked by another hook. Until a settled
-  // lifecycle adapter is verified, preserve identity but never infer idle or
-  // completion (including from transcript/assistant text).
+  // Legacy Claude events are identity-only. Native contexts are ordered above;
+  // raw Stop and completion text never prove that the TUI settled.
   const status = agent === "claude" ? "unknown" :
     event.kind === "agent.hook"
       ? readHookStatus(payload)
@@ -93,6 +106,7 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
 
   return {
     agent,
+    ...(event.kind === "agent.hook" && isClaudeAgentContext(payload.claude) ? { claude: payload.claude } : {}),
     ...(isPiAgentContext(payload.pi) ? { pi: payload.pi } : {}),
     status,
     threadId,

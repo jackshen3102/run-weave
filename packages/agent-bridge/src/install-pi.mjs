@@ -16,6 +16,7 @@ export const bridgeAssets = [
   "runweave-hook-bridge.cjs",
   "runweave-hook-payload.cjs",
   "runweave-hook-completion.cjs",
+  "runweave-hook-claude.cjs",
   "runweave-task-supervision.cjs",
   "feishu_stop_notify.sh",
 ];

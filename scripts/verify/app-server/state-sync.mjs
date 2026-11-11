@@ -72,6 +72,7 @@ try {
   let context = await readContext(stateDir);
 
   await verifyStateProjection(context, syncDir);
+  await verifyClaudeNativeProjection(context);
   await verifyCompletionSemantics(context);
   await verifyIsolationAndFallbackKeys(context);
   await verifyDedupe(context, syncDir);
@@ -504,6 +505,9 @@ async function verifySyncFiles(syncDir) {
 }
 
 async function verifyRestartRecovery(context) {
+  const claude = (await getThread(context, "claude-native-lifecycle")).thread;
+  assert.equal(claude.status, "idle");
+  assert.equal(claude.claude.instanceId, "200:200");
   const thread = await getThread(context, ids.threadId);
   assert.equal(thread.thread.status, "completed");
   const latest = await getJson(context, "/events/latest");
@@ -515,6 +519,9 @@ async function verifyRestartRecovery(context) {
 }
 
 async function verifyProjectionRebuild(context, syncDir) {
+  const claude = (await getThread(context, "claude-native-lifecycle")).thread;
+  assert.equal(claude.status, "idle");
+  assert.equal(claude.claude.instanceId, "200:200");
   const rebuilt = await getThread(context, ids.threadId);
   assert.equal(rebuilt.thread.status, "completed");
   const latestThreads = await readJson(
@@ -535,4 +542,28 @@ async function verifySyncDegrades(context) {
   );
   const status = await getJson(context, "/sync/status");
   assert.ok(status.lastError);
+}
+
+async function verifyClaudeNativeProjection(context) {
+  const threadId = "claude-native-lifecycle";
+  let observedAt = 1000;
+  const send = async (event, extra = {}) => {
+    const claude = { version: 1, sessionId: threadId, instanceId: "100:100", startedAt: 100,
+      observedAt: ++observedAt, eventId: `native-${observedAt}`, event, ...extra };
+    const result = await postEvent(context, { ...hookEvent("AgentMetadata"), correlationId: threadId,
+      payload: { source: "claude", threadId, claude, stateHookEvent: "AgentMetadata" } });
+    assert.equal(result.status, 201);
+    return (await getThread(context, threadId)).thread;
+  };
+  assert.equal((await send("sessionstart")).status, "idle");
+  assert.equal((await send("userpromptsubmit")).status, "running");
+  assert.equal((await send("stop")).status, "running");
+  assert.equal((await send("sessionstart", { sessionSource: "compact" })).status, "running");
+  assert.equal((await send("notification", { notificationType: "idle_prompt" })).status, "idle");
+  assert.equal((await send("pretooluse")).status, "running");
+  assert.equal((await send("posttooluse")).status, "running");
+  assert.equal((await send("notification", { notificationType: "idle_prompt", observedAt: 1002 })).status, "running");
+  assert.equal((await send("sessionstart", { instanceId: "200:200", startedAt: 200 })).status, "idle");
+  assert.equal((await send("userpromptsubmit")).status, "idle", "previous process cannot replace a new generation");
+  console.log("Claude native App Server lifecycle and stale event guards passed");
 }

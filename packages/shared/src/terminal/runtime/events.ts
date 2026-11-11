@@ -1,3 +1,4 @@
+import type { ClaudeAgentContext } from "../../terminal/claude-agent";
 import type { PiAgentContext } from "../pi-agent";
 import type { DeviceStatusSnapshot } from "../../monitoring/device-status";
 import type { TerminalCompletionEventPayload } from "./completion";
@@ -245,6 +246,7 @@ export type AgentHookStateEvent =
   | "AgentMetadata";
 
 export interface AgentHookStateRequest {
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   activityEventId?: string;
   operationId?: string;

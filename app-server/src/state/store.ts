@@ -1,3 +1,4 @@
+import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +25,7 @@ export interface StateRefIdentity {
 }
 
 export interface StateRefUpdate {
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   agent: AppServerAgentKind;
   status: AppServerAgentRunStatus;
@@ -122,6 +124,7 @@ export class AppServerStateStore {
     const startsNewTurn = update.agent === "codex" &&
       (update.lastHookEvent === "UserPromptSubmit" || update.lastHookEvent === "SessionStart");
     const current: AppServerThreadRef = {
+      ...(update.claude ?? previous?.claude ? { claude: update.claude ?? previous?.claude } : {}),
       ...(update.pi ?? previous?.pi ? { pi: update.pi ?? previous?.pi } : {}),
       threadId: update.threadId,
       agent: update.agent,

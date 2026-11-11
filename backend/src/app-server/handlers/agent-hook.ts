@@ -1,3 +1,4 @@
+import { isClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import { logger } from "../../logging/index";
@@ -67,6 +68,7 @@ export async function handleAgentHookEvent(
     tmuxPaneId,
     commandName,
     operationId,
+    ...(isClaudeAgentContext((event.payload as Record<string, unknown>)?.claude) ? { claude: (event.payload as { claude: import("@runweave/shared/terminal/claude-agent").ClaudeAgentContext }).claude } : {}),
     ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi) ? { pi: (event.payload as { pi: import("@runweave/shared/terminal/pi-agent").PiAgentContext }).pi } : {}),
   });
   if (result.status === "not_found" || result.status === "exited") {

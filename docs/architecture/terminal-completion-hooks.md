@@ -63,7 +63,8 @@ Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI
 
 安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
 
-Claude 的状态与 prepare/resume 生命周期尚未开放。飞书通知单独绑定原生 session、进程代次与
+Claude 的状态由带主进程身份的 Hook 推进，规则见[终端状态](./terminal-state.md#运行限制)；
+自动 prepare/resume 仍未开放。飞书通知单独绑定原生 session、进程代次与
 当前 Panel；`Stop` 保存回复候选，后续原生 `idle_prompt` 确认才发布一次 completion。
 详见 [Claude 原生空闲确认](./terminal-completion-notifications.md#claude-原生空闲确认)。
 Backend 仍拒绝旧版裸 Stop（202 ignored，`claude_lifecycle_unverified`），不借认成 Codex/Trae，

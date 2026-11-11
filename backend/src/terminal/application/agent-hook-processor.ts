@@ -1,3 +1,6 @@
+import { syncAgentThreadMetadata } from "./agent-hook-thread-metadata";
+import { recordClaudeHookContext, withClaudeHookQueue } from "./claude-hook-lifecycle";
+import { isClaudeAgentContext, type ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { resolveHookPanel } from "./resolve-hook-panel";
 import { codexHookBelongsToPrimary } from "../runtime/codex-context";
 import { isPiAgentContext, isNewerPiContext, type PiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -6,7 +9,6 @@ import type {
   AgentHookIgnoreReason,
   AgentHookStateEvent,
 } from "@runweave/shared/terminal/events";
-import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type {
   TerminalAgentKind,
   TerminalState,
@@ -24,7 +26,6 @@ import {
   resolveAgentHookTerminalState,
   type TerminalStateService,
 } from "../state/terminal-state-service";
-import { readCodexThreadSnapshot } from "../runtime/codex-thread-snapshot";
 import { acknowledgeTerminalPrompt } from "../runtime/input-admission";
 import { persistNodeWrapperAgentIdentity } from "./node-wrapper-agent-identity";
 
@@ -32,13 +33,8 @@ const agentHookProcessorLogger = logger.child({
   component: "terminal-agent-hook",
 });
 
-function getLastThreadStatusForHookEvent(
-  hookEvent: AgentHookStateEvent,
-): TerminalLastThreadStatus {
-  return hookEvent === "UserPromptSubmit" ? "running" : "idle";
-}
-
 export interface ProcessTerminalAgentHookInput {
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   terminalSessionId: string;
   operationId?: string | null;
@@ -89,6 +85,16 @@ export type ProcessTerminalAgentHookResult =
     };
 
 export async function processTerminalAgentHook(
+  ...args: Parameters<typeof processTerminalAgentHookUnlocked>
+): Promise<ProcessTerminalAgentHookResult> {
+  const [options, input] = args;
+  const processHook = () => processTerminalAgentHookUnlocked(...args);
+  return input.agent === "claude"
+    ? withClaudeHookQueue(options.terminalSessionManager, input.terminalSessionId, processHook)
+    : processHook();
+}
+
+async function processTerminalAgentHookUnlocked(
   options: {
     terminalSessionManager: TerminalSessionManager;
     terminalStateService: TerminalStateService;
@@ -116,9 +122,8 @@ export async function processTerminalAgentHook(
     };
   }
 
-  // The native Claude adapter is not yet generation-bound. Recognize the
-  // provider without accepting legacy hooks as state, input or completion proof.
-  if (input.agent === "claude") {
+  // Old Toolkit hooks carry no native process identity and remain non-authoritative.
+  if (input.agent === "claude" && (!isClaudeAgentContext(input.claude) || input.claude.sessionId !== input.threadId)) {
     return {
       status: "ignored", terminalSessionId: session.id, agent: input.agent,
       hookEvent: input.hookEvent, activeCommand: session.activeCommand,
@@ -167,6 +172,7 @@ export async function processTerminalAgentHook(
     lastThreadOwner.lastThreadProvider ??
     (lastThreadOwner.lastThreadId ? "codex" : null);
   const resumedLastThreadIdentityMatched = Boolean(
+    input.agent !== "claude" &&
     input.hookEvent === "UserPromptSubmit" &&
     hookThreadId &&
     !currentThreadOwner.threadId &&
@@ -311,6 +317,22 @@ export async function processTerminalAgentHook(
     };
   }
 
+  let stateHookEvent = input.hookEvent;
+  if (input.agent === "claude" && isClaudeAgentContext(input.claude)) {
+    const result = await recordClaudeHookContext(options.terminalSessionManager, session, panel ?? null, input.claude);
+    if (!result.accepted) {
+      return { status: "ignored", terminalSessionId: session.id, agent: input.agent,
+        hookEvent: input.hookEvent, activeCommand: targetActiveCommand,
+        terminalState: currentTargetState, panelId: panel?.id ?? null,
+        ignoreReason: "operation_identity_mismatch", activityReplayAllowed: result.activityReplayAllowed };
+    }
+    const { status } = result;
+    if (!status) {
+      return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
+        hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
+    }
+    stateHookEvent = status === "running" ? "UserPromptSubmit" : "Stop";
+  }
   if (input.agent === "pi") {
     if (!isPiAgentContext(input.pi) || input.pi.sessionId !== hookThreadId ||
         !isNewerPiContext(input.pi, currentThreadOwner.pi)) {
@@ -337,7 +359,7 @@ export async function processTerminalAgentHook(
         event === "ui_prompt_start" ? "Pi 需要你处理" : "Pi 本轮执行失败");
     }
   }
-  if (input.hookEvent === "AgentMetadata") {
+  if (input.hookEvent === "AgentMetadata" && input.agent !== "claude") {
     return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
       hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
   }
@@ -347,7 +369,7 @@ export async function processTerminalAgentHook(
       session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
       input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,
     ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.mobile-reply.failed", { error }); });
-    await options.terminalSessionManager.feishuNotifications.beginTurn(
+    if (input.agent !== "claude") await options.terminalSessionManager.feishuNotifications.beginTurn(
       session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
       input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,
     ).catch((error) => { agentHookProcessorLogger.warn("terminal-agent-hook.feishu-policy.failed", { error }); });
@@ -374,7 +396,7 @@ export async function processTerminalAgentHook(
     }
     const panelTerminalState = resolveAgentHookTerminalState(
       effectiveAgent,
-      input.hookEvent,
+      stateHookEvent,
     );
     await options.terminalSessionManager.updatePanelTerminalState(
       panel.id,
@@ -393,7 +415,7 @@ export async function processTerminalAgentHook(
     terminalState = options.terminalStateService.handleAgentHook(
       session.id,
       effectiveAgent,
-      input.hookEvent,
+      stateHookEvent,
       {
         projectId: session.projectId,
         reason: "agent_hook",
@@ -407,7 +429,7 @@ export async function processTerminalAgentHook(
         session,
         panel,
         provider: effectiveAgent,
-        hookEvent: input.hookEvent,
+        hookEvent: input.hookEvent === "SessionStart" ? "SessionStart" : stateHookEvent,
         threadId: hookThreadId,
         operationId: input.operationId,
       })) ?? session;
@@ -428,153 +450,4 @@ export async function processTerminalAgentHook(
     terminalState,
     panelId: panel?.id ?? null,
   };
-}
-
-export async function syncAgentThreadMetadata(options: {
-  terminalSessionManager: TerminalSessionManager;
-  session: ReturnType<TerminalSessionManager["getSession"]>;
-  panel: ReturnType<TerminalSessionManager["getPanel"]> | null;
-  provider: TerminalAgentKind;
-  hookEvent: AgentHookStateEvent;
-  threadId: string;
-  operationId?: string | null;
-}): Promise<ReturnType<TerminalSessionManager["getSession"]>> {
-  const session = options.session;
-  if (!session) {
-    return session;
-  }
-
-  const lastThreadUpdatedAt = new Date();
-  const lastThreadStatus = getLastThreadStatusForHookEvent(options.hookEvent);
-  await options.terminalSessionManager.updateSessionLastThread(
-    session.id,
-    options.threadId,
-    lastThreadStatus,
-    lastThreadUpdatedAt,
-    options.provider,
-  );
-  if (options.panel) {
-    await options.terminalSessionManager.updatePanelLastThread(
-      options.panel.id,
-      options.threadId,
-      lastThreadStatus,
-      lastThreadUpdatedAt,
-      options.provider,
-      options.operationId,
-    );
-  }
-
-  if (
-    options.hookEvent === "SessionStart" ||
-    options.hookEvent === "UserPromptSubmit"
-  ) {
-    const runningPanelCount = options.terminalSessionManager
-      .listPanels(session.id)
-      .filter((candidate) => candidate.status === "running").length;
-    const shouldWriteSessionMetadata = runningPanelCount <= 1;
-    const previousThreadId = session.threadId;
-    const previousPanelThreadId = options.panel?.threadId;
-    let nextSession = session;
-
-    if (shouldWriteSessionMetadata) {
-      nextSession =
-        (await options.terminalSessionManager.updateSessionThreadId(
-          session.id,
-          options.threadId,
-          options.provider,
-        )) ?? nextSession;
-      if (previousThreadId !== options.threadId) {
-        await options.terminalSessionManager.updateSessionPreview(
-          session.id,
-          null,
-        );
-      }
-    }
-    if (options.hookEvent === "SessionStart" && options.provider === "codex") {
-      updateCodexThreadPreviewInBackground(
-        options.terminalSessionManager,
-        session.id,
-        options.threadId,
-        options.panel?.id ?? null,
-        shouldWriteSessionMetadata,
-      );
-    }
-    if (options.panel) {
-      await options.terminalSessionManager.updatePanelThreadId(
-        options.panel.id,
-        options.threadId,
-        options.provider,
-        options.operationId,
-      );
-      if (previousPanelThreadId !== options.threadId) {
-        await options.terminalSessionManager.updatePanelPreview(
-          options.panel.id,
-          null,
-        );
-      }
-    }
-    return nextSession;
-  }
-
-  if (options.hookEvent !== "Stop") {
-    return session;
-  }
-
-  const runningPanelCount = options.terminalSessionManager
-    .listPanels(session.id)
-    .filter((candidate) => candidate.status === "running").length;
-  let nextSession = session;
-  if (
-    session.threadId === options.threadId &&
-    (runningPanelCount <= 1 || !options.panel)
-  ) {
-    nextSession =
-      (await options.terminalSessionManager.updateSessionThreadId(
-        session.id,
-        null,
-      )) ?? nextSession;
-    await options.terminalSessionManager.updateSessionPreview(session.id, null);
-  }
-  if (options.panel?.threadId === options.threadId) {
-    await options.terminalSessionManager.updatePanelThreadId(
-      options.panel.id,
-      null,
-      null,
-      options.operationId,
-    );
-    await options.terminalSessionManager.updatePanelPreview(
-      options.panel.id,
-      null,
-    );
-  }
-  return nextSession;
-}
-
-function updateCodexThreadPreviewInBackground(
-  terminalSessionManager: TerminalSessionManager,
-  terminalSessionId: string,
-  threadId: string,
-  panelId: string | null,
-  updateSessionPreview: boolean,
-): void {
-  void readCodexThreadSnapshot(threadId)
-    .then(async ({ preview }) => {
-      if (updateSessionPreview) {
-        await terminalSessionManager.updateSessionPreview(
-          terminalSessionId,
-          preview,
-        );
-      }
-      if (panelId) {
-        await terminalSessionManager.updatePanelPreview(panelId, preview);
-      }
-    })
-    .catch((error) => {
-      agentHookProcessorLogger.warn("terminal-agent-hook.preview.failed", {
-        message: "Failed to load Codex thread preview",
-        terminalSessionId,
-        threadId,
-        error,
-      });
-    });
 }

@@ -7,6 +7,7 @@ const { setTimeout } = require("node:timers");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { readClaudeContext } = require("./runweave-hook-claude.cjs");
 const { postCompletionHook } = require("./runweave-hook-completion.cjs");
 const {
   STOP_EVENTS,
@@ -221,10 +222,12 @@ async function postAgentHook({
   activityEventId,
   operationId,
   pi,
+  claude,
 }) {
   let body = JSON.stringify({
     activityEventId,
     ...(pi ? { pi } : {}),
+    ...(claude ? { claude } : {}),
     ...(operationId ? { operationId } : {}),
     terminalSessionId,
     projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
@@ -322,8 +325,11 @@ async function main() {
   }
   const completionReason = normalizeReason(args.reason);
   const threadId = readThreadId(payload);
-  const stateHookEvent =
-    ["pi", "codex", "trae", "traecli", "traex"].includes(source)
+  payload.runweaveHookEventId = crypto.randomUUID();
+  if (source === "claude") payload.claude = readClaudeContext(payload, payload.runweaveHookEventId);
+  const stateHookEvent = source === "claude"
+    ? (payload.claude ? toAgentHookStateEvent(normalizedEvent) || "AgentMetadata" : null)
+    : ["pi", "codex", "trae", "traecli", "traex"].includes(source)
       ? toAgentHookStateEvent(normalizedEvent)
       : null;
   // Compaction continues the turn; child CLIs do not own the parent terminal.
@@ -418,7 +424,6 @@ async function main() {
     const summary = extractCompletionSummary(payload);
     if (summary) payload.last_assistant_message = summary;
   }
-  payload.runweaveHookEventId = crypto.randomUUID();
   const appServerClient = await discoverAppServer();
   if (!appServerClient) {
     appendDebugLog("hook bridge app-server unavailable", {
@@ -484,6 +489,7 @@ async function main() {
           : undefined,
       activityEventId,
       ...(source === "pi" ? { pi: payload.pi } : {}),
+      ...(source === "claude" ? { claude: payload.claude } : {}),
       operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
     });
     appendDebugLog("hook bridge posted agent hook", {

@@ -300,6 +300,7 @@ export class LowDbTerminalSessionStore
       }
 
       if (params.pi) session.pi = params.pi;
+      if (params.claude) session.claude = params.claude;
       if (params.threadId) {
         session.threadId = params.threadId;
         session.threadProvider = params.provider ?? undefined;
