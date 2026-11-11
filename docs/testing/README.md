@@ -44,7 +44,8 @@ Daily Record 的[浏览来源接入计划](./skills/daily-record-browser.testpla
 ## Claude Code 集成验收
 
 Claude 的[配置与能力](../cli/configuration.md#claude-code-原生引用与能力)、
-[正文读取](../architecture/terminal-code-preview.md)和
+[正文读取](../architecture/terminal-code-preview.md)、
+[Hook 生命周期](../architecture/terminal-state.md#运行限制)和
 [原生空闲通知](../architecture/terminal-completion-notifications.md#claude-原生空闲确认)分别描述当前接入。
 以下三份计划保留完整能力的验收要求，不是已实现清单，也没有完整通过记录：
 
