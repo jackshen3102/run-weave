@@ -46,7 +46,7 @@ function readClaudeIdentity() {
   let startedAt = processes.get(claudePid).startedAt;
   if (process.platform !== "win32") {
     const result = spawnSync("ps", ["-p", String(claudePid), "-o", "lstart="], {
-      ...options, env: { ...process.env, TZ: "UTC", LC_ALL: "C" },
+      ...options, env: { TZ: "UTC", LC_ALL: "C" },
     });
     if (result.error || result.status !== 0) return null;
     startedAt = Date.parse(`${String(result.stdout).trim()} UTC`);
