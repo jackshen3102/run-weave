@@ -46,7 +46,7 @@ struct TerminalQuickActionsExpandButton: View {
   let expand: () -> Void
 
   var body: some View {
-    Button(action: expand) label: {
+    Button(action: expand) {
       Image(systemName: mode == .shortcuts ? "keyboard" : "bolt.fill")
         .frame(width: 44, height: 44)
     }

@@ -408,7 +408,12 @@ struct TerminalScreen: View {
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
       TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible || showingConversation).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 8)
+        .ignoresSafeArea(.container, edges: .bottom)
+    }
+    .overlay(alignment: .bottom) {
       terminalDock
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(.container, edges: quickActionsVisible ? .bottom : [])
     }
   }
 
@@ -447,12 +452,12 @@ struct TerminalScreen: View {
         TerminalQuickActionBar(mode: $quickActionMode, visible: $quickActionsVisible,
           enabled: quickActionsEnabled, sending: sendingInstantReply,
           sendShortcut: { if quickActionsEnabled { controller.sendRaw($0) } }, sendReply: sendInstantReply)
+          .background(TerminalAppearance.background)
       }
     }
     .frame(maxWidth: .infinity)
     .buttonStyle(.plain)
-    .padding(.vertical, 4)
-    .background(TerminalAppearance.background)
+    .padding(.vertical, quickActionsVisible ? 0 : 8)
   }
 
   private var quickActionsEnabled: Bool {
