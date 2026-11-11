@@ -11,7 +11,7 @@
 | Terminal、Project、输入投递与 Agent 控制                | [terminal-cli.md](./terminal-cli.md)                                                                                                                     |
 | Terminal 快照分享、匿名读取与有效期                     | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                                                                                               |
 | iOS 两台模拟器跨 worktree 复用                          | [ios-simulators.md](./ios-simulators.md)                                                                                                                 |
-| 普通会话经验检索与结果回执                              | [experience-cli.md](./experience-cli.md)                                                                                                                 |
+| 普通会话经验检索、历史盘点、增量审查与结果回执          | [experience-cli.md](./experience-cli.md)                                                                                                                 |
 | 本机 Codex 历史用量与执行疑点报告                       | [token-report.md](./token-report.md)                                                                                                                     |
 | 本机 Codex Skill 加载与候选使用统计                     | [skill-report.md](./skill-report.md)                                                                                                                     |
 | 按天整理本机 Agent 对话与事实记录、配置多机器定时上报   | [每日事实记录](../../packages/daily-record/README.md)、[定时上报配置与恢复](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md) |

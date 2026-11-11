@@ -84,10 +84,13 @@ Claude 的操作能力仍为 `unavailable / integration_unverified`。`unsupport
 不能将未接通的 Runweave adapter 宣称为上游不支持。既有 provider 的操作入口和默认值不变，
 具体操作仍重新核对当前目标。合同入口为 [共享能力类型](../../packages/shared/src/agent-capabilities.ts)。
 
-Claude 当前接入分为三条独立路径：
+Claude 的正文、生命周期与通知分别接入；受管操作能力仍以接口返回为准：
 
 - [原生正文阅读](../architecture/terminal-code-preview.md)按当前 pane 的真实进程和 session 定位只读记录；
-  可读不表示已完成受管 prepare/resume 或生命周期接入。
+  可读不表示已完成受管 prepare/resume，也不能代替生命周期证据。
+- [原生 Hook 生命周期](../architecture/terminal-state.md#运行限制)按主进程代次与 session 更新状态；
+  仅探测到前台进程仍为 `agent_starting`，`Stop` 不推导 idle，须等待同代次原生空闲确认。
+  Windows 祖先退出或 PID 复用的身份边界也以该合同为准；源码接入不代表各平台均已验收。
 - [飞书完成通知](../architecture/terminal-completion-notifications.md#claude-原生空闲确认)等待同代次的原生空闲确认，
   不改变 TerminalState，也不启用 Claude 桌面通知或声音。
 - 结构化问答与权限回传、实时模型设置、fork、旁聊、后台任务和内部 Agent 的 Claude 接入仍未开放；
