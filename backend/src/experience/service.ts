@@ -2,6 +2,8 @@ import { ExperienceError } from "./errors";
 export { ExperienceError } from "./errors";
 import { readCandidate, retireCandidate } from "./candidate-lifecycle";
 import { readExperienceCatalog } from "./catalog";
+import { readExperienceMaintenance, readExperienceMaintenanceReview, saveExperienceMaintenanceReview } from "./maintenance-review";
+import type { SaveExperienceMaintenanceReview } from "@runweave/shared/experience";
 import type { ExperienceCatalogKind } from "@runweave/shared/experience";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -270,6 +272,18 @@ export class ExperienceService {
 
   catalog(repositoryId: string, sourceAvailable: boolean, kind: ExperienceCatalogKind, limit: number, cursor?: string) {
     return readExperienceCatalog(this.storage, repositoryId, sourceAvailable, kind, limit, cursor);
+  }
+
+  maintenanceQueue(repositoryId: string, sourceAvailable: boolean, kind: ExperienceCatalogKind, policy: string, pendingOnly: boolean, limit: number, cursor?: string) {
+    return readExperienceMaintenance(this.storage, repositoryId, sourceAvailable, kind, policy, pendingOnly, limit, cursor);
+  }
+
+  saveMaintenanceReview(repositoryId: string, sourceAvailable: boolean, input: SaveExperienceMaintenanceReview) {
+    return saveExperienceMaintenanceReview(this.storage, repositoryId, sourceAvailable, input);
+  }
+
+  maintenanceReview(repositoryId: string, requestId: string) {
+    return readExperienceMaintenanceReview(this.storage, repositoryId, requestId);
   }
 
   async candidate(cwd: string, candidateId: string) {

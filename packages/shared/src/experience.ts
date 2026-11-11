@@ -146,6 +146,49 @@ export interface ExperienceCatalogPage {
   nextCursor: string | null;
 }
 
+/** Maintenance receipts describe a review, not adoption, publication or task success. */
+export interface ExperienceMaintenanceReview {
+  requestId: string;
+  repositoryId: string;
+  namespace: string;
+  policy: string;
+  kind: ExperienceCatalogKind;
+  itemId: string;
+  version: string;
+  decision: "reviewed" | "deferred";
+  reason: string;
+  blocker: string | null;
+  reviewedAt: string;
+}
+export interface SaveExperienceMaintenanceReview {
+  requestId: string;
+  policy: string;
+  kind: ExperienceCatalogKind;
+  itemId: string;
+  expectedVersion: string;
+  expectedReviewId: string | null;
+  decision: "reviewed" | "deferred";
+  reason: string;
+  blocker: string | null;
+}
+export interface ExperienceMaintenanceItem {
+  itemId: string;
+  /** Includes object content, source availability and observed evidence state. */
+  version: string;
+  evidenceIssues: string[];
+  item: ExperienceCatalogPage["items"][number];
+  review: ExperienceMaintenanceReview | null;
+  state: "pending" | "reviewed" | "deferred";
+}
+export interface ExperienceMaintenancePage extends Omit<ExperienceCatalogPage, "items"> {
+  policy: string;
+  pendingOnly: boolean;
+  items: ExperienceMaintenanceItem[];
+  /** Counts cover scanned objects, including unchanged objects omitted by pendingOnly. */
+  counts: { scanned: number; pending: number; reviewed: number; deferred: number };
+  blockers: Array<{ key: string; count: number }>;
+}
+
 export interface ExperienceLearningJob {
   jobId: string;
   repositoryId: string;

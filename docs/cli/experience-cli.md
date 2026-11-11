@@ -75,6 +75,64 @@ common-directory 身份**，或另行明确数据迁移范围；不伪造路径�
 env -u RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR -u RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING pnpm --dir backend exec tsx ../scripts/verify/experience/maintenance.mts
 ```
 
+## 增量知识审查
+
+```bash
+rw experience review-queue --repository-id <已登记仓库ID> --kind candidates --policy cleanup-v1 --pending-only --all --json
+rw experience review --repository-id <同一仓库ID> --file review.json --instance stable --json
+rw experience review-receipt --repository-id <同一仓库ID> --request-id <原请求UUID> --json
+```
+
+`review-queue` 支持与 catalog 相同的四类对象：records、revisions、candidates、jobs。
+policy 是调用方选择的审查规则版本（1–80 位字母、数字、点、下划线或连字符），规则或适用基线
+改变时使用新 policy；它不自动识别语义变化。接口为
+`GET /api/experience/maintenance/:repositoryId?kind=...&policy=...`，沿用登记仓库、命名空间、
+认证与本机直连门禁，源码丢失仍能盘点历史，返回明确的 sourceAvailable。
+
+每项返回 itemId、完整 item、version、evidenceIssues、review 和 pending/reviewed/deferred 状态。
+version 同时绑定对象正文、生命周期、来源可用性、有效期状态、证据行的实际哈希及缺失状态。
+有合法归档的原文件缺失沿用原证据读取合同；原文件再次变化、恢复可读、对象更新、任务重试或
+policy 改变，都会重新进入 pending。每次队列查询重新核对证据，不用旧的有效性判断永久跳过。
+这只避免重复的内容审查，不免除当前适用前提的核对；环境基线改变需要更新 policy。
+
+`--pending-only` 只输出本次待审对象，但 counts 仍包含本页扫描的全部对象，以及已审和暂缓数量。
+blockers 按调用方提供的稳定原因键合并**当前暂缓对象数**，不累计运行次数、不将暂缓算作完成。
+没有 pending 但仍有 deferred，不能报告全量审查完成。分页先按原始对象前进，因此过滤后的空页
+仍可能有 nextCursor；`--all` 会继续翻页并累加 counts 和 blockers。游标绑定 policy、过滤条件和
+catalog 作用域；`--cursor` 不能与 `--all` 同用。分页不是跨请求固定快照，结束前应从头核对变化，
+不得将本次返回的数量当作永久不变的全库总数。
+
+逐项实质审查后保存单条请求文件；不要将未审的列表批量标记为已审：
+
+```json
+{
+  "requestId": "本次请求生成并保留的UUID",
+  "policy": "cleanup-v1",
+  "kind": "candidates",
+  "itemId": "队列中的itemId",
+  "expectedVersion": "队列中的version",
+  "expectedReviewId": null,
+  "decision": "reviewed",
+  "reason": "本次实际审查的结论和依据",
+  "blocker": null
+}
+```
+
+对应 `POST /api/experience/maintenance/:repositoryId/reviews`。首次 expectedReviewId 为 null；
+修改同一对象版本的结论时，使用队列 review.requestId。缺少证据或来源不可用只能记 deferred，
+并提供 blocker（与 policy 相同字符约束，例如 source-unavailable）和具体 reason。
+内容版本或已审回执变化返回 409，不自动重试。requestId 与原参数用于核对结果不确定的原请求，
+完全相同的重放返回原回执及原时间；复用 requestId 修改正文返回冲突。回执和历史追加保存于
+同仓库 SQLite，重启后保留；保存前再次核对对象版本，证据观察发生在写入之前，之后的外部变化
+由下次队列查询识别，不承诺文件系统与 SQLite 的跨资源事务。
+`review-receipt` 通过 `GET /api/experience/maintenance/:repositoryId/reviews/:requestId` 回读原回执，
+对象后来变化也不覆盖该历史。404 只能说明此次读取未找到，不能在原写入仍不确定时自动换键重放。
+
+审查回执不修改候选、已发布经验、有效期、使用反馈或人类收件箱状态，也不是独立验收或成功证明。
+需要实际退役时先使用 retire-candidate 或正常的记录更新接口，再重新读取新版本并记录审查结论；
+不能用 reviewed 代替实际处置。源码路径不可用的对象保留 deferred，不能伪造目录绕过身份校验。
+实现入口为 [增量审查](../../backend/src/experience/maintenance-review.ts)。
+
 ## 人类阅读与 Agent 使用
 
 已保存且当前有效的经验也通过「自进化」成果收件箱供人阅读。手机和桌面的已处理/恢复只改变
