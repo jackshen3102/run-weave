@@ -1,3 +1,4 @@
+import { LocalFeishuTerminalClient } from "../feishu/local-terminal-client.js";
 import { runFeishuHub } from "../feishu/hub-runtime.js";
 import { notifyFeishuNode } from "../feishu/node-notifier.js";
 import { isFeishuNotifyPayload } from "@runweave/shared/feishu/bridge";
@@ -230,7 +231,7 @@ export async function runFeishuCommand(
         config,
         store,
         client,
-        terminalClient,
+        terminalClient: new LocalFeishuTerminalClient(terminalClient),
         stderr: io.stderr,
         signal: controller.signal,
       });

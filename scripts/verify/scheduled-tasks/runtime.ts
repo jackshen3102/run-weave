@@ -21,7 +21,7 @@ import {
 import { ScheduledTaskStore } from "../../../backend/src/scheduled-tasks/storage/store";
 
 import { verifyProjectMigration } from "./project-migration";
-import { verifyProjectIndependent } from "./project-independent";
+import { verifyProjectIndependent, verifyPreviousBlocker } from "./project-independent";
 import { verifyMaintenance } from "./maintenance";
 import { verifyContinuation } from "./continuation";
 import { verifyMigrations } from "./migrations";
@@ -42,6 +42,7 @@ const cases: Record<string, () => Promise<void>> = {
   restart: verifyRestart,
   catchUp: verifyCatchUp,
   catchUpExecution: verifyCatchUpExecution,
+  previousBlocker: () => withStore((store, directory) => verifyPreviousBlocker(store, directory, taskFixture, runFixture)),
   concurrent: () =>
     withStore((store) => verifyConcurrent(store, taskFixture, runFixture)),
   fullAccess: verifyFullAccess,
@@ -500,6 +501,7 @@ async function verifyCatchUpExecution(): Promise<void> {
     }
   });
 }
+
 
 async function withStore(
   run: (store: ScheduledTaskStore, directory: string) => Promise<void>,

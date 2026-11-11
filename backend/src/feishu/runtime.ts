@@ -1,3 +1,4 @@
+import { materializeFeishuInput } from "./attachment-input";
 import { configuration, settingText } from "@runweave/config-node";
 import {
   FeishuBridgeError,
@@ -42,13 +43,14 @@ export function createFeishuNode(
         if (session.status !== "running")
           throw new FeishuBridgeError("not_running");
         try {
+          const text = await materializeFeishuInput(input);
           const result = await submitTerminalInput(
             sessions,
             inputOptions,
             session,
             {
               operationId: `feishu:${input.messageId}`,
-              data: input.text,
+              data: text,
               mode: "prompt_replace",
               submit: true,
             },

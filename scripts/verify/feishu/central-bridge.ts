@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { runNodeFixture } from "./node-fixture";
 import assert from "node:assert/strict";
 import { fork, type ChildProcess } from "node:child_process";
@@ -59,6 +60,14 @@ async function main() {
   const fakeLark = {
     im: {
       v1: {
+        messageResource: {
+          get: async ({ path: p }: { path: { file_key: string } }) => {
+            if (p.file_key === "denied") throw new Error("fixture denied");
+            const bytes = p.file_key === "image" ? Buffer.from("89504e470d0a1a0a", "hex") :
+              Buffer.alloc(p.file_key === "too-large" ? 8 * 1024 * 1024 + 1 : 600 * 1024, 65);
+            return { getReadableStream: () => Readable.from([bytes]) };
+          },
+        },
         message: {
           create: async () => {
             const id = `root-${++serial}`;
@@ -123,6 +132,7 @@ async function main() {
   const children = new Map<string, ChildProcess>();
   const inputs: Array<{
     backendId: string;
+    deliveredText?: string;
     frame: { messageId: string; text: string };
   }> = [];
   const messages: Array<{ type: string }> = [];
@@ -386,6 +396,27 @@ async function main() {
     console.log(
       "PASS hub restart retains bindings and only recovers unattempted input",
     );
+
+    const beforeAttachments = inputs.length;
+    await handler.accept(event(0, "image-ok", { message_type: "image", content: JSON.stringify({ image_key: "image" }) }));
+    await handler.accept(event(1, "file-ok", { message_type: "file", content: JSON.stringify({ file_key: "log", file_name: "错误 日志.log" }) }));
+    await handler.drain();
+    for (const [id, node, expected] of [["image-ok", 0, Buffer.from("89504e470d0a1a0a", "hex")], ["file-ok", 1, Buffer.alloc(600 * 1024, 65)]] as const) {
+      const delivered = inputs.find(input => input.frame.messageId === id)!;
+      assert.equal(delivered.backendId, ids[node]);
+      const savedPath = JSON.parse(delivered.deliveredText!.split("当前任务读取：")[1]!);
+      assert.deepEqual(await readFile(savedPath), expected);
+      assert.equal((await store.delivery(id))?.status, "succeeded");
+    }
+    await handler.accept(event(0, "image-ok", { message_type: "image", content: JSON.stringify({ image_key: "image" }) }));
+    for (const [id, key, name] of [["large", "too-large", "large.log"], ["permission", "denied", "secret.log"], ["traversal", "log", "../escape.log"]]) {
+      await handler.accept(event(0, id!, { message_type: "file", content: JSON.stringify({ file_key: key, file_name: name }) }));
+      await handler.drain();
+      assert.equal((await store.delivery(id!))?.status, "failed");
+    }
+    assert.equal(inputs.length, beforeAttachments + 2);
+    assert.equal((await store.getActiveTopic("chat", "same-terminal", ids[0]))?.rootMessageId, topicRoots[0]);
+    console.log("PASS images and large logs materialize on original nodes; duplicate, oversize, permission and path traversal never reach input");
 
     const legacyDir = path.join(directory, "legacy");
     const legacy = new FeishuStateStore({ directory: legacyDir });

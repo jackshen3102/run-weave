@@ -1,5 +1,6 @@
+import { materializeFeishuInput } from "../../../backend/src/feishu/attachment-input";
 import { Readable } from "node:stream";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import {
@@ -37,6 +38,7 @@ export async function runNodeFixture() {
     "express",
   ) as typeof import("../../../backend/node_modules/express");
   let crash = false;
+  const attachmentDirectories = new Set<string>();
   const connector = new FeishuBridgeConnector({
     url: url!,
     backendId: backendId!,
@@ -47,7 +49,9 @@ export async function runNodeFixture() {
       return { status: "running" };
     },
     input: async (frame) => {
-      process.send?.({ type: "input", backendId, frame });
+      const deliveredText = await materializeFeishuInput(frame);
+      if (frame.attachment) attachmentDirectories.add(path.dirname(JSON.parse(deliveredText.split("当前任务读取：")[1]!)));
+      process.send?.({ type: "input", backendId, frame, deliveredText });
       if (crash) {
         setTimeout(() => process.exit(0), 10);
         await new Promise(() => {});
@@ -89,6 +93,7 @@ export async function runNodeFixture() {
     }
     if (msg.type === "stop") {
       await connector.close();
+      for (const directory of attachmentDirectories) await rm(directory, { recursive: true, force: true });
       server.close();
       process.exit(0);
     }

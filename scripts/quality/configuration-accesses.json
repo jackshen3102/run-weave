@@ -10265,6 +10265,14 @@
   {
     "file": "scripts/verify/feishu/central-bridge.ts",
     "kind": "file-io",
+    "expression": "readFile(savedPath)",
+    "count": 1,
+    "category": "test",
+    "reason": "读取隔离节点临时目录中的附件字节，核对跨节点交付内容，不读取或修改用户配置。"
+  },
+  {
+    "file": "scripts/verify/feishu/central-bridge.ts",
+    "kind": "file-io",
     "expression": "writeFile(migrated)",
     "count": 1,
     "category": "test",

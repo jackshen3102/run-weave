@@ -286,6 +286,16 @@ export class ScheduledTaskDatabase {
     return row ? parseRun(row) : null;
   }
 
+  previousFinishedRun(runId: string): ScheduledRun | null {
+    const current = this.requireRun(runId);
+    const row = this.database.prepare(
+      `SELECT * FROM scheduled_runs WHERE task_id = ? AND id != ?
+       AND status IN ('completed', 'failed', 'cancelled') AND scheduled_for < ?
+       ORDER BY scheduled_for DESC, id DESC LIMIT 1`,
+    ).get(current.taskId, current.id, current.scheduledFor) as StoredRow | undefined;
+    return row ? this.readBackground(row, parseRun) : null;
+  }
+
   listRuns(taskId: string): ScheduledRun[] {
     return (
       this.database

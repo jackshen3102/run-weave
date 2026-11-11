@@ -1,3 +1,4 @@
+import type { CreateTerminalClipboardFileRequest, CreateTerminalClipboardFileResponse } from "@runweave/shared/terminal/input";
 import type { TerminalStateResponse } from "@runweave/shared/terminal/events";
 import type { PrepareTerminalAgentRequest, PrepareTerminalAgentResponse } from "@runweave/shared/terminal/agent-preparation";
 import type { SendTerminalInterruptRequest, SendTerminalInterruptResponse, SendTerminalInputRequest, SendTerminalInputResponse } from "@runweave/shared/terminal/input";
@@ -172,6 +173,12 @@ export class TerminalHttpClient {
     return this.auth.requestJson<TerminalStateResponse>(
       `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state`,
     );
+  }
+
+  createClipboardFile(id: string, payload: CreateTerminalClipboardFileRequest): Promise<CreateTerminalClipboardFileResponse> {
+    return this.auth.requestJson(`/api/terminal/session/${encodeURIComponent(id)}/clipboard-file`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
   }
 
   sendInput(

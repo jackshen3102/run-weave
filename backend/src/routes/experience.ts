@@ -9,10 +9,12 @@ import {
   feedbackSchema,
 } from "../experience/schema";
 import { isLocalDirectHttpRequest } from "../server/local-request";
+import type { EvolutionRepositoryScopes } from "../evolution/repository-scope";
 
 export function createExperienceRouter(
   service: ExperienceService,
   learning?: ExperienceLearningRuntime,
+  repositories?: Pick<EvolutionRepositoryScopes, "list"> | null,
 ): Router {
   const router = Router();
   router.use((request, response, next) => {
@@ -22,6 +24,34 @@ export function createExperienceRouter(
       return;
     }
     next();
+  });
+  router.get("/catalog/:repositoryId", async (request, response, next) => {
+    try {
+      const repositoryId = z.string().regex(/^[a-f0-9]{64}$/u).parse(request.params.repositoryId);
+      const query = z.object({
+        kind: z.enum(["records", "revisions", "candidates", "jobs"]),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        cursor: z.string().min(1).max(1024).optional(),
+      }).strict().parse(request.query);
+      if (!repositories) throw new ExperienceError("experience_repository_registry_unavailable", 503);
+      const repository = (await repositories.list(true)).find(item => item.repositoryId === repositoryId);
+      if (!repository) throw new ExperienceError("experience_repository_not_registered", 404);
+      response.json(service.catalog(repositoryId, repository.available === true, query.kind, query.limit, query.cursor));
+    } catch (error) { next(error); }
+  });
+  router.get("/candidates/:id", async (request, response, next) => {
+    try {
+      response.json(await service.candidate(cwdSchema.parse(request.query.cwd),
+        z.string().regex(/^[a-f0-9]{64}$/u).parse(request.params.id)));
+    } catch (error) { next(error); }
+  });
+  router.post("/candidates/:id/retire", async (request, response, next) => {
+    try {
+      const input = z.object({ cwd: cwdSchema, expectedVersion: z.string().regex(/^[a-f0-9]{64}$/u),
+        reason: z.string().trim().min(1).max(2000) }).strict().parse(request.body);
+      const id = z.string().regex(/^[a-f0-9]{64}$/u).parse(request.params.id);
+      response.json(await service.retireCandidate(input.cwd, id, input.expectedVersion, input.reason));
+    } catch (error) { next(error); }
   });
   router.get("/diagnose", async (request, response, next) => {
     try {

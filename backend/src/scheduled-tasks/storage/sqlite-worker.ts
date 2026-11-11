@@ -88,6 +88,8 @@ function execute(command: ScheduledTaskWorkerCommand) {
         command.idempotencyKey,
         command.requestHash,
       );
+    case "previous-finished-run":
+      return database.previousFinishedRun(command.runId);
     case "get-run":
       return database.getRun(command.runId);
     case "list-runs":

@@ -31,8 +31,9 @@ type Bucket =
 export function withExperienceStore<T>(
   directory: string,
   operation: (store: ExperienceStore) => T,
+  readOnly = false,
 ): T {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  if (!readOnly) mkdirSync(directory, { recursive: true, mode: 0o700 });
   const file = path.join(directory, "store.sqlite");
   // Packaged Backend lives in app.asar; native modules are staged outside it.
   const Driver = require(
@@ -40,9 +41,12 @@ export function withExperienceStore<T>(
   ) as typeof Database;
   const database = new Driver(file, {
     timeout: 5000,
+    readonly: readOnly,
+    fileMustExist: readOnly,
     nativeBinding: process.env.RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING,
   });
   try {
+    if (!readOnly) {
     chmodSync(file, 0o600);
     database.exec(`CREATE TABLE IF NOT EXISTS documents (
       bucket TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL,
@@ -52,6 +56,7 @@ export function withExperienceStore<T>(
     database.exec(`CREATE INDEX IF NOT EXISTS experience_checkpoint_expiry_idx
       ON documents(bucket, json_extract(value, '$.expiresAt'))
       WHERE bucket = 'learning-checkpoints'`);
+    }
     return operation(new ExperienceStore(database));
   } finally {
     database.close();
@@ -73,6 +78,15 @@ class ExperienceStore {
       .prepare("SELECT value FROM documents WHERE bucket = ? ORDER BY id")
       .all(bucket) as Array<{ value: string }>;
     return rows.map((row) => JSON.parse(row.value) as T);
+  }
+
+  page<T>(bucket: Bucket, after: string, limit: number, repositoryId?: string): Array<{ id: string; value: T }> {
+    const rows = this.database.prepare(
+      `SELECT id, value FROM documents WHERE bucket = ? AND id > ?
+       ${repositoryId ? "AND json_extract(value, '$.repositoryId') = ?" : ""}
+       ORDER BY id LIMIT ?`,
+    ).all(bucket, after, ...(repositoryId ? [repositoryId] : []), limit) as Array<{ id: string; value: string }>;
+    return rows.map(row => ({ id: row.id, value: JSON.parse(row.value) as T }));
   }
 
   put(bucket: Bucket, id: string, value: unknown): void {

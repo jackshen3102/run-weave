@@ -38,6 +38,43 @@ rw experience retry --instance stable JOB_ID --cwd "$PWD" --json
 经验独立于项目源码保存。同仓库不同 worktree 的源码内容不影响召回；修改、移动或删除源码
 不会自动使经验失效。采用前仍须核对 applicability 中的版本、配置、环境与当前实际结果。
 
+## 历史盘点与候选退役
+
+```bash
+rw evolution repository list --include-removed --json
+rw experience catalog --repository-id <已登记仓库ID> --kind records --all --json
+rw experience catalog --repository-id <已登记仓库ID> --kind revisions --all --json
+rw experience catalog --repository-id <已登记仓库ID> --kind candidates --all --json
+rw experience catalog --repository-id <已登记仓库ID> --kind jobs --all --json
+rw experience candidate <candidateId> --cwd /actual/repository --json
+rw experience retire-candidate <candidateId> --cwd /actual/repository --expected-version <读取到的version> --reason '逐项审查后的具体退役理由' --instance stable --json
+```
+
+`catalog` 对应 `GET /api/experience/catalog/:repositoryId?kind=...`，只接受当前 Backend 已登记的
+仓库 ID（包括已注销登记），保留本机直连与登录门禁，不根据仓库名称、remote 或其他项目兜底。
+以只读 SQLite 连接读取该命名空间的当前经验、所有修订、学习候选或学习作业，源码目录消失不阻止
+读取已留存的数据。`sourceAvailable: false` 仍表示源码不可用，不能据此确认历史结论现在仍成立；
+`storeAvailable: false` 表示没有对应存储文件，不会自动创建空库或宣称已覆盖历史。
+`--limit 1..200` 默认 50，返回 `nextCursor`；`--cursor` 续读，`--all` 自动翻页，两者互斥。
+游标绑定仓库、命名空间及数据类别，按不可变 ID 排序；并发写入时不是固定快照，正式全量审查仍需
+核对盘点前后变化。旧 `status` 的最近 50 条作业保持兼容；`history` 仍指经验使用反馈。
+
+`candidate` 对应 `GET /api/experience/candidates/:id?cwd=...`，返回候选及包含审查/状态的
+`version` 指纹；catalog 的候选条目使用相同结构。退役通过 `POST /api/experience/candidates/:id/retire`
+提交 `{cwd, expectedVersion, reason}`，要求真实 Git 目录仍可解析。版本变化返回 409，不自动重试；
+完全相同的请求可返回原回执，不新增退役时间。候选变为 `retired` 并保存原状态、理由、时间与前版本，
+保留正文、原 review、证据和来源作业；之后的学习审查不能再晋级该候选。退役 promoted 候选不自动
+退役它已发布的经验，后者仍需独立审查。不能把“证据缺失、低使用量、已处理”直接作为无价值理由。
+
+源码路径丢失时可完成历史盘点，但无法通过 cwd 执行候选退役或核验当前源码。需要找回**同一 Git
+common-directory 身份**，或另行明确数据迁移范围；不伪造路径、重建空 Git 仓库或按名称合并。
+
+针对性隔离验证（真实 HTTP、SQLite、Git 与 CLI 分页，不写生产数据）：
+
+```bash
+env -u RUNWEAVE_BETTER_SQLITE3_PACKAGE_DIR -u RUNWEAVE_BETTER_SQLITE3_NATIVE_BINDING pnpm --dir backend exec tsx ../scripts/verify/experience/maintenance.mts
+```
+
 ## 人类阅读与 Agent 使用
 
 已保存且当前有效的经验也通过「自进化」成果收件箱供人阅读。手机和桌面的已处理/恢复只改变
