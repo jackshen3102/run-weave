@@ -1,3 +1,4 @@
+import type { ScheduledTask, ScheduledRun } from "@runweave/shared/scheduled-tasks";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFile, rename, symlink } from "node:fs/promises";
@@ -96,4 +97,56 @@ async function waitFor(condition: () => Promise<boolean>): Promise<void> {
     if (Date.now() > deadline) throw new Error("project independent runtime timeout");
     await new Promise(resolve => setTimeout(resolve, 20));
   }
+}
+
+export async function verifyPreviousBlocker(
+  store: ScheduledTaskStore, directory: string,
+  taskFixture: () => ScheduledTask,
+  runFixture: (task: ScheduledTask, trigger: ScheduledRun["trigger"]) => ScheduledRun,
+): Promise<void> {
+    let task = taskFixture();
+    await store.createTask(task, "carry-forward", "hash");
+    const requests: Array<{ prompt: string; workingDirectory: string; resumeThreadId?: string; projectId?: string }> = [];
+    const runtime = new ScheduledTaskRuntime(store, {} as TerminalSessionManager, new Map([["codex", {
+      provider: "codex", run: async request => {
+        requests.push(request);
+        return { provider: "codex", threadId: `thread-${request.runId}`, summary: "existing-result; missing-access",
+          outcome: requests.length === 2 ? "succeeded" : "blocked", reason: "missing-access" };
+      },
+    }]]), false, { timeoutMs: 10000, maxOutputBytes: 10000 });
+    try {
+      await runtime.initialize();
+      for (let index = 0; index < 5; index++) {
+        if (index === 3) {
+          const previousRevision = task.revision;
+          task = { ...task, revision: previousRevision + 1, prompt: "changed scope" };
+          await store.updateTask(task, previousRevision);
+        }
+        const run = runFixture(task, index === 4 ? "manual" : "scheduled");
+        run.scheduledFor = task.nextRunAt!;
+        run.executionContext = { kind: "task-workspace", cwd: path.join(directory, "workspaces", run.id) };
+        const nextAt = new Date(Date.parse(task.nextRunAt!) + 86400000).toISOString();
+        if (run.trigger === "manual") await store.createManualRun(run, `manual-${index}`, "hash");
+        else await store.materializeScheduledRun(run, `occurrence-${index}`, nextAt, task.revision, task.nextRunAt!);
+        const claimed = await store.claimNextRun(runtime["ownerId"], new Date().toISOString());
+        assert.equal(claimed?.id, run.id);
+        await runtime["execute"](claimed!);
+        assert.equal(requests.length, index + 1);
+        const request = requests[index]!;
+        assert.equal(request.resumeThreadId, undefined);
+        assert.equal(request.projectId, undefined);
+        assert.equal(request.workingDirectory, run.executionContext.cwd);
+        if (index === 1) {
+          assert.match(request.prompt, /missing-access/);
+          assert.match(request.prompt, /existing-result/);
+          assert.match(request.prompt, /existing-artifact/);
+          assert.match(request.prompt, /只读检查/);
+        } else assert.equal(request.prompt, task.prompt);
+        const finished = (await store.getRun(run.id))!;
+        assert.equal(finished.status, index === 1 ? "completed" : "failed");
+        if (index === 0) await store.putRun({ ...finished, artifacts: [{ label: "existing-artifact", kind: "text", text: "preserve this result" }] });
+        task = (await store.getTask(task.id))!;
+      }
+      assert.equal(new Set(requests.map(request => request.workingDirectory)).size, 5);
+    } finally { await runtime.dispose(); }
 }

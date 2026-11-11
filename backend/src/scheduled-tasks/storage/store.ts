@@ -172,6 +172,10 @@ export class ScheduledTaskStore {
   getRun(runId: string) {
     return this.request<ScheduledRun | null>({ op: "get-run", runId });
   }
+  previousFinishedRun(runId: string) {
+    return this.request<ScheduledRun | null>({ op: "previous-finished-run", runId });
+  }
+
   listRuns(taskId: string) {
     return this.request<ScheduledRun[]>({ op: "list-runs", taskId });
   }

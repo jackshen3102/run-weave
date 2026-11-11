@@ -1,3 +1,4 @@
+import { previousBlockerPrompt } from "./previous-blocker";
 import { ServerMaintenance } from "./server-maintenance";
 import { taskWorkspace, validateExecutionContext } from "./execution-context";
 import { continuationPrompt } from "./continuation";
@@ -248,12 +249,14 @@ export class ScheduledTaskRuntime {
       if (remainingBytes <= 0)
         throw new Error("provider_output_limit_exceeded");
       const resuming = Boolean(initial.threadRef && initial.continuation);
+      const previous = !resuming && initial.trigger === "scheduled" && !initial.snapshot.origin &&
+        initial.snapshot.schedule.kind !== "once" ? await this.store.previousFinishedRun(initial.id) : null;
       const result = await provider.run({
         runId: initial.id,
         projectId: initial.executionContext.kind === "project" ? initial.executionContext.projectId : undefined,
         prompt: resuming
           ? continuationPrompt(initial)
-          : initial.snapshot.prompt,
+          : previousBlockerPrompt(initial, previous),
         ...(resuming ? { resumeThreadId: initial.threadRef!.threadId } : {}),
         workingDirectory: cwd,
         model: initial.snapshot.model,

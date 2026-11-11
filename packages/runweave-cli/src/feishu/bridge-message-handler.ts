@@ -1,6 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import type { SendTerminalInputRequest } from "@runweave/shared/terminal/input";
+import type { FeishuAttachment } from "@runweave/shared/feishu/bridge";
+import { downloadFeishuAttachment, parseInboundAttachment, FeishuAttachmentError } from "./inbound-attachment.js";
 import { HttpError } from "../errors.js";
 import type { FeishuConfig } from "./config.js";
 import type { FeishuStateStore, FeishuTopicActive } from "./state-store.js";
@@ -33,6 +35,7 @@ export interface FeishuTerminalClient {
   sendInput(
     id: string,
     input: SendTerminalInputRequest,
+    attachment?: FeishuAttachment,
   ): Promise<{ inputAccepted?: boolean; inputEnqueued?: boolean }>;
 }
 
@@ -65,10 +68,9 @@ export class FeishuBridgeMessageHandler {
       (topic.threadId && topic.threadId !== event.message.thread_id)
     )
       return;
-    const text = parseMessageText(
-      event.message.content,
-      event.message.mentions,
-    );
+    const attachment = parseInboundAttachment(event.message.message_type, event.message.content);
+    const text = attachment ? "收到飞书补充材料，请结合原任务查看。" :
+      event.message.message_type === "text" ? parseMessageText(event.message.content, event.message.mentions) : "";
     if (!text || Buffer.byteLength(text, "utf8") > MAX_INPUT_BYTES) {
       if (
         (await this.params.store.beginDelivery(
@@ -84,7 +86,7 @@ export class FeishuBridgeMessageHandler {
         await this.replyWithReceipt(
           event,
           topic,
-          "投递失败：回复内容为空或过长",
+          "投递失败：消息内容无效、为空或过长",
         );
       }
       return;
@@ -141,7 +143,7 @@ export class FeishuBridgeMessageHandler {
       this.params.config.allowedOpenIds.has(openId) &&
       event.message.chat_type === "group" &&
       event.message.chat_id === this.params.config.targetChatId &&
-      event.message.message_type === "text" &&
+      ["text", "image", "file"].includes(event.message.message_type) &&
       event.message.root_id &&
       event.message.thread_id,
     );
@@ -164,16 +166,15 @@ export class FeishuBridgeMessageHandler {
     );
     if (deliveryState !== "started") return;
 
-    const text = parseMessageText(
-      event.message.content,
-      event.message.mentions,
-    );
+    const attachment = parseInboundAttachment(event.message.message_type, event.message.content);
+    const text = attachment ? "收到飞书补充材料，请结合原任务查看。" :
+      event.message.message_type === "text" ? parseMessageText(event.message.content, event.message.mentions) : "";
     if (!text || Buffer.byteLength(text, "utf8") > MAX_INPUT_BYTES) {
       await this.params.store.finishDelivery(
         event.message.message_id,
         "failed",
       );
-      await this.replyWithReceipt(event, topic, "投递失败：回复内容为空或过长");
+      await this.replyWithReceipt(event, topic, "投递失败：消息内容无效、为空或过长");
       return;
     }
 
@@ -190,6 +191,7 @@ export class FeishuBridgeMessageHandler {
       return;
     }
     const deadline = Date.parse(entry?.expiresAt ?? new Date().toISOString());
+    let preparedAttachment: FeishuAttachment | undefined;
     let inputAttempted = false;
     let lastError: unknown = new Error("Delivery expired before sending");
     let waitingLogged = false;
@@ -208,6 +210,9 @@ export class FeishuBridgeMessageHandler {
           this.params.terminalClient)!.withSignal(signal);
         // Read-only preflight can be retried across backend downtime.
         await client.getSession(topic.terminalSessionId);
+        if (attachment && !preparedAttachment) preparedAttachment = await downloadFeishuAttachment(
+          this.params.client, event.message.message_id, attachment, signal,
+        );
         signal.throwIfAborted();
         await this.params.store.markInputAttempt(
           event.message.message_id,
@@ -227,7 +232,7 @@ export class FeishuBridgeMessageHandler {
           data: text,
           mode: "prompt_replace",
           submit: true,
-        });
+        }, preparedAttachment);
         if (result.inputAccepted !== true || result.inputEnqueued !== true) {
           throw new Error("Runweave did not accept terminal input");
         }
@@ -250,6 +255,7 @@ export class FeishuBridgeMessageHandler {
         }
         const retryable =
           !inputAttempted &&
+          !(error instanceof FeishuAttachmentError) &&
           (!(error instanceof HttpError) ||
             error.status === 401 ||
             error.status === 429 ||
@@ -380,6 +386,9 @@ function classifyTerminalFailure(
   removeTopic: boolean;
   deliveryStatus: "failed" | "unknown";
 } {
+  if (error instanceof FeishuAttachmentError) return {
+    category: "attachment_failed", userText: error.message, removeTopic: false, deliveryStatus: "failed",
+  };
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   if (message.includes("delivery_expired")) {
     return {

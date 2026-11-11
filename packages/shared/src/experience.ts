@@ -111,11 +111,39 @@ export interface ExperienceCandidate {
   sourceJobId: string;
   record: ExperienceRecord;
   expectedRevision: string | null;
-  status: "pending" | "promoted" | "rejected";
+  status: "pending" | "promoted" | "rejected" | "retired";
+  /** Manual retirement preserves the candidate, its review and evidence. */
+  retirement?: {
+    at: string;
+    reason: string;
+    previousStatus: "pending" | "promoted" | "rejected";
+    expectedVersion: string;
+  };
   review: {
     verdict: "supported" | "insufficient" | "contradicted";
     reason: string;
   } | null;
+}
+
+export interface ExperienceCandidateView {
+  candidate: ExperienceCandidate;
+  /** Content fingerprint including review and lifecycle; required for retirement. */
+  version: string;
+}
+export interface RetireExperienceCandidateRequest {
+  cwd: string;
+  expectedVersion: string;
+  reason: string;
+}
+export type ExperienceCatalogKind = "records" | "revisions" | "candidates" | "jobs";
+export interface ExperienceCatalogPage {
+  repositoryId: string;
+  namespace: string;
+  kind: ExperienceCatalogKind;
+  sourceAvailable: boolean;
+  storeAvailable: boolean;
+  items: Array<ExperienceRecord | ExperienceCandidateView | ExperienceLearningJob>;
+  nextCursor: string | null;
 }
 
 export interface ExperienceLearningJob {

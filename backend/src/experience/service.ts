@@ -1,3 +1,8 @@
+import { ExperienceError } from "./errors";
+export { ExperienceError } from "./errors";
+import { readCandidate, retireCandidate } from "./candidate-lifecycle";
+import { readExperienceCatalog } from "./catalog";
+import type { ExperienceCatalogKind } from "@runweave/shared/experience";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
@@ -28,15 +33,6 @@ interface Lookup {
   query: string;
   at: string;
   excluded: ExperienceSearchResult["excluded"];
-}
-
-export class ExperienceError extends Error {
-  constructor(
-    message: string,
-    readonly status = 400,
-  ) {
-    super(message);
-  }
 }
 
 /** Repository identity is independent of Backend registration, profile and port. */
@@ -270,6 +266,24 @@ export class ExperienceService {
       view: await this.inspect(record),
       revisions: revisions.filter((revision) => revision.id === record.id),
     })));
+  }
+
+  catalog(repositoryId: string, sourceAvailable: boolean, kind: ExperienceCatalogKind, limit: number, cursor?: string) {
+    return readExperienceCatalog(this.storage, repositoryId, sourceAvailable, kind, limit, cursor);
+  }
+
+  async candidate(cwd: string, candidateId: string) {
+    const scope = await this.scope(cwd);
+    const view = readCandidate(scope.directory, candidateId);
+    this.checkScope(scope, view.candidate.record);
+    return view;
+  }
+
+  async retireCandidate(cwd: string, candidateId: string, expectedVersion: string, reason: string) {
+    const scope = await this.scope(cwd);
+    const current = readCandidate(scope.directory, candidateId);
+    this.checkScope(scope, current.candidate.record);
+    return retireCandidate(scope.directory, candidateId, expectedVersion, reason);
   }
 
   async candidates(cwd: string): Promise<ExperienceCandidate[]> {

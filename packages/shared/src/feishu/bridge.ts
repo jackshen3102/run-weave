@@ -1,7 +1,8 @@
 /** Fixed Feishu bridge wire contract; no runtime or transport dependencies. */
 export const FEISHU_PROTOCOL_VERSION = 1;
 export const FEISHU_MAX_TEXT_BYTES = 256 * 1024;
-export const FEISHU_MAX_FRAME_BYTES = 512 * 1024;
+export const FEISHU_MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+export const FEISHU_MAX_FRAME_BYTES = 12 * 1024 * 1024;
 export const FEISHU_MAX_PENDING = 64;
 export const FEISHU_ERRORS = [
   "invalid_request",
@@ -27,6 +28,44 @@ export interface FeishuTopicResult {
   messageId: string;
   createdTopic: boolean;
 }
+export interface FeishuAttachment {
+  fileName: string;
+  dataBase64: string;
+}
+export function feishuAttachmentPrompt(text: string, filePath: string): string {
+  return `${text}\n附件已保存到当前执行机器，请按当前任务读取：${JSON.stringify(filePath)}`;
+}
+
+export function isFeishuAttachmentName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    !!value.trim() &&
+    new TextEncoder().encode(value).length <= 255 &&
+    !/[/\\]/.test(value) &&
+    ![".", ".."].includes(value) &&
+    !Array.from(value).some(
+      (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+    )
+  );
+}
+export function isFeishuAttachment(v: unknown): v is FeishuAttachment {
+  if (
+    !record(v) ||
+    !fields(v, ["fileName", "dataBase64"]) ||
+    !isFeishuAttachmentName(v.fileName)
+  )
+    return false;
+  return (
+    typeof v.dataBase64 === "string" &&
+    v.dataBase64.length > 0 &&
+    v.dataBase64.length <= Math.ceil(FEISHU_MAX_ATTACHMENT_BYTES / 3) * 4 &&
+    v.dataBase64.length % 4 === 0 &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(v.dataBase64) &&
+    (v.dataBase64.length / 4) * 3 -
+      (v.dataBase64.endsWith("==") ? 2 : v.dataBase64.endsWith("=") ? 1 : 0) <=
+      FEISHU_MAX_ATTACHMENT_BYTES
+  );
+}
 export type FeishuRequest =
   | { type: "terminal.get"; requestId: string; terminalSessionId: string }
   | {
@@ -36,6 +75,7 @@ export type FeishuRequest =
       messageId: string;
       text: string;
       expiresAt: number;
+      attachment?: FeishuAttachment;
     }
   | ({ type: "notify"; requestId: string } & FeishuNotifyPayload);
 export type FeishuResultValue =
@@ -94,7 +134,10 @@ export function parseFeishuFrame(raw: string): FeishuFrame {
             "messageId",
             "text",
             "expiresAt",
+            ...(Object.hasOwn(v, "attachment") ? ["attachment"] : []),
           ]) &&
+          (!Object.hasOwn(v, "attachment") ||
+            isFeishuAttachment(v.attachment)) &&
           id(v.terminalSessionId) &&
           id(v.messageId) &&
           feishuText(v.text) &&

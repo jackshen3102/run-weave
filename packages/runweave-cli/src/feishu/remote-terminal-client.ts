@@ -1,4 +1,4 @@
-import { FeishuBridgeError } from "@runweave/shared/feishu/bridge";
+import { FeishuBridgeError, type FeishuAttachment } from "@runweave/shared/feishu/bridge";
 import type { SendTerminalInputRequest } from "@runweave/shared/terminal/input";
 import { HttpError } from "../errors.js";
 import type { FeishuTerminalClient } from "./bridge-message-handler.js";
@@ -33,7 +33,7 @@ export class RemoteFeishuTerminalClient implements FeishuTerminalClient {
       throw mapError(error);
     }
   }
-  async sendInput(terminalSessionId: string, input: SendTerminalInputRequest) {
+  async sendInput(terminalSessionId: string, input: SendTerminalInputRequest, attachment?: FeishuAttachment) {
     try {
       const result = await this.hub.request(
         this.backendId,
@@ -42,6 +42,7 @@ export class RemoteFeishuTerminalClient implements FeishuTerminalClient {
           terminalSessionId,
           messageId: input.operationId!.slice("feishu:".length),
           text: input.data,
+          ...(attachment ? { attachment } : {}),
           expiresAt: this.expiresAt,
         },
         this.signal,

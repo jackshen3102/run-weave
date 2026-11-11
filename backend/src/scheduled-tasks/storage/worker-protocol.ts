@@ -83,6 +83,7 @@ export type ScheduledTaskWorkerCommand =
       idempotencyKey: string;
       requestHash: string;
     }
+  | { id: number; op: "previous-finished-run"; runId: string }
   | { id: number; op: "get-run"; runId: string }
   | { id: number; op: "list-runs"; taskId: string }
   | {
