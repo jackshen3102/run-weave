@@ -10,6 +10,11 @@ import { redactActivityText } from "../activity/security/redaction";
 import path from "node:path";
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+class IncompleteEvidence extends Error {
+  constructor(readonly sourceSha256: string) {
+    super("experience_evidence_lines_missing");
+  }
+}
 async function readEvidence(
   input: ExperienceEvidenceInput,
   archive = false,
@@ -20,7 +25,9 @@ async function readEvidence(
   if (!source.isFile()) {
     throw new Error("experience_evidence_must_be_a_file");
   }
-  const stream = createReadStream(input.path, { encoding: "utf8" });
+  const stream = createReadStream(input.path);
+  const observed = createHash("sha256");
+  stream.on("data", (chunk) => { observed.update(chunk); });
   const lines = createInterface({ input: stream, crlfDelay: Infinity });
   const selected: string[] = [];
   let line = 0;
@@ -41,7 +48,8 @@ async function readEvidence(
     stream.destroy();
   }
   if (line < input.endLine)
-    throw new Error("experience_evidence_lines_missing");
+    // EOF was reached: include all observed bytes, even before startLine.
+    throw new IncompleteEvidence(observed.digest("hex"));
   const original = selected.join("\n") + "\n";
   const text = redactExcerpt(original);
   if (archive && Buffer.byteLength(text) > 64 * 1024)
@@ -62,22 +70,30 @@ export const snapshotEvidence = (input: ExperienceEvidenceInput) =>
 export async function inspectEvidence(
   evidence: ExperienceEvidence,
 ): Promise<string | null> {
+  return (await inspectEvidenceSnapshot(evidence)).reason;
+}
+
+/** A digest of the observed lines detects a second change even while already invalid. */
+export async function inspectEvidenceSnapshot(evidence: ExperienceEvidence): Promise<{
+  reason: string | null;
+  sourceSha256: string | null;
+  sourceState: "available" | "missing" | "unavailable";
+}> {
   if (
     evidence.archived &&
     hash(evidence.archived.text) !== evidence.archived.sha256
   )
-    return `evidence_archive_changed:${evidence.path}`;
+    return { reason: `evidence_archive_changed:${evidence.path}`, sourceSha256: null, sourceState: "unavailable" };
   try {
-    if ((await readEvidence(evidence)).sha256 !== evidence.sha256)
-      return `evidence_changed:${evidence.path}`;
+    const sourceSha256 = (await readEvidence(evidence)).sha256;
+    return { reason: sourceSha256 !== evidence.sha256 ? `evidence_changed:${evidence.path}` : null,
+      sourceSha256, sourceState: "available" };
   } catch (error) {
-    if (
-      !evidence.archived ||
-      (error as NodeJS.ErrnoException).code !== "ENOENT"
-    )
-      return `evidence_unavailable:${evidence.path}`;
+    const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+    return { reason: evidence.archived && missing ? null : `evidence_unavailable:${evidence.path}`,
+      sourceSha256: error instanceof IncompleteEvidence ? error.sourceSha256 : null,
+      sourceState: missing ? "missing" : "unavailable" };
   }
-  return null;
 }
 
 export function redactExcerpt(value: string): string {

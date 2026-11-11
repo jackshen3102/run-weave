@@ -23,6 +23,8 @@ type Bucket =
   | "feedback"
   | "candidates"
   | "jobs"
+  | "maintenance-reviews"
+  | "maintenance-review-heads"
   | "learning-checkpoints";
 
 /** Only short synchronous transactions hold SQLite locks; evidence I/O happens outside.

@@ -25,6 +25,46 @@ export function createExperienceRouter(
     }
     next();
   });
+  const repositoryIdSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+  const kindSchema = z.enum(["records", "revisions", "candidates", "jobs"]);
+  const policySchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/u);
+  const registeredRepository = async (id: string) => {
+    if (!repositories) throw new ExperienceError("experience_repository_registry_unavailable", 503);
+    const repository = (await repositories.list(true)).find(item => item.repositoryId === id);
+    if (!repository) throw new ExperienceError("experience_repository_not_registered", 404);
+    return repository;
+  };
+  router.get("/maintenance/:repositoryId", async (request, response, next) => {
+    try {
+      const id = repositoryIdSchema.parse(request.params.repositoryId);
+      const query = z.object({ kind: kindSchema, policy: policySchema,
+        pendingOnly: z.enum(["true", "false"]).default("false"),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        cursor: z.string().min(1).max(4096).optional() }).strict().parse(request.query);
+      const repository = await registeredRepository(id);
+      response.json(await service.maintenanceQueue(id, repository.available === true, query.kind, query.policy, query.pendingOnly === "true", query.limit, query.cursor));
+    } catch (error) { next(error); }
+  });
+  router.post("/maintenance/:repositoryId/reviews", async (request, response, next) => {
+    try {
+      const id = repositoryIdSchema.parse(request.params.repositoryId);
+      const input = z.object({ requestId: z.string().uuid(), policy: policySchema, kind: kindSchema,
+        itemId: z.string().min(1).max(256), expectedVersion: z.string().regex(/^[a-f0-9]{64}$/u),
+        expectedReviewId: z.string().uuid().nullable(), decision: z.enum(["reviewed", "deferred"]),
+        reason: z.string().trim().min(1).max(2000), blocker: policySchema.nullable(),
+      }).strict().refine(value => value.decision === "deferred" ? value.blocker !== null : value.blocker === null).parse(request.body);
+      const repository = await registeredRepository(id);
+      response.json(await service.saveMaintenanceReview(id, repository.available === true, input));
+    } catch (error) { next(error); }
+  });
+  router.get("/maintenance/:repositoryId/reviews/:requestId", async (request, response, next) => {
+    try {
+      const id = repositoryIdSchema.parse(request.params.repositoryId);
+      const requestId = z.string().uuid().parse(request.params.requestId);
+      await registeredRepository(id);
+      response.json(service.maintenanceReview(id, requestId));
+    } catch (error) { next(error); }
+  });
   router.get("/catalog/:repositoryId", async (request, response, next) => {
     try {
       const repositoryId = z.string().regex(/^[a-f0-9]{64}$/u).parse(request.params.repositoryId);

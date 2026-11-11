@@ -1,4 +1,5 @@
 import { runExperienceMaintenance } from "./experience-maintenance.js";
+import { runExperienceReview } from "./experience-review.js";
 import { runExperienceInbox } from "./experience-inbox.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -22,7 +23,7 @@ import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
 
 const usage =
-  "Usage: rw experience <list [--limit N|--all]|process id [--expected-content-version hash]|process --file reviewed-list.json|search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId|catalog --repository-id ID --kind records|revisions|candidates|jobs [--all]|candidate ID|retire-candidate ID --expected-version HASH --reason text> [--cwd path] [--instance id] [--config-dir path] [--json]";
+  "Usage: rw experience <list [--limit N|--all]|process id [--expected-content-version hash]|process --file reviewed-list.json|search --query text|show id|save --file record.json|feedback --file receipt.json|history|status|diagnose [--query text]|retry jobId|catalog --repository-id ID --kind records|revisions|candidates|jobs [--all]|candidate ID|retire-candidate ID --expected-version HASH --reason text|review-queue --repository-id ID --kind KIND --policy VERSION [--pending-only] [--all]|review --repository-id ID --file review.json|review-receipt --repository-id ID --request-id UUID> [--cwd path] [--instance id] [--config-dir path] [--json]";
 export async function runExperienceCommand(
   command: string | undefined,
   args: string[],
@@ -44,12 +45,15 @@ export async function runExperienceCommand(
       "catalog",
       "candidate",
       "retire-candidate",
+      "review-queue",
+      "review",
+      "review-receipt",
     ].includes(command)
   )
     throw new CliError(usage, 2);
   const { options, positionals } = parseArgs(
     args,
-    new Set(["json", "plain", "all"]),
+    new Set(["json", "plain", "all", "pending-only"]),
   );
   const cwd = path.resolve(getStringOption(options, "cwd") ?? process.cwd());
   const auth = await resolveAuthContext({
@@ -57,6 +61,12 @@ export async function runExperienceCommand(
     backendPort: getStringOption(options, "backend-port"),
     env: io.env,
   });
+  if (command === "review-queue" || command === "review" || command === "review-receipt") {
+    const result = await runExperienceReview(command, positionals, options, auth);
+    const mode = resolveOutputMode(options);
+    writeOutput(io.stdout, mode, mode === "json" ? result : JSON.stringify(result, null, 2));
+    return;
+  }
   if (["catalog", "candidate", "retire-candidate"].includes(command)) {
     const result = await runExperienceMaintenance(command, positionals, options, cwd, auth);
     const mode = resolveOutputMode(options);
