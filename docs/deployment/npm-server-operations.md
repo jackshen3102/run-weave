@@ -33,6 +33,9 @@
 registry 安装并验证原生运行时、服务和登录 → 提升到请求的 dist-tag。
 支持 macOS arm64、Linux glibc arm64/x64、Windows x64，不再发行 Intel Mac 平台包。
 只做构建的手动触发不会发布；没有通过全部安装验证时不提升 `latest`。
+Linux 发行包以 glibc 2.31、GLIBCXX 3.4.28 为最低运行基线。构建机需要 Docker，
+在 Node 22 Debian Bullseye 容器中重新编译同版本 SQLite 原生模块，再打入平台包；
+不能直接采用上游较新系统的 prebuild。CI 另在该基线容器安装最终候选包并验证启动和登录。
 
 先根据上次成功发行后的源码及传递依赖变化决定范围：仅 CLI 变化只提升
 `packages/runweave-cli/package.json`；仅 Server 变化只提升

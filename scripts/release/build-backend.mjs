@@ -1,3 +1,4 @@
+import { prepareLinuxSqlite } from "./linux-native-runtime.mjs";
 import { buildDevResources } from "../../scripts/dev-resources/build.mjs";
 import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
@@ -148,6 +149,10 @@ copyNativePackage(
     relative === path.join("prebuilds", sqlitePrebuild) ||
     relative === "package.json" ||
     relative === "LICENSE",
+);
+prepareLinuxSqlite(
+  path.join(repoRoot, "backend/node_modules/better-sqlite3"),
+  path.join(backendDir, "node_modules/better-sqlite3"),
 );
 copyNativePackage(
   "node-pty",
