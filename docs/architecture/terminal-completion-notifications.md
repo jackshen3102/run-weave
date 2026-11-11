@@ -1,6 +1,6 @@
 # 终端任务完成通知链路
 
-本文描述 Runweave 如何在已接通的 Codex、Coco/Trae、Pi 等 AI CLI 任务完成时，向用户发出**主动通知**（macOS 系统通知 + 声音、飞书消息）。Claude 的飞书通知使用下述原生空闲确认路径；状态、准备与恢复能力仍独立受限，详见[Hook 门禁](./terminal-completion-hooks.md#hook-安装与上报行为)。
+本文描述 Runweave 如何在已接通的 Codex、Coco/Trae、Pi 等 AI CLI 任务完成时，向用户发出**主动通知**（macOS 系统通知 + 声音、飞书消息）。Claude 的飞书通知使用下述原生空闲确认路径；状态与通知分别接入，准备与恢复能力仍独立受限，详见[Hook 门禁](./terminal-completion-hooks.md#hook-安装与上报行为)。
 
 本文是 [terminal-completion-hooks.md](./terminal-completion-hooks.md) 的 **channel 细节补充**。canonical 的 hook 架构与 launcher 职责（含身份门禁、launcher 是否允许做通知副作用）以那篇为准；本文只展开通知 channel（桌面/声音/飞书）的实现、脚本与配置。两者共用同一条 hook 链路与同一个 launcher。
 
@@ -84,7 +84,8 @@ feed、飞书过滤、发送脚本及 Terminal 话题。计时取原 Stop 时刻
 和缓冲。权限与 `AskUserQuestion` 使用统一即时提醒。
 
 该路径不改变 Claude TerminalState，也不启用自动 prepare/resume。旧版裸 Stop 仍被拒绝。
-本机进程身份无法确认时静默；当前依赖 macOS/Linux 的 `ps`，不声明 Windows 可用。
+本机进程身份无法确认时静默；身份采集使用 macOS/Linux 的 `ps` 或 Windows CIM。
+TerminalState 单独消费带同一身份的状态事件，见[终端状态](./terminal-state.md#运行限制)。
 入口见 [公共完成传输](../../packages/agent-bridge/hooks/runweave-hook-completion.cjs)、
 [Backend 完成路由](../../backend/src/routes/terminal/completion.ts) 与上述通知策略。
 

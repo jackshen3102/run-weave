@@ -1,3 +1,4 @@
+import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { CodexConversationContext } from "@runweave/shared/terminal/codex-context";
 import type { FeishuNotificationState } from "../completion/feishu-state";
@@ -48,6 +49,7 @@ export interface TerminalSessionRecord {
   alias: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
@@ -86,6 +88,7 @@ export interface TerminalPanelRecord {
   role: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   piLastCompletionKey?: string;
   preview?: string;
@@ -172,6 +175,7 @@ export function buildSessionRecord(
     pinnedAt: persisted.pinnedAt ?? null,
     threadId: persisted.threadId,
     pi: persisted.pi,
+    claude: persisted.claude,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
     preview: persisted.preview,
@@ -259,6 +263,7 @@ export function toPersistedSession(
     threadId: session.threadId,
     threadProvider: session.threadProvider,
     pi: session.pi,
+    claude: session.claude,
     preview: session.preview,
     latestReply: session.latestReply,
     lastThreadId: session.lastThreadId,
@@ -302,6 +307,7 @@ export function buildPanelRecord(
     role: persisted.role ?? null,
     threadId: persisted.threadId,
     pi: persisted.pi,
+    claude: persisted.claude,
     piLastCompletionKey: persisted.piLastCompletionKey,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
@@ -340,6 +346,7 @@ export function toPersistedPanel(
     threadId: panel.threadId,
     threadProvider: panel.threadProvider,
     pi: panel.pi,
+    claude: panel.claude,
     piLastCompletionKey: panel.piLastCompletionKey,
     preview: panel.preview,
     latestReply: panel.latestReply,

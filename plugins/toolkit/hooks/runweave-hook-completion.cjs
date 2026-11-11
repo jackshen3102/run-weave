@@ -1,40 +1,6 @@
-/* global fetch, module, require, process, AbortSignal */
+/* global fetch, module, require, AbortSignal */
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { buildCompletionHookBody, extractUserPrompt, isFeishuAttentionHook, readNotificationType } = require("./runweave-hook-payload.cjs");
-const { spawnSync } = require("node:child_process");
-const { randomUUID } = require("node:crypto");
-const path = require("node:path");
-
-function readClaudeInstance(spawnSync) {
-  const result = spawnSync("ps", ["-axo", "pid=,ppid=,comm="], {
-    encoding: "utf8", timeout: 1000, maxBuffer: 2 * 1024 * 1024,
-  });
-  if (result.error || result.status !== 0) return null;
-  const processes = new Map();
-  for (const line of String(result.stdout).split(/\r?\n/)) {
-    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/);
-    if (match) processes.set(Number(match[1]), { parent: Number(match[2]), command: path.basename(match[3]) });
-  }
-  let claudePid = null;
-  const visited = new Set();
-  for (let pid = process.ppid; pid > 1 && !visited.has(pid); ) {
-    visited.add(pid);
-    const entry = processes.get(pid);
-    if (!entry) return null;
-    if (["claude", "codex", "trae", "traex", "pi"].includes(entry.command)) {
-      if (claudePid || entry.command !== "claude") return null;
-      claudePid = pid;
-    }
-    pid = entry.parent;
-  }
-  if (!claudePid) return null;
-  const started = spawnSync("ps", ["-p", String(claudePid), "-o", "lstart="], {
-    encoding: "utf8", timeout: 1000,
-  });
-  const stamp = String(started.stdout || "").trim();
-  return !started.error && started.status === 0 && stamp ? `${claudePid}:${stamp}` : null;
-}
-
 async function postCompletionHook({
   endpoint,
   token,
@@ -55,11 +21,11 @@ async function postCompletionHook({
   });
   if (source === "claude") {
     if (!endpoint) return { accepted: false };
-    const instanceId = readClaudeInstance(spawnSync);
+    const instanceId = payload.claude?.instanceId;
     if (!instanceId || payload.agent_id || payload.agent_transcript_path) return { accepted: false };
     const notificationType = readNotificationType(payload);
     const event = String(rawEvent).toLowerCase().replace(/[_\s-]/g, "");
-    body.claude = { instanceId, eventId: payload.runweaveHookEventId || randomUUID(),
+    body.claude = { instanceId, eventId: payload.runweaveHookEventId,
       ...(notificationType ? { notificationType } : {}),
       ...(event === "userpromptsubmit" ? { query: extractUserPrompt(payload) || "" } : {}) };
     body.completionReason = event === "permissionrequest" ||

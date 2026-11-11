@@ -1,3 +1,4 @@
+import { handleAgentHookEvent } from "../../../backend/src/app-server/handlers/agent-hook.ts";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createInternalTerminalCompletionRouter } from "../../../backend/src/routes/terminal/completion.ts";
@@ -14,6 +15,7 @@ export async function verifyToolkitHookProviderGuards() {
   await verifyDelayedCrossProviderHookGuard();
   await verifyTmuxPaneFallbackUniqueness();
   await verifyClaudeCapabilityIsolation();
+  await verifyClaudeNativeLifecycle();
   verifyAgentThreadResumeFallback();
   assert.equal(buildAgentResumeCommand({ provider: "claude", threadId: "session-claude" }),
     "claude --resume session-claude\n");
@@ -254,4 +256,83 @@ async function verifyTmuxPaneFallbackUniqueness() {
   assert.equal(missing.result.status, "ignored");
   assert.equal(missing.result.panelId, null);
   assert.equal(missing.mutations.length, 0);
+}
+
+// HTTP integration: native hook requests through the actual router and processor.
+async function verifyClaudeNativeLifecycle() {
+  const express = createRequire(new URL("../../../backend/package.json", import.meta.url))("express");
+  const session = { id: "claude-native", projectId: "fixture", status: "running",
+    activeCommand: "claude", terminalState: { state: "agent_starting", agent: "claude" }, completionRevision: 0 };
+  const manager = {
+    getSession: () => session, listPanels: () => [], hasSessionAgentPreparation: () => false,
+    getRecentAgentActivity: () => null,
+    updateSessionThreadId: async (_id, threadId, provider, _pi, claude) => {
+      Object.assign(session, { threadId, threadProvider: provider, ...(claude ? { claude } : {}) }); return session;
+    },
+    updateSessionLastThread: async () => {}, updateSessionPreview: async () => {}, acknowledgeSessionCompletion: async () => {},
+  };
+  const state = { getCurrent: () => session.terminalState, handleAgentHook: (_id, agent, event) =>
+    session.terminalState = { agent, state: event === "UserPromptSubmit" ? "agent_running" : "agent_idle" } };
+  const app = express();
+  app.use(express.json());
+  app.use("/state", createInternalTerminalAgentHookRouter({ terminalSessionManager: manager,
+    terminalStateService: state, hookToken: "fixture-token" }));
+  const server = await new Promise(resolve => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+  let clock = 1000;
+  const context = (event, extra = {}) => ({ version: 1, instanceId: "100:100", startedAt: 100,
+    observedAt: ++clock, eventId: `native-${clock}`, sessionId: "native-session", event, ...extra });
+  const post = async (hookEvent, claude, extra = {}) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/state`, { method: "POST",
+      headers: { "content-type": "application/json", "x-runweave-hook-token": "fixture-token" },
+      body: JSON.stringify({ terminalSessionId: session.id, agent: "claude", commandName: "claude",
+        hookEvent, claude, threadId: claude.sessionId, ...extra }) });
+    assert.equal(response.status, 202); return response.json();
+  };
+  try {
+    assert.equal((await post("Stop", context("stop"))).disposition, "ignored", "unbound Stop cannot acquire a terminal");
+    await post("SessionStart", context("sessionstart"));
+    assert.equal(session.terminalState.state, "agent_idle");
+    const prompt = context("userpromptsubmit");
+    const results = await Promise.all([post("UserPromptSubmit", prompt), post("UserPromptSubmit", prompt)]);
+    assert.deepEqual(results.map(r => r.disposition).sort(), ["ignored", "recorded"]);
+    assert.equal(session.terminalState.state, "agent_running");
+    await post("SessionStart", context("sessionstart", { sessionSource: "compact" }));
+    assert.equal(session.terminalState.state, "agent_running");
+    await post("Stop", context("stop"));
+    assert.equal(session.terminalState.state, "agent_running", "Stop is not settled evidence");
+    const idle = context("notification", { notificationType: "idle_prompt" });
+    await post("AgentMetadata", idle);
+    assert.equal(session.terminalState.state, "agent_idle");
+    const tool = context("pretooluse");
+    await handleAgentHookEvent({ id: "native-app-server-tool", correlationId: tool.sessionId,
+      scope: { terminalSessionId: session.id }, payload: { source: "claude", claude: tool, stateHookEvent: "ToolRequested" } },
+      { terminalSessionManager: manager, terminalStateService: state });
+    assert.equal(session.terminalState.state, "agent_running", "App Server tool fallback advances Claude");
+    await post("ToolRequested", tool, { toolUseId: "tool-1", toolName: "Read" });
+    assert.equal(session.terminalState.state, "agent_running");
+    await post("ToolCompleted", context("posttooluse"), { toolUseId: "tool-1", toolName: "Read" });
+    assert.equal(session.terminalState.state, "agent_running");
+    assert.equal((await post("AgentMetadata", idle)).disposition, "ignored", "late idle cannot stop newer work");
+    assert.equal((await post("UserPromptSubmit", context("userpromptsubmit", { sessionId: "old-thread" }))).disposition, "ignored");
+    await post("SessionStart", context("sessionstart", { instanceId: "200:200", startedAt: 200 }));
+    assert.equal((await post("Stop", context("stop"))).disposition, "ignored", "old process cannot stop replacement");
+    session.activeCommand = "codex";
+    session.terminalState = { state: "agent_running", agent: "codex" };
+    assert.equal((await post("UserPromptSubmit", context("userpromptsubmit", { instanceId: "200:200", startedAt: 200 }))).disposition, "ignored");
+    assert.equal(session.terminalState.agent, "codex");
+    await handleAgentHookEvent({ id: "codex-tool", scope: { terminalSessionId: session.id },
+      payload: { source: "codex", stateHookEvent: "ToolRequested" } },
+      { terminalSessionManager: manager, terminalStateService: state });
+    assert.equal(session.terminalState.state, "agent_running", "Claude tool support must not idle Codex");
+    session.threadId = null;
+    session.threadProvider = null;
+    session.lastThreadId = "native-session";
+    session.lastThreadProvider = "claude";
+    assert.equal((await post("UserPromptSubmit", context("userpromptsubmit", { instanceId: "200:200", startedAt: 200 }))).disposition, "ignored",
+      "last Claude thread cannot bypass the active provider gate");
+    console.log("Claude HTTP lifecycle: startup, work, native idle, duplicate/late/old-process/cross-provider guards passed");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 }

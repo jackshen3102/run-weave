@@ -528,6 +528,7 @@ function buildAppServerBaseEvent({
     payload: {
       source,
       ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
+      ...(source === "claude" && payload.claude ? { claude: payload.claude } : {}),
       threadId,
       rawHookEvent: String(rawEvent || "Unknown"),
       normalizedEvent,

@@ -179,8 +179,10 @@ app-server 会从 `agent.hook` 与 `agent.completion` 投影轻量 ThreadRef。T
 ThreadRef identity 是 provider-aware 的：`threadId` 必须和 `agent`、`detailRef` 一起解释。Codex 仍由 hook 和 Codex App Server 状态补偿提供轻量 projection；Trae family（`trae` / `traex` / `traecli`）的真实 thread identity 来自 hook payload 与 `~/.trae/cli/sessions/**/*.jsonl` 中的 `session_meta.payload.id`，不得按 cwd 或时间窗口猜测。reader 暂时不可用时可以保留 degraded / unresolved 状态，但恢复后必须收敛到同一个 provider + thread ID。
 
 Claude 原始事件保留 `agent=claude`，不会借用 `commandName=codex` 等命令身份；同名 thread ID
-已由另一 provider 占用时拒绝跨 Claude/provider 覆盖。Claude 生命周期尚未经过代次和 settled
-协议验收，状态保持 unknown，Stop 或助手文本不推导 idle/completed，也不补偿 Backend 状态。
+已由另一 provider 占用时拒绝跨 Claude/provider 覆盖。带主进程身份的 Claude Hook 按代次与
+事件时间排序，启动和原生 idle 通知投影为 idle，提交与工具事件投影为 running；Stop 保留
+当前状态。无身份旧事件保持 unknown，且不能覆盖已建立的原生投影。身份与 settled 语义见
+[终端状态](./terminal-state.md#运行限制)。
 只读正文与生命周期分开，见[会话阅读](./terminal-code-preview.md)。
 
 其它已接通 provider 的状态映射：

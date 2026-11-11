@@ -1,3 +1,4 @@
+import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -45,6 +46,7 @@ export interface PersistedTerminalSessionRecord {
   alias?: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   preview?: string;
   latestReply?: TerminalReplySnapshot;
@@ -81,6 +83,7 @@ export interface PersistedTerminalPanelRecord {
   role?: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   piLastCompletionKey?: string;
   preview?: string;
@@ -182,6 +185,7 @@ export interface UpdateTerminalSessionAliasParams {
 }
 
 export interface UpdateTerminalSessionThreadIdParams {
+  claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   terminalSessionId: string;
   threadId: string | null;

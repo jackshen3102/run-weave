@@ -228,10 +228,18 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 
 ## 运行限制
 
-Claude 已纳入 `TerminalAgentKind` 与命令识别，但其代次绑定和 settled 生命周期尚未开放：
-仅观察到前台 `claude` 时保持 `agent_starting`，不把它当作 ready。内部 Claude Hook 返回
-`ignored / agent_lifecycle_unavailable`，App Server 保留 Claude 来源但投影为 unknown，
-不借用 Codex/Trae 身份，也不触发自动重建恢复。`--resume ID` 语法支持不代表受管恢复已可用。
+Claude 仅有前台进程探测时保持 `agent_starting`。公共 Hook bridge 通过主 Claude 进程的
+PID 与创建时间建立代次身份（Windows 使用 CIM，macOS/Linux 使用 ps），排除嵌套 Agent
+进程和带子 Agent 标识的事件；Backend 继续校验 Panel、provider 与已有 launch operation。
+带原生身份的 `SessionStart` 确认 idle，`UserPromptSubmit` 和工具前后事件确认 running；
+压缩触发的 `SessionStart` 保留当前状态。事件按进程代次、会话 ID 和 Hook 进程启动时间排序，
+两个传输重复投递只应用一次，最近身份随 Panel/session 保存，旧代次和旧会话不能覆盖新状态。
+`Stop` 可能被其它 Hook 阻止，因此只保留当前状态；同一代次的原生 `Notification/idle_prompt`
+确认 idle。这一通知通常在回答结束约 60 秒后触发，且用户输入或后台 Agent 可延后它，
+参见 [Claude Hook 合同](https://code.claude.com/docs/en/hooks#notification)。完成通知仍由现有适配器
+确认，不以状态变化代替完成事件。旧 Toolkit 的无身份 Hook 继续返回
+`ignored / agent_lifecycle_unavailable`，App Server 只保留其 unknown 身份。
+不借用 Codex/Trae 身份，也不开放自动重建恢复。`--resume ID` 语法支持不代表受管恢复已可用。
 原有 Codex、Trae、Pi 合同不变；普通 shell 不新增运行态，也不从 tail 文本猜状态。
 
 如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 生命周期或 Trae lifecycle 终态校正。Codex 的 `task_started` 可重新确认仍为 running 的线程，或恢复不晚于该开始记录的投影；不能用旧开始记录复活已结束的线程。读取从文件尾逐块回溯，最多 64 MiB，每块 1 MiB，避免长任务的开始记录落出最后一块后永久失去恢复依据；超过边界或读取期间文件变化时不推断状态。重新确认开始后，同一 rollout 中更新的终态序号仍可完成该轮；新的 prompt/start hook 会清除上一轮生命周期游标。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。

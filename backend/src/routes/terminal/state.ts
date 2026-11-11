@@ -1,3 +1,4 @@
+import { isClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
 import { recoverCodexToolConversation } from "../../terminal/application/codex-tool-conversation";
 import { resolveHookPanel } from "../../terminal/application/resolve-hook-panel";
@@ -24,6 +25,7 @@ const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi"] as con
 
 const agentHookStateSchema = z
   .object({
+    claude: z.custom<import("@runweave/shared/terminal/claude-agent").ClaudeAgentContext>(isClaudeAgentContext).optional(),
     pi: z
       .custom<
         import("@runweave/shared/terminal/pi-agent").PiAgentContext
@@ -164,7 +166,7 @@ export function createInternalTerminalAgentHookRouter(options: {
       if (parsed.data.agent === "pi" || parsed.data.agent === "claude") {
         const result = await processTerminalAgentHook(options, {
           ...parsed.data,
-          hookEvent: "AgentMetadata",
+          hookEvent: parsed.data.agent === "claude" ? parsed.data.hookEvent : "AgentMetadata",
         });
         if (
           result.status !== "recorded" &&

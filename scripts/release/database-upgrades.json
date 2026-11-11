@@ -85,5 +85,69 @@
       "9301bc5fbeb157ec84245bf38efb0073647b86fe"
     ],
     "reason": "Reviewed Claude projector update with CRLF checkout. No persisted schema or storage format changed from Server 0.1.14. Retain the reviewed Windows v4/v5 bridge; populated v4 scheduled tasks still require explicit preview/apply."
+  },
+  {
+    "platform": "linux",
+    "target": "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+    "from": [
+      "83d0999909b1e5a50f6f5e56ed81693a960a709965e17822b5ad198a096a46f7",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6"
+    ],
+    "sourceRevisions": [
+      "40307293314929f8b22b9798398c65bde96f4bab",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe",
+      "f866322b32d9c3896ed3c60bc387f1184a104614"
+    ],
+    "reason": "Server 0.1.16 to additive Claude native lifecycle context in JSON thread projections. Existing records omit the optional context and remain readable; no database schema or task migration behavior changes. Preserve the previously reviewed upgrade sources and explicit v4 task preview/apply requirement. Target binds this exact LF storage tree."
+  },
+  {
+    "platform": "darwin",
+    "target": "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+    "from": [
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6"
+    ],
+    "sourceRevisions": [
+      "40307293314929f8b22b9798398c65bde96f4bab",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe"
+    ],
+    "reason": "Server 0.1.16 to additive Claude native lifecycle context in JSON thread projections. Existing records omit the optional context and remain readable; no database schema or task migration behavior changes. Preserve the previously reviewed upgrade sources and explicit v4 task preview/apply requirement. Target binds this exact LF storage tree."
+  },
+  {
+    "platform": "win32",
+    "target": "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "a2587197ffe98093d8d57f40a686b5de2efef5c2e767dafa155e938da94ae5e5",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "40307293314929f8b22b9798398c65bde96f4bab",
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
+    ],
+    "reason": "Server 0.1.16 to additive Claude native lifecycle context in JSON thread projections. Existing records omit the optional context and remain readable; no database schema or task migration behavior changes. Preserve the previously reviewed upgrade sources and explicit v4 task preview/apply requirement. Target binds this exact LF storage tree."
+  },
+  {
+    "platform": "win32",
+    "target": "f05970e8ce6fdb4a399b57c4f81345bb61256a3d7672733bdd3b1919ed9aafdd",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "a2587197ffe98093d8d57f40a686b5de2efef5c2e767dafa155e938da94ae5e5",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "40307293314929f8b22b9798398c65bde96f4bab",
+      "57eead5bb509846aab7c9ce8c707276b3321abb9",
+      "9301bc5fbeb157ec84245bf38efb0073647b86fe",
+      "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
+    ],
+    "reason": "Server 0.1.16 to additive Claude native lifecycle context in JSON thread projections. Existing records omit the optional context and remain readable; no database schema or task migration behavior changes. Preserve the previously reviewed upgrade sources and explicit v4 task preview/apply requirement. Target binds this exact CRLF storage tree."
   }
 ]

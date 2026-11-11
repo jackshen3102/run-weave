@@ -2,7 +2,7 @@ import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completi
 import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 
-const AGENT_SOURCES = new Set(["codex", "trae", "traecli", "traex", "pi"]);
+const AGENT_SOURCES = new Set(["claude", "codex", "trae", "traecli", "traex", "pi"]);
 const HOOK_SOURCES = new Set([
   "claude",
   "codex",
@@ -38,7 +38,9 @@ export function readAppServerHookEvent(
   if (
     stateHookEvent === "SessionStart" ||
     stateHookEvent === "UserPromptSubmit" ||
-    stateHookEvent === "Stop" || stateHookEvent === "AgentMetadata"
+    stateHookEvent === "Stop" || stateHookEvent === "AgentMetadata" ||
+    (readAppServerHookSource(payload) === "claude" &&
+      (stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted"))
   ) {
     return stateHookEvent;
   }
