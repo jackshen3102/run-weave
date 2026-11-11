@@ -231,6 +231,8 @@ Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之�
 Claude 仅有前台进程探测时保持 `agent_starting`。公共 Hook bridge 通过主 Claude 进程的
 PID 与创建时间建立代次身份（Windows 使用 CIM，macOS/Linux 使用 ps），排除嵌套 Agent
 进程和带子 Agent 标识的事件；Backend 继续校验 Panel、provider 与已有 launch operation。
+Windows 中 Claude 以上的祖先进程退出或 PID 被复用时，终止祖先遍历，保留已验证的 Claude
+身份；发现 Claude 之前断链仍拒绝事件，不跨越被复用的 PID 关联其他进程树。
 带原生身份的 `SessionStart` 确认 idle，`UserPromptSubmit` 和工具前后事件确认 running；
 压缩触发的 `SessionStart` 保留当前状态。事件按进程代次、会话 ID 和 Hook 进程启动时间排序，
 两个传输重复投递只应用一次，最近身份随 Panel/session 保存，旧代次和旧会话不能覆盖新状态。
