@@ -31,11 +31,19 @@ function readClaudeIdentity() {
   }
   let claudePid = null;
   const visited = new Set();
+  let childStartedAt = observedAt;
   for (let pid = process.ppid; pid > 1; ) {
     if (visited.has(pid)) return null;
     visited.add(pid);
     const entry = processes.get(pid);
-    if (!entry) return null;
+    // Windows retains the original parent PID after its process exits. A missing
+    // or reused parent above a live Claude is a process-tree boundary, not proof
+    // that Claude itself is gone. Never cross a reused PID into another tree.
+    if (!entry || (process.platform === "win32" && entry.startedAt > childStartedAt)) {
+      if (process.platform === "win32" && claudePid) break;
+      return null;
+    }
+    if (process.platform === "win32") childStartedAt = entry.startedAt;
     if (["claude", "codex", "trae", "traex", "traecli", "pi"].includes(entry.command)) {
       if (claudePid || entry.command !== "claude") return null;
       claudePid = pid;
