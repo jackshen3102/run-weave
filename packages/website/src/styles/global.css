@@ -1,15 +1,9 @@
 :root {
-  --paper: #f6f3ec;
-  --ink: #22251f;
-  --muted: #62645c;
-  --accent: #b54729;
-  --rule: #cbc9bf;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
   color: var(--ink);
   background: var(--paper);
-  color-scheme: light;
 }
 * {
   box-sizing: border-box;
@@ -88,6 +82,7 @@ figure {
   gap: 28px;
 }
 .site-header nav {
+  margin-left: auto;
   display: flex;
   flex-wrap: wrap;
   gap: 32px;
@@ -127,7 +122,7 @@ figure {
 .button {
   min-height: 51px;
   padding: 13px 22px;
-  border: 1px solid #b7b7ad;
+  border: 1px solid var(--control-border);
   border-radius: 5px;
   display: inline-flex;
   align-items: center;
@@ -138,17 +133,17 @@ figure {
   transition: background 0.2s;
 }
 .button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-text);
 }
 .button:hover {
-  background: #ebe6dc;
+  background: var(--surface-hover);
   color: var(--ink);
 }
 .button.primary:hover {
-  background: #953b22;
-  color: #fff;
+  background: var(--primary-hover);
+  color: var(--primary-text);
 }
 .hero-art {
   width: 108%;
@@ -215,8 +210,8 @@ figure {
   margin-top: 28px;
   min-height: 78px;
   padding: 17px;
-  border: 1px solid #d8d4cb;
-  background: #f1eee6;
+  border: 1px solid var(--rule);
+  background: var(--surface);
   border-radius: 7px;
   font-size: 13px;
 }
@@ -233,7 +228,7 @@ figure {
 }
 .message-sample {
   border-radius: 12px 12px 12px 0;
-  background: #ebe7dd;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -249,7 +244,7 @@ figure {
 }
 .result-sample span + span {
   padding-top: 8px;
-  border-top: 1px solid #d8d4cb;
+  border-top: 1px solid var(--rule);
 }
 .usage {
   padding-block: 55px;
@@ -330,151 +325,76 @@ figure {
 .products h2 {
   margin-bottom: 27px;
 }
-.product-row {
+.product-grid {
   display: grid;
-  grid-template-columns: 1.15fr 1.45fr 1fr 30px;
-  align-items: center;
-  gap: 25px;
-  min-height: 163px;
-  border-top: 1px solid var(--rule);
-  padding: 20px 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 48px;
+  padding-block: 8px 32px;
 }
-.product-row:first-of-type {
-  border-top: 0;
+.product-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-content: start;
+  gap: 24px 12px;
+  position: relative;
+  min-width: 0;
 }
-.product-row h3 {
+.product-card + .product-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24px;
+  border-left: 1px solid var(--rule);
+}
+.product-card h3 {
   font:
-    bold 35px/1.2 Georgia,
+    bold 30px/1.2 Georgia,
     "Songti SC",
     serif;
   letter-spacing: -1px;
 }
-.product-row p {
+.product-copy {
+  min-width: 0;
+}
+.product-copy p {
+  margin-top: 10px;
+  min-height: 3.7em;
   font-size: 14px;
-  padding-left: 24px;
-  border-left: 1px solid var(--rule);
+  color: var(--muted);
 }
 .product-arrow {
-  font-size: 28px;
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 26px;
+  line-height: 36px;
   color: var(--accent);
   transition: transform 0.2s;
 }
-.product-row:hover .product-arrow {
+.product-card:hover .product-arrow {
   transform: translate(3px, -3px);
 }
 .product-art {
-  height: 119px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink);
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  max-width: 300px;
+  justify-self: center;
+  margin: 0;
 }
-.note-window,
-.journal-window {
-  border: 1px solid #d7d3c9;
+.product-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
   border-radius: 8px;
-  width: 220px;
-  max-width: 100%;
-  padding: 8px 13px;
-  background: #faf8f3;
-  box-shadow: 0 5px 12px #22251f0d;
 }
-.window-dots {
-  font-size: 8px;
-  color: #ae765f;
-  letter-spacing: 3px;
-  margin-bottom: 7px;
-}
-.note-window {
-  width: 165px;
-  transform: rotate(-2deg);
-}
-.note-window b {
-  display: block;
-  font-size: 11px;
-  margin-bottom: 5px;
-}
-.note-window > span {
-  display: block;
+.product-art figcaption {
+  margin-top: 5px;
   font-size: 10px;
-  line-height: 1.5;
-}
-.filmstrip {
-  display: flex;
-  gap: 8px;
-}
-.filmstrip i {
-  height: 42px;
-  flex: 1;
-  background:
-    repeating-linear-gradient(0deg, transparent 0 6px, #82a27b60 6px 7px),
-    #272d28;
-  border: 3px solid #454d43;
-  border-radius: 3px;
-}
-.filmstrip i:nth-child(2) {
-  background: #dcded3;
-  border-color: #e7e8e0;
-}
-.timeline {
-  display: flex;
-  justify-content: space-between;
-  font-size: 8px;
-  margin-top: 10px;
-  padding-top: 4px;
-  border-top: 1px solid var(--accent);
-}
-.remote-devices {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  width: 220px;
-  max-width: 100%;
-}
-.remote-mac {
-  width: 155px;
-  height: 88px;
-  border: 5px solid #252b28;
-  border-bottom: 9px solid #252b28;
-  border-radius: 4px;
-  position: relative;
-  background: #96b1be;
-  box-shadow: 0 5px 0 -1px #9a9a91;
-}
-.mountains {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    145deg,
-    #9bb3bd 35%,
-    #c29d7d 35% 48%,
-    #74878a 48% 63%,
-    #3f5d64 63%
-  );
-}
-.remote-devices span {
-  position: absolute;
-  left: 24%;
-  top: 25%;
-  width: 50%;
-  height: 48%;
-  background: #222c29e8;
-  color: #9bb992;
-  font: 12px/1.8 monospace;
-  padding: 2px 4px;
-}
-.remote-phone {
-  width: 40px;
-  height: 81px;
-  border: 3px solid #252b28;
-  border-radius: 8px;
-  position: relative;
-  overflow: hidden;
-  background: #9bb3bd;
-}
-.remote-phone span {
-  font-size: 6px;
+  color: var(--muted);
+  text-align: right;
 }
 .closing {
   border-block: 1px solid var(--rule);
@@ -516,7 +436,7 @@ figure {
   left: 20px;
   padding: 10px;
   background: var(--ink);
-  color: white;
+  color: var(--paper);
   z-index: 2;
 }
 .skip-link:focus {
@@ -533,4 +453,33 @@ figure {
 }
 .error-page .button {
   margin-top: 35px;
+}
+
+.error-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+@media (max-width: 1000px) {
+  .site-header {
+    flex-wrap: wrap;
+    padding-block: 19px;
+    gap: 14px;
+  }
+  .site-header nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+  .site-header > [data-theme-control] {
+    margin-left: auto;
+  }
+}
+@media (max-width: 380px) {
+  .site-header .wordmark,
+  .error-header .wordmark {
+    font-size: 26px;
+  }
 }

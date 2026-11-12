@@ -32,7 +32,7 @@ pnpm --filter @runweave/website preview --host 127.0.0.1 --port 4321
 - 首屏采用用户选定的第一张修订稿“网站开发与交付”：[hero-website.png](src/assets/hero-website.png)。来源为 `artifacts/website-hero-options/01-website-v2.png`，以真实桌面和 iOS 界面为参照，经 AI 编辑制作。横向项目标签、终端排版与产品结构对齐；电脑执行页面开发、手机补充安装步骤要求，均为同一示例任务的内容示意，不是实际执行或跨端验收证据。素材已移除顶部“Runweave｜01 网站开发与交付”标题；首页显示时收起顶部 130px 留白，保留完整产品画面和底部示意标注。素材转换为响应式 WebP；点击可查看无标题的 1536px 大图。
 - 官网围绕电脑上的项目、终端与 Agent 工作台展开，多后端连接为主要能力，手机作为补充入口。已删除“工作方式”三步区域及对应导航；不再用离开电脑、通勤或文件附件测试作为首页价值叙事。原文件附件截图仅作历史素材保留，不在当前首页引用。
 - 首屏隐私与内容检查：仅含公开官网、示例项目、`studio-mac` 与 `alex · workspace` 示例名称、构建命令及示意输出；无凭据、内部网址或用户业务材料。无 Beta 标记、公司名称、默认项目和虚构下拉菜单。
-- 三个配套产品的小图是 CSS 绘制的装饰示意，均从可访问树中移除；名称与介绍是 HTML。
+- 三个配套产品采用选定的 B 版局部聚焦构图：[随记](src/assets/product-notes.webp) 参照已有 iOS 卡片列表截图，[屏幕日记](src/assets/product-journal.webp) 参照 Mac 回放界面并将录屏内容替换为公开官网示例，[远程桌面](src/assets/product-remote.webp) 参照已有横屏手机模拟素材。均经 AI 编辑制作，属于界面与内容示意，不是原始实拍或运行验收证据；页面保留“界面示意”说明与图片替代文本。素材不含用户业务内容，采用响应式 WebP 和懒加载，名称与介绍仍为 HTML。
 - [分享图](public/og.png) 使用同一真实桌面 Beta 截图，品牌图标与 [favicon](public/logo.png) 共用桌面端图标，由 `electron/resources/icons/icon-preview.png` 等比缩小为 128 × 128 PNG。
 
 页面包含首页、`/start/` 快速开始和 404；首页的“开始使用”和“快速开始”均进入站内教程。`/agent-guide.txt` 提供 AI 可读指南，`/llms.txt` 提供发现入口。安装命令和纯文本指南共享 `src/data/quickstart.ts`；`CopyCode.astro` 渐进增强复制功能，失败时选中文本并提示手动复制。
@@ -131,7 +131,7 @@ ssh ubuntu@18.140.158.81 \
 
 切换后按本节列出的站点、资源、缓存与分享路径检查，不以命令返回值替代线上验证。脚本只恢复静态版本，不改 DNS、TLS、Nginx 配置或 Clarity 项目。当前保留多个正式域名版本；首屏更新发布已使用 `--apply` 原子切换到新版本，旧版本仅执行只读回滚预检，未执行在线回滚演练。
 
-纯版本切换无需重启服务。当前正式版本为 `20261112T095754Z-f23370c0`，保留上一正式版 `20261112T030802Z-e2570f71` 及临时版本 `20261112T021514Z-91f82e46`。临时版本的 SEO 使用 share 域名，不能仅切换版本就声称完成正式域名回退。若要撤销本次域名迁移，先备份当时配置，恢复本次部署备份中的两个 Nginx 配置和 previous-release 指针，再 `sudo nginx -t && sudo systemctl reload nginx`；此操作会恢复临时 share 入口，必须连同域名与 Clarity 变更一起判断。未实际执行在线回滚演练。
+纯版本切换无需重启服务。当前正式版本为 `20261112T103418Z-198f5fac`，保留上一正式版 `20261112T030802Z-e2570f71` 及临时版本 `20261112T021514Z-91f82e46`。临时版本的 SEO 使用 share 域名，不能仅切换版本就声称完成正式域名回退。若要撤销本次域名迁移，先备份当时配置，恢复本次部署备份中的两个 Nginx 配置和 previous-release 指针，再 `sudo nginx -t && sudo systemctl reload nginx`；此操作会恢复临时 share 入口，必须连同域名与 Clarity 变更一起判断。未实际执行在线回滚演练。
 
 2026-11-12 迁移核对：新域名 HTTPS 正常，证书 SAN 与域名匹配；19 个线上文件逐一匹配本次 manifest，包括按 404 返回的内部页面；正式 SEO 与缓存头核对通过。share 根路径恢复 404、原分享路由仍由原服务响应。当前版本和旧版本均保留，迁移前配置备份实际存在。Clarity 后台网站 URL 已保存并刷新读回为正式入口。Runweave Browser 实际打开新域名，点击首页 CTA 到教程并成功复制 AI 指令；390px 首页和教程无横向溢出，图片实际加载，控制台无错误。正式页各一个 Clarity tag，collect POST 返回 204；新域名的云端录制回放未单独核验。
 
@@ -168,3 +168,21 @@ lint、astro check、production build 通过。15 个线上文件 SHA-256 与 ma
 ### 配套工具文案（2026-11-12）
 
 版本 `20261112T095754Z-f23370c0` 将“更多产品”栏目及导航改为“配套工具”，标题明确为“记录想法、回看屏幕、远程操作电脑”。以当前线上版 `20261112T093641Z-f23370c0` 的已校验源码为基线隔离构建，未发布工作区另一组使用方式改动；生产文件仅 `index.html` 发生变化。lint、astro check、build 通过，线上 HTML 哈希和文案已核对，1440px/390px Browser 布局无横向溢出，证据见 `artifacts/website-product-copy-*`。服务器对应 deployments 目录保留 manifest、previous-release 和 activation.json。
+
+### 页脚导航（2026-11-12）
+
+版本 `20261112T101704Z-198f5fac` 删除首页重复的大标题和行动按钮，页脚改为产品简介、开始使用、文档与支持，以及 MIT 许可证和源码入口；页脚位于 main 之外。保留已确认的配套工具文案。构建来自提交 `198f5fac` 加本轮 Footer、index 和 Products 改动，production 输出为 `/private/tmp/runweave-website-footer-dist`；构建输入与源文件哈希见服务器对应 deployments 目录的 manifest.json。本版本不包含随后工作区正在进行的配套产品图片改动。
+
+lint、typecheck、production build 通过；15 个公开文件逐一匹配 manifest，HTML 和文本 no-cache、哈希资源 immutable。Runweave Browser 已检查正式站 1440px 和 390px 无横向溢出、页脚链接点击区域不小于 44px，并实际点击“让 AI 帮你安装”进入 `/start/#agent`。部署指南、使用文档、许可证及问题反馈链接均返回 HTTP 200。截图为 `artifacts/website-footer-live-desktop.png`、`artifacts/website-footer-live-mobile.png`，后者是浏览器手机宽度检查，不是真机验收。禁用 JavaScript 与原生 200% 缩放维持上述阻塞状态。
+
+发布前校验全部文件，再原子切换 current；上一版 `20261112T095754Z-f23370c0` 保留，可使用上节 rollback-version.py 命令替换 release 参数恢复。服务器 deployments 目录保存 manifest.json、previous-release、activation.json 和 verification.json；本机 HTTP 与浏览器记录为 `artifacts/website-footer-checks.json`。本轮未改 DNS、TLS、Nginx 配置或重启服务，未执行在线回滚演练。
+
+### 深浅外观（2026-11-12）
+
+版本 `20261112T103418Z-198f5fac` 为首页、快速开始和 404 页统一提供浅色、深色、跟随系统三种模式，默认跟随系统。页头原生选择框支持键盘操作；手动选择保存在本站 localStorage 的 `runweave-website-theme`，选择“跟随系统”删除覆盖值。head 内初始化脚本在正文前恢复选择，监听系统偏好和同源 storage 变化。存储不可用时当前页面仍可切换；CSS 媒体查询提供无脚本的系统配色，选择器仅在脚本初始化后显示。无脚本设计已落实，但仍不声称完成禁用 JavaScript 专项运行验收。
+
+配色集中在 `src/styles/theme.css`；导航、按钮、分隔线、页脚、教程代码框与复制按钮共用颜色变量，产品截图保持原貌。正文、辅助文字、强调色和主按钮文字的静态配色对比度均不低于 4.5:1。本轮隔离源码 `/private/tmp/runweave-website-theme-source/packages/website` 保留上一生产版的配套工具内容与布局，不包含工作区独立进行的产品图片改动；生产输出 `/private/tmp/runweave-website-theme-dist`，未覆盖已有开发预览。manifest 保存源文件哈希和正式构建输入。
+
+lint、astro check（0 错误、0 警告）及 production build 通过。正式站 Browser 已实际验证系统浅色/深色动态跟随（媒体模拟）、手动选择优先于系统、刷新记忆、导航到教程及 404 的配色一致性、恢复系统模式后清除保存值。首页与教程分别在两种配色下检查 320/390/768/1440px，无横向溢出。系统偏好通过浏览器媒体模拟验证，未改宿主 OS 设置；手机宽度检查不等于真机验收。禁用 JavaScript 与原生 200% 缩放仍保留前述工具阻塞。
+
+15 个公开文件与 manifest 完全匹配，HTML/文本 no-cache、哈希资源 immutable；原子切换后保留上一版 `20261112T101704Z-198f5fac`，需要回滚时使用上节 rollback-version.py 命令并替换 release 参数。服务器对应 deployments 目录保留 manifest.json、previous-release、activation.json、verification.json。本机证据为 `artifacts/website-theme-checks.json`，正式站浏览器截图为 `artifacts/website-theme-live-dark.png`、`artifacts/website-theme-live-light.png`。本轮不修改 DNS、TLS、Nginx 配置，无服务重启或在线回滚演练。

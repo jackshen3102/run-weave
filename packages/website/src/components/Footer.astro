@@ -2,5 +2,110 @@
 import Brand from "./Brand.astro";
 import { guide, repository } from "../data/home";
 ---
-<section class="closing"><h2>打开工作台，<br class="mobile-break" />开始下一项工作。</h2><a class="button primary" href={guide}>开始使用 Runweave <span aria-hidden="true">↗</span></a></section>
-<footer class="site-footer"><Brand /><span class="footer-note">你的项目。你的工具。你的工作台。</span><a href={repository}>GitHub ↗</a></footer>
+<footer class="project-footer wrap">
+  <div class="footer-grid">
+    <div class="footer-about">
+      <Brand />
+      <p>在电脑上组织项目、运行 Agent，<br />把终端与浏览器放在同一个工作区。</p>
+    </div>
+    <nav aria-labelledby="footer-start-title">
+      <h2 id="footer-start-title">开始使用</h2>
+      <ul>
+        <li><a href={guide}>快速开始</a></li>
+        <li><a href={`${guide}#agent`}>让 AI 帮你安装</a></li>
+        <li><a href={`${repository}/blob/main/docs/cli/server-cli.md`}>部署指南 <span aria-hidden="true">↗</span></a></li>
+      </ul>
+    </nav>
+    <nav aria-labelledby="footer-support-title">
+      <h2 id="footer-support-title">文档与支持</h2>
+      <ul>
+        <li><a href={`${repository}/blob/main/docs/README.md`}>使用文档 <span aria-hidden="true">↗</span></a></li>
+        <li><a href="/agent-guide.txt">AI 使用指南</a></li>
+        <li><a href={`${repository}/issues`}>报告问题 <span aria-hidden="true">↗</span></a></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="footer-meta">
+    <a href={`${repository}/blob/main/LICENSE.md`}>MIT 许可证 <span aria-hidden="true">↗</span></a>
+    <a href={repository}>源代码 <span aria-hidden="true">↗</span></a>
+  </div>
+</footer>
+<style>
+  .project-footer {
+    border-top: 1px solid var(--rule);
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) repeat(2, minmax(0, 1fr));
+    gap: 48px;
+    padding: 44px 0 32px;
+  }
+  .footer-about :global(.wordmark) {
+    font-size: 30px;
+    letter-spacing: -1.2px;
+  }
+  .footer-about p {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.9;
+    margin-top: 14px;
+  }
+  nav h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 10px 0 12px;
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  nav a,
+  .footer-meta a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 2px;
+  }
+  .footer-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    border-top: 1px solid var(--rule);
+    padding-block: 12px;
+  }
+  .footer-meta a {
+    font-size: 12px;
+  }
+  @media (max-width: 760px) {
+    .footer-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      padding: 30px 0 24px;
+    }
+    .footer-about {
+      grid-column: 1 / -1;
+    }
+    .footer-about p {
+      margin-top: 10px;
+    }
+    nav h2 {
+      margin-top: 0;
+      margin-bottom: 6px;
+    }
+  }
+</style>

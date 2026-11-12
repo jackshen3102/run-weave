@@ -1,0 +1,16 @@
+<label class="theme-control" data-theme-control hidden>
+  <span class="theme-label">外观</span>
+  <select aria-label="外观模式" data-theme-select>
+    <option value="system">跟随系统</option>
+    <option value="light">浅色</option>
+    <option value="dark">深色</option>
+  </select>
+</label>
+<style>
+  .theme-control { flex-shrink: 0; }
+  .theme-control[hidden] { display: none; }
+  .theme-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  select { min-height: 44px; max-width: 120px; padding: 8px 10px; border: 1px solid var(--control-border); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+  select:hover { background: var(--surface-hover); }
+  select:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+</style>

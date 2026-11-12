@@ -1,5 +1,6 @@
 ---
+import ThemeSelect from "../components/ThemeSelect.astro";
 import Brand from "../components/Brand.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
-<SiteLayout title="页面未找到｜Runweave" notFound><main id="main" class="wrap error-page"><Brand /><p class="eyebrow">404</p><h1>这里还没有页面。</h1><p>回到首页，继续了解 Runweave。</p><a class="button primary" href="/">返回首页 →</a></main></SiteLayout>
+<SiteLayout title="页面未找到｜Runweave" notFound><main id="main" class="wrap error-page"><div class="error-header"><Brand /><ThemeSelect /></div><p class="eyebrow">404</p><h1>这里还没有页面。</h1><p>回到首页，继续了解 Runweave。</p><a class="button primary" href="/">返回首页 →</a></main></SiteLayout>
