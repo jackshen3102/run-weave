@@ -62,6 +62,21 @@ ScreenJournal 默认展示原始录屏，整理事项为可选辅助能力；分
 独立 NPM 服务端由 `packages/runweave-server/` 分发同源 Backend、App Server 和网页；独立 `@runweave/cli` 唯一提供 rw；
 两个服务进程保持独立，生命周期由 `rw server` 管理，当前合同见 [服务端管理](../cli/server-cli.md)。
 
+## 官网边界
+
+`packages/website/` 是独立的 Astro 静态站点，使用 TypeScript 和 CSS，不依赖产品
+Frontend、Backend、App Server 或登录态，也不随 npm Server 或桌面客户端分发。
+首页介绍电脑上的项目、终端、Agent 与多后端连接；手机作为补充入口。
+`/start/` 提供快速开始，`/agent-guide.txt` 与 `/llms.txt` 提供 AI 可读入口，
+安装说明共享同一份数据源，不另建 CMS。
+
+预览默认 noindex、禁止抓取且不生成 sitemap；生产构建必须提供真实 HTTPS 根地址，
+站点地图只包含首页和快速开始。静态托管须对未知路径返回真实 404；
+HTML 与资源整版原子发布和回退，不使用 SPA 首页 fallback。
+正文与链接以初始 HTML 提供；外观选择、复制命令为渐进增强，Clarity 仅在生产按配置加载。
+素材必须可公开，界面示意与真实运行证据分别标注，不承诺各平台能力完全一致。
+构建输入、素材来源、采集边界、发布和验证入口统一见[官网指南](../../packages/website/README.md)。
+
 ## 依赖方向
 
 - UI 运行时通过 `@runweave/shared` 使用协议，不导入 Backend 或 Electron 实现。

@@ -8,6 +8,7 @@
 | 你要做什么                                             | 下一步                                                                                                                                                     |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 先理解代码目录、运行时和依赖方向                       | [architecture/README.md](./architecture/README.md)                                                                                                         |
+| 修改官网、快速开始、静态托管与 SEO                    | [官网工程与部署指南](../packages/website/README.md)                                                                                                       |
 | 查看重要架构选择及其取舍背景                           | [adr/README.md](./adr/README.md)                                                                                                                           |
 | 管理定时任务、后台执行与终端恢复                       | [接入边界](../frontend/docs/scheduled-tasks.md)、[CLI、按需运行与后台续接](./cli/scheduled-task-cli.md)、[运行配置](./deployment/overview.md#定时任务运行) |
 | 查看 Claude Code 正文、生命周期、通知与验收边界        | [配置与能力](./cli/configuration.md#claude-code-原生引用与能力)、[验收入口](./testing/README.md#claude-code-集成验收)                                      |
