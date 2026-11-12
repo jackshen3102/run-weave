@@ -13239,5 +13239,61 @@
     "count": 1,
     "category": "build",
     "reason": "读取待发版包版本元数据，与不可变候选包交叉验证；不读取用户配置。"
+  },
+  {
+    "file": "packages/website/astro.config.mjs",
+    "kind": "environment",
+    "expression": "process.env.WEBSITE_CLARITY_ENABLED",
+    "count": 1,
+    "category": "build",
+    "reason": "官网构建时分析开关，预览和开发始终排除采集，不作为产品运行时配置来源。"
+  },
+  {
+    "file": "packages/website/astro.config.mjs",
+    "kind": "environment",
+    "expression": "process.env.WEBSITE_CLARITY_PROJECT_ID",
+    "count": 1,
+    "category": "build",
+    "reason": "官网构建时公开 Clarity 项目标识，仅允许字母数字，不是访问后台的凭据。"
+  },
+  {
+    "file": "packages/website/astro.config.mjs",
+    "kind": "environment",
+    "expression": "process.env.WEBSITE_ENV",
+    "count": 1,
+    "category": "build",
+    "reason": "官网静态构建模式，仅控制生产元信息与分析脚本，不读取或覆盖 Backend 实例配置。"
+  },
+  {
+    "file": "packages/website/astro.config.mjs",
+    "kind": "environment",
+    "expression": "process.env.WEBSITE_SITE_URL",
+    "count": 1,
+    "category": "build",
+    "reason": "官网部署时提供的公开站点源，用于静态 canonical 和 sitemap，校验凭据及生产 HTTPS。"
+  },
+  {
+    "file": "packages/website/src/pages/llms.txt.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.SITE",
+    "count": 1,
+    "category": "build",
+    "reason": "读取 Astro 构建注入的公开站点源，生成静态文本入口，不访问 Backend 配置。"
+  },
+  {
+    "file": "packages/website/src/pages/robots.txt.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.SITE",
+    "count": 1,
+    "category": "build",
+    "reason": "读取 Astro 构建注入的公开站点源，生成静态文本入口，不访问 Backend 配置。"
+  },
+  {
+    "file": "packages/website/src/pages/robots.txt.ts",
+    "kind": "environment",
+    "expression": "import.meta.env.WEBSITE_PRODUCTION",
+    "count": 1,
+    "category": "build",
+    "reason": "读取 Astro 构建注入的生产标记，生成静态 robots 抓取策略，不作为实例配置。"
   }
 ]
