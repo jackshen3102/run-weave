@@ -3011,7 +3011,7 @@
     "file": "electron/src/backend/health-auth.ts",
     "kind": "environment-forward",
     "expression": "...process.env",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
     "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
@@ -13239,6 +13239,118 @@
     "count": 1,
     "category": "build",
     "reason": "读取待发版包版本元数据，与不可变候选包交叉验证；不读取用户配置。"
+  },
+  {
+    "file": "electron/scripts/prepare-whistle-runtime.mjs",
+    "kind": "environment",
+    "expression": "process.env.npm_execpath",
+    "count": 1,
+    "category": "build",
+    "reason": "Use the invoking package manager JavaScript entry to build Whistle on Windows without executing a command shim."
+  },
+  {
+    "file": "scripts/electron/dist-retry.mjs",
+    "kind": "environment",
+    "expression": "process.env.npm_execpath",
+    "count": 2,
+    "category": "build",
+    "reason": "Use the invoking pnpm entry for Windows build subprocesses; this is build context rather than user configuration."
+  },
+  {
+    "file": "scripts/electron/dist-windows.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_ELECTRON_BUILD_ROOT",
+    "count": 1,
+    "category": "build",
+    "reason": "Select disposable Windows package staging without changing installed application state or persistent settings."
+  },
+  {
+    "file": "scripts/electron/dist-windows.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "build",
+    "reason": "Forward the current build tool environment into the Windows packaging subprocess, preserving registry and toolchain context."
+  },
+  {
+    "file": "electron/src/desktop/config.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_BACKEND_URL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Publish the installed Windows Server loopback URL resolved from the active instance settings to existing desktop connection consumers."
+  },
+  {
+    "file": "electron/src/backend/external-cdp.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_BACKEND_URL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Use the current desktop Backend connection to publish its local Browser endpoint; installed Windows resolves this address from instance settings."
+  },
+  {
+    "file": "electron/src/backend/external-cdp.ts",
+    "kind": "environment",
+    "expression": "process.env.BROWSER_VIEWER_BACKEND_URL",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Use the current desktop Backend connection to publish its local Browser endpoint; installed Windows resolves this address from instance settings."
+  },
+  {
+    "file": "electron/scripts/prepare-windows-whistle.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repoRoot, \"package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "Read checked-in dependency manifests and the exact workspace lock graph, then write only a disposable frozen Windows Whistle package staging area."
+  },
+  {
+    "file": "electron/scripts/prepare-windows-whistle.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repoRoot, \"packages/whistle-runtime/package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "Read checked-in dependency manifests and the exact workspace lock graph, then write only a disposable frozen Windows Whistle package staging area."
+  },
+  {
+    "file": "electron/scripts/prepare-windows-whistle.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(repoRoot, \"pnpm-lock.yaml\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "Read checked-in dependency manifests and the exact workspace lock graph, then write only a disposable frozen Windows Whistle package staging area."
+  },
+  {
+    "file": "electron/scripts/prepare-windows-whistle.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(targetDir, \"package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "Read checked-in dependency manifests and the exact workspace lock graph, then write only a disposable frozen Windows Whistle package staging area."
+  },
+  {
+    "file": "electron/scripts/prepare-windows-whistle.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(targetDir, \"pnpm-lock.yaml\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "Read checked-in dependency manifests and the exact workspace lock graph, then write only a disposable frozen Windows Whistle package staging area."
+  },
+  {
+    "file": "scripts/verify/electron/windows-native.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(backend, \"activity-sqlite-runtime-manifest.json\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Windows 打包运行验证只读解压产物的 SQLite 清单，核对平台及 Electron 版本，不访问用户配置。"
+  },
+  {
+    "file": "scripts/verify/electron/windows-native.mjs",
+    "kind": "file-io",
+    "expression": "fs.readFileSync(path.join(backend, file.path))",
+    "count": 1,
+    "category": "test",
+    "reason": "Windows 打包运行验证只读清单列出的分发文件，核对大小及 SHA256，不访问用户数据。"
   },
   {
     "file": "packages/website/astro.config.mjs",

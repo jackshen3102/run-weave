@@ -1,0 +1,16 @@
+extends: ./electron-builder.yml
+
+artifactName: Runweave-${version}-windows-${arch}.${ext}
+win:
+  icon: resources/icons/icon-preview.png
+  target:
+    - target: zip
+      arch: [x64]
+  extraResources:
+    - from: ../backend/node_modules/node-pty
+      to: backend/node_modules/node-pty
+      filter:
+        - "lib/**/*"
+        - "prebuilds/win32-x64/**/*"
+        - "package.json"
+        - "LICENSE"

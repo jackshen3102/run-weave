@@ -70,6 +70,11 @@ function commandName(binary) {
 }
 
 async function runStreamingCommand(command, args, options = {}) {
+  if (process.platform === "win32" && command === "pnpm.cmd") {
+    if (!process.env.npm_execpath) throw new Error("Build through pnpm on Windows");
+    args = [process.env.npm_execpath, ...args];
+    command = process.execPath;
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd ?? ROOT,
@@ -133,6 +138,7 @@ function takeBuilderConfig(builderArgs) {
 
 async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
   const linux = path.basename(baseBuilderConfig) === "electron-builder.linux.yml";
+  const windows = path.basename(baseBuilderConfig) === "electron-builder.windows.yml";
   const frontendDist = path.join(buildRoot, "frontend", "dist");
   const electronAppDir = path.join(buildRoot, "electron");
   const electronDist = path.join(electronAppDir, "dist");
@@ -216,7 +222,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             to: "node_modules",
             filter: ["**/*"],
           },
-          ...(!linux
+          ...(!linux && !windows
             ? [{
                 from: path.join(electronDist, "companion"),
                 to: "companion",
@@ -234,7 +240,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             to: "backend/node_modules/node-pty",
             filter: [
               "lib/**/*",
-              linux ? "prebuilds/linux-x64/**/*" : "prebuilds/darwin-arm64/**/*",
+              `prebuilds/${windows ? "win32-x64" : linux ? "linux-x64" : "darwin-arm64"}/**/*`,
               "package.json",
               "LICENSE",
             ],
@@ -268,6 +274,10 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
               target: [{ target: "tar.gz", arch: ["x64"] }],
             } }
           : {}),
+        ...(windows ? { win: {
+          target: [{ target: "zip", arch: ["x64"] }],
+          icon: path.join(ELECTRON_DIR, "resources", "icons", "icon-preview.png"),
+        } } : {}),
         mac: {
           icon: path.join(ELECTRON_DIR, "resources", "icons", "icon.icns"),
           category: "public.app-category.developer-tools",
@@ -313,6 +323,13 @@ function isolatedBuilderIdentity(baseBuilderConfig) {
       appId: "com.runweave.desktop",
       productName: "Runweave",
       artifactName: "Runweave-${version}-linux-${arch}.${ext}",
+    };
+  }
+  if (configName === "electron-builder.windows.yml") {
+    return {
+      appId: "com.runweave.desktop",
+      productName: "Runweave",
+      artifactName: "Runweave-${version}-windows-${arch}.${ext}",
     };
   }
   if (configName === "electron-builder.yml") {

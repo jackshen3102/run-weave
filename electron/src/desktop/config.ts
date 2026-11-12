@@ -112,7 +112,12 @@ function parseOptionalPort(raw: string | undefined): number | null {
 }
 
 export const isDev = !app.isPackaged;
-export const managesPackagedBackend = isDev
+// Windows preview uses the installed npm Server, including its persistent PTY Host.
+export const usesInstalledServer = app.isPackaged && process.platform === "win32";
+if (usesInstalledServer) {
+  process.env.RUNWEAVE_BACKEND_URL = `http://127.0.0.1:${configRuntime.get<number>("backend.server.port", 5001)}`;
+}
+export const managesPackagedBackend = isDev || usesInstalledServer
   ? false
   : process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND?.trim() !== "false";
 process.env.RUNWEAVE_MANAGES_PACKAGED_BACKEND = String(managesPackagedBackend);

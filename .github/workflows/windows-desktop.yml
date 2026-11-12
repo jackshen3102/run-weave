@@ -1,0 +1,110 @@
+name: Windows desktop
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/windows-desktop.yml
+      - electron/electron-builder.windows.yml
+      - electron/scripts/**
+      - scripts/electron/dist-windows.mjs
+      - scripts/electron/dist-retry.mjs
+      - scripts/verify/electron/windows-native.mjs
+      - packages/whistle-runtime/**
+      - patches/**
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact_name:
+        description: Verified Windows x64 ZIP and checksum artifact
+        value: ${{ jobs.build-windows.outputs.artifact_name }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      artifact_name: ${{ steps.verify.outputs.artifact_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies without native rebuilds
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build Windows x64 ZIP
+        env:
+          VITE_CLARITY_ENABLED: "false"
+        run: pnpm dist:electron:windows
+
+      - name: Verify distributed ZIP with packaged Electron
+        id: verify
+        run: |
+          $release = Join-Path $env:GITHUB_WORKSPACE 'electron/.windows-build/release'
+          $archives = @(Get-ChildItem $release -Filter 'Runweave-*-windows-x64.zip')
+          if ($archives.Count -ne 1) { throw 'Expected exactly one Windows ZIP' }
+          $archive = $archives[0]
+          $extracted = Join-Path $env:RUNNER_TEMP ('runweave-windows-' + [guid]::NewGuid())
+          New-Item -ItemType Directory $extracted | Out-Null
+          tar -xf $archive.FullName -C $extracted
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP extraction failed' }
+          $executable = Join-Path $extracted 'Runweave.exe'
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          try {
+            & $executable scripts/verify/electron/windows-native.mjs (Join-Path $extracted 'resources') | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged Electron native verification failed' }
+          } finally {
+            Remove-Item Env:ELECTRON_RUN_AS_NODE
+          }
+          $hash = (Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksum = $archive.FullName + '.sha256'
+          Set-Content $checksum "$hash  $($archive.Name)" -Encoding utf8NoBOM
+          if ((Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) {
+            throw 'Archive changed during verification'
+          }
+          "artifact_name=$($archive.BaseName)-$env:GITHUB_SHA" >> $env:GITHUB_OUTPUT
+
+      - name: Upload verified Windows ZIP and checksum
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.verify.outputs.artifact_name }}
+          path: |
+            electron/.windows-build/release/Runweave-*-windows-x64.zip
+            electron/.windows-build/release/Runweave-*-windows-x64.zip.sha256
+          include-hidden-files: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Write download summary
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          '### Windows x64 preview' >> $env:GITHUB_STEP_SUMMARY
+          "[Download ZIP and SHA-256 checksum]($env:ARTIFACT_URL) (retained 14 days)." >> $env:GITHUB_STEP_SUMMARY
+          'Unsigned preview; manual updates. Extracted-package native checks passed. This does not replace interactive Windows desktop acceptance.' >> $env:GITHUB_STEP_SUMMARY

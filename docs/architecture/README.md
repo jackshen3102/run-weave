@@ -22,21 +22,21 @@ scripts/dev-session    开发会话与 Beta 生命周期
 
 ## 目录职责
 
-| 目录                                  | 当前职责                                                         | 首要入口                                                       |
-| ------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `frontend/`                           | Web UI 与 Electron renderer                                      | `frontend/src/App.tsx`                                         |
-| `backend/`                            | 本机 HTTP/WebSocket、Terminal、Activity、Evolution               | `backend/src/index.ts`                                         |
-| `electron/`                           | macOS 窗口、IPC、内嵌 Browser、Backend 进程与更新                | `electron/src/main.ts`                                         |
-| `packages/app-ios/`                   | 独立 Swift iOS 应用，通过 Backend HTTP/WS 工作                   | [原生包入口](../../packages/app-ios/README.md)                 |
-| `app-server/`                         | 独立事件中心、Thread 状态投影和实时消费                          | `app-server/src/index.ts`                                      |
-| `packages/shared/`                    | 跨运行时纯 TypeScript 合同                                       | `packages/shared/package.json#exports`                         |
-| `packages/common/`                    | Web 终端与图片基础能力                                           | `packages/common/AGENTS.md`                                    |
-| `packages/browser-history/`           | 本机浏览记录、Native Messaging 接收器与只读材料 CLI              | [记录合同](../../packages/browser-history/README.md)           |
-| `packages/browser-history-extension/` | Chrome / Edge 共用 MV3 采集扩展                                  | [安装入口](../../packages/browser-history-extension/README.md) |
-| `packages/runweave-cli/`              | `rw` CLI                                                         | `packages/runweave-cli/src/index.ts`                           |
-| `packages/runweave-mcp/`              | 个人 full-access 调查 MCP；本机文件、现有 Backend API 与命令执行 | [运行与 Tunnel 接入](../../packages/runweave-mcp/README.md)    |
-| `scripts/dev-session/`                | Dev Session / Beta Pool 控制面                                   | `scripts/dev-session/cli.mjs`                                  |
-| `plugins/toolkit/`                    | Runweave 项目技能与 hooks                                        | `plugins/toolkit/.codex-plugin/plugin.json`                    |
+| 目录                                  | 当前职责                                                              | 首要入口                                                       |
+| ------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `frontend/`                           | Web UI 与 Electron renderer                                           | `frontend/src/App.tsx`                                         |
+| `backend/`                            | 本机 HTTP/WebSocket、Terminal、Activity、Evolution                    | `backend/src/index.ts`                                         |
+| `electron/`                           | 桌面窗口、IPC、内嵌 Browser、Backend 连接与更新；Linux/Windows 为预览 | `electron/src/main.ts`                                         |
+| `packages/app-ios/`                   | 独立 Swift iOS 应用，通过 Backend HTTP/WS 工作                        | [原生包入口](../../packages/app-ios/README.md)                 |
+| `app-server/`                         | 独立事件中心、Thread 状态投影和实时消费                               | `app-server/src/index.ts`                                      |
+| `packages/shared/`                    | 跨运行时纯 TypeScript 合同                                            | `packages/shared/package.json#exports`                         |
+| `packages/common/`                    | Web 终端与图片基础能力                                                | `packages/common/AGENTS.md`                                    |
+| `packages/browser-history/`           | 本机浏览记录、Native Messaging 接收器与只读材料 CLI                   | [记录合同](../../packages/browser-history/README.md)           |
+| `packages/browser-history-extension/` | Chrome / Edge 共用 MV3 采集扩展                                       | [安装入口](../../packages/browser-history-extension/README.md) |
+| `packages/runweave-cli/`              | `rw` CLI                                                              | `packages/runweave-cli/src/index.ts`                           |
+| `packages/runweave-mcp/`              | 个人 full-access 调查 MCP；本机文件、现有 Backend API 与命令执行      | [运行与 Tunnel 接入](../../packages/runweave-mcp/README.md)    |
+| `scripts/dev-session/`                | Dev Session / Beta Pool 控制面                                        | `scripts/dev-session/cli.mjs`                                  |
+| `plugins/toolkit/`                    | Runweave 项目技能与 hooks                                             | `plugins/toolkit/.codex-plugin/plugin.json`                    |
 
 改动某个目录前继续读其就近 `AGENTS.md`；完整清单以
 `git ls-files '**/AGENTS.md' 'AGENTS.md'` 为准。

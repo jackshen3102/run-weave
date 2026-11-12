@@ -1,4 +1,4 @@
-import { settingText, configuration, configurationPath } from "@runweave/config-node";
+import { settingText, configuration, configurationPath, assertPrivateDescriptor } from "@runweave/config-node";
 import { isIP } from "node:net";
 import {
   constants,
@@ -65,7 +65,9 @@ export function localBackendAuthHeaders(
   const lock = recorded.value;
   const owner = config.ownerDevSessionId;
   const hosts =
-    target.hostname === "127.0.0.1" ? ["127.0.0.1", "0.0.0.0"] : ["::1", "::"];
+    target.hostname === "127.0.0.1"
+      ? ["127.0.0.1", "0.0.0.0", ...(process.platform === "win32" ? ["::"] : [])]
+      : ["::1", "::"];
   if (
     !hosts.includes(lock.host ?? "") ||
     !Number.isInteger(lock.pid) ||
@@ -94,15 +96,17 @@ function readHealthProfileLock(profileDir: string): {
 } {
   let fd: number | undefined;
   try {
+    const file = path.join(profileDir, "backend.lock.json");
     fd = openSync(
-      path.join(profileDir, "backend.lock.json"),
+      file,
       constants.O_RDONLY | constants.O_NOFOLLOW,
     );
     const stat = fstatSync(fd);
+    if (process.platform === "win32") assertPrivateDescriptor(fd, 65_536, file);
     if (
       !stat.isFile() ||
-      (stat.mode & 0o077) !== 0 ||
-      stat.uid !== process.getuid?.() ||
+      (process.platform !== "win32" && (stat.mode & 0o077) !== 0) ||
+      (typeof process.getuid === "function" && stat.uid !== process.getuid()) ||
       stat.size > 65_536
     ) {
       throw new Error("invalid Backend health profile lock");
@@ -128,6 +132,10 @@ function assertHealthListenerGeneration(
   lock: BackendProfileLockOwner,
   target: URL,
 ): void {
+  if (process.platform === "win32") {
+    assertWindowsHealthListenerGeneration(lock, target);
+    return;
+  }
   const options = {
     encoding: "utf8" as const,
     timeout: 1_000,
@@ -158,6 +166,37 @@ function assertHealthListenerGeneration(
     ) {
       throw new Error("listener or generation mismatch");
     }
+  } catch {
+    throw new Error("Backend health listener generation cannot be proven");
+  }
+}
+
+function assertWindowsHealthListenerGeneration(lock: BackendProfileLockOwner, target: URL): void {
+  try {
+    if (!lock.processStartedAt || !/^\d+$/.test(lock.processStartedAt)) throw new Error("missing process generation");
+    const script = `
+$ErrorActionPreference = 'Stop'
+$process = [Diagnostics.Process]::GetProcessById(${lock.pid})
+$before = $process.StartTime.ToUniversalTime().Ticks.ToString()
+$listeners = @(Get-NetTCPConnection -State Listen -LocalPort ${Number(target.port)} | ForEach-Object {
+  @{ address = $_.LocalAddress; port = $_.LocalPort; pid = $_.OwningProcess }
+})
+$process.Refresh()
+if ($process.HasExited) { throw 'exited' }
+@{ before = $before; after = $process.StartTime.ToUniversalTime().Ticks.ToString(); listeners = $listeners } | ConvertTo-Json -Depth 4 -Compress
+`;
+    const raw = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+      encoding: "utf8", timeout: 10_000, maxBuffer: 65_536, windowsHide: true,
+      env: { ...process.env, PSModulePath: undefined }, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const value = JSON.parse(raw) as { before?: string; after?: string; listeners?: Array<{ address: string; port: number; pid: number }> };
+    if (value.before !== lock.processStartedAt || value.after !== lock.processStartedAt || !Array.isArray(value.listeners)) throw new Error("generation mismatch");
+    const listeners = value.listeners.filter((listener) => {
+      const family = isIP(listener.address);
+      if (!family || listener.port !== Number(target.port) || !Number.isSafeInteger(listener.pid)) throw new Error("invalid listener");
+      return healthListenerMatchesEndpoint(`${family === 6 ? `[${listener.address}]` : listener.address}:${listener.port}`, family === 6 ? "IPv6" : "IPv4", target);
+    });
+    if (!listeners.length || listeners.some((listener) => listener.pid !== lock.pid)) throw new Error("listener mismatch");
   } catch {
     throw new Error("Backend health listener generation cannot be proven");
   }

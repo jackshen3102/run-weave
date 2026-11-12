@@ -91,5 +91,5 @@ project and terminal before declaring a Linux artifact usable.
 The macOS companion, macOS native resource sampler/full system metrics, battery
 integration and automatic updates are not part of this Linux preview. Long-text
 terminal delivery retains its existing security gate; this package does not
-bypass it. No Windows package is added. The macOS configuration keeps its native
+bypass it. Windows has a separate [preview build](./electron-windows.md). The macOS configuration keeps its native
 companion and arm64 PTY resources and its existing signing hook/targets.

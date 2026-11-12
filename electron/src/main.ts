@@ -4,7 +4,7 @@ import { registerTerminalBadge } from "./monitoring/terminal-badge";
 import { registerResourceNotificationHandlers } from "./monitoring/resource-notifications";
 import "./desktop/config.js";
 import { configuration } from "@runweave/config-node";
-import { app, BrowserWindow, dialog, ipcMain, Menu, net } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import type {
   AttentionOpenDispatch,
   AttentionOpenIntent,
@@ -25,6 +25,7 @@ import { shouldEnableAutoUpdates } from "./updater/config.js";
 import { buildApplicationMenuTemplate } from "./desktop/menu.js";
 import { registerTerminalBrowserHandlers } from "./browser/view/index.js";
 import { installHooksIfNeeded } from "./hooks/hook-installer.js";
+import { publishExternalBackendCdpEndpoint } from "./backend/external-cdp.js";
 import { desktopRuntime } from "./desktop/runtime-state.js";
 import { registerSuijiStorage } from "./desktop/suiji-storage.js";
 import {
@@ -33,6 +34,7 @@ import {
   isBetaChannel,
   isDev,
   managesPackagedBackend,
+  usesInstalledServer,
 } from "./desktop/config.js";
 import {
   createWindow,
@@ -358,7 +360,7 @@ if (hasSingleInstanceLock) {
       app.once("before-quit", stopBadge);
       registerAttentionNotificationHandlers(() => desktopRuntime.mainWindow);
   registerResourceNotificationHandlers(() => desktopRuntime.mainWindow);
-      if (!isBetaChannel) {
+      if (!isBetaChannel && (isDev || managesPackagedBackend)) {
         await installHooksIfNeeded({
           resourcesDir: process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR
             ? path.resolve(process.env.RUNWEAVE_ELECTRON_RESOURCES_DIR)
@@ -384,41 +386,8 @@ if (hasSingleInstanceLock) {
         desktopRuntime.cdpProxy.endpoint;
       writeBetaDesktopStatus();
 
-      if (isDev || !managesPackagedBackend) {
-        // In dev mode, backend is an independent process started before Electron.
-        // Notify it of the CDP proxy endpoint so PTY terminals inherit the env var.
-        const backendUrl =
-          process.env.RUNWEAVE_BACKEND_URL ??
-          process.env.BROWSER_VIEWER_BACKEND_URL;
-        if (backendUrl) {
-          try {
-            const resp = await net.fetch(
-              `${backendUrl}/internal/cdp-endpoint`,
-              {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  endpoint: desktopRuntime.cdpProxy.endpoint,
-                }),
-              },
-            );
-            if (!resp.ok) {
-              console.warn(
-                "[electron] failed to propagate CDP endpoint to backend",
-                {
-                  status: resp.status,
-                },
-              );
-            }
-          } catch (error) {
-            console.warn(
-              "[electron] failed to propagate CDP endpoint to backend",
-              {
-                error: error instanceof Error ? error.message : String(error),
-              },
-            );
-          }
-        }
+      if (isDev || (!managesPackagedBackend && !usesInstalledServer)) {
+        await publishExternalBackendCdpEndpoint(desktopRuntime.cdpProxy.endpoint);
       }
 
       if (!isDev) {
