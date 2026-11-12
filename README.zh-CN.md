@@ -1,6 +1,6 @@
 # Runweave
 
-[English](README.md)
+[官网](https://runweave.jackshen310.cn/) · [快速开始](https://runweave.jackshen310.cn/start/) · [AI 使用指南](https://runweave.jackshen310.cn/agent-guide.txt) · [English](README.md)
 
 Runweave 是一个本地优先的 AI CLI 终端工作台。它帮助你在桌面、浏览器、CLI
 和手机之间运行、观察、接力和继续处理长时间运行的命令行任务，例如 `codex`、
