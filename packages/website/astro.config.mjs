@@ -51,6 +51,7 @@ if (clarityEnabled && !/^[a-zA-Z0-9]+$/.test(clarityProject)) {
 export default defineConfig({
   site: site.origin,
   output: "static",
+  devToolbar: { enabled: false },
   integrations: production
     ? [
         sitemap({
