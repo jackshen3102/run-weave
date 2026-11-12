@@ -1,7 +1,8 @@
 ---
+import Brand from "./Brand.astro";
 import { repository } from "../data/home";
 ---
 <header class="site-header wrap">
-  <a class="wordmark" href="/" aria-label="Runweave 首页">Runweave</a>
+  <Brand />
   <nav aria-label="主导航"><a href="/start/">快速开始</a><a href="#workflow">工作方式</a><a href="#machines">多机连接</a><a href="#products">更多产品</a><a href={repository}>GitHub <span aria-hidden="true">↗</span></a></nav>
 </header>
