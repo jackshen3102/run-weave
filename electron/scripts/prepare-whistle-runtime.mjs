@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
+import { prepareWindowsWhistle } from "./prepare-windows-whistle.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,10 +12,14 @@ const repoRoot = path.resolve(electronDir, "..");
 const targetDir = process.env.RUNWEAVE_WHISTLE_RUNTIME_DIR
   ? path.resolve(process.env.RUNWEAVE_WHISTLE_RUNTIME_DIR)
   : path.join(electronDir, ".whistle-runtime");
+const pnpmEntry = process.env.npm_execpath;
+if (process.platform === "win32" && !pnpmEntry) throw new Error("Build through pnpm on Windows");
 
 rmSync(targetDir, { recursive: true, force: true });
-execFileSync(
-  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+if (process.platform === "win32") {
+  prepareWindowsWhistle(repoRoot, targetDir, pnpmEntry);
+} else execFileSync(
+  "pnpm",
   [
     "--filter",
     "@runweave/whistle-runtime",

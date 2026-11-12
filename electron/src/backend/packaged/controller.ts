@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { configuration, setting } from "@runweave/config-node";
 import type { PackagedBackendConnectionState } from "@runweave/shared/runtime-monitor";
 import type { LoginResponse } from "@runweave/shared/protocol";
 import {
@@ -10,6 +11,7 @@ import {
   type PackagedBackendRuntime,
 } from "../runtime.js";
 import { checkAppServerAvailability } from "../../app-server/cli.js";
+import { publishExternalBackendCdpEndpoint } from "../external-cdp.js";
 import { getIsQuitting } from "../../app/state.js";
 import {
   createAvailablePackagedBackendState,
@@ -24,6 +26,8 @@ import {
   isBetaChannel,
   isManagedDevSession,
   isDev,
+  managesPackagedBackend,
+  usesInstalledServer,
 } from "../../desktop/config.js";
 import { desktopRuntime } from "../../desktop/runtime-state.js";
 import {
@@ -320,7 +324,9 @@ export async function startPackagedBackendRuntime(): Promise<PackagedBackendConn
 }
 
 export async function connectExternalBackendRuntime(): Promise<PackagedBackendConnectionState> {
-  const backendUrl = process.env.RUNWEAVE_BACKEND_URL?.trim() || "";
+  const backendUrl = usesInstalledServer
+    ? `http://127.0.0.1:${setting<number>("backend.server.port", 5001)}`
+    : process.env.RUNWEAVE_BACKEND_URL?.trim() || "";
   try {
     const parsed = new URL(backendUrl);
     if (
@@ -344,22 +350,35 @@ export async function connectExternalBackendRuntime(): Promise<PackagedBackendCo
       serviceInstanceId?: string;
       sourceRevision?: string;
       status?: string;
+      runtimeReleaseId?: string;
+      environment?: { kind?: string; instanceId?: string; configRoot?: string };
     };
     const expectedId = process.env.RUNWEAVE_EXPECTED_BACKEND_ID?.trim();
-    const expectedRevision = process.env.RUNWEAVE_SOURCE_REVISION?.trim();
+    const expectedRevision = usesInstalledServer ? undefined : process.env.RUNWEAVE_SOURCE_REVISION?.trim();
+    const context = configuration().context;
     if (
       !response.ok ||
       health.status !== "ok" ||
       health.service !== "runweave-backend" ||
       (expectedId && health.serviceInstanceId !== expectedId) ||
+      (usesInstalledServer && (
+        health.environment?.kind !== context.kind ||
+        health.environment.instanceId !== context.instanceId ||
+        !health.environment.configRoot ||
+        path.relative(context.configRoot, health.environment.configRoot) !== ""
+      )) ||
       (expectedRevision && health.sourceRevision !== expectedRevision)
     ) {
       throw new Error("external Backend identity handshake failed");
     }
+    if (usesInstalledServer && desktopRuntime.cdpProxy) {
+      await publishExternalBackendCdpEndpoint(desktopRuntime.cdpProxy.endpoint, backendUrl);
+    }
     return setPackagedBackendState(
       createAvailablePackagedBackendState(backendUrl, {
         runtimeSource: "external",
-        statusMessage: "Using Dev Session shared Backend",
+        runtimeReleaseId: health.runtimeReleaseId,
+        statusMessage: usesInstalledServer ? "已连接本机 Runweave Server" : "Using Dev Session shared Backend",
       }),
     );
   } catch (error) {
@@ -370,6 +389,7 @@ export async function connectExternalBackendRuntime(): Promise<PackagedBackendCo
 }
 
 export async function restartPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
+  if (!managesPackagedBackend) return await connectExternalBackendRuntime();
   if (desktopRuntime.packagedBackendRestartPromise) {
     return desktopRuntime.packagedBackendRestartPromise;
   }

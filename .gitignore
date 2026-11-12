@@ -33,3 +33,4 @@ deploy/nginx/openssl-san.local.cnf
 
 # Isolated local Linux desktop package staging
 electron/.linux-build/
+electron/.windows-build/

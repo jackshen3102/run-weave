@@ -9,6 +9,7 @@ import {
   shell,
 } from "electron";
 import pidusage from "pidusage";
+import { pathToFileURL } from "node:url";
 import { watchDesktopWindow } from "./responsiveness.js";
 import { watchRendererRecovery } from "./renderer-recovery.js";
 import type { RuntimeStatsSnapshot } from "@runweave/shared/runtime-monitor";
@@ -41,7 +42,7 @@ export function registerCustomProtocol(getFrontendDistDir: () => string) {
       return new Response("Forbidden", { status: 403 });
     }
 
-    return net.fetch(`file://${resolved.filePath}`);
+    return net.fetch(pathToFileURL(resolved.filePath).href);
   };
 
   protocol.handle(CUSTOM_PROTOCOL, handleAppProtocol);

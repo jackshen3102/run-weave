@@ -1,6 +1,6 @@
 # Electron 桌面端
 
-`electron/` 是默认面向 macOS、可选 Linux x64 预览的桌面壳，负责窗口、内嵌 Terminal Browser、IPC/preload、后端进程、
+`electron/` 是默认面向 macOS、可选 Linux/Windows x64 预览的桌面壳，负责窗口、内嵌 Terminal Browser、IPC/preload、后端进程、
 更新和桌面级诊断。
 
 ## 先看哪里
@@ -13,6 +13,7 @@
 - Terminal Browser：`src/browser/`
 - 打包配置：`electron-builder.yml`、`electron-builder.beta.yml`、`electron-builder.linux.yml`
 - Linux x64 预览的打包、原生验证与限制：[`electron-linux.md`](../docs/deployment/electron-linux.md)
+- Windows x64 预览连接已安装的 npm Server：[`electron-windows.md`](../docs/deployment/electron-windows.md)
 
 ## 边界
 
@@ -20,7 +21,7 @@
   也不要让 `frontend/` 直接导入 Electron 主进程模块。
 - Electron 与其他运行时共享的 IPC payload、状态和协议进入 `packages/shared`。
 - Terminal Browser 的 tab、BrowserView、CDP proxy 和网络策略属于主进程；Web 前端只消费 bridge。
-- 默认只验证和打包当前 mac 客户端，不新增 Windows 打包工作。
+- 默认只验证和打包当前 mac 客户端；用户要求 Windows 时使用专属预览入口。
 - 更新、Stable/Beta/Dev Session 的真实边界从
   `../docs/deployment/README.md` 和 `../docs/architecture/README.md` 进入。
 
