@@ -69,7 +69,7 @@ WEBSITE_ENV=production pnpm --filter @runweave/website build
 
 ## 网站行为分析
 
-沿用产品的 Microsoft Clarity 官方 Web 自动采集，使用独立项目 [Runweave Website](https://clarity.microsoft.com/projects/view/zc99skixyj/dashboard)，公开项目 ID 为 `zc99skixyj`，不复用 Web/Electron 或 iOS 项目。项目当前登记地址为本机预览 `http://127.0.0.1:4321`；正式域名确定后同步更新项目概述和 `WEBSITE_SITE_URL`。
+沿用产品的 Microsoft Clarity 官方 Web 自动采集，使用独立项目 [Runweave Website](https://clarity.microsoft.com/projects/view/zc99skixyj/dashboard)，公开项目 ID 为 `zc99skixyj`，不复用 Web/Electron 或 iOS 项目。项目登记地址已同步为 AWS 正式入口 `https://runweave.jackshen310.cn`；迁移域名时同时更新项目概述和 `WEBSITE_SITE_URL`。
 
 - `WEBSITE_ENV=production` 的静态页面默认启用；Astro 开发模式、预览构建、404 和纯文本接口不采集。无前端框架、无新增 npm 依赖。
 - `WEBSITE_CLARITY_ENABLED=false` 是构建时关闭开关；修改后重建并替换整份站点产物。变量只接受 true/false。preview 即使设为 true 也不加载采集器。
@@ -85,3 +85,55 @@ WEBSITE_ENV=production pnpm --filter @runweave/website build
 本轮验证（2026-11-12）：独立生产构建在本机临时服务加载官方 SDK 0.8.77，首页与教程均只出现一个项目 tag，collect POST 返回 204；实际从首页进入教程并复制安装命令。Clarity 后台出现测试实时用户，打开实时录制后重建了教程结构，文本呈遮盖状态。此证据不替代正式域名上线后的普通浏览器验证；测试宿主是 Electron Browser，云端入口可能归一为 Electron，使用 site/page 标签区分。
 
 显式关闭、预览强制开启仍排除、Astro dev 强制 production 配置仍排除、非法开关/项目 ID 拒绝均已检查。人为阻断 SDK 项目 tag 后，导航与复制不受影响（真实复制成功）；故障规则随后已移除。Astro 预渲染可能把同名环境变量暴露为字符串，入口显式归一 true/false 并独立检查生产/开发条件，不把字符串 false 当作启用。
+
+## AWS 当前部署
+
+官网入口为 **https://runweave.jackshen310.cn/**，教程为 [/start/](https://runweave.jackshen310.cn/start/)。Cloudflare 中 `runweave` 的 A 记录指向 AWS `18.140.158.81`，仅 DNS、TTL 自动。Nginx 直接托管静态文件，无需 Node 进程。
+
+`share.jackshen310.cn` 恢复为分享专用域名，根路径为 404；`/share/terminal` 与 `/api/snapshot-shares` 沿用原代理配置。临时官网入口已撤下，没有把签名分享 URL 重定向到官网。Backend 和 App Server 未修改或重启。
+
+生产构建独立输出，不能直接发布本地预览产物：
+
+```bash
+WEBSITE_ENV=production WEBSITE_SITE_URL=https://runweave.jackshen310.cn \
+  pnpm --filter @runweave/website build --outDir /tmp/runweave-website-domain-dist
+```
+
+本机 4321 仍提供预览，保留 noindex 与 Clarity 排除；生产首页和教程不含 noindex，canonical、OG、robots、sitemap、llms.txt 与 AI 指令使用正式域名。账号初始化示例中的 `127.0.0.1:5001` 是用户本机 Server 地址，保留该值。
+
+服务器目录与配置：
+
+- `/var/www/runweave-website/releases/<release>/`：完整静态产物；发布后不原地覆盖。
+- `/var/www/runweave-website/current`：Nginx 使用的版本符号链接。
+- `/var/www/runweave-website/deployments/<release>/manifest.json`：源提交、构建输入与逐文件 SHA-256；首次临时版记录只有源提交与域名。
+- 同目录 `runweave-share.conf.before`、`runweave-website.conf.before` 与 `previous-release`：本次迁移前配置和版本指针。
+- `/etc/nginx/conf.d/runweave-website.conf`：独立官网虚拟主机，源码见 [nginx-site.conf](deploy/nginx-site.conf)。
+- `/etc/nginx/snippets/runweave-website.conf`：静态路由，源码见 [nginx-static.conf](deploy/nginx-static.conf)。
+- `/etc/letsencrypt/live/runweave.jackshen310.cn/`：正式域名证书，当前到期日 2027-02-10；续期使用 webroot `/var/www/runweave-website-acme`，现有 `snap.certbot.renew.timer` 负责调度，成功后检查并重载 Nginx。没有手动读取或复制私钥。
+
+HTML、纯文本、站点地图和 404 使用 `Cache-Control: no-cache`；带 hash 的 `/_astro/` 使用 `public, max-age=31536000, immutable`。未知路径为真实 HTTP 404 并展示本版本 404.html，不使用 SPA fallback。HTTP 入口固定跳转本域名 HTTPS，ACME challenge 单独保留。
+
+后续发布先上传新版本并按 manifest 核对，再原子切换 `current`，保留旧目录；切换后核对 `/`、`/start/`、两份 AI 文本、SEO、全部公开资源、缓存头及未知路径，并检查分享接口未被官网接管。
+
+正式域名的已验证回滚基线是 `20261112T030802Z-e2570f71`。[rollback-version.py](deploy/rollback-version.py) 默认只读预检：要求 manifest 的 release、正式域名、文件集合与全部 SHA-256 匹配，并拒绝 release 内的符号链接。临时 share 版会被拒绝，不能混用其 SEO。只有显式 `--apply` 才原子替换 current；已指向该版本时不作修改。
+
+从仓库根目录执行（先预检；后续发布需要恢复此基线时才加 `--apply`）：
+
+```bash
+scp packages/website/deploy/rollback-version.py ubuntu@18.140.158.81:/tmp/runweave-website-rollback-version.py
+ssh ubuntu@18.140.158.81 \
+  'python3 /tmp/runweave-website-rollback-version.py 20261112T030802Z-e2570f71'
+# 实际切换：
+ssh ubuntu@18.140.158.81 \
+  'sudo python3 /tmp/runweave-website-rollback-version.py 20261112T030802Z-e2570f71 --apply'
+```
+
+切换后按本节列出的站点、资源、缓存与分享路径检查，不以命令返回值替代线上验证。脚本只恢复静态版本，不改 DNS、TLS、Nginx 配置或 Clarity 项目。当前只有一个正式域名版本；此次仅执行默认只读预检，未执行 `--apply` 或在线回滚演练。
+
+纯版本切换无需重启服务。当前正式版本为 `20261112T030802Z-e2570f71`，保留临时版本 `20261112T021514Z-91f82e46`。临时版本的 SEO 使用 share 域名，不能仅切换版本就声称完成正式域名回退。若要撤销本次域名迁移，先备份当时配置，恢复本次部署备份中的两个 Nginx 配置和 previous-release 指针，再 `sudo nginx -t && sudo systemctl reload nginx`；此操作会恢复临时 share 入口，必须连同域名与 Clarity 变更一起判断。未实际执行在线回滚演练。
+
+2026-11-12 迁移核对：新域名 HTTPS 正常，证书 SAN 与域名匹配；19 个线上文件逐一匹配本次 manifest，包括按 404 返回的内部页面；正式 SEO 与缓存头核对通过。share 根路径恢复 404、原分享路由仍由原服务响应。当前版本和旧版本均保留，迁移前配置备份实际存在。Clarity 后台网站 URL 已保存并刷新读回为正式入口。Runweave Browser 实际打开新域名，点击首页 CTA 到教程并成功复制 AI 指令；390px 首页和教程无横向溢出，图片实际加载，控制台无错误。正式页各一个 Clarity tag，collect POST 返回 204；新域名的云端录制回放未单独核验。
+
+浏览器专项仍有验收阻塞：当前代理不能取得所需页面级 CDP session，禁用 JavaScript 未执行；缩放快捷键未改变实际 viewport/DPR，CLI 无原生 zoom 控制，200% 缩放未执行。最小解锁动作是在同一 Browser 人工设置后交回复核，或由宿主提供对应控制能力。静态 HTML、CSS zoom 和响应式宽度检查不替代这两项验收。
+
+迁移证据的长期源位于服务器 `/var/www/runweave-website/deployments/20261112T030802Z-e2570f71/manifest.json`：记录 production 构建输入、源提交 `e2570f71` 与 19 个文件的 SHA-256。版本 `20261112T030802Z-e2570f71` 是新域名构建，临时版本 `20261112T021514Z-91f82e46` 完整保留。当前机器上的逐路由 HTTP 状态、实际缓存头、SEO、浏览器交互与专项阻塞明细见 `artifacts/website-domain-migration.json`（本地验收附件，不作为应用配置或自动发布输入）。
