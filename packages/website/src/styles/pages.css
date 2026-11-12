@@ -1,7 +1,12 @@
 .hero-image-link {
   display: block;
+  aspect-ratio: 1536 / 894;
   border-radius: 8px;
   overflow: hidden;
+}
+.hero-image-link img {
+  /* Exclude the 130px empty header band from the 1536px-wide artwork. */
+  margin-top: -8.463542%;
 }
 .hero-image-link:focus-visible {
   outline: 3px solid var(--accent);
@@ -9,20 +14,6 @@
 }
 .hero-example figcaption {
   padding-right: 0;
-}
-
-.workflow-example {
-  margin-top: 12px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.result-sample a {
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .start-page {

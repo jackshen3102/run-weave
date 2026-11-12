@@ -251,73 +251,78 @@ figure {
   padding-top: 8px;
   border-top: 1px solid #d8d4cb;
 }
-.machines {
-  display: grid;
-  grid-template-columns: 1fr 1.65fr;
-  gap: 60px;
-  align-items: center;
+.usage {
   padding-block: 55px;
 }
-.machines-copy > p:last-child {
-  font-size: 15px;
+.usage .section-kicker {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.supported-platforms,
+.supported-platforms ul,
+.supported-platforms li {
+  display: flex;
+  align-items: center;
+}
+.supported-platforms {
+  gap: 18px;
   margin-top: 20px;
-  color: #474b43;
+  color: var(--muted);
+  font-size: 16px;
 }
-.machine-diagram ul {
+.supported-platforms ul {
   list-style: none;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 0;
+  flex-wrap: wrap;
+  gap: 24px;
   margin: 0;
+  padding: 0;
 }
-.machine-diagram li {
-  text-align: center;
-  padding: 10px 14px;
-  border-right: 1px solid var(--rule);
+.supported-platforms li {
+  gap: 8px;
 }
-.machine-diagram li:last-child {
-  border: 0;
+.supported-platforms svg {
+  width: 22px;
+  height: 22px;
 }
-.machine-diagram svg {
-  margin-bottom: 12px;
+.usage-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 38px;
 }
-.machine-diagram h3 {
-  font-size: 19px;
-  letter-spacing: -0.02em;
+.usage-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 26px;
+  padding: 10px 36px 10px 0;
 }
-.machine-diagram h3 span {
-  font-size: 13px;
-  font-weight: 400;
-  display: block;
-  margin-top: 5px;
+.usage-option + .usage-option {
+  border-left: 1px solid var(--rule);
+  padding-left: 36px;
+  padding-right: 0;
 }
-.machine-diagram li p {
-  font-size: 12px;
+.usage-option > svg {
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+}
+.usage-option h3 {
+  font-size: 24px;
+}
+.usage-option p {
   color: var(--muted);
-  margin-top: 9px;
+  font-size: 15px;
+  margin-top: 8px;
 }
-.connection-line {
-  border: 1px solid #b6b7ac;
-  border-top: 0;
-  border-radius: 0 0 8px 8px;
-  height: 20px;
-  width: 72%;
-  margin: 25px auto 0;
-  position: relative;
-}
-.connection-line:after {
-  content: "";
-  position: absolute;
-  height: 15px;
-  border-left: 1px solid #b6b7ac;
-  top: 100%;
-  left: 50%;
-}
-.diagram-caption {
-  text-align: center;
-  font-size: 12px;
-  margin-top: 23px;
-  color: var(--muted);
+.usage-option a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .products {
   padding-bottom: 0;

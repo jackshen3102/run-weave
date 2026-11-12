@@ -27,8 +27,8 @@ pnpm --filter @runweave/website preview --host 127.0.0.1 --port 4321
 - [首页数据](src/data/home.ts)：GitHub、中文使用指南和三个产品文档入口。
 - [首页](src/pages/index.astro)：页面区域装配；各区域的真实正文在 `src/components/`。
 - [全局样式](src/styles/global.css)：米白背景、橙色重点、桌面与手机布局。
-- 首屏采用用户选定的第一张修订稿“网站开发与交付”：[hero-website.png](src/assets/hero-website.png)。来源为 `artifacts/website-hero-options/01-website-v2.png`，以真实桌面和 iOS 界面为参照，经 AI 编辑制作。横向项目标签、终端排版与产品结构对齐；电脑执行页面开发、手机补充安装步骤要求，均为同一示例任务的内容示意，不是实际执行或跨端验收证据。图片保留完整比例，转换为响应式 WebP；点击可查看 1536px 大图。
-- 文件附件流程仍使用独立的历史验证案例 `rw-file-paste-check`：[桌面 Beta](src/assets/desktop-real.png) 来自 `artifacts/file-paste-desktop-beta.png`；[iOS 附件草稿](src/assets/ios-real.png) 来自 `artifacts/mobile-file-attachment-draft.png`；[iOS 附件输出结果](src/assets/ios-result.png) 来自 `artifacts/mobile-file-attachment-sent.png`。这不是首屏“网站开发”示例的实际运行记录，也不宣称同一 Agent 自动完成或本轮重新采集手机素材。
+- 首屏采用用户选定的第一张修订稿“网站开发与交付”：[hero-website.png](src/assets/hero-website.png)。来源为 `artifacts/website-hero-options/01-website-v2.png`，以真实桌面和 iOS 界面为参照，经 AI 编辑制作。横向项目标签、终端排版与产品结构对齐；电脑执行页面开发、手机补充安装步骤要求，均为同一示例任务的内容示意，不是实际执行或跨端验收证据。素材已移除顶部“Runweave｜01 网站开发与交付”标题；首页显示时收起顶部 130px 留白，保留完整产品画面和底部示意标注。素材转换为响应式 WebP；点击可查看无标题的 1536px 大图。
+- 官网围绕电脑上的项目、终端与 Agent 工作台展开，多后端连接为主要能力，手机作为补充入口。已删除“工作方式”三步区域及对应导航；不再用离开电脑、通勤或文件附件测试作为首页价值叙事。原文件附件截图仅作历史素材保留，不在当前首页引用。
 - 首屏隐私与内容检查：仅含公开官网、示例项目、`studio-mac` 与 `alex · workspace` 示例名称、构建命令及示意输出；无凭据、内部网址或用户业务材料。无 Beta 标记、公司名称、默认项目和虚构下拉菜单。
 - 三个配套产品的小图是 CSS 绘制的装饰示意，均从可访问树中移除；名称与介绍是 HTML。
 - [分享图](public/og.png) 使用同一真实桌面 Beta 截图，品牌图标与 [favicon](public/logo.png) 共用桌面端图标，由 `electron/resources/icons/icon-preview.png` 等比缩小为 128 × 128 PNG。
@@ -129,7 +129,7 @@ ssh ubuntu@18.140.158.81 \
 
 切换后按本节列出的站点、资源、缓存与分享路径检查，不以命令返回值替代线上验证。脚本只恢复静态版本，不改 DNS、TLS、Nginx 配置或 Clarity 项目。当前保留多个正式域名版本；首屏更新发布已使用 `--apply` 原子切换到新版本，旧版本仅执行只读回滚预检，未执行在线回滚演练。
 
-纯版本切换无需重启服务。当前正式版本为 `20261112T043238Z-06aaad89`，保留上一正式版 `20261112T030802Z-e2570f71` 及临时版本 `20261112T021514Z-91f82e46`。临时版本的 SEO 使用 share 域名，不能仅切换版本就声称完成正式域名回退。若要撤销本次域名迁移，先备份当时配置，恢复本次部署备份中的两个 Nginx 配置和 previous-release 指针，再 `sudo nginx -t && sudo systemctl reload nginx`；此操作会恢复临时 share 入口，必须连同域名与 Clarity 变更一起判断。未实际执行在线回滚演练。
+纯版本切换无需重启服务。当前正式版本为 `20261112T095754Z-f23370c0`，保留上一正式版 `20261112T030802Z-e2570f71` 及临时版本 `20261112T021514Z-91f82e46`。临时版本的 SEO 使用 share 域名，不能仅切换版本就声称完成正式域名回退。若要撤销本次域名迁移，先备份当时配置，恢复本次部署备份中的两个 Nginx 配置和 previous-release 指针，再 `sudo nginx -t && sudo systemctl reload nginx`；此操作会恢复临时 share 入口，必须连同域名与 Clarity 变更一起判断。未实际执行在线回滚演练。
 
 2026-11-12 迁移核对：新域名 HTTPS 正常，证书 SAN 与域名匹配；19 个线上文件逐一匹配本次 manifest，包括按 404 返回的内部页面；正式 SEO 与缓存头核对通过。share 根路径恢复 404、原分享路由仍由原服务响应。当前版本和旧版本均保留，迁移前配置备份实际存在。Clarity 后台网站 URL 已保存并刷新读回为正式入口。Runweave Browser 实际打开新域名，点击首页 CTA 到教程并成功复制 AI 指令；390px 首页和教程无横向溢出，图片实际加载，控制台无错误。正式页各一个 Clarity tag，collect POST 返回 204；新域名的云端录制回放未单独核验。
 
@@ -146,3 +146,23 @@ ssh ubuntu@18.140.158.81 \
 检查结果：lint 通过，隔离源码 `astro check` 为 0 错误、0 警告，production 构建通过（依赖 Zod 注释有 Rollup 提示，不影响输出）。最初以 macOS `/tmp` 别名作为 Astro root 导致虚拟模块路径不一致；改用实际 `/private/tmp` 路径后构建通过，失败产物未发布。16 个线上文件与 manifest 逐一匹配，HTML no-cache、哈希资源 immutable，正式 canonical 与首屏内容正确，未知路径 404。响应式 WebP 为 480/720/1080/1536px，完整大图约 101 KB。
 
 Runweave Browser 已实际检查同一生产产物的本地 1440px 与 390px 布局：图片加载成功、页面无横向溢出。正式首页 1440px 的图片加载、按钮无遮挡、大图点击与教程入口已通过；点击大图可打开 1536 × 1024 图片。正式页面调用 resize 后实际 innerWidth 仍为 1440，线上 390px 专项未通过工具执行，不能把本地宽度检查称为线上手机或真机验收。截图接口在本机与正式页均于 5 秒超时，未取得本轮网页截图；DOM 与交互证据保存在 `artifacts/website-hero-live-*.json`，HTTP 证据为 `artifacts/website-hero-live-checks.json`。禁用 JavaScript 与原生 200% 缩放仍保持上节阻塞状态。
+
+### 恢复静态展示（2026-11-12）
+
+用户撤回视频方案后，已恢复提交 `f23370c0` 的静态工作方式区域，首屏仍使用选定的第一张修订稿。视频组件、播放逻辑和视频资产已从网站源码与生产产物中移除；原视频及生成脚本仅归档到本机 `artifacts/website-workflow-video/reverted-source/`，不随网站发布。
+
+当前发布 `20261112T065014Z-f23370c0`，独立 production 输出 `/private/tmp/runweave-website-static-restored-dist`。lint、astro check 与构建通过；16 个线上文件与 manifest 一致，首页无 video 元素或 MP4 引用，原首屏图片与静态流程均已恢复。服务器对应 deployments 目录保留 manifest、previous-release 和 activation.json；被撤回的视频版 `20261112T064431Z-f23370c0` 仅作历史保留，不应作为默认回退目标。HTTP 核对记录为 `artifacts/website-static-restored-checks.json`。
+
+### 电脑工作台定位（2026-11-12）
+
+版本 `20261112T065723Z-f23370c0` 删除工作方式区域、组件和导航链接；首页、页尾、多机连接、教程入口及 SEO 文案统一强调电脑上的项目、终端、Agent 与多后端工作。手机连接仍可用，作为补充入口介绍；保留用户选定的首屏图。
+
+lint、astro check、production build 通过。15 个线上文件 SHA-256 与 manifest 一致，首页不含 workflow 锚点、视频或“离开／路上”宣传。Runweave Browser 已核对 1440px/390px 首页无横向溢出、原图加载、页内锚点无失效目标，快速开始导航实际可用。部署目录保存 manifest、previous-release、activation.json，上一版 `20261112T065014Z-f23370c0` 保留。本机证据为 `artifacts/website-desktop-focus-checks.json` 与同前缀桌面／手机宽度截图；不代替原生手机、禁用 JavaScript 或 200% 原生缩放验收。
+
+### 首屏图片去标题（2026-11-12）
+
+版本 `20261112T093641Z-f23370c0` 去掉素材顶部外置标题，页面通过固定比例容器收起 130px 留白。终端、浏览器预览、手机及底部示意说明保留；源素材为本轮图片编辑结果 `exec-89d37faa-bd18-41d2-844b-282616a009d4.png`，原图仍在 `artifacts/website-hero-options/01-website-v2.png`。lint、astro check 与生产构建通过，15 个线上文件逐一匹配 manifest。Runweave Browser 已核对 1440px/390px 显示及图片加载，截图为 `artifacts/website-no-heading-desktop.png`、`artifacts/website-no-heading-mobile.png`。上一版 `20261112T065723Z-f23370c0` 完整保留；本轮 manifest、activation 和 previous-release 位于对应服务器 deployments 目录。
+
+### 配套工具文案（2026-11-12）
+
+版本 `20261112T095754Z-f23370c0` 将“更多产品”栏目及导航改为“配套工具”，标题明确为“记录想法、回看屏幕、远程操作电脑”。以当前线上版 `20261112T093641Z-f23370c0` 的已校验源码为基线隔离构建，未发布工作区另一组使用方式改动；生产文件仅 `index.html` 发生变化。lint、astro check、build 通过，线上 HTML 哈希和文案已核对，1440px/390px Browser 布局无横向溢出，证据见 `artifacts/website-product-copy-*`。服务器对应 deployments 目录保留 manifest、previous-release 和 activation.json。
