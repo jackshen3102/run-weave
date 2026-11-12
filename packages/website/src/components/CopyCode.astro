@@ -1,0 +1,31 @@
+---
+interface Props { text: string; label: string; }
+const { text, label } = Astro.props;
+---
+<div class="copy-code">
+  <div class="copy-heading"><span>{label}</span><button type="button" data-copy hidden aria-label={`复制${label}`}>复制</button></div>
+  <pre tabindex="0"><code>{text}</code></pre>
+  <p class="copy-status" role="status" aria-live="polite"></p>
+</div>
+<script>
+  document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      const container = button.closest(".copy-code");
+      const code = container?.querySelector("code");
+      const status = container?.querySelector(".copy-status");
+      if (!code || !status) return;
+      try {
+        await navigator.clipboard.writeText(code.textContent ?? "");
+        status.textContent = "已复制。请粘贴到你的终端或 AI 对话中。";
+      } catch {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        status.textContent = "自动复制不可用，已选中文本，请手动复制。";
+      }
+    });
+  });
+</script>

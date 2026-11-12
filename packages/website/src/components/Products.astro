@@ -1,0 +1,6 @@
+---
+import { products, repository } from "../data/home";
+---
+<section id="products" class="section products" aria-labelledby="products-title"><p class="section-kicker">更多产品 / AROUND YOUR WORK</p><h2 id="products-title">也照顾工作前后的事情。</h2>
+{products.map(product => <a class="product-row" href={`${repository}/blob/main/${product.path}`}><h3>{product.name}</h3><p>{product.description}</p><div class={`product-art ${product.kind}`} aria-hidden="true">{product.kind === 'notes' ? <div class="note-window"><div class="window-dots">● ● ●</div><b>随记</b><span>▤ &nbsp;记录</span><span>☑ &nbsp;待办</span><span>◉ &nbsp;浏览</span><span>▦ &nbsp;工作</span></div> : product.kind === 'journal' ? <div class="journal-window"><div class="window-dots">● ● ●</div><div class="filmstrip"><i/><i/><i/></div><div class="timeline"><span>10:24</span><span>10:36</span><span>10:52</span></div></div> : <div class="remote-devices"><div class="remote-mac"><div class="mountains"/><span>›_</span></div><div class="remote-phone"><div class="mountains"/><span>›_</span></div></div>}</div><span class="product-arrow" aria-hidden="true">↗</span></a>)}
+</section>

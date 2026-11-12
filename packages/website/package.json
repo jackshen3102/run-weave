@@ -1,0 +1,23 @@
+{
+  "name": "@runweave/website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check",
+    "lint": "eslint src/data src/pages/*.ts astro.config.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
+    "astro": "6.4.8",
+    "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@emnapi/runtime": "1.11.3",
+    "typescript": "^5.8.2"
+  }
+}

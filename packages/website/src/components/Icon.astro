@@ -1,0 +1,7 @@
+---
+interface Props { name: string; }
+const { name } = Astro.props;
+---
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+  {name === 'laptop' ? <><rect x="8" y="5" width="24" height="25" rx="2"/><path d="M3 34h34M15 30v4m10-4v4"/></> : name === 'server' ? <><rect x="6" y="5" width="28" height="11" rx="3"/><rect x="6" y="23" width="28" height="11" rx="3"/><path d="M11 10.5h2m-2 18h2m5-18h11m-11 18h11"/></> : <><path d="M5 9l30-5v32L5 31V9Zm14-2v27M5 20h30"/></>}
+</svg>
