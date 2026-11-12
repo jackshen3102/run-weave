@@ -1,6 +1,6 @@
 # Runweave
 
-[中文](README.zh-CN.md)
+[Website (中文)](https://runweave.jackshen310.cn/) · [Quick start (中文)](https://runweave.jackshen310.cn/start/) · [AI guide](https://runweave.jackshen310.cn/agent-guide.txt) · [中文](README.zh-CN.md)
 
 Runweave is a local-first terminal workspace for AI CLI workflows. It helps you
 run, observe, hand off, and continue long-lived command-line tasks such as
