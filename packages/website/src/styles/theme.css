@@ -1,0 +1,51 @@
+:root {
+  color-scheme: light;
+  --paper: #f6f3ec;
+  --ink: #22251f;
+  --muted: #62645c;
+  --accent: #b54729;
+  --rule: #cbc9bf;
+  --surface: #efede5;
+  --surface-hover: #e4e0d6;
+  --control-border: #a3a398;
+  --primary-bg: #b54729;
+  --primary-hover: #953b22;
+  --primary-text: #ffffff;
+}
+/* CSS follows the system even when JavaScript is unavailable. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    color-scheme: dark;
+    --paper: #191b18;
+    --ink: #ecece5;
+    --muted: #b4b8ad;
+    --accent: #ef997a;
+    --rule: #42473e;
+    --surface: #242821;
+    --surface-hover: #33392f;
+    --control-border: #747e6c;
+    --primary-bg: #ef997a;
+    --primary-hover: #ffb396;
+    --primary-text: #241a14;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #191b18;
+  --ink: #ecece5;
+  --muted: #b4b8ad;
+  --accent: #ef997a;
+  --rule: #42473e;
+  --surface: #242821;
+  --surface-hover: #33392f;
+  --control-border: #747e6c;
+  --primary-bg: #ef997a;
+  --primary-hover: #ffb396;
+  --primary-text: #241a14;
+}
+
+/* Legacy product illustrations keep their original light canvas and ink. */
+.note-window,
+.journal-window {
+  color: #22251f;
+}

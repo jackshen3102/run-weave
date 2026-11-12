@@ -24,4 +24,4 @@ export const products = [
     path: "packages/remote-desktop-host/README.md",
     kind: "remote",
   },
-];
+] as const;

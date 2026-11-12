@@ -1,0 +1,40 @@
+<script is:inline>
+  (() => {
+    const key = "runweave-website-theme";
+    const root = document.documentElement;
+    const system = window.matchMedia("(prefers-color-scheme: dark)");
+    const valid = (value) => value === "light" || value === "dark" ? value : "system";
+    let preference = "system";
+    try { preference = valid(localStorage.getItem(key)); } catch { /* Storage is optional. */ }
+    const apply = () => {
+      root.dataset.theme = preference;
+      const dark = preference === "dark" || (preference === "system" && system.matches);
+      document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+        meta.content = dark ? "#191b18" : "#f6f3ec";
+      });
+      document.querySelectorAll("[data-theme-select]").forEach((select) => { select.value = preference; });
+    };
+    apply();
+    system.addEventListener("change", apply);
+    window.addEventListener("storage", (event) => {
+      if (event.key === key || event.key === null) {
+        preference = valid(event.newValue);
+        apply();
+      }
+    });
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll("[data-theme-select]").forEach((select) => {
+        select.value = preference;
+        select.closest("[data-theme-control]").hidden = false;
+        select.addEventListener("change", () => {
+          preference = valid(select.value);
+          try {
+            if (preference === "system") localStorage.removeItem(key);
+            else localStorage.setItem(key, preference);
+          } catch { /* Keep the selection for this page when storage is unavailable. */ }
+          apply();
+        });
+      });
+    });
+  })();
+</script>

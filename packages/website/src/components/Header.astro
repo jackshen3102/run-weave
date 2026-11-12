@@ -1,8 +1,10 @@
 ---
+import ThemeSelect from "./ThemeSelect.astro";
 import Brand from "./Brand.astro";
 import { repository } from "../data/home";
 ---
 <header class="site-header wrap">
   <Brand />
   <nav aria-label="主导航"><a href="/start/">快速开始</a><a href="#machines">使用方式</a><a href="#products">配套工具</a><a href={repository}>GitHub <span aria-hidden="true">↗</span></a></nav>
+  <ThemeSelect />
 </header>
