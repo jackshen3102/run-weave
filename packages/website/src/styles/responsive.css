@@ -22,12 +22,16 @@
   .steps article > p {
     min-height: 108px;
   }
-  .machines {
-    gap: 30px;
-    grid-template-columns: 1fr 1.4fr;
+  .usage-option {
+    gap: 18px;
+    padding-right: 24px;
   }
-  .machine-diagram li {
-    padding-inline: 8px;
+  .usage-option + .usage-option {
+    padding-left: 24px;
+  }
+  .usage-option > svg {
+    width: 60px;
+    height: 60px;
   }
   .product-row {
     grid-template-columns: 1.2fr 1.5fr 1fr 24px;
@@ -152,30 +156,34 @@
     margin-top: 18px;
     min-height: 60px;
   }
-  .machines {
-    display: block;
-  }
-  .machines-copy > p:last-child {
+  .supported-platforms {
+    gap: 12px;
     font-size: 14px;
   }
-  .machine-diagram {
-    margin-top: 30px;
+  .supported-platforms ul {
+    gap: 16px;
   }
-  .machine-diagram h3 {
-    font-size: 16px;
+  .supported-platforms li {
+    gap: 6px;
   }
-  .machine-diagram h3 span {
-    font-size: 11px;
+  .supported-platforms svg {
+    width: 18px;
+    height: 18px;
   }
-  .machine-diagram li p {
-    font-size: 10px;
+  .usage-options {
+    grid-template-columns: 1fr;
+    margin-top: 28px;
   }
-  .machine-diagram svg {
-    width: 30px;
-    height: 30px;
+  .usage-option {
+    padding: 0 0 26px;
   }
-  .connection-line {
-    margin-top: 20px;
+  .usage-option + .usage-option {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding: 26px 0 0;
+  }
+  .usage-option h3 {
+    font-size: 22px;
   }
   .product-row {
     grid-template-columns: 1fr 35px;

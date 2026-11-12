@@ -1,5 +1,32 @@
 ---
-import { machines } from "../data/home";
+import { guide, platforms } from "../data/home";
 import Icon from "./Icon.astro";
 ---
-<section id="machines" class="section machines" aria-labelledby="machines-title"><div class="machines-copy"><p class="section-kicker">多机连接 / YOUR MACHINES</p><h2 id="machines-title">工作在哪台机器上，<br />你都能接着管。</h2><p>Mac 上的浏览器、Linux 上的开发环境、Windows 上的专属工具，各自在合适的地方运行，从同一个入口连接和跟进。</p></div><div class="machine-diagram"><ul>{machines.map(machine => <li><Icon name={machine.icon}/><h3>{machine.name}<span>{machine.role}</span></h3><p>{machine.detail}</p></li>)}</ul><div class="connection-line" aria-hidden="true"></div><p class="diagram-caption">在电脑与手机上连接、切换、跟进</p></div></section>
+<section id="machines" class="section usage" aria-labelledby="machines-title">
+  <p class="section-kicker">按你的方式使用</p>
+  <h2 id="machines-title">在你的电脑上，按你的方式使用。</h2>
+  <div class="supported-platforms">
+    <span>支持</span>
+    <ul aria-label="支持的平台">
+      {platforms.map(platform => <li><Icon name={platform.icon} /><span>{platform.name}</span></li>)}
+    </ul>
+  </div>
+  <div class="usage-options">
+    <article class="usage-option">
+      <Icon name="desktop" />
+      <div>
+        <h3>桌面客户端</h3>
+        <p>安装客户端，直接打开工作台。</p>
+        <a href={guide}>开始使用 <span aria-hidden="true">↗</span></a>
+      </div>
+    </article>
+    <article class="usage-option">
+      <Icon name="browser" />
+      <div>
+        <h3>CLI 部署 + 网页访问</h3>
+        <p>在电脑或服务器上部署，通过浏览器打开工作台。</p>
+        <a href={`${guide}#install`}>查看部署指南 <span aria-hidden="true">↗</span></a>
+      </div>
+    </article>
+  </div>
+</section>

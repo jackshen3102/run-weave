@@ -4,8 +4,8 @@ import "../styles/responsive.css";
 import "../styles/pages.css";
 import Analytics from "../components/Analytics.astro";
 interface Props { title?: string; notFound?: boolean; description?: string; }
-const { title = "Runweave｜让 Agent 持续工作，随时接续任务", notFound = false } = Astro.props;
-const description = Astro.props.description ?? "让 Agent 在你的 Mac、Windows 或 Linux 上持续工作。从电脑或手机查看进展、补充要求，跟进到结果。";
+const { title = "Runweave｜项目、终端与 Agent 的工作台", notFound = false } = Astro.props;
+const description = Astro.props.description ?? "在电脑上组织项目与终端，运行 AI Agent，使用浏览器与本地工具。连接 Mac、Windows、Linux 后端，也支持手机查看与参与。";
 const production = import.meta.env.WEBSITE_PRODUCTION;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
@@ -25,7 +25,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:description" content={description} />
     {!notFound && <meta property="og:url" content={canonical} />}
     <meta property="og:image" content={new URL("/og.png", Astro.site)} />
-    <meta property="og:image:alt" content="Runweave — 你不必一直在场，工作也能继续。" />
+    <meta property="og:image:alt" content="Runweave — 项目、终端与 Agent 的工作台。" />
     <meta name="theme-color" content="#f6f3ec" />
     {!notFound && <Analytics />}
   </head>
