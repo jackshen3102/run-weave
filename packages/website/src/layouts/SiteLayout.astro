@@ -1,0 +1,31 @@
+---
+import "../styles/global.css";
+import Analytics from "../components/Analytics.astro";
+interface Props { title?: string; notFound?: boolean; description?: string; }
+const { title = "Runweave｜让 Agent 持续工作，随时接续任务", notFound = false } = Astro.props;
+const description = Astro.props.description ?? "让 Agent 在你的 Mac、Windows 或 Linux 上持续工作。从电脑或手机查看进展、补充要求，跟进到结果。";
+const production = import.meta.env.WEBSITE_PRODUCTION;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {(!production || notFound) && <meta name="robots" content="noindex, nofollow" />}
+    {!notFound && <link rel="canonical" href={canonical} />}
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {!notFound && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={new URL("/og.png", Astro.site)} />
+    <meta property="og:image:alt" content="Runweave — 你不必一直在场，工作也能继续。" />
+    <meta name="theme-color" content="#f6f3ec" />
+    {!notFound && <Analytics />}
+  </head>
+  <body data-clarity-mask="true"><a class="skip-link" href="#main">跳到正文</a><slot /></body>
+</html>

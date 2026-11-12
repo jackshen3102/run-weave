@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "packages/website/.astro/**",
       "**/coverage/**",
       "**/node_modules/**",
       "electron/release/**",

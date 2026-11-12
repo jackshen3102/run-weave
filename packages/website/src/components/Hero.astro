@@ -1,0 +1,17 @@
+---
+import { Image } from "astro:assets";
+import desktop from "../assets/desktop-real.png";
+import phone from "../assets/ios-real.png";
+import { guide, repository } from "../data/home";
+---
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy"><p class="eyebrow">让 Agent 持续工作，让你随时参与</p>
+  <h1 id="hero-title">你不必一直在场，<br />工作也能继续。</h1>
+  <p class="intro">让 Agent 在你的 Mac、Windows 或 Linux 上持续工作，使用已配置的工具、浏览器与数据。<br class="desktop-break" />从电脑或手机查看进展、补充要求，跟进到结果。</p>
+  <div class="actions"><a class="button primary" href={guide}>开始使用 Runweave <span aria-hidden="true">↗</span></a><a class="button" href={repository}>GitHub <span aria-hidden="true">↗</span></a></div></div>
+  <figure class="hero-art real-captures">
+    <div class="desktop-capture"><Image src={desktop} alt="Runweave 桌面 Beta 真实截图：文件附件检查中的终端和预览面板" widths={[480, 720, 1080, 1440]} sizes="(max-width: 760px) 85vw, 52vw" loading="eager" fetchpriority="high" format="webp" /></div>
+    <div class="phone-capture"><Image src={phone} alt="Runweave iOS 原生客户端历史截图：终端和文件附件输入" widths={[200, 300, 402]} sizes="(max-width: 760px) 25vw, 16vw" loading="eager" format="webp" /></div>
+    <figcaption>文件附件验证 · 桌面 Beta / iOS 历史实拍</figcaption>
+  </figure>
+</section>

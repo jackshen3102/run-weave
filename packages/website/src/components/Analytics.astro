@@ -1,0 +1,29 @@
+---
+// Astro prerender can expose process environment values as strings.
+const enabled = import.meta.env.WEBSITE_PRODUCTION &&
+  String(import.meta.env.WEBSITE_CLARITY_ENABLED) === "true" && !import.meta.env.DEV;
+const projectId = String(import.meta.env.WEBSITE_CLARITY_PROJECT_ID).trim();
+const pageId = Astro.url.pathname === "/" ? "website_home" : "website_quickstart";
+---
+{enabled && <script is:inline define:vars={{ projectId, pageId }}>
+  (() => {
+    const id = "runweave-website-clarity-script";
+    if (document.getElementById(id)) return;
+    try {
+      window.clarity = window.clarity || function () {
+        (window.clarity.q = window.clarity.q || []).push(arguments);
+      };
+      const tag = document.createElement("script");
+      tag.id = id;
+      tag.async = true;
+      tag.src = "https://www.clarity.ms/tag/" + projectId;
+      document.head.appendChild(tag);
+      window.clarity("set", "site", "runweave_website");
+      window.clarity("set", "client", "website");
+      window.clarity("set", "environment", "production");
+      window.clarity("set", "page", pageId);
+    } catch {
+      // Analytics must never interrupt reading, navigation or copying commands.
+    }
+  })();
+</script>}

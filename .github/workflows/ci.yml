@@ -32,3 +32,6 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Build website preview
+        run: pnpm --filter @runweave/website build

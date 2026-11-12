@@ -1,0 +1,5 @@
+---
+import { machines } from "../data/home";
+import Icon from "./Icon.astro";
+---
+<section id="machines" class="section machines" aria-labelledby="machines-title"><div class="machines-copy"><p class="section-kicker">多机连接 / YOUR MACHINES</p><h2 id="machines-title">工作在哪台机器上，<br />你都能接着管。</h2><p>Mac 上的浏览器、Linux 上的开发环境、Windows 上的专属工具，各自在合适的地方运行，从同一个入口连接和跟进。</p></div><div class="machine-diagram"><ul>{machines.map(machine => <li><Icon name={machine.icon}/><h3>{machine.name}<span>{machine.role}</span></h3><p>{machine.detail}</p></li>)}</ul><div class="connection-line" aria-hidden="true"></div><p class="diagram-caption">在电脑与手机上连接、切换、跟进</p></div></section>
