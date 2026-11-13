@@ -240,16 +240,18 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     const recovered = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
     assert.equal(recovered.runtime.pid, originalPid);
     const connectionSocket = await openFreshSocket();
-    const connectionClosed = new Promise<{ code: number; reason: string }>(resolve => {
-      connectionSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
-    });
+    // Closing writer discovery/control must not close a terminal's output pipe.
+    let outputClosed = false;
+    connectionSocket.once("close", () => { outputClosed = true; });
     (await getPtyHost()).close();
-    await wait(() => connectionSocket.readyState === WebSocket.CLOSED, "shared Host connection closes viewer");
-    assert.deepEqual(await connectionClosed, { code: 1013, reason: "Terminal host connection lost" });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await recovered.runtime.hosted!.snapshot();
+    assert.equal(outputClosed, false);
+    assert.equal(connectionSocket.readyState, WebSocket.OPEN);
     const preserved = (await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!;
     assert.equal(preserved.pid, originalPid);
     assert.equal(preserved.status, "running");
-    return "verified Host replacement and archived WS history; rejected resize and shared disconnect have distinct WS reasons and preserve the original PTY; real slow WS recovers by snapshot without restarting the PTY";
+    return "verified Host replacement and archived WS history; rejected resize preserves the original PTY and a closed control pipe leaves terminal output connected; real slow WS recovers by snapshot without restarting the PTY";
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;

@@ -25,6 +25,7 @@ current/last threadId 启动 Agent resume，没有匹配 thread 时创建空 she
 允许使用已持久化的 Agent Hook 状态；shell_idle 不作为恢复 Agent 的依据。一次性命令不重跑，返回默认 shell。
 交互终端每 60 秒最多重建 3 次，超限标为不可恢复并结束。启动对账和后续连接共用此处理。
 Host 暂时失联、凭据或配置范围不匹配仍报告错误，不推断会话丢失。原始未确认输入不会自动重发。
+启动时先确定 Backend 实际监听地址并更新 Host 上游，再恢复丢失的 PTY，确保新进程继承当前实例的控制面地址。
 已明确 exited 的终端仍提供保存的历史，输入不再执行，也不会因打开历史页面自行恢复 Agent。
 恢复保留终端 ID 与历史，但使用新的 Host/PTY 绑定；不声称原进程仍在，也不保证包含 Host 未交付的输出。
 新的 Backend 通过比较并交换取得 writer generation；旧代不能输入、resize 或 close。

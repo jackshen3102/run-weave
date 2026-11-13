@@ -2,6 +2,9 @@
 export function isTerminalOutputRecoveryClose(code: number, reason?: string | null): boolean {
   return code === 1013 && [
     "Terminal output recovery required", // Compatibility with older Backends.
+    // A lost pipe does not prove loss of the Host or its PTY. Reattach by the
+    // existing Host/session binding; writer and identity conflicts still stop.
+    "Terminal host connection lost",
     "Terminal initial output queue exceeded",
     "Terminal recovery queue exceeded",
     "Terminal recovery unavailable; reconnect",

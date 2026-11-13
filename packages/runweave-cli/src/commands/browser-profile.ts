@@ -7,11 +7,15 @@ import {
 import { CliError } from "../errors.js";
 import { isRemoteBrowserProfileState, type RemoteBrowserResolveResponse } from "@runweave/shared/remote";
 import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/session";
+import { resolveRunweaveBaseUrl } from "../config/profile-store.js";
+import { verifyBackendEnvironment } from "../client/environment.js";
+import { ConfigurationError } from "@runweave/config-node";
 
 export interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
   stderr: Pick<NodeJS.WriteStream, "write">;
   env: NodeJS.ProcessEnv;
+  onBrowserStage?: (stage: "identity" | "binding", passed: boolean) => void;
 }
 
 interface ResolveOptions {
@@ -124,6 +128,8 @@ async function resolveRemoteBrowserProfile(
   if (!terminalSessionId || !projectId || !hookToken || !base) {
     throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Remote Browser identity is unavailable", 3);
   }
+  io.onBrowserStage?.("identity", true);
+  io.onBrowserStage?.("binding", false);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeout(options));
   try {
@@ -219,12 +225,28 @@ async function resolveBrowserProfileAttempt(
   options: ResolveOptions,
   io: BrowserCommandIo,
 ): Promise<ResolvedTerminalBrowserProfile> {
+  io.onBrowserStage?.("identity", false);
+  if (!io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT?.trim() &&
+      !io.env.RUNWEAVE_BASE_URL?.trim() && !io.env.RUNWEAVE_BACKEND_PORT?.trim() &&
+      io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim() && io.env.RUNWEAVE_HOOK_TOKEN?.trim()) {
+    // Verify the configured local instance before sending an old PTY's token.
+    const baseUrl = resolveRunweaveBaseUrl({});
+    try {
+      await verifyBackendEnvironment(baseUrl, AbortSignal.timeout(requestTimeout(options)));
+    } catch (error) {
+      if (error instanceof ConfigurationError && error.code !== "CONFIG_TARGET_UNVERIFIED") throw error;
+      throw new BrowserProfileTemporaryError("DESKTOP_UNAVAILABLE: Terminal Backend discovery is unavailable", 3);
+    }
+    io = { ...io, env: { ...io.env, RUNWEAVE_BASE_URL: baseUrl } };
+  }
   const projectId = await resolveCurrentProjectId(io, options);
   if (!io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT?.trim() &&
       (io.env.RUNWEAVE_TERMINAL_SESSION_ID || io.env.RUNWEAVE_PROJECT_ID)) {
     return resolveRemoteBrowserProfile(options, io, projectId);
   }
   const ambient = parseAmbientEndpoint(io.env.PLAYWRIGHT_MCP_CDP_ENDPOINT);
+  io.onBrowserStage?.("identity", true);
+  io.onBrowserStage?.("binding", false);
   const groupId = options.groupId ?? (io.env.RUNWEAVE_BROWSER_GROUP_ID?.trim() || null) ?? ambient.ambientGroupId;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeout(options));
@@ -269,7 +291,11 @@ export async function resolveBrowserProfile(args: string[], io: BrowserCommandIo
   options.deadline = Date.now() + (options.waitTimeoutMs || 5000);
   let attempt = 0;
   for (;;) {
-    try { return await resolveBrowserProfileAttempt(options, io); }
+    try {
+      const resolved = await resolveBrowserProfileAttempt(options, io);
+      io.onBrowserStage?.("binding", true);
+      return resolved;
+    }
     catch (error) {
       if (!(error instanceof BrowserProfileTemporaryError) || !options.waitTimeoutMs || Date.now() >= options.deadline)
         throw error;

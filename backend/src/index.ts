@@ -96,6 +96,7 @@ import {
 } from "./terminal/workspace-service/proxy";
 import { TerminalWorktreeDeletionError } from "./terminal/workspace-service/worktree-deletion";
 import { setBackendRuntimeStatusListener } from "./bootstrap/runtime-status";
+import { reconcileHostedTerminals } from "./terminal/runtime/pty-host-runtime";
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
 const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
@@ -550,13 +551,10 @@ async function startRuntime(): Promise<void> {
       host: runtimeConfig.host,
       port,
     });
-    // Pin rw CLI control-plane env to THIS backend. Parent shells may carry a
-    // stale default such as 5001 while this process is running on a fallback
-    // test port.
-    // Always pin the hook endpoint to THIS backend's listening port. Inheriting
-    // it from a parent shell spawned by another Runweave backend would deliver
-    // codex hook events to the wrong process.
+    // Pin terminal control-plane and Hook addresses to the actual listener,
+    // including fallback ports, before restoring any missing Host processes.
     await initializeAppServerEventIntegration(services, controlPlaneBaseUrl);
+    await reconcileHostedTerminals(services.terminalSessionManager, services.terminalRuntimeRegistry);
     services.start(controlPlaneBaseUrl);
 
     stage = "lifecycle-handlers";

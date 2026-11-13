@@ -46,14 +46,22 @@ export async function createHostedPty(options: {
   create?: PtyHostCreateSession;
   onLaunch?: (launch: NonNullable<PtyHostSession["launch"]>) => Promise<void>;
 }): Promise<PtyRuntime> {
-  const client = await getPtyHost();
-  if (client.descriptor.hostInstanceId !== options.binding.hostInstanceId) {
+  const control = await getPtyHost();
+  if (control.descriptor.hostInstanceId !== options.binding.hostInstanceId) {
     // A verified replacement Host cannot own a session from the previous Host.
     // Creation and RPC identity checks still fail closed on an invalid binding.
     throw new Error(options.create ? "HOST_IDENTITY_MISMATCH" : "HOST_SESSION_GONE");
   }
-  if (options.create) await client.request("createSession", { ...options.create, generation: client.generation });
-  const target = { ...options.binding, terminalSessionId: options.terminalSessionId, generation: client.generation };
+  if (options.create) await control.request("createSession", { ...options.create, generation: control.generation });
+  // Output owns a per-terminal pipe. A slow stream must not sever the writer
+  // control connection or output subscriptions belonging to other terminals.
+  const client = await PtyHostClient.connect(configuration().context, undefined, undefined, undefined,
+    ({ event, ...fields }) => hostLogger.warn(event, { ...fields, terminalSessionId: options.terminalSessionId }));
+  if (client.descriptor.hostInstanceId !== control.descriptor.hostInstanceId) {
+    client.close();
+    throw new Error("HOST_IDENTITY_MISMATCH");
+  }
+  const target = { ...options.binding, terminalSessionId: options.terminalSessionId, generation: control.generation };
   const dataListeners = new Set<(data: string) => void>();
   const frameListeners = new Set<(frame: TerminalOutputFrame) => void>();
   const exitListeners = new Set<(event: { exitCode: number }) => void>();
@@ -90,10 +98,10 @@ export async function createHostedPty(options: {
   client.events.add(receive); client.disconnected.add(disconnected);
   let attached: { session: PtyHostSession; snapshot: PtyHostSnapshot; frames: TerminalOutputFrame[] };
   try { attached = await client.request("attachSession", target); }
-  catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); throw error; }
+  catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); throw error; }
   if (attached.session.launch && options.onLaunch) {
     try { await options.onLaunch(attached.session.launch); }
-    catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); throw error; }
+    catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); throw error; }
   }
   cursor = attached.snapshot.cursor;
   grid = { cols: attached.snapshot.cols, rows: attached.snapshot.rows };
@@ -132,7 +140,7 @@ export async function createHostedPty(options: {
     write(data) { void writeSteps([{ type: "text", data }], undefined, true).catch(error => notifyFailure("writeInput", error)); },
     resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(error => notifyFailure("resize", error)); },
     signal(signal) { void client.request("signal", { ...target, signal }).catch(error => notifyFailure("signal", error)); },
-    dispose() { disposed = true; client.events.delete(receive); client.disconnected.delete(disconnected); },
+    dispose() { disposed = true; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
     hosted: {
       get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },

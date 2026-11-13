@@ -19,7 +19,9 @@ rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--wait-timeout-m
 SSH 远端终端也使用同一命令。未设置 `PLAYWRIGHT_MCP_CDP_ENDPOINT`、但存在 Runweave
 终端或项目身份时，CLI 自动通过远端 Backend 申请访问凭证并解析桌面 Browser；需要
 `RUNWEAVE_TERMINAL_SESSION_ID`、`RUNWEAVE_PROJECT_ID`、`RUNWEAVE_HOOK_TOKEN`，以及
-`RUNWEAVE_BASE_URL` 或 `RUNWEAVE_BACKEND_PORT`。桌面负责建立 SSH 反向隧道，Agent
+`RUNWEAVE_BASE_URL` 或 `RUNWEAVE_BACKEND_PORT`。旧恢复终端缺少这两个地址字段时，CLI 使用显式
+`--instance` / `--config-dir` 对应的本机 Backend 配置，先核对服务的实例身份，再发送该终端自己的
+Hook 令牌；不会借用其他终端身份或 CLI 登录 Profile 的远端地址。桌面负责建立 SSH 反向隧道，Agent
 无需自行转发端口。远端返回的 CDP 地址带一次性 60 秒票据，应立即连接；重连时重新解析。
 身份不完整返回 `REMOTE_CAPABILITY_UNSUPPORTED`，桌面通道不可用返回
 `DESKTOP_UNAVAILABLE`，越权访问返回 `BROWSER_SCOPE_DENIED`。未选择终端归属返回 `BROWSER_BINDING_REQUIRED`；需在桌面为该终端选择通道，不能按最后注册者猜测。
