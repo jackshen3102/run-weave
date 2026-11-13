@@ -197,6 +197,28 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     const { runtime } = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
     await runtime.hosted!.writeSteps([{ type: "text", data: "echo FRESH_TERMINAL_OK\r" }]);
     await wait(() => /\r?\nFRESH_TERMINAL_OK\r?\n/.test(manager.getSession(fresh.id)!.scrollback), "new terminal executes input");
+    // Real persistence must advance while output keeps arriving, not only after
+    // the terminal becomes quiet. Verify ordered, exact UTF-8 bytes on disk.
+    const streaming = await manager.createSession({ command, args, cwd: directory });
+    const historyFile = path.join(directory, "terminal-scrollback", `${streaming.id}.log`);
+    const streamed: string[] = [];
+    let persistedWhileStreaming = false;
+    for (let n = 0; n < 60; n++) {
+      const chunk = `CONTINUOUS_${n}_中文🧪\n`;
+      streamed.push(chunk);
+      manager.appendOutput(streaming.id, chunk);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      try { persistedWhileStreaming ||= (await readFile(historyFile, "utf8")).includes("CONTINUOUS_0_"); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
+    assert.equal(persistedWhileStreaming, true, "continuous output must flush before the stream ends");
+    let persisted = "";
+    for (let n = 0; n < 100; n++) {
+      persisted = await readFile(historyFile, "utf8");
+      if (persisted === streamed.join("")) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(persisted, streamed.join(""), "periodic flush must retain byte order without gaps or duplicates");
     // Real rejected RPC and real socket close must produce distinct WS reasons,
     // while retaining the same Host-owned process and never replaying input.
     const openFreshSocket = async () => {

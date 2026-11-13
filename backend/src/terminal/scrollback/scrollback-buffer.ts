@@ -22,18 +22,26 @@ function trimTextToTailBytes(value: string, limitBytes: number): string {
     return "";
   }
 
-  let retained = "";
+  let start = value.length;
   let retainedBytes = 0;
-  for (const char of Array.from(value).reverse()) {
-    const charBytes = countUtf8Bytes(char);
-    if (retainedBytes + charBytes > limitBytes) {
-      break;
+  // Scan only the retained suffix. Avoid allocating/reversing a character array
+  // for the entire history, and preserve lone surrogates like Array.from did.
+  while (start > 0) {
+    let next = start - 1;
+    const unit = value.charCodeAt(next);
+    let charBytes = unit <= 0x7f ? 1 : unit <= 0x7ff ? 2 : 3;
+    if (unit >= 0xdc00 && unit <= 0xdfff && next > 0) {
+      const previous = value.charCodeAt(next - 1);
+      if (previous >= 0xd800 && previous <= 0xdbff) {
+        next -= 1;
+        charBytes = 4;
+      }
     }
-    retained = `${char}${retained}`;
+    if (retainedBytes + charBytes > limitBytes) break;
     retainedBytes += charBytes;
+    start = next;
   }
-
-  return retained;
+  return value.slice(start);
 }
 
 function normalizeChunk(
