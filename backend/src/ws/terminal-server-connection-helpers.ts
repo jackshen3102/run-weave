@@ -18,6 +18,12 @@ import {
   resolveTmuxTarget,
 } from "../terminal/runtime/launcher";
 
+export const TERMINAL_RECOVERY_CLOSE_REASONS = {
+  "mirror-limit": "Terminal mirror output limit",
+  "host-disconnected": "Terminal host connection lost",
+  "host-operation-failed": "Terminal host operation failed",
+};
+
 export const TMUX_INITIAL_REPAINT_SETTLE_MS = 50;
 export const TMUX_METADATA_SYNC_DELAY_MS = 100;
 // JSON escaping can expand a bounded 512 KiB ANSI snapshot beyond its raw size.

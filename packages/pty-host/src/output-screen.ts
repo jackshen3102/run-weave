@@ -16,6 +16,13 @@ export interface TerminalScreenSnapshot {
   rows: number;
 }
 
+export interface TerminalMirrorFailure {
+  code: "HOST_MIRROR_PENDING_LIMIT" | "HOST_MIRROR_QUEUE_LIMIT" | "HOST_MIRROR_CONTROL_LIMIT";
+  bufferedBytes: number;
+  limitBytes: number;
+  queuedOperations: number;
+}
+
 type Operation =
   | { frame: TerminalOutputFrame }
   | { cols: number; rows: number };
@@ -37,7 +44,7 @@ export class TerminalOutputScreen {
 
   constructor(
     cursor: TerminalOutputCursor,
-    private readonly onFailure: () => void,
+    private readonly onFailure: (failure: TerminalMirrorFailure) => void,
     scrollback = 0,
   ) {
     this.cursor = cursor;
@@ -57,8 +64,12 @@ export class TerminalOutputScreen {
     if (this.disposed) return;
     this.pendingBytes += frame.range.toOffset - frame.range.fromOffset;
     if (this.pendingBytes > RESUME_MAX_BYTES || this.queue.length >= 8192) {
+      const failure: TerminalMirrorFailure = {
+        code: this.pendingBytes > RESUME_MAX_BYTES ? "HOST_MIRROR_PENDING_LIMIT" : "HOST_MIRROR_QUEUE_LIMIT",
+        bufferedBytes: this.pendingBytes, limitBytes: RESUME_MAX_BYTES, queuedOperations: this.queue.length,
+      };
       this.dispose();
-      this.onFailure();
+      this.onFailure(failure);
       return;
     }
     this.queue.push({ frame });
@@ -186,8 +197,10 @@ export class TerminalOutputScreen {
             frame.range.toOffset -
             frame.range.fromOffset;
         if (this.partialControlBytes > RESUME_MAX_BYTES) {
+          const failure: TerminalMirrorFailure = { code: "HOST_MIRROR_CONTROL_LIMIT", bufferedBytes: this.partialControlBytes,
+            limitBytes: RESUME_MAX_BYTES, queuedOperations: this.queue.length };
           this.dispose();
-          this.onFailure();
+          this.onFailure(failure);
           return;
         }
         this.completeSnapshot?.();

@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { configuration } from "@runweave/config-node";
-import { PtyHostClient } from "@runweave/pty-host/client";
+import { PtyHostClient, hostErrorCode } from "@runweave/pty-host/client";
 import type { PtyHostBinding, PtyHostSession, PtyHostInputResult, PtyHostInputStep, PtyHostCreateSession, PtyHostUpstreams, PtyHostSnapshot } from "@runweave/shared/terminal/pty-host";
 import type { TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
 import type { TerminalOutputFrame, TerminalOutputReplay } from "./output-recovery";
-import type { PtyRuntime } from "./pty-service";
+import type { PtyRuntime, TerminalRecoveryFailure } from "./pty-service";
+import { logger } from "../../logging/index";
+
+const hostLogger = logger.child({ component: "pty-host" });
 
 const ownerId = randomUUID();
 let connection: Promise<PtyHostClient> | undefined;
@@ -17,7 +20,8 @@ export function usesPtyHost(): boolean {
 }
 export async function getPtyHost(): Promise<PtyHostClient> {
   if (stopped) throw new Error("HOST_CLIENT_STOPPED");
-  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId).then(async client => {
+  connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId,
+    ({ event, ...fields }) => hostLogger.warn(event, fields)).then(async client => {
     generation = client.generation;
     hostInstanceId = client.descriptor.hostInstanceId;
     client.disconnected.add(() => { connection = undefined; });
@@ -53,7 +57,7 @@ export async function createHostedPty(options: {
   const dataListeners = new Set<(data: string) => void>();
   const frameListeners = new Set<(frame: TerminalOutputFrame) => void>();
   const exitListeners = new Set<(event: { exitCode: number }) => void>();
-  const disconnectListeners = new Set<() => void>();
+  const failureListeners = new Set<(failure: TerminalRecoveryFailure) => void>();
   const resizeListeners = new Set<(cols: number, rows: number) => void>();
   const pending: TerminalOutputFrame[] = [];
   let exited: number | undefined;
@@ -66,16 +70,23 @@ export async function createHostedPty(options: {
     for (const listener of frameListeners) listener(frame);
   };
   let initializing = true;
+  let disposed = false;
+  let failed = false;
   const early: import("@runweave/shared/terminal/pty-host").PtyHostEvent[] = [];
   const receive: Parameters<typeof client.events.add>[0] = event => {
     if (event.terminalSessionId !== options.terminalSessionId) return;
     if (initializing) { early.push(event); return; }
-    if (event.type === "launch" && options.onLaunch) void options.onLaunch(event.launch).catch(disconnected);
+    if (event.type === "launch" && options.onLaunch) void options.onLaunch(event.launch).catch(error => notifyFailure("launch", error));
     if (event.type === "output") emitFrame(event);
     if (event.type === "resize") { grid = { cols: event.cols, rows: event.rows }; for (const listener of resizeListeners) listener(event.cols, event.rows); }
     if (event.type === "exit") { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
   };
-  const disconnected = () => { for (const listener of disconnectListeners) listener(); };
+  const fail = (failure: TerminalRecoveryFailure) => {
+    if (disposed || failed) return;
+    failed = true;
+    for (const listener of failureListeners) listener(failure);
+  };
+  const disconnected = (error: Error) => fail({ kind: "host-disconnected", code: hostErrorCode(error) });
   client.events.add(receive); client.disconnected.add(disconnected);
   let attached: { session: PtyHostSession; snapshot: PtyHostSnapshot; frames: TerminalOutputFrame[] };
   try { attached = await client.request("attachSession", target); }
@@ -107,21 +118,27 @@ export async function createHostedPty(options: {
     tail = job.catch(() => {});
     return job;
   };
-  const notifyFailure = () => disconnected();
+  const notifyFailure = (action: string, error: unknown) => {
+    if (disposed || failed) return;
+    const code = hostErrorCode(error);
+    hostLogger.warn("terminal.host.operation.failed", { terminalSessionId: options.terminalSessionId,
+      hostInstanceId: client.descriptor.hostInstanceId, action, code, pendingInputs, pendingBytes });
+    fail({ kind: client.isConnected ? "host-operation-failed" : "host-disconnected", action, code });
+  };
   return {
     pid: attached.session.pid,
     onData(listener) { dataListeners.add(listener); },
     onExit(listener) { exitListeners.add(listener); if (exited !== undefined) listener({ exitCode: exited }); },
-    write(data) { void writeSteps([{ type: "text", data }], undefined, true).catch(notifyFailure); },
-    resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(notifyFailure); },
-    signal(signal) { void client.request("signal", { ...target, signal }).catch(notifyFailure); },
-    dispose() { client.events.delete(receive); client.disconnected.delete(disconnected); },
+    write(data) { void writeSteps([{ type: "text", data }], undefined, true).catch(error => notifyFailure("writeInput", error)); },
+    resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(error => notifyFailure("resize", error)); },
+    signal(signal) { void client.request("signal", { ...target, signal }).catch(error => notifyFailure("signal", error)); },
+    dispose() { disposed = true; client.events.delete(receive); client.disconnected.delete(disconnected); },
     hosted: {
       get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },
       snapshot: () => client.request("getSnapshot", target),
       onFrame(listener) { frameListeners.add(listener); for (const frame of pending.splice(0)) listener(frame); },
-      onDisconnect(listener) { disconnectListeners.add(listener); },
+      onFailure(listener) { failureListeners.add(listener); },
       onResize(listener) { resizeListeners.add(listener); },
       writeSteps,
       async close() { await client.request("closeSession", target); },

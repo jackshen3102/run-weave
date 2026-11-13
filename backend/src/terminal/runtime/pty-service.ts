@@ -32,13 +32,19 @@ export interface SpawnTerminalSessionOptions {
   }) => string[];
 }
 
+export interface TerminalRecoveryFailure {
+  kind: "mirror-limit" | "host-disconnected" | "host-operation-failed";
+  code: string;
+  action?: string;
+}
+
 export interface PtyRuntime {
   hosted?: {
     readonly grid: { cols: number; rows: number };
     output: import("./output-recovery").TerminalOutputSource;
     snapshot(): Promise<import("./output-screen").TerminalScreenSnapshot>;
     onFrame(listener: (frame: import("./output-recovery").TerminalOutputFrame) => void): void;
-    onDisconnect(listener: () => void): void;
+    onFailure(listener: (failure: TerminalRecoveryFailure) => void): void;
     onResize(listener: (cols: number, rows: number) => void): void;
     writeSteps(steps: import("@runweave/shared/terminal/pty-host").PtyHostInputStep[], operationId?: string): Promise<void>;
     close(): Promise<void>;

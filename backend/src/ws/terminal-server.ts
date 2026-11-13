@@ -43,7 +43,7 @@ import {
 import { logTerminalConnectionOpened } from "./terminal-connection-logging";
 import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
 import { createTerminalOutputRecovery } from "./terminal-output-recovery";
-import { closeSlowTerminalSocket } from "./terminal-server-connection-helpers";
+import { closeSlowTerminalSocket, TERMINAL_RECOVERY_CLOSE_REASONS } from "./terminal-server-connection-helpers";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
@@ -380,8 +380,10 @@ export function attachTerminalWebSocketServer(
     unsubscribe = runtimeRegistry.subscribe(runtimeId, {
       onOutputFrame: (frame) => outputRecovery?.onFrame(frame),
       onResize: (cols, rows) => outputRecovery?.onResize(cols, rows),
-      onRecoveryError: () =>
-        closeSlowTerminalSocket(socket, "Terminal mirror output limit"),
+      onRecoveryError: failure => {
+        terminalWsLogger.warn("terminal.runtime.recovery.failed", { terminalSessionId, ...failure });
+        closeSlowTerminalSocket(socket, TERMINAL_RECOVERY_CLOSE_REASONS[failure.kind]);
+      },
       onData(data) {
         runtimeOutputSequence += 1;
         logTerminalPerf("terminal.runtime.output", {

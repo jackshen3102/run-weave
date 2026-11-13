@@ -9,7 +9,8 @@ import { z } from "zod";
 import { hostPaths, prepareHostDirectory, writeHostJson } from "./discovery";
 import { HostGateway, isGatewayCredential } from "./gateway";
 import { HostSession } from "./sessions";
-import { receiveJsonLines, sendJson } from "./transport";
+import { HostTransportError, receiveJsonLines, sendJson } from "./transport";
+import { diagnosticAction, hostErrorCode, reportHostDiagnostic, writeHostDiagnostic } from "./diagnostics";
 
 const scopeSchema = z.object({ kind: z.enum(["stable", "dev"]), instanceId: z.string().min(1), configRoot: z.string().min(1) });
 const targetSchema = z.object({ hostInstanceId: z.string().uuid(), sessionInstanceId: z.string().uuid(), terminalSessionId: z.string().min(1), generation: z.number().int().positive() });
@@ -62,9 +63,16 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
 
   const server = createServer(socket => {
     sockets.add(socket);
-    socket.on("error", () => {});
+    const connectionId = randomUUID();
+    let socketError: Error | undefined;
+    socket.on("error", error => { socketError = error; });
     const subscriptions = new Map<string, () => void>();
     socket.on("close", () => {
+      reportHostDiagnostic(writeHostDiagnostic, {
+        event: "pty-host.connection.closed", hostInstanceId, connectionId,
+        code: socketError ? hostErrorCode(socketError) : "HOST_PEER_CLOSED", writableBytes: socket.writableLength,
+        ...(socketError instanceof HostTransportError ? { bufferedBytes: socketError.bufferedBytes, limitBytes: socketError.limitBytes } : {}),
+      });
       sockets.delete(socket);
       for (const unsubscribe of subscriptions.values()) unsubscribe();
     });
@@ -72,9 +80,17 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
       const parsed = wireSchema.safeParse(message);
       if (!parsed.success) { socket.destroy(); return; }
       const request = parsed.data;
+      const startedAt = performance.now();
       const reply = (result: unknown) => sendJson(socket, { requestId: request.requestId, result });
-      const fail = (error: unknown) => sendJson(socket, { requestId: request.requestId,
-        error: error instanceof z.ZodError ? "HOST_MESSAGE_INVALID" : (error as Error).message });
+      const fail = (error: unknown) => {
+        reportHostDiagnostic(writeHostDiagnostic, {
+          event: "pty-host.request.failed", hostInstanceId, connectionId, requestId: request.requestId,
+          action: diagnosticAction(request.action), code: error instanceof z.ZodError ? "HOST_MESSAGE_INVALID" : hostErrorCode(error),
+          elapsedMs: Math.round(performance.now() - startedAt), writableBytes: socket.writableLength,
+        });
+        return sendJson(socket, { requestId: request.requestId,
+          error: error instanceof z.ZodError ? "HOST_MESSAGE_INVALID" : (error as Error).message });
+      };
       if (!isGatewayCredential(request.token, token)) { fail(new Error("HOST_AUTH_FAILED")); socket.end(); return; }
       if (request.hostInstanceId !== hostInstanceId) { fail(new Error("HOST_IDENTITY_MISMATCH")); socket.end(); return; }
       void (async () => {
