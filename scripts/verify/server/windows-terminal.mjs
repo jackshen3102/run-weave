@@ -134,6 +134,8 @@ $value=@{phase=${quote(phase)};exitCode=$code;addressPresent=$addressPresent;rep
       socket.ws.close();
       // All processes in this fixture are owned by this verification. Lose the
       // Host, then restart Backend to exercise actual startup-time PTY rebuilding.
+      const releaseRelative = path.relative(path.join(cwd, ".runweave/server"), after.runningRelease);
+      assert(releaseRelative && !releaseRelative.startsWith("..") && !path.isAbsolute(releaseRelative), "Refusing to stop a Host outside the fixture");
       process.kill(after.pid, "SIGKILL");
       await lifecycle.restartAfterCrash();
       socket = await connect();

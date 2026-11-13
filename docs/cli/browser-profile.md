@@ -52,6 +52,25 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 不单独证明某次请求命中规则。缺失状态或旧桌面没有 resolver 时明确失败，不伪造 `stopped`，
 也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
+## 控制链路诊断
+
+```bash
+"$RUNWEAVE_CLI_BIN" browser doctor --json
+```
+
+`doctor` 复用相同 Profile/Group 和身份解析，依次检查 `identity`、`binding`、`cdp`、`proxy`。
+支持 resolver 的 `--profile`、`--group-id` 和 `--wait-timeout-ms`，不切换代理、不导航页面或执行页面工具。
+诊断连接结束即释放；resolver 可能按既有合同初始化空工作组。
+
+stdout 始终是单个 JSON，含 `schemaVersion: 1`、`scope: terminal-browser-control`、`healthy`、
+CLI 源码版本和分层 `checks`。失败层返回稳定错误码，后续层为 `skipped`，命令退出码为 3；
+参数错误仍为 2。没有终端身份的桌面调用将 identity 标为 `skipped/NO_TERMINAL_IDENTITY`。
+不输出 Hook、capability、CDP 地址或票据，失败正文只写通用诊断。
+
+`healthy: true` 只证明控制链路和代理状态可读且无应用错误。`pageRequestsVerified` 固定为 false；
+代理 ready、CDP 连通不能证明业务域名可达或登录有效，业务页面仍需通过 Playwright 单独验收。
+旧终端的地址发现及实例核验也在同一个 resolver 等待期限内；实例身份不符时立即拒绝，不发送终端令牌。
+
 ## 请求头规则（Agent 操作）
 
 通过 Header 路由的泳道或 PPE 环境也使用此入口；先从业务配置或文档确认 Header 名称、值和

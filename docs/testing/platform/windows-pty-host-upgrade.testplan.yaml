@@ -123,3 +123,14 @@ cases:
     steps:
       - 执行 dry-run，确认返回固定目标、兼容性和是否需维护窗口，但没有新增已接管执行事务。
       - 核对组件与终端身份、配置和发行指针未变，允许 staging 下载和物化；保存证据并清理本例资源。
+  - id: PTYUP-014
+    name: 原终端升级后仍控制原 Browser 页面
+    required: true
+    description: 升级验收必须覆盖原终端到实际 Browser 的完整链路，不能以新终端或服务健康替代。
+    preconditions:
+      - 本例拥有隔离 Windows 安装、旧新候选 tarball 和明确归属的真实桌面 Browser 通道，旧终端的 Hook 与桌面绑定有效。
+      - 已通过 toolkit:playwright-cli 从原终端 resolver 连接本例页面，记录唯一页面标识及 Host、shell、终端身份；不操作业务写入。
+    steps:
+      - 断开本例 Playwright 连接，从原终端发起候选升级，等待同一升级事务完成，记录精确候选版本及回执。
+      - 重新连接原终端，不新建终端、不重绑、不手工设置地址；执行 doctor，确认四层检查通过且未将 pageRequestsVerified 改为 true。
+      - 从原终端重新 resolve，立即使用 toolkit:playwright-cli attach 新 endpoint；确认读取原页面标识及真实页面请求结果，核对 Host 和 shell 进程未改变后 detach、清理本例资源。

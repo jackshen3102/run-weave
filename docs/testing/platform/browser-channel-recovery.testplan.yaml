@@ -86,3 +86,36 @@ cases:
     steps:
       - "让 CLI 指向本例 loopback resolver，执行 profile resolve --wait-timeout-ms 0 --json；记录请求已收到、响应头已返回但响应体未结束。"
       - "确认 CLI 自己在约 5 秒的请求期限退出并报告失败，无需外部杀进程；关闭本例 HTTP fixture 并清理资源。"
+  - id: BCR-009
+    name: "诊断分层失败且不冒充页面验收"
+    required: true
+    description: "doctor 输出真实控制链路分层结果，不泄露连接凭据、不修改页面，且不会把通道成功记作页面请求成功。"
+    preconditions:
+      - "本例有候选 CLI、归属明确的真实桌面 Browser 和自有终端，原页面及代理模式已记录。"
+      - "可对本例绑定、CDP 或代理读取分别施加独立可恢复故障，不影响其他终端或 Profile。"
+    steps:
+      - "在正常状态运行 browser doctor --json，确认 identity、binding、cdp、proxy 通过，pageRequestsVerified 为 false；通过 toolkit:playwright-cli 确认原页面未导航。"
+      - "在各自独立样本中只使一个层级失败；确认 JSON 只有该层 failed、后续 skipped，命令退出 3，报告不含任何 Hook、capability、CDP endpoint 或票据。"
+      - "解除本例故障，重新诊断并确认恢复；核对代理模式未改变，detach 并清理资源。"
+  - id: BCR-010
+    name: "旧终端缺少地址时核验实例后恢复"
+    required: true
+    description: "旧终端保留自己的身份但没有 Backend 地址时，从绑定实例配置发现地址；临时故障受统一期限约束，错误实例不能收到令牌。"
+    preconditions:
+      - "本例拥有独立实例配置、候选 CLI 及有效终端身份；本例子进程移除 Backend URL、端口和 ambient CDP 环境字段。"
+      - "可记录自有 Backend 的健康与身份请求，并可在独立等价样本中返回临时 503、悬挂响应体或错误实例身份。"
+    steps:
+      - "以实例绑定入口运行 doctor，确认先核验健康中的实例身份，再以原终端令牌查询身份；未绑定桌面的 fixture 返回 binding failed/BROWSER_BINDING_REQUIRED，而非身份缺失。"
+      - "对临时 503 样本，在同一次默认等待调用中解除故障，确认恢复；对悬挂样本指定短等待，确认自行在统一期限内退出，不由外部杀进程。"
+      - "对错误实例样本确认立即返回 CONFIG_TARGET_MISMATCH，记录该样本未收到终端 Hook；报告无凭据，清理本例资源。"
+  - id: BCR-011
+    name: "Host 丢失后的启动重建具备当前地址"
+    required: true
+    description: "Backend 启动恢复丢失的交互 PTY 时，新 shell 已继承实际监听地址，能使用自己的 Hook 完成身份鉴权。"
+    preconditions:
+      - "本例拥有隔离 Windows HOME、候选 Server 和 CLI、自有 Host 与交互终端；已记录终端 ID 和 shell 进程身份。"
+      - "本例能够终止自有 Host 并正常重新启动自有 Backend，不操作用户的 Host、终端或数据库。"
+    steps:
+      - "停止本例连接并终止自有 Host，再启动同配置的 Backend；确认恢复同一终端记录，shell 和 Host 为新进程。"
+      - "重新连接本例终端，不人工设置地址；读取 shell 自有环境，确认存在当前 Backend URL 或端口。"
+      - "从新 shell 运行 doctor，确认身份鉴权通过；无桌面绑定时仅将 BROWSER_BINDING_REQUIRED 记为控制面证据，不声称真实页面通过，清理本例资源。"
