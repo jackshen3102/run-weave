@@ -25,6 +25,7 @@ export class HostSession {
   private terminal!: IPty;
   private fallbackActivated = false;
   private closing = false;
+  private nativeClosing = false;
   private processGeneration = 0;
   private startupDeadline = 0;
 
@@ -40,7 +41,7 @@ export class HostSession {
       reportHostDiagnostic(writeHostDiagnostic, { event: "pty-host.mirror.failed", hostInstanceId,
         terminalSessionId: options.terminalSessionId, ...failure });
     }, TERMINAL_CLIENT_SCROLLBACK_LINES, data => {
-      if (!this.closing && this.info.status === "running") this.terminal?.write(data);
+      if (!this.nativeClosing && this.info.status === "running") this.terminal?.write(data);
     });
     this.screen.resize(options.cols, options.rows);
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
@@ -124,12 +125,13 @@ export class HostSession {
     this.closing = true;
     if (process.platform === "win32") {
       if (signal === "SIGINT") this.terminal.write("\x03"); else this.close();
-    } else this.terminal.kill(signal);
+    } else { this.nativeClosing = signal !== "SIGINT"; this.terminal.kill(signal); }
   }
 
   close(): void {
     if (this.info.status !== "running") return;
     this.closing = true;
+    this.nativeClosing = true;
     this.terminal.kill();
   }
 

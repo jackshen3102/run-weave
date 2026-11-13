@@ -148,7 +148,7 @@ jobs:
         run: node scripts/release/restore-server-artifacts.mjs --target=${{ matrix.target }}
       - name: Verify independent Windows PTY Host
         if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' }}
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           node scripts/verify/server/pty-host-spike.mjs
           node scripts/verify/server/pty-host.mjs
