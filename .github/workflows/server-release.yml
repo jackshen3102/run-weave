@@ -87,6 +87,15 @@ jobs:
           JS
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Compile patched Windows PTY native ownership
+        if: ${{ runner.os == 'Windows' }}
+        run: node scripts/release/windows-native-pty.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ runner.os == 'Windows' }}
+        with:
+          name: windows-pty-native-${{ matrix.target }}
+          path: .runtime-artifacts/windows-pty/native/
+          if-no-files-found: error
       - name: Find immutable candidate from an earlier attempt
         if: ${{ !inputs.pty_spike_only }}
         id: candidate

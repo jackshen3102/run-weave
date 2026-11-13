@@ -105,7 +105,11 @@ export class ExperienceLearningRuntime {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.abort?.abort();
-    await this.running;
+    try {
+      await this.running;
+    } finally {
+      this.queue.dispose();
+    }
   }
   private tick(): void {
     if (!this.enabled || this.stopping || this.running) return;

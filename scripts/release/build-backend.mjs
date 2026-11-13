@@ -1,4 +1,5 @@
 import { prepareLinuxSqlite } from "./linux-native-runtime.mjs";
+import { prepareWindowsPty } from "./windows-native-pty.mjs";
 import { buildDevResources } from "../../scripts/dev-resources/build.mjs";
 import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
@@ -57,8 +58,7 @@ function run(command, args, cwd = repoRoot) {
     throw new Error(`${command} ${args.join(" ")} failed`);
 }
 
-function copyNativePackage(name, include) {
-  const source = path.join(repoRoot, "backend", "node_modules", name);
+function copyNativePackage(name, include, source = path.join(repoRoot, "backend", "node_modules", name)) {
   const manifest = JSON.parse(
     readFileSync(path.join(source, "package.json"), "utf8"),
   );
@@ -165,6 +165,7 @@ copyNativePackage(
     relative.startsWith(`prebuilds${path.sep}${ptyPrebuild}${path.sep}`) ||
     relative === "package.json" ||
     relative === "LICENSE",
+  prepareWindowsPty(),
 );
 cpSync(
   path.join(repoRoot, "scripts", "release", "backend-start.mjs"),

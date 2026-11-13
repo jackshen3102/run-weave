@@ -424,6 +424,7 @@ async function verifySegmentedLearning(root: string, facts: LearningFact[]) {
     },
   };
   for (let batch = 0; batch < 12; batch++) {
+    queue.dispose();
     queue = new ExperienceLearningQueue(storage); // Reopen persisted progress.
     const job = queue.claim()!;
     assert.ok(job);
@@ -453,8 +454,11 @@ async function verifySegmentedLearning(root: string, facts: LearningFact[]) {
         assert.equal(other.jobId, "other", "long analysis must yield to other work");
         queue.update(other, { status: "skipped" });
       }
+    } finally {
+      queue.dispose();
     }
   }
+  queue.dispose();
   throw new Error("segmented analysis never completed");
 }
 

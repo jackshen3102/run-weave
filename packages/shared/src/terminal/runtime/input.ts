@@ -131,3 +131,5 @@ export interface CreateTerminalClipboardFileResponse {
   /** Absolute path on the receiving Backend's execution host. */
   filePath: string;
 }
+
+export { isTerminalAutoResponse, isTerminalQueryResponse } from "./responses";

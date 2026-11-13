@@ -27,14 +27,22 @@ type Bucket =
   | "maintenance-review-heads"
   | "learning-checkpoints";
 
-/** Only short synchronous transactions hold SQLite locks; evidence I/O happens outside.
- * Each operation closes its connection, including on failure. No long-lived owner or worker.
- */
+/** Only short synchronous transactions hold SQLite locks; evidence I/O happens outside. */
 export function withExperienceStore<T>(
   directory: string,
   operation: (store: ExperienceStore) => T,
   readOnly = false,
 ): T {
+  const store = openExperienceStore(directory, readOnly);
+  try {
+    return operation(store);
+  } finally {
+    store.close();
+  }
+}
+
+/** A runtime owner may reuse the connection, but must close it when stopped. */
+export function openExperienceStore(directory: string, readOnly = false): ExperienceStore {
   if (!readOnly) mkdirSync(directory, { recursive: true, mode: 0o700 });
   const file = path.join(directory, "store.sqlite");
   // Packaged Backend lives in app.asar; native modules are staged outside it.
@@ -59,14 +67,19 @@ export function withExperienceStore<T>(
       ON documents(bucket, json_extract(value, '$.expiresAt'))
       WHERE bucket = 'learning-checkpoints'`);
     }
-    return operation(new ExperienceStore(database));
-  } finally {
+    return new ExperienceStore(database);
+  } catch (error) {
     database.close();
+    throw error;
   }
 }
 
 class ExperienceStore {
   constructor(private readonly database: Database.Database) {}
+
+  close(): void {
+    if (this.database.open) this.database.close();
+  }
 
   get<T>(bucket: Bucket, id: string): T | undefined {
     const row = this.database

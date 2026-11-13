@@ -8,6 +8,9 @@
     "./terminal": "./src/terminal/index.ts",
     "./terminal/image-lightbox.css": "./src/terminal/image-lightbox.css"
   },
+  "dependencies": {
+    "@runweave/shared": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^19.0.0",
     "yet-another-react-lightbox": "^3.32.0"

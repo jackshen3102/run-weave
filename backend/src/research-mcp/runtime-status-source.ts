@@ -1,9 +1,12 @@
-import { readResearchMcpInstallation, resolveConfigurationContext } from "@runweave/config-node";
+import { configuration, readResearchMcpInstallation } from "@runweave/config-node";
 import { isRuntimeStatusState, type RuntimeStatusReport } from "@runweave/shared/runtime-status";
 import type { RuntimeStatusRegistry } from "../runtime-status/registry";
 
 /** Consume owner evidence; missing reports are a failure when the service is enabled. */
 export function startResearchMcpRuntimeStatusSource(registry: RuntimeStatusRegistry): { stop(): Promise<void> } {
+  // The running Backend already owns a verified, immutable invocation scope.
+  // Re-resolving it on every poll synchronously launches Windows ACL checks.
+  const context = configuration().context;
   let stopped = false;
   let inFlight: Promise<void> | null = null;
   let failedSince: number | null = null;
@@ -21,7 +24,7 @@ export function startResearchMcpRuntimeStatusSource(registry: RuntimeStatusRegis
             ...(["recovering", "unhealthy"].includes(state) ? lastReport?.items.map((item) => ({ ...item, state: "blocked" as const, summary: "状态来源不可用，保留最后已知结果", dependsOn: ["research-mcp.source"], recovery: null })) ?? [] : [])] });
       };
       try {
-        const installation = readResearchMcpInstallation();
+        const installation = readResearchMcpInstallation(context);
         if (!installation) { failedSince = null; fallback("disabled", "调查 MCP 未安装启用，不检查健康状态"); return; }
         if (!installation.enabled) { failedSince = null; fallback("disabled", "调查 MCP 已显式停用"); return; }
         const response = await fetch(`http://127.0.0.1:${installation.port}/runtime-status`, { signal: AbortSignal.timeout(1000), redirect: "error" });
@@ -31,7 +34,7 @@ export function startResearchMcpRuntimeStatusSource(registry: RuntimeStatusRegis
         const report = JSON.parse(source) as RuntimeStatusReport;
         if (report.protocolVersion !== 1 || report.source?.id !== "research-mcp" || report.source.runtime !== "research-mcp" || report.source.capabilityId !== "research-mcp" ||
           !Array.isArray(report.items) || report.items.length > 32 || report.validForMs !== 20_000 || !report.items.some((item) => item.id === "research-mcp.process" &&
-            item.facts.some((fact) => fact.id === "instance" && fact.value === resolveConfigurationContext().instanceId)) ||
+            item.facts.some((fact) => fact.id === "instance" && fact.value === context.instanceId)) ||
           report.items.some((item) => item.capabilityId !== "research-mcp" || !item.id.startsWith("research-mcp.") || !isRuntimeStatusState(item.state))) throw new Error("invalid_owner_report");
         const processItem = report.items.find(item => item.id === "research-mcp.process")!;
         const installedMatches = processItem.facts.some(fact => fact.id === "release" && fact.value === installation.releaseId) && processItem.facts.some(fact => fact.id === "mcp-sha" && fact.value === installation.sourceRevision);

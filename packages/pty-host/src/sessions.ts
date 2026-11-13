@@ -39,7 +39,9 @@ export class HostSession {
       this.degraded = true;
       reportHostDiagnostic(writeHostDiagnostic, { event: "pty-host.mirror.failed", hostInstanceId,
         terminalSessionId: options.terminalSessionId, ...failure });
-    }, TERMINAL_CLIENT_SCROLLBACK_LINES);
+    }, TERMINAL_CLIENT_SCROLLBACK_LINES, data => {
+      if (!this.closing && this.info.status === "running") this.terminal?.write(data);
+    });
     this.screen.resize(options.cols, options.rows);
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
     try { this.spawn(options); }
@@ -69,6 +71,7 @@ export class HostSession {
     const started = Date.now();
     const terminal = pty.spawn(launch.command, launch.args, {
       name: "xterm-256color", cols: this.info.cols, rows: this.info.rows, cwd: this.options.cwd,
+      useConptyDll: process.platform === "win32",
       env: { ...launch.env, ...this.prepareEnv(this.info.gatewayToken, this.info.terminalSessionId) },
     });
     this.startupDeadline = this.options.fallback && isInteractiveShellLaunch(this.options) ? Date.now() + 1000 : 0;

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { copyNativeLockRuntime } from '../../../packages/config-node/scripts/native-runtime.mjs';
+import { prepareWindowsPty } from '../../release/windows-native-pty.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const require = createRequire(path.join(repo, 'packages/runweave-cli/package.json'));
@@ -28,7 +29,7 @@ await build({ ...options, entryPoints: [path.join(repo, 'packages/pty-host/src/i
 await build({ ...options, stdin: { contents: 'export * from "./packages/pty-host/src/client"; export * from "./packages/pty-host/src/lifecycle";', resolveDir: repo }, outfile: path.join(fixture, 'client.cjs') });
 copyNativeLockRuntime(fixture);
 copyNativeLockRuntime(path.join(release, 'pty-host'));
-cpSync(path.join(repo, 'backend/node_modules/node-pty'), path.join(release, 'pty-host/node_modules/node-pty'), { recursive: true, dereference: true, filter: () => true });
+cpSync(prepareWindowsPty(), path.join(release, 'pty-host/node_modules/node-pty'), { recursive: true, dereference: true, filter: () => true });
 const { PtyHostClient, ensureHost, readHost } = require(path.join(fixture, 'client.cjs'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let client, observer, second;
