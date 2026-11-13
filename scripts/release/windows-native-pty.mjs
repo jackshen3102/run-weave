@@ -2,7 +2,7 @@
 // cannot contain them. Compile on Windows or consume the exact CI native artifact.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,7 +62,7 @@ export function prepareWindowsPty() {
   if (!existsSync(manifestPath)) {
     if (process.env.RUNWEAVE_WINDOWS_PTY_NATIVE_ARTIFACT)
       throw new Error("Windows PTY native artifact manifest is missing");
-    const require = createRequire(path.join(source, "package.json"));
+    const require = createRequire(path.join(realpathSync(source), "package.json"));
     const addon = path.dirname(require.resolve("node-addon-api/package.json"));
     cpSync(addon, path.join(target, "node_modules/node-addon-api"), { recursive: true });
     const gyp = path.join(path.dirname(process.execPath), "node_modules/npm/node_modules/node-gyp/bin/node-gyp.js");
