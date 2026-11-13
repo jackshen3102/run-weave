@@ -187,7 +187,9 @@ export class TerminalManagerBufferRuntime extends TerminalManagerBase {
   }
 
   private scheduleScrollbackFlush(terminalSessionId: string): void {
-    this.clearPendingScrollbackFlush(terminalSessionId);
+    // Flush from the first pending chunk; continuous output must not postpone
+    // persistence indefinitely or keep growing the pending chunk array.
+    if (this.scrollbackFlushTimers.has(terminalSessionId)) return;
 
     const timer = setTimeout(() => {
       this.scrollbackFlushTimers.delete(terminalSessionId);
