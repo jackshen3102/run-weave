@@ -43,7 +43,7 @@ import {
 import { logTerminalConnectionOpened } from "./terminal-connection-logging";
 import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
 import { createTerminalOutputRecovery } from "./terminal-output-recovery";
-import { closeSlowTerminalSocket, TERMINAL_RECOVERY_CLOSE_REASONS } from "./terminal-server-connection-helpers";
+import { closeSlowTerminalSocket, registerTerminalSocketContext, TERMINAL_RECOVERY_CLOSE_REASONS } from "./terminal-server-connection-helpers";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
@@ -83,6 +83,7 @@ export function attachTerminalWebSocketServer(
     }
 
     const { terminalSessionId } = handshake;
+    registerTerminalSocketContext(socket, terminalSessionId);
     const connectedAt = Date.now();
     const session = terminalSessionManager.getSession(terminalSessionId);
     const params = new URL(request.url ?? "/", "http://localhost").searchParams;
@@ -237,7 +238,7 @@ export function attachTerminalWebSocketServer(
       try {
         activeRuntime.resize(cols, rows);
       } catch {
-        closeSlowTerminalSocket(socket);
+        closeSlowTerminalSocket(socket, "Terminal initial resize failed");
         runtimeRegistry.retainIdleRuntime(runtimeId);
         return;
       }
@@ -435,7 +436,7 @@ export function attachTerminalWebSocketServer(
           pendingInitialOutput += metadata.output;
           if (Buffer.byteLength(pendingInitialOutput, "utf8") > 512 * 1024) {
             pendingInitialOutput = "";
-            closeSlowTerminalSocket(socket);
+            closeSlowTerminalSocket(socket, "Terminal initial output queue exceeded", { trigger: "initial-output-limit", limitBytes: 512 * 1024 });
           }
           return;
         }

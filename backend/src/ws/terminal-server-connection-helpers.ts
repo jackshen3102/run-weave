@@ -29,6 +29,10 @@ export const TMUX_METADATA_SYNC_DELAY_MS = 100;
 // JSON escaping can expand a bounded 512 KiB ANSI snapshot beyond its raw size.
 const TERMINAL_WS_MAX_PENDING_BYTES = 4 * 1024 * 1024;
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
+const socketContexts = new WeakMap<WebSocket, { terminalSessionId: string }>();
+export function registerTerminalSocketContext(socket: WebSocket, terminalSessionId: string): void {
+  socketContexts.set(socket, { terminalSessionId });
+}
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -92,7 +96,10 @@ export function sendEvent(
     socket.bufferedAmount + Buffer.byteLength(payload, "utf8") >
     TERMINAL_WS_MAX_PENDING_BYTES
   ) {
-    closeSlowTerminalSocket(socket);
+    closeSlowTerminalSocket(socket, "Terminal output recovery required", {
+      trigger: "send-buffer-limit", payloadBytes: Buffer.byteLength(payload, "utf8"),
+      limitBytes: TERMINAL_WS_MAX_PENDING_BYTES, messageType: event.type,
+    });
     return false;
   }
   socket.send(payload);
@@ -102,8 +109,12 @@ export function sendEvent(
 export function closeSlowTerminalSocket(
   socket: WebSocket,
   reason = "Terminal output recovery required",
+  details: { trigger?: string; payloadBytes?: number; limitBytes?: number; messageType?: string } = {},
 ): void {
   if (socket.readyState !== 1) return;
+  terminalWsLogger.warn("terminal.output.recovery.required", {
+    ...socketContexts.get(socket), reason, bufferedBytes: socket.bufferedAmount, ...details,
+  });
   socket.close(1013, reason);
   // Stop producers immediately, even if the close handshake cannot cross the network.
   socket.emit("terminal-output-stopped");

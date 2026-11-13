@@ -1,3 +1,5 @@
+import { isTerminalOutputRecoveryClose } from "@runweave/shared/terminal/websocket";
+
 export const MIN_TERMINAL_RECONNECT_LIFETIME_MS = 1_000;
 export const MAX_TERMINAL_RECONNECT_ATTEMPTS = 5;
 
@@ -24,7 +26,8 @@ export function shouldAutoReconnectTerminalClose(params: {
     return false;
   }
 
-  if (NON_RECONNECT_CLOSE_CODES.has(params.code)) {
+  if (NON_RECONNECT_CLOSE_CODES.has(params.code) &&
+      !isTerminalOutputRecoveryClose(params.code, params.reason)) {
     return false;
   }
 
