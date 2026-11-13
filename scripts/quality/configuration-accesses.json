@@ -13407,5 +13407,29 @@
     "count": 1,
     "category": "build",
     "reason": "读取 Astro 构建注入的生产标记，生成静态 robots 抓取策略，不作为实例配置。"
+  },
+  {
+    "file": "scripts/verify/server/windows-terminal.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(result)",
+    "count": 1,
+    "category": "test",
+    "reason": "读取隔离 Windows 安装夹具中本次终端生成的浏览器身份诊断回执，仅验证控制链路，不作为实例配置来源。"
+  },
+  {
+    "file": "scripts/verify/server/windows-terminal.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(script)",
+    "count": 1,
+    "category": "test",
+    "reason": "在隔离 Windows 安装夹具目录写入本次终端身份诊断脚本，仅使用该终端继承的身份，不修改用户配置。"
+  },
+  {
+    "file": "scripts/verify/server/registry.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(cliPackage)",
+    "count": 1,
+    "category": "test",
+    "reason": "读取隔离 npm 安装目录中候选 CLI 的包元数据，核对安装版本，不读取或修改用户实例配置。"
   }
 ]

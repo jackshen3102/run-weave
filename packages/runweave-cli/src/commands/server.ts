@@ -66,13 +66,13 @@ function token(ctx: ServerContext): void {
   if (process.platform === "win32") {
     // Keep the batch file ASCII: cmd decodes its contents with the console code page.
     // Node reads the bound CLI path as UTF-8, including Chinese user directories.
-    writeFileSync(path.join(ctx.home, "rw.cjs"), `require(${JSON.stringify(__filename)}).runCli(process.argv.slice(2)).then(code => { process.exitCode = code; });\n`);
+    writeFileSync(path.join(ctx.home, "rw.cjs"), `require(${JSON.stringify(__filename)}).runCli([...${JSON.stringify(ctx.configArgs)}, ...process.argv.slice(2)]).then(code => { process.exitCode = code; });\n`);
     writeFileSync(path.join(ctx.home, "rw.cmd"), '@echo off\r\nsetlocal DisableDelayedExpansion\r\nnode "%~dp0rw.cjs" %*\r\n');
     return;
   }
   writeFileSync(
     path.join(ctx.home, "rw"),
-    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(__filename)} "$@"\n`,
+    `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(__filename)} ${ctx.configArgs.map(quote).join(" ")} "$@"\n`,
     { mode: 0o700 },
   );
 }

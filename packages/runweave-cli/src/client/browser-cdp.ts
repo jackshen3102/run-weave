@@ -80,7 +80,7 @@ export class BrowserCdpClient {
     }
   }
 
-  send<T>(method: string, params: object = {}, sessionId?: string): Promise<T> {
+  send<T>(method: string, params: object = {}, sessionId?: string, timeoutMs = 40_000): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (this.socket.readyState !== WebSocket.OPEN) {
         reject(new CliError("CDP connection is closed", 3));
@@ -95,7 +95,7 @@ export class BrowserCdpClient {
             3,
           ),
         );
-      }, 40_000);
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,

@@ -25,6 +25,8 @@ const cliVersion = JSON.parse(
 ).version;
 const upgradeFrom = process.argv.find(arg => arg.startsWith("--upgrade-from="))?.slice(15);
 const smoke = process.argv.includes("--smoke");
+const cliTarball = process.argv.find(arg => arg.startsWith("--cli-tarball="))?.slice(14);
+if (cliTarball && !path.isAbsolute(cliTarball)) throw new Error("CLI tarball must be an absolute path");
 if (upgradeFrom && (upgradeFrom !== "0.1.3" || process.platform !== "linux"))
   throw new Error("Published database upgrade verification supports Linux Server 0.1.3");
 const initialVersion = upgradeFrom ?? serverVersion;
@@ -47,6 +49,7 @@ const env = {
 for (const key of Object.keys(env))
   if (
     key.startsWith("RUNWEAVE_") ||
+    key.startsWith("PLAYWRIGHT_") ||
     key === "ELECTRON_RUN_AS_NODE" ||
     key === "CODEX_HOME"
   )
@@ -122,12 +125,15 @@ try {
     "--ignore-scripts",
     "--no-audit",
     "--no-fund",
-    `@runweave/cli@${cliVersion}`,
+    cliTarball ?? `@runweave/cli@${cliVersion}`,
     ...upgradeFrom ? [] : [`@runweave/server@${serverVersion}`],
   ]);
   if (upgradeFrom) await run(npmCommand[0], [...npmCommand.slice(1), "install", "-g", "--prefix", prefix,
     "--ignore-scripts", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/",
     `@runweave/server@${upgradeFrom}`]);
+  const cliPackage = path.join(prefix, process.platform === "win32" ? "node_modules" : "lib/node_modules", "@runweave/cli/package.json");
+  assert(JSON.parse(readFileSync(cliPackage, "utf8")).version === cliVersion, "Installed CLI npm version differs from the candidate");
+  const cliInfo = JSON.parse(await run(cliCommand[0], [...cliCommand.slice(1), "version", "--json"]));
   if (process.platform === "win32") {
     console.log("Verify Windows native file lock");
     const nativeLock = path.join(prefix, "node_modules/@runweave/cli/node_modules/fs-native-extensions");
@@ -158,7 +164,7 @@ try {
     for (const shim of [path.join(prefix, "rw.cmd"), path.join(home, ".runweave/server/rw.cmd")]) {
       const command = `& '${shim.replaceAll("'", "''")}' --version\nexit $LASTEXITCODE`;
       const version = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")]);
-      assert(version.trim() === cliVersion, `Wrong CLI version from ${shim}`);
+      assert(version.trim() === cliInfo.version, `Wrong CLI executable from ${shim}`);
     }
   }
   console.log("Verify native runtime loading");

@@ -1,6 +1,8 @@
 import { verifyWindowsHostedUpgrade } from "./windows-host-upgrade.mjs";
 // Real authenticated HTTP + WebSocket + ConPTY integration, against an installed Server.
 import { randomBytes } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
@@ -78,10 +80,43 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     await socket.waitOutput(`READY_${nonce}`);
     socket.send({ type: "input", data: "Write-Output ('RECONNECTED_'+$rwProbe)\r" });
     await socket.waitOutput(`RECONNECTED_${nonce}`);
+    const browserReports = [];
+    async function verifyBrowserIdentity(phase, requireLaunchAddress = false) {
+      const script = path.join(cwd, `browser-identity-${nonce}.ps1`);
+      const result = path.join(cwd, `browser-identity-${nonce}-${phase}.json`);
+      const quote = value => `'${value.replaceAll("'", "''")}'`;
+      writeFileSync(script, `$addressPresent=[bool]($env:RUNWEAVE_BASE_URL -or $env:RUNWEAVE_BACKEND_PORT)
+${requireLaunchAddress ? "" : "Remove-Item Env:RUNWEAVE_BASE_URL,Env:RUNWEAVE_BACKEND_PORT -ErrorAction SilentlyContinue"}
+$output=(& $env:RUNWEAVE_CLI_BIN browser doctor --wait-timeout-ms 0 --json 2>$null | Out-String)
+$code=$LASTEXITCODE
+$value=@{phase=${quote(phase)};exitCode=$code;addressPresent=$addressPresent;report=($output|ConvertFrom-Json)}|ConvertTo-Json -Depth 8
+[IO.File]::WriteAllText(${quote(result)},$value,[Text.UTF8Encoding]::new($false))
+`);
+      socket.send({ type: "input", data: `& ${quote(script)}\r` });
+      let observed;
+      const until = Date.now() + 30_000;
+      while (!observed) {
+        try { observed = JSON.parse(readFileSync(result, "utf8")); } catch { /* Wait for this shell's result. */ }
+        assert(Date.now() < until, `Browser identity probe timed out: ${phase}`);
+        if (!observed) await sleep(100);
+      }
+      const report = observed.report;
+      assert(observed.phase === phase && observed.exitCode === 3, `Browser probe did not report an unbound fixture: ${phase}`);
+      assert(report.scope === "terminal-browser-control" && report.pageRequestsVerified === false, "Browser diagnostic coverage was overstated");
+      assert(report.checks.find(check => check.stage === "identity")?.status === "passed", `Old terminal lost Browser identity: ${phase}`);
+      assert(report.checks.find(check => check.stage === "binding")?.code === "BROWSER_BINDING_REQUIRED", `Browser identity failed before binding: ${phase}`);
+      assert(!JSON.stringify(report).match(/cdpEndpoint|capability|gatewayToken|\/ticket\//), "Browser diagnostic leaked a credential");
+      if (requireLaunchAddress) assert(observed.addressPresent, "Restored PTY was launched before Backend address initialization");
+      browserReports.push({ phase, identity: "passed", binding: "unbound-fixture", launchAddressVerified: requireLaunchAddress });
+    }
+    // No desktop belongs to this installation. Reaching BROWSER_BINDING_REQUIRED
+    // proves real CLI discovery + Hook authentication, never browser UI readiness.
+    await verifyBrowserIdentity("before-restart");
     let continuity;
     if (lifecycle) {
       const verified = await verifyWindowsHostedUpgrade({ ...lifecycle, id, socket, connect, home: cwd });
       continuity = verified.result; socket = verified.socket;
+      await verifyBrowserIdentity("after-restart-and-upgrade");
     }
     await api(`session/${id}`, undefined, "DELETE");
     const sessions = await api("session", undefined, "GET");
@@ -96,10 +131,20 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
       socket = await connect();
       socket.send({ type: "input", data: "$r=$null; for($i=0;$i -lt 10;$i++){try{$r=Invoke-WebRequest -UseBasicParsing ($env:RUNWEAVE_APP_SERVER_URL+'/readyz') -Headers @{Authorization=('Bearer '+$env:RUNWEAVE_APP_SERVER_TOKEN)};break}catch{Start-Sleep -Seconds 1}}; Write-Output ('GATEWAY_'+[int]$r.StatusCode)\r" });
       await socket.waitOutput("GATEWAY_200");
+      socket.ws.close();
+      // All processes in this fixture are owned by this verification. Lose the
+      // Host, then restart Backend to exercise actual startup-time PTY rebuilding.
+      const releaseRelative = path.relative(path.join(cwd, ".runweave/server"), after.runningRelease);
+      assert(releaseRelative && !releaseRelative.startsWith("..") && !path.isAbsolute(releaseRelative), "Refusing to stop a Host outside the fixture");
+      process.kill(after.pid, "SIGKILL");
+      await lifecycle.restartAfterCrash();
+      socket = await connect();
+      await verifyBrowserIdentity("restored-startup", lifecycle.local);
       await api(`session/${id}`, undefined, "DELETE"); id = null;
       continuity.hostMaintenance = true;
     }
-    return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true, continuity };
+    return { powershell: true, inputOutput: true, resize: true, ctrlC: true, reconnect: true, close: true, continuity,
+      browserIdentity: browserReports, browserUiVerified: false };
   } finally {
     socket?.ws.close();
     if (id) await api(`session/${id}`, undefined, "DELETE").catch(() => {});

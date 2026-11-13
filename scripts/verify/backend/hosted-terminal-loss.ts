@@ -208,9 +208,9 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
       return socket;
     };
     // Exercise the real WS send queue, not the Host mirror or terminal history.
-    const peerReady = new Promise<import("ws").WebSocket>(resolve => terminalWss.once("connection", resolve));
+    const slowPeerReady = new Promise<import("ws").WebSocket>(resolve => terminalWss.once("connection", resolve));
     const slowSocket = await openFreshSocket();
-    const peer = await peerReady;
+    const peer = await slowPeerReady;
     const { sendEvent } = await import("../../../backend/src/ws/terminal-server-connection-helpers");
     const { isTerminalOutputRecoveryClose } = await import("../../../packages/shared/src/terminal/runtime/websocket");
     const slowClosed = new Promise<{ code: number; reason: string }>(resolve => {
@@ -237,19 +237,51 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     assert.deepEqual(await operationClosed, { code: 1013, reason: "Terminal host operation failed" });
     const originalPid = runtime.pid;
     assert.equal((await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!.pid, originalPid);
-    const recovered = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
+    const connectClient = PtyHostClient.connect;
+    let outputPipe: InstanceType<typeof PtyHostClient> | undefined;
+    let recovered: Awaited<ReturnType<typeof ensureHostedTerminal>>;
+    PtyHostClient.connect = async (...args: Parameters<typeof PtyHostClient.connect>) => {
+      const actual = await connectClient.apply(PtyHostClient, args);
+      if (!args[1]) outputPipe = actual;
+      return actual;
+    };
+    try {
+      recovered = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
+    } finally { PtyHostClient.connect = connectClient; }
     assert.equal(recovered.runtime.pid, originalPid);
+    assert.ok(outputPipe, "terminal must own a separate output connection");
     const connectionSocket = await openFreshSocket();
+    const peerSession = await manager.createSession({ command, args, cwd: directory });
+    const peerRuntime = await ensureHostedTerminal({ session: peerSession, terminalSessionManager: manager, runtimeRegistry: registry });
+    const peerSocket = new WebSocket(`ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=${peerSession.id}&token=fixture-ticket`);
+    sockets.push(peerSocket);
+    let peerReady = false;
+    peerSocket.on("message", raw => { if (JSON.parse(String(raw)).type === "snapshot") peerReady = true; });
+    await wait(() => peerReady, "peer terminal snapshot");
     const connectionClosed = new Promise<{ code: number; reason: string }>(resolve => {
       connectionSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
     });
+    outputPipe.close();
+    await wait(() => connectionSocket.readyState === WebSocket.CLOSED, "only the disconnected terminal closes");
+    const connectionClose = await connectionClosed;
+    assert.deepEqual(connectionClose, { code: 1013, reason: "Terminal host connection lost" });
+    assert.equal(isTerminalOutputRecoveryClose(connectionClose.code, connectionClose.reason), true);
+    assert.equal(peerSocket.readyState, WebSocket.OPEN);
+    await peerRuntime.runtime.hosted!.snapshot();
+    const reattached = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
+    assert.equal(reattached.runtime.pid, originalPid);
+    const reattachedSocket = await openFreshSocket();
+    // A lost control connection must leave both terminal output pipes intact.
     (await getPtyHost()).close();
-    await wait(() => connectionSocket.readyState === WebSocket.CLOSED, "shared Host connection closes viewer");
-    assert.deepEqual(await connectionClosed, { code: 1013, reason: "Terminal host connection lost" });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await reattached.runtime.hosted!.snapshot();
+    await peerRuntime.runtime.hosted!.snapshot();
+    assert.equal(reattachedSocket.readyState, WebSocket.OPEN);
+    assert.equal(peerSocket.readyState, WebSocket.OPEN);
     const preserved = (await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!;
     assert.equal(preserved.pid, originalPid);
     assert.equal(preserved.status, "running");
-    return "verified Host replacement and archived WS history; rejected resize and shared disconnect have distinct WS reasons and preserve the original PTY; real slow WS recovers by snapshot without restarting the PTY";
+    return "verified Host replacement and archived WS history; rejected resize preserves the original PTY and a lost terminal pipe reattaches the same PTY without affecting its peer; a closed control pipe leaves both outputs connected; real slow WS recovers by snapshot without restarting the PTY";
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;
