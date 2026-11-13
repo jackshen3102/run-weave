@@ -25,6 +25,8 @@ const cliVersion = JSON.parse(
 ).version;
 const upgradeFrom = process.argv.find(arg => arg.startsWith("--upgrade-from="))?.slice(15);
 const smoke = process.argv.includes("--smoke");
+const cliTarball = process.argv.find(arg => arg.startsWith("--cli-tarball="))?.slice(14);
+if (cliTarball && !path.isAbsolute(cliTarball)) throw new Error("CLI tarball must be an absolute path");
 if (upgradeFrom && (upgradeFrom !== "0.1.3" || process.platform !== "linux"))
   throw new Error("Published database upgrade verification supports Linux Server 0.1.3");
 const initialVersion = upgradeFrom ?? serverVersion;
@@ -47,6 +49,7 @@ const env = {
 for (const key of Object.keys(env))
   if (
     key.startsWith("RUNWEAVE_") ||
+    key.startsWith("PLAYWRIGHT_") ||
     key === "ELECTRON_RUN_AS_NODE" ||
     key === "CODEX_HOME"
   )
@@ -122,7 +125,7 @@ try {
     "--ignore-scripts",
     "--no-audit",
     "--no-fund",
-    `@runweave/cli@${cliVersion}`,
+    cliTarball ?? `@runweave/cli@${cliVersion}`,
     ...upgradeFrom ? [] : [`@runweave/server@${serverVersion}`],
   ]);
   if (upgradeFrom) await run(npmCommand[0], [...npmCommand.slice(1), "install", "-g", "--prefix", prefix,

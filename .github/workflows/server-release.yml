@@ -166,6 +166,27 @@ jobs:
         if: ${{ runner.os == 'Windows' && needs.plan.outputs.full_regression == 'true' && !inputs.pty_spike_only }}
         timeout-minutes: 3
         run: pnpm scheduled-tasks:verify-runtime --case projectMigration
+  verify-windows-cli:
+    needs: [plan, package]
+    if: ${{ needs.plan.outputs.scope == 'cli' && !inputs.windows_only && !inputs.pty_spike_only }}
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-server-linux-x64
+          path: release-artifacts
+      - name: Verify candidate CLI with existing Windows Server and old terminal identities
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $version = (Get-Content packages/runweave-cli/package.json -Raw | ConvertFrom-Json).version
+          $candidate = (Resolve-Path "release-artifacts/runweave-cli-$version.tgz").Path
+          node scripts/verify/server/registry.mjs "--cli-tarball=$candidate"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
   validate:
     if: ${{ !inputs.windows_only && !inputs.pty_spike_only }}
     needs: [plan, package]
@@ -184,8 +205,8 @@ jobs:
       - name: Validate complete release without publishing credentials
         run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
   publish:
-    needs: [plan, validate]
-    if: github.event_name == 'push' || inputs.publish
+    needs: [plan, validate, verify-windows-cli]
+    if: ${{ always() && needs.validate.result == 'success' && (needs.plan.outputs.scope != 'cli' || needs.verify-windows-cli.result == 'success') && (github.event_name == 'push' || inputs.publish) }}
     runs-on: ubuntu-24.04
     environment: npm-release
     env:
