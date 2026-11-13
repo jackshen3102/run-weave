@@ -1,6 +1,7 @@
 import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
+import { isTerminalOutputRecoveryClose } from "@runweave/shared/terminal/websocket";
 import type {
   TerminalModeState,
   TerminalServerMessage,
@@ -110,6 +111,8 @@ export function useTerminalConnection(params: {
     setInputError(null);
     setNotice(null);
     let cancelled = false;
+    let recoveryAttempts = 0;
+    let lastRecoveryAt = 0;
     const scope = JSON.stringify([apiBase, terminalSessionId]);
     const previousRecovery =
       outputRecoveryScopeRef.current === scope
@@ -264,7 +267,15 @@ export function useTerminalConnection(params: {
           const failedAt = Date.now();
           setFailureSince((current) => current ?? failedAt);
           setLastCloseReason(closeReason);
-          const reconnectAttempt = reconnectCountRef.current;
+          const recoverOutput = isTerminalOutputRecoveryClose(event.code, event.reason);
+          if (recoverOutput) {
+            // Do not replay the backlog that caused this connection to fall behind.
+            outputRecovery.invalidate();
+            if (failedAt - lastRecoveryAt >= 30_000) recoveryAttempts = 0;
+            lastRecoveryAt = failedAt;
+            recoveryAttempts += 1;
+          }
+          const reconnectAttempt = Math.max(reconnectCountRef.current, recoverOutput ? recoveryAttempts - 1 : 0);
           if (
             !cancelled &&
             shouldAutoReconnectTerminalClose({

@@ -170,7 +170,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
         assert.equal(payload.threadProvider ?? payload.lastThreadProvider, provider);
       }
     }
-    attachTerminalWebSocketServer(createHttpUpgradeRouter(server), manager, registry, {
+    const terminalWss = attachTerminalWebSocketServer(createHttpUpgradeRouter(server), manager, registry, {
       verifyTemporaryToken: (token: string) => token === "fixture-ticket" ? { username: "fixture" } : null,
     } as never);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -207,6 +207,27 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
       await wait(() => ready, "running hosted terminal snapshot");
       return socket;
     };
+    // Exercise the real WS send queue, not the Host mirror or terminal history.
+    const peerReady = new Promise<import("ws").WebSocket>(resolve => terminalWss.once("connection", resolve));
+    const slowSocket = await openFreshSocket();
+    const peer = await peerReady;
+    const { sendEvent } = await import("../../../backend/src/ws/terminal-server-connection-helpers");
+    const { isTerminalOutputRecoveryClose } = await import("../../../packages/shared/src/terminal/runtime/websocket");
+    const slowClosed = new Promise<{ code: number; reason: string }>(resolve => {
+      slowSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
+    });
+    slowSocket.pause();
+    let accepted = true;
+    for (let n = 0; n < 512 && accepted; n++)
+      accepted = sendEvent(peer, { type: "output", data: "x".repeat(64 * 1024) });
+    assert.equal(accepted, false, "real socket must reach its bounded send queue");
+    slowSocket.resume();
+    const slowClose = await slowClosed;
+    assert.deepEqual(slowClose, { code: 1013, reason: "Terminal output recovery required" });
+    assert.equal(isTerminalOutputRecoveryClose(slowClose.code, slowClose.reason), true);
+    const snapshotSocket = await openFreshSocket();
+    assert.equal((await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!.pid, runtime.pid);
+    snapshotSocket.close();
     const operationSocket = await openFreshSocket();
     const operationClosed = new Promise<{ code: number; reason: string }>(resolve => {
       operationSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
@@ -228,7 +249,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     const preserved = (await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!;
     assert.equal(preserved.pid, originalPid);
     assert.equal(preserved.status, "running");
-    return "verified Host replacement and archived WS history; rejected resize and shared disconnect have distinct WS reasons and preserve the original PTY";
+    return "verified Host replacement and archived WS history; rejected resize and shared disconnect have distinct WS reasons and preserve the original PTY; real slow WS recovers by snapshot without restarting the PTY";
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;

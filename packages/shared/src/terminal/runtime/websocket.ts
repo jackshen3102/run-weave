@@ -1,3 +1,13 @@
+/** Only output synchronization failures may reconnect with a fresh snapshot. */
+export function isTerminalOutputRecoveryClose(code: number, reason?: string | null): boolean {
+  return code === 1013 && [
+    "Terminal output recovery required", // Compatibility with older Backends.
+    "Terminal initial output queue exceeded",
+    "Terminal recovery queue exceeded",
+    "Terminal recovery unavailable; reconnect",
+  ].includes(reason?.trim() ?? "");
+}
+
 export type TerminalSignal = "SIGINT" | "SIGTERM" | "SIGKILL";
 
 export interface TerminalModeState {
