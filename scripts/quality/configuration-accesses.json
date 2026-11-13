@@ -13479,5 +13479,53 @@
     "count": 1,
     "category": "build",
     "reason": "Read only the workflow-validated immutable candidate recovery flag; runtime configuration and npm credentials are not read."
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_WINDOWS_PTY_NATIVE_ARTIFACT",
+    "count": 3,
+    "category": "build",
+    "reason": "显式选择 Windows PTY 构建产物目录；仅构建调用生效，产物必须匹配平台、ABI、源码及二进制哈希，不替代实例配置。"
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(manifestPath)",
+    "count": 1,
+    "category": "build",
+    "reason": "读取 Windows PTY 原生构建回执，校验平台、ABI、源码及文件列表后才允许打包，不作为用户配置。"
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(artifact, name))",
+    "count": 2,
+    "category": "build",
+    "reason": "读取 Windows PTY 原生二进制计算哈希并核对构建回执，仅用于发行产物完整性检查。"
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(source, \"package.json\"))",
+    "count": 1,
+    "category": "build",
+    "reason": "读取已安装 node-pty 的版本，绑定 Windows 原生构建回执与当前依赖，不作为运行时配置。"
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(source, relative))",
+    "count": 1,
+    "category": "build",
+    "reason": "读取已安装 PTY 源码与资源计算构建指纹，拒绝复用不匹配的原生构建产物。"
+  },
+  {
+    "file": "scripts/release/windows-native-pty.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(manifestPath)",
+    "count": 1,
+    "category": "build",
+    "reason": "生成 Windows PTY 原生构建回执，保存平台、ABI、源码与二进制哈希，仅写入构建产物目录。"
   }
 ]
