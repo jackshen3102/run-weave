@@ -13471,5 +13471,13 @@
     "count": 1,
     "category": "test",
     "reason": "Write a temporary subprocess HOME preloader so protocol verification cannot access user instance configuration."
+  },
+  {
+    "file": "scripts/release/server-release-plan.mjs",
+    "kind": "environment",
+    "expression": "process.env.RELEASE_RESUME_PUBLISHED",
+    "count": 1,
+    "category": "build",
+    "reason": "Read only the workflow-validated immutable candidate recovery flag; runtime configuration and npm credentials are not read."
   }
 ]

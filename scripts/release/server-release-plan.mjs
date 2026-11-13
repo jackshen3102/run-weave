@@ -8,6 +8,7 @@ const readVersion = (name) =>
 const versions = { server: readVersion("server"), cli: readVersion("cli") };
 const requested = process.env.RELEASE_REQUESTED_SCOPE ?? "auto";
 const publishing = process.env.RELEASE_PUBLISH === "true";
+const resumePublished = process.env.RELEASE_RESUME_PUBLISHED === "true";
 const windowsOnly =
   process.env.RELEASE_WINDOWS_ONLY === "true" ||
   process.env.RELEASE_PTY_SPIKE_ONLY === "true";
@@ -37,8 +38,9 @@ const published = publishing
   : {};
 // Only changed components receive new versions. Auto publishes precisely those
 // new versions; an unchanged component keeps its already-published exact version.
-const selected =
-  requested === "auto"
+const selected = resumePublished
+  ? ["server", "cli"]
+  : requested === "auto"
     ? publishing
       ? Object.keys(versions).filter((name) => !published[name])
       : ["server", "cli"]
@@ -51,7 +53,7 @@ if (!selected.length)
   );
 if (publishing) {
   for (const name of Object.keys(versions)) {
-    if (selected.includes(name) && published[name])
+    if (selected.includes(name) && published[name] && !resumePublished)
       throw new Error(
         `${name}@${versions[name]} is already published; use a new version`,
       );

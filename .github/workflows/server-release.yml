@@ -26,6 +26,14 @@ on:
         type: choice
         options: [next, latest]
         default: next
+      resume_run_id:
+        description: Resume registry verification and promotion of an already-published immutable candidate
+        type: string
+        default: ""
+      resume_attempt:
+        description: Candidate attempt with successful packaging, validation and publish jobs
+        type: string
+        default: "1"
 permissions:
   contents: read
   actions: read
@@ -41,6 +49,10 @@ jobs:
       full_regression: ${{ steps.plan.outputs.full_regression }}
       matrix: ${{ steps.plan.outputs.matrix }}
       registry_matrix: ${{ steps.plan.outputs.registry_matrix }}
+      resume: ${{ steps.resume.outputs.validated || 'false' }}
+      source_ref: ${{ steps.resume.outputs.source_ref || github.sha }}
+      source_run_id: ${{ steps.resume.outputs.source_run_id || github.run_id }}
+      receipt: ${{ steps.resume.outputs.receipt }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,6 +60,56 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
+      - name: Validate published candidate recovery provenance
+        id: resume
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.resume_run_id != '' }}
+        uses: actions/github-script@v7
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.resume_run_id }}
+          CANDIDATE_ATTEMPT: ${{ inputs.resume_attempt }}
+        with:
+          script: |
+            const runId = process.env.CANDIDATE_RUN_ID;
+            const attempt = process.env.CANDIDATE_ATTEMPT;
+            if (!/^[1-9]\d{0,15}$/.test(runId) || !/^[1-9]\d{0,3}$/.test(attempt)) throw new Error('Invalid candidate run or attempt');
+            const repository = context.repo;
+            const { data: run } = await github.rest.actions.getWorkflowRun({ ...repository, run_id: Number(runId) });
+            if (run.status !== 'completed' || run.event !== 'push' || !/^\.github\/workflows\/server-release\.yml(?:@.*)?$/.test(run.path) || run.head_repository.full_name !== `${repository.owner}/${repository.repo}` || !/^[a-f0-9]{40}$/.test(run.head_sha)) throw new Error('Candidate must be a completed release-tag run from this repository');
+            const { serverTargets } = await import(require('node:url').pathToFileURL(require('node:path').resolve('scripts/release/server-targets.mjs')).href);
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, { ...repository, run_id: Number(runId), attempt_number: Number(attempt), per_page: 100 });
+            for (const name of [...serverTargets.map(row => `package (${row.runner}, ${row.target})`), 'validate', 'publish']) {
+              if (!jobs.some(job => job.name === name && job.conclusion === 'success')) throw new Error(`Candidate attempt did not pass ${name}`);
+            }
+            const readFile = require('node:fs').readFileSync;
+            const versions = {};
+            for (const component of ['server', 'cli']) {
+              const path = `packages/runweave-${component}/package.json`;
+              const { data: file } = await github.rest.repos.getContent({ ...repository, path, ref: run.head_sha });
+              const candidate = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+              versions[component] = candidate.version;
+              if (candidate.version !== JSON.parse(readFile(path, 'utf8')).version) throw new Error(`Current ${component} version differs from candidate`);
+              if (component === 'server' && run.head_branch !== `server-v${candidate.version}`) throw new Error('Candidate tag and Server version differ');
+            }
+            const publish = jobs.find(job => job.name === 'publish' && job.conclusion === 'success');
+            const { data: rawLog } = await github.rest.actions.downloadJobLogsForWorkflowRun({ ...repository, job_id: publish.id });
+            const log = (typeof rawLog === 'string' ? rawLog : Buffer.from(rawLog).toString('utf8')).replace(/^\d{4}-\d{2}-\d{2}T\S+ /gm, '');
+            const start = log.lastIndexOf('{\n  "revision":');
+            const end = log.indexOf('\n}', start);
+            if (start < 0 || end < 0) throw new Error('Published receipt is missing from the successful job log');
+            const receipt = JSON.parse(log.slice(start, end + 2));
+            const expected = new Map([['@runweave/server', versions.server], ['@runweave/cli', versions.cli], ...serverTargets.map(row => [`@runweave/server-${row.target}`, versions.server])]);
+            if (receipt.revision !== run.head_sha || receipt.scope !== 'all' || receipt.packages.length !== expected.size) throw new Error('Published digest manifest does not match candidate');
+            for (const pkg of receipt.packages) {
+              if (expected.get(pkg.name) !== pkg.version || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pkg.integrity)) throw new Error('Published package identity or digest is invalid');
+              expected.delete(pkg.name);
+            }
+            if (expected.size) throw new Error('Published receipt is incomplete');
+            // The digest manifest is logged before upload; job success proves publication finished.
+            receipt.publicationEvidence = { runId: Number(runId), attempt: Number(attempt), jobId: publish.id, conclusion: publish.conclusion };
+            core.setOutput('validated', 'true');
+            core.setOutput('source_ref', run.head_sha);
+            core.setOutput('source_run_id', runId);
+            core.setOutput('receipt', JSON.stringify(receipt));
       - name: Select release packages and regression coverage
         id: plan
         env:
@@ -55,9 +117,11 @@ jobs:
           RELEASE_PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
           RELEASE_WINDOWS_ONLY: ${{ inputs.windows_only }}
           RELEASE_PTY_SPIKE_ONLY: ${{ inputs.pty_spike_only }}
+          RELEASE_RESUME_PUBLISHED: ${{ steps.resume.outputs.validated }}
         run: node scripts/release/server-release-plan.mjs
   package:
     needs: plan
+    if: ${{ needs.plan.outputs.resume != 'true' }}
     env:
       RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
     strategy:
@@ -191,25 +255,76 @@ jobs:
           node scripts/verify/server/registry.mjs "--cli-tarball=$candidate"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
   validate:
-    if: ${{ !inputs.windows_only && !inputs.pty_spike_only }}
+    if: ${{ always() && needs.plan.result == 'success' && (needs.package.result == 'success' || needs.plan.outputs.resume == 'true') && !inputs.windows_only && !inputs.pty_spike_only }}
     needs: [plan, package]
     env:
       RELEASE_SCOPE: ${{ needs.plan.outputs.scope }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.source_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
       - uses: actions/download-artifact@v4
+        if: ${{ needs.plan.outputs.resume != 'true' }}
         with:
           pattern: npm-server-*
           path: release-artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.plan.outputs.source_run_id }}
+      - name: Restore exact published bytes from the successful CI receipt
+        if: ${{ needs.plan.outputs.resume == 'true' }}
+        env:
+          PUBLISHED_RECEIPT: ${{ needs.plan.outputs.receipt }}
+        run: |
+          node --input-type=module <<'JS'
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+          import { serverTargets } from './scripts/release/server-targets.mjs';
+          const receipt = JSON.parse(process.env.PUBLISHED_RECEIPT);
+          if (receipt.revision !== execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() || receipt.publicationEvidence?.conclusion !== 'success' || receipt.scope !== 'all') throw new Error('Recovery source differs from completed publication evidence');
+          const versions = Object.fromEntries(['server', 'cli'].map(name => [name, JSON.parse(readFileSync(`packages/runweave-${name}/package.json`, 'utf8')).version]));
+          const expected = new Map([['@runweave/server', versions.server], ['@runweave/cli', versions.cli], ...serverTargets.map(row => [`@runweave/server-${row.target}`, versions.server])]);
+          if (receipt.packages.length !== expected.size) throw new Error('Incomplete published receipt');
+          const bytes = new Map();
+          for (const pkg of receipt.packages) {
+            if (expected.get(pkg.name) !== pkg.version) throw new Error('Unexpected published package');
+            expected.delete(pkg.name);
+            const metadata = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg.name)}/${pkg.version}`, { signal: AbortSignal.timeout(30000) });
+            if (!metadata.ok) throw new Error(`Registry metadata failed: ${pkg.name} (${metadata.status})`);
+            const info = await metadata.json();
+            if (info.name !== pkg.name || info.version !== pkg.version || info.dist.integrity !== pkg.integrity || new URL(info.dist.tarball).origin !== 'https://registry.npmjs.org') throw new Error(`Registry identity or digest differs: ${pkg.name}`);
+            const response = await fetch(info.dist.tarball, { signal: AbortSignal.timeout(60000) });
+            if (!response.ok) throw new Error(`Registry tarball failed: ${pkg.name} (${response.status})`);
+            const data = Buffer.from(await response.arrayBuffer());
+            if (`sha512-${createHash('sha512').update(data).digest('base64')}` !== pkg.integrity) throw new Error(`Published bytes differ: ${pkg.name}`);
+            bytes.set(pkg.name, { file: `${pkg.name.replace('@', '').replace('/', '-')}-${pkg.version}.tgz`, data });
+          }
+          if (expected.size) throw new Error('Missing published package');
+          for (const { target } of serverTargets) {
+            const directory = `release-artifacts/npm-server-${target}`;
+            mkdirSync(directory, { recursive: true });
+            for (const name of ['@runweave/server', '@runweave/cli', `@runweave/server-${target}`]) {
+              const pkg = bytes.get(name);
+              writeFileSync(`${directory}/${pkg.file}`, pkg.data, { flag: 'wx' });
+            }
+          }
+          console.log(`Restored ${bytes.size} immutable packages at ${receipt.revision}`);
+          JS
       - name: Validate complete release without publishing credentials
         run: node scripts/release/publish-server.mjs --artifacts=release-artifacts --check
+      - uses: actions/upload-artifact@v4
+        if: ${{ needs.plan.outputs.resume == 'true' }}
+        with:
+          name: npm-recovered-candidates
+          path: release-artifacts
+          if-no-files-found: error
   publish:
     needs: [plan, validate, verify-windows-cli]
-    if: ${{ always() && needs.validate.result == 'success' && (needs.plan.outputs.scope != 'cli' || needs.verify-windows-cli.result == 'success') && (github.event_name == 'push' || inputs.publish) }}
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.resume != 'true' && needs.validate.result == 'success' && (needs.plan.outputs.scope != 'cli' || needs.verify-windows-cli.result == 'success') && (github.event_name == 'push' || inputs.publish) }}
     runs-on: ubuntu-24.04
     environment: npm-release
     env:
@@ -225,6 +340,7 @@ jobs:
       - name: Install OIDC-capable npm
         run: npm install -g npm@12.2.1 --registry=https://registry.npmjs.org/
       - uses: actions/download-artifact@v4
+        if: ${{ needs.plan.outputs.resume != 'true' }}
         with:
           pattern: npm-server-*
           path: release-artifacts
@@ -240,13 +356,16 @@ jobs:
           path: release-artifacts/release-receipt.json
           if-no-files-found: ignore
   verify-registry:
-    needs: [plan, publish]
+    needs: [plan, validate, publish]
+    if: ${{ always() && needs.plan.result == 'success' && needs.validate.result == 'success' && (needs.publish.result == 'success' || needs.plan.outputs.resume == 'true') && (github.event_name == 'push' || inputs.publish) }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.registry_matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.source_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
@@ -255,6 +374,7 @@ jobs:
         run: node scripts/verify/server/registry.mjs --smoke
   promote:
     needs: [plan, verify-registry]
+    if: ${{ always() && needs.plan.result == 'success' && needs.verify-registry.result == 'success' }}
     runs-on: ubuntu-24.04
     environment: npm-release
     env:
@@ -264,13 +384,23 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.source_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
       - run: npm install -g npm@12.2.1 --registry=https://registry.npmjs.org/
       - uses: actions/download-artifact@v4
+        if: ${{ needs.plan.outputs.resume != 'true' }}
         with:
           pattern: npm-server-*
+          path: release-artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.plan.outputs.source_run_id }}
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.plan.outputs.resume == 'true' }}
+        with:
+          name: npm-recovered-candidates
           path: release-artifacts
       - name: Promote verified packages to requested channel
         env:
