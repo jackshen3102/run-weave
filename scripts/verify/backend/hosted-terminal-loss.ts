@@ -21,7 +21,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
   const { ensureHost, readHost } = await import("../../../packages/pty-host/src/lifecycle");
   const { PtyHostClient } = await import("../../../packages/pty-host/src/client");
   const { ensureHostedTerminal } = await import("../../../backend/src/terminal/runtime/pty-host-runtime");
-  const { createHostedPty, disconnectPtyHost } = await import("../../../backend/src/terminal/runtime/pty-host-client");
+  const { createHostedPty, disconnectPtyHost, getPtyHost } = await import("../../../backend/src/terminal/runtime/pty-host-client");
   const { TerminalSessionManager } = await import("../../../backend/src/terminal/manager/manager");
   const { LowDbTerminalSessionStore } = await import("../../../backend/src/terminal/store/lowdb-store");
   const { TerminalRuntimeRegistry } = await import("../../../backend/src/terminal/runtime/registry");
@@ -197,7 +197,38 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     const { runtime } = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
     await runtime.hosted!.writeSteps([{ type: "text", data: "echo FRESH_TERMINAL_OK\r" }]);
     await wait(() => /\r?\nFRESH_TERMINAL_OK\r?\n/.test(manager.getSession(fresh.id)!.scrollback), "new terminal executes input");
-    return "verified Host replacement resumes exact current/last Traex/TraeCLI IDs once with new bindings; explicitly exited terminals preserve WS history across Backend reopens; new PTY accepts input";
+    // Real rejected RPC and real socket close must produce distinct WS reasons,
+    // while retaining the same Host-owned process and never replaying input.
+    const openFreshSocket = async () => {
+      let ready = false;
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/terminal?terminalSessionId=${fresh.id}&token=fixture-ticket`);
+      sockets.push(socket);
+      socket.on("message", raw => { if (JSON.parse(String(raw)).type === "snapshot") ready = true; });
+      await wait(() => ready, "running hosted terminal snapshot");
+      return socket;
+    };
+    const operationSocket = await openFreshSocket();
+    const operationClosed = new Promise<{ code: number; reason: string }>(resolve => {
+      operationSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
+    });
+    runtime.resize(0, 24);
+    await wait(() => operationSocket.readyState === WebSocket.CLOSED, "failed resize closes viewer");
+    assert.deepEqual(await operationClosed, { code: 1013, reason: "Terminal host operation failed" });
+    const originalPid = runtime.pid;
+    assert.equal((await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!.pid, originalPid);
+    const recovered = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
+    assert.equal(recovered.runtime.pid, originalPid);
+    const connectionSocket = await openFreshSocket();
+    const connectionClosed = new Promise<{ code: number; reason: string }>(resolve => {
+      connectionSocket.once("close", (code, reason) => resolve({ code, reason: String(reason) }));
+    });
+    (await getPtyHost()).close();
+    await wait(() => connectionSocket.readyState === WebSocket.CLOSED, "shared Host connection closes viewer");
+    assert.deepEqual(await connectionClosed, { code: 1013, reason: "Terminal host connection lost" });
+    const preserved = (await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!;
+    assert.equal(preserved.pid, originalPid);
+    assert.equal(preserved.status, "running");
+    return "verified Host replacement and archived WS history; rejected resize and shared disconnect have distinct WS reasons and preserve the original PTY";
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;

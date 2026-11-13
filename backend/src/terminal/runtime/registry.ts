@@ -1,5 +1,5 @@
 import { closeHostedSession, usesPtyHost, disconnectPtyHost } from "./pty-host-client";
-import type { PtyRuntime } from "./pty-service";
+import type { PtyRuntime, TerminalRecoveryFailure } from "./pty-service";
 import {
   TerminalOutputRecoveryBuffer,
   type TerminalOutputFrame,
@@ -9,6 +9,7 @@ import { extractShellPromptMetadata } from "./shell-integration";
 import { TerminalOutputScreen } from "./output-screen";
 import { TerminalOutputClients } from "./output-clients";
 import { RESUME_WINDOW_MS } from "./output-recovery";
+import { logger } from "../../logging/index";
 
 const ESCAPE = "\u001b";
 const BRACKETED_PASTE_MODE_PATTERN = new RegExp(
@@ -21,7 +22,7 @@ interface RuntimeSubscriber {
   onData(data: string): void;
   onOutputFrame?(frame: TerminalOutputFrame): void;
   onResize?(cols: number, rows: number): void;
-  onRecoveryError?(): void;
+  onRecoveryError?(failure: TerminalRecoveryFailure): void;
   onExit(event: { exitCode: number; signal?: number }): void;
 }
 
@@ -72,9 +73,10 @@ export class TerminalRuntimeRegistry {
     if (entry.outputRecovery && !runtime.hosted) {
       entry.outputScreen = new TerminalOutputScreen(
         entry.outputRecovery.cursor,
-        () => {
+        failure => {
+          logger.warn("terminal.mirror.failed", { terminalSessionId, ...failure });
           for (const subscriber of entry.subscribers)
-            subscriber.onRecoveryError?.();
+            subscriber.onRecoveryError?.({ kind: "mirror-limit", code: failure.code });
           void this.disposeRuntime(runtimeId);
         },
       );
@@ -103,8 +105,8 @@ export class TerminalRuntimeRegistry {
         for (const subscriber of entry.subscribers) subscriber.onResize?.(cols, rows);
       });
       runtime.hosted.onFrame(frame => { for (const subscriber of entry.subscribers) subscriber.onOutputFrame?.(frame); });
-      runtime.hosted.onDisconnect(() => {
-        for (const subscriber of entry.subscribers) subscriber.onRecoveryError?.();
+      runtime.hosted.onFailure(failure => {
+        for (const subscriber of entry.subscribers) subscriber.onRecoveryError?.(failure);
         void this.disposeRuntime(runtimeId);
       });
     }
