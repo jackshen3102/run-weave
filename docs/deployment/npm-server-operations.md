@@ -82,6 +82,9 @@ Agent 要记录 run ID、head SHA、发版范围、实际选中的包版本和�
 `npm-release-final-receipt` 的 `phase=complete` 表示发布及标签核对完成。
 公共主包及 CLI 只取 Linux x64 job 的一份已验证产物。
 CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成的包目录运行。
+Linux x64 job 还对精确 CLI 产物运行
+[控制协议进程验收](../../scripts/verify/browser-control/verify.mjs)，覆盖旧地址发现、错误实例拒绝、
+临时故障、超时、CDP/代理分层及凭据脱敏；这不等同真实浏览器 UI 验收。
 仅发布 CLI 时，发布前也必须将这份精确 tarball 安装到隔离 Windows HOME，配合已有公开 Server，
 验证旧终端在重启后仍能通过 Browser 身份鉴权；该 job 失败不得进入 publish。
 
@@ -91,7 +94,7 @@ CLI 包须包含原生锁依赖及四个平台 prebuild；`npm pack` 从生成�
 验证真实安装、原生加载、启动、登录和 Windows 基本 PTY；完整生命周期回归在本地产物阶段执行。
 这不改变配置/数据库兼容检查，也不把迁移相关验证变成可绕过选项。
 Windows 生命周期回归还覆盖旧终端缺少地址字段，以及 Host 丢失后启动时重建 PTY 的身份检查。
-隔离实例没有桌面绑定时，仅将身份鉴权后返回的 `BROWSER_BINDING_REQUIRED` 记为控制面通过，
+隔离实例仅注册自有控制候选、未给终端选择绑定时，只将身份鉴权后的 `BROWSER_BINDING_REQUIRED` 记为控制面通过，
 并明确记录 `browserUiVerified: false`；真实浏览器页面验收见
 [Browser 恢复](../testing/platform/browser-channel-recovery.testplan.yaml)和
 [Windows 升级](../testing/platform/windows-pty-host-upgrade.testplan.yaml)。

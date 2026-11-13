@@ -1,8 +1,9 @@
 import { verifyWindowsHostedUpgrade } from "./windows-host-upgrade.mjs";
 // Real authenticated HTTP + WebSocket + ConPTY integration, against an installed Server.
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createServer } from "node:http";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (ok, message) => { if (!ok) throw new Error(message); };
 export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
@@ -16,7 +17,28 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     return response.status === 204 ? null : response.json();
   }
   const project = await api("project", { name: "Windows PTY verification", path: cwd });
-  let socket, id;
+  let socket, id, browserBridge, browserBindingId;
+  const gatewayKey = randomBytes(32).toString("hex");
+  const desktopIdentity = { protocolVersion: 2, desktopId: "registry-desktop", hostId: "registry-host", generation: 1 };
+  async function registerBrowserCandidate() {
+    if (!browserBridge) {
+      browserBridge = createServer((request, response) => {
+        if (request.url !== "/check" || request.headers["x-runweave-gateway-key"] !== gatewayKey) {
+          response.writeHead(403); response.end(); return;
+        }
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify(desktopIdentity));
+      });
+      await new Promise(resolve => browserBridge.listen(0, "127.0.0.1", resolve));
+    }
+    const response = await fetch(`${url}/api/desktop-browser/bindings`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ ...desktopIdentity, reversePort: browserBridge.address().port, gatewayKey }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert(response.ok, `Fixture Browser candidate registration failed (${response.status})`);
+    browserBindingId = (await response.json()).id;
+  }
   try {
     const created = await api("session", { projectId: project.projectId, command: "powershell.exe", args: [] });
     id = created.terminalSessionId;
@@ -60,6 +82,7 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
         },
         waitResize: expected => wait(() => size === expected, `ordered resize ${expected}`),
         waitOutput: marker => wait(() => visible(output).includes(marker), marker),
+        tail: () => visible(output).slice(-1500),
       };
     }
     socket = await connect();
@@ -82,22 +105,22 @@ export async function verifyWindowsTerminal(url, token, cwd, lifecycle) {
     await socket.waitOutput(`RECONNECTED_${nonce}`);
     const browserReports = [];
     async function verifyBrowserIdentity(phase, requireLaunchAddress = false) {
-      const script = path.join(cwd, `browser-identity-${nonce}.ps1`);
+      await registerBrowserCandidate();
       const result = path.join(cwd, `browser-identity-${nonce}-${phase}.json`);
       const quote = value => `'${value.replaceAll("'", "''")}'`;
-      writeFileSync(script, `$addressPresent=[bool]($env:RUNWEAVE_BASE_URL -or $env:RUNWEAVE_BACKEND_PORT)
+      const script = `$addressPresent=[bool]($env:RUNWEAVE_BASE_URL -or $env:RUNWEAVE_BACKEND_PORT)
 ${requireLaunchAddress ? "" : "Remove-Item Env:RUNWEAVE_BASE_URL,Env:RUNWEAVE_BACKEND_PORT -ErrorAction SilentlyContinue"}
 $output=(& $env:RUNWEAVE_CLI_BIN browser doctor --wait-timeout-ms 0 --json 2>$null | Out-String)
 $code=$LASTEXITCODE
 $value=@{phase=${quote(phase)};exitCode=$code;addressPresent=$addressPresent;report=($output|ConvertFrom-Json)}|ConvertTo-Json -Depth 8
 [IO.File]::WriteAllText(${quote(result)},$value,[Text.UTF8Encoding]::new($false))
-`);
-      socket.send({ type: "input", data: `& ${quote(script)}\r` });
+`;
+      socket.send({ type: "input", data: `& powershell.exe -NoProfile -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}\r` });
       let observed;
       const until = Date.now() + 30_000;
       while (!observed) {
         try { observed = JSON.parse(readFileSync(result, "utf8")); } catch { /* Wait for this shell's result. */ }
-        assert(Date.now() < until, `Browser identity probe timed out: ${phase}`);
+        assert(Date.now() < until, `Browser identity probe timed out: ${phase}; ${socket.tail()}`);
         if (!observed) await sleep(100);
       }
       const report = observed.report;
@@ -109,14 +132,14 @@ $value=@{phase=${quote(phase)};exitCode=$code;addressPresent=$addressPresent;rep
       if (requireLaunchAddress) assert(observed.addressPresent, "Restored PTY was launched before Backend address initialization");
       browserReports.push({ phase, identity: "passed", binding: "unbound-fixture", launchAddressVerified: requireLaunchAddress });
     }
-    // No desktop belongs to this installation. Reaching BROWSER_BINDING_REQUIRED
-    // proves real CLI discovery + Hook authentication, never browser UI readiness.
+    // A private control peer is registered but never selected for this terminal.
+    // BROWSER_BINDING_REQUIRED proves discovery + Hook auth, never browser UI readiness.
     await verifyBrowserIdentity("before-restart");
     let continuity;
     if (lifecycle) {
       const verified = await verifyWindowsHostedUpgrade({ ...lifecycle, id, socket, connect, home: cwd });
       continuity = verified.result; socket = verified.socket;
-      await verifyBrowserIdentity("after-restart-and-upgrade");
+      await verifyBrowserIdentity(lifecycle.local ? "after-restart-and-upgrade" : "after-restart");
     }
     await api(`session/${id}`, undefined, "DELETE");
     const sessions = await api("session", undefined, "GET");
@@ -148,6 +171,13 @@ $value=@{phase=${quote(phase)};exitCode=$code;addressPresent=$addressPresent;rep
   } finally {
     socket?.ws.close();
     if (id) await api(`session/${id}`, undefined, "DELETE").catch(() => {});
+    if (browserBindingId) await fetch(`${url}/api/desktop-browser/bindings/${browserBindingId}`, {
+      method: "DELETE", headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000),
+    }).catch(() => {});
+    if (browserBridge) {
+      browserBridge.closeAllConnections();
+      await new Promise(resolve => browserBridge.close(resolve));
+    }
     await api(`project/${project.projectId}`, undefined, "DELETE").catch(error => { console.error("Fixture project cleanup pending:", error.message); });
   }
 }
