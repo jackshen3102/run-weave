@@ -190,7 +190,7 @@ codeHashes 在读取时忽略，不自动重写历史数据。保存与检索仅
 更新需要旧 `revision`，冲突 HTTP 409；旧版本留存。SQLite 短事务原子保存当前记录和版本，
 不同 Backend 同时提交相同旧版本也只能有一个成功。回执绑定检索时实际命中的版本，
 经验更新、过期或项目源码变化均不阻止记录该次使用结果。
-数据库保存 records/revisions/lookups/feedback/candidates，文件权限 0600，数据库连接按操作关闭。
+数据库保存 records/revisions/lookups/feedback/candidates，文件权限 0600。普通操作结束时关闭数据库连接；后台学习队列在其运行期间复用连接，停止调度并排空当前任务后关闭，不在等待模型或证据 I/O 时持有事务。
 此前实验版 browser profile 内按 Project UUID 保存的 JSON 不自动合并；正式版尚未部署过该入口。
 旧实验记录需重新核实来源与适用条件后，通过 `save` 显式导入。
 这是独立的已核实记录入口；不会迁移或修改既有候选生命周期、分析任务与策略。

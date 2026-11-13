@@ -12,6 +12,10 @@ patchedDependencies:
     hash: 87adbdbacd75562d48a3e3693fc3ed2ef0e0c746a4d4befef86ce5d330d7dd28
     path: patches/app-builder-lib@25.1.8.patch
 
+  node-pty@1.2.0-beta.14:
+    hash: 6111847de6fbb51b59f8ef5cb3df03f46bd48dd4afee85eca2004598859f7d13
+    path: patches/node-pty@1.2.0-beta.14.patch
+
 importers:
   .:
     devDependencies:
@@ -123,7 +127,7 @@ importers:
         version: 7.0.1
       node-pty:
         specifier: 1.2.0-beta.14
-        version: 1.2.0-beta.14
+        version: 1.2.0-beta.14(patch_hash=6111847de6fbb51b59f8ef5cb3df03f46bd48dd4afee85eca2004598859f7d13)
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -444,6 +448,10 @@ importers:
         version: 5.9.3
 
   packages/common:
+    dependencies:
+      '@runweave/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       "@types/react":
         specifier: ^19.0.12
@@ -734,7 +742,7 @@ importers:
         version: 1.5.1
       node-pty:
         specifier: 1.2.0-beta.14
-        version: 1.2.0-beta.14
+        version: 1.2.0-beta.14(patch_hash=6111847de6fbb51b59f8ef5cb3df03f46bd48dd4afee85eca2004598859f7d13)
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -21076,7 +21084,7 @@ snapshots:
     dependencies:
       netmask: 2.1.1
 
-  node-pty@1.2.0-beta.14:
+  node-pty@1.2.0-beta.14(patch_hash=6111847de6fbb51b59f8ef5cb3df03f46bd48dd4afee85eca2004598859f7d13):
     dependencies:
       node-addon-api: 7.1.1
 

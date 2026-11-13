@@ -125,7 +125,8 @@
       "@radix-ui/react-dismissable-layer": "1.1.15"
     },
     "patchedDependencies": {
-      "app-builder-lib@25.1.8": "patches/app-builder-lib@25.1.8.patch"
+      "app-builder-lib@25.1.8": "patches/app-builder-lib@25.1.8.patch",
+      "node-pty@1.2.0-beta.14": "patches/node-pty@1.2.0-beta.14.patch"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",

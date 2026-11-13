@@ -10,6 +10,7 @@ import { hostPaths, prepareHostDirectory, writeHostJson } from "./discovery";
 import { HostGateway, isGatewayCredential } from "./gateway";
 import { HostSession } from "./sessions";
 import { HostTransportError, receiveJsonLines, sendJson } from "./transport";
+import { createHostOutputBatcher } from "./output-batcher";
 import { diagnosticAction, hostErrorCode, reportHostDiagnostic, writeHostDiagnostic } from "./diagnostics";
 
 const scopeSchema = z.object({ kind: z.enum(["stable", "dev"]), instanceId: z.string().min(1), configRoot: z.string().min(1) });
@@ -66,7 +67,7 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
     const connectionId = randomUUID();
     let socketError: Error | undefined;
     socket.on("error", error => { socketError = error; });
-    const subscriptions = new Map<string, () => void>();
+    const subscriptions = new Map<string, { flush(): void; dispose(): void }>();
     socket.on("close", () => {
       reportHostDiagnostic(writeHostDiagnostic, {
         event: "pty-host.connection.closed", hostInstanceId, connectionId,
@@ -74,14 +75,19 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
         ...(socketError instanceof HostTransportError ? { bufferedBytes: socketError.bufferedBytes, limitBytes: socketError.limitBytes } : {}),
       });
       sockets.delete(socket);
-      for (const unsubscribe of subscriptions.values()) unsubscribe();
+      for (const subscription of subscriptions.values()) subscription.dispose();
     });
     receiveJsonLines(socket, message => {
       const parsed = wireSchema.safeParse(message);
       if (!parsed.success) { socket.destroy(); return; }
       const request = parsed.data;
       const startedAt = performance.now();
-      const reply = (result: unknown) => sendJson(socket, { requestId: request.requestId, result });
+      const reply = (result: unknown) => {
+        // A snapshot/read reply must not overtake older live output. Otherwise
+        // the receiver could finish recovery before an overlapping batch arrives.
+        for (const subscription of subscriptions.values()) subscription.flush();
+        return sendJson(socket, { requestId: request.requestId, result });
+      };
       const fail = (error: unknown) => {
         reportHostDiagnostic(writeHostDiagnostic, {
           event: "pty-host.request.failed", hostInstanceId, connectionId, requestId: request.requestId,
@@ -170,21 +176,28 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
           return reply({ ok: true });
         }
         if (request.action === "attachSession") {
-          subscriptions.get(session.info.terminalSessionId)?.();
+          subscriptions.get(session.info.terminalSessionId)?.flush();
+          subscriptions.get(session.info.terminalSessionId)?.dispose();
           let ready = false;
+          const batcher = createHostOutputBatcher(frame => {
+            sendJson(socket, { type: "output", terminalSessionId: session.info.terminalSessionId, data: frame.data,
+              cursor: { streamId: frame.range.streamId, offset: frame.range.toOffset }, range: frame.range });
+          });
           const output = (frame: import("./output-recovery").TerminalOutputFrame) => {
-            if (ready) sendJson(socket, { type: "output", terminalSessionId: session.info.terminalSessionId, data: frame.data, cursor: session.buffer.cursor, range: frame.range });
+            if (ready) batcher.push(frame);
           };
-          const exited = (exitCode: number) => { sendJson(socket, { type: "exit", terminalSessionId: session.info.terminalSessionId, exitCode }); };
+          const exited = (exitCode: number) => { batcher.flush(); sendJson(socket, { type: "exit", terminalSessionId: session.info.terminalSessionId, exitCode }); };
           const resized = (cols: number, rows: number) => {
-            if (ready) sendJson(socket, { type: "resize", terminalSessionId: session.info.terminalSessionId, cols, rows, cursor: session.buffer.cursor });
+            if (ready) { batcher.flush(); sendJson(socket, { type: "resize", terminalSessionId: session.info.terminalSessionId, cols, rows, cursor: session.buffer.cursor }); }
           };
-          const launched = (launch: NonNullable<import("@runweave/shared/terminal/pty-host").PtyHostSession["launch"]>) => { if (ready) sendJson(socket, { type: "launch", terminalSessionId: session.info.terminalSessionId, launch }); };
+          const launched = (launch: NonNullable<import("@runweave/shared/terminal/pty-host").PtyHostSession["launch"]>) => { if (ready) { batcher.flush(); sendJson(socket, { type: "launch", terminalSessionId: session.info.terminalSessionId, launch }); } };
           session.launchListeners.add(launched);
           session.outputListeners.add(output);
           session.exitListeners.add(exited);
           session.resizeListeners.add(resized);
-          subscriptions.set(session.info.terminalSessionId, () => { session.launchListeners.delete(launched); session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized); });
+          subscriptions.set(session.info.terminalSessionId, { flush: batcher.flush, dispose() {
+            batcher.dispose(); session.launchListeners.delete(launched); session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized);
+          } });
           const snapshot = await session.snapshot();
           const tail = session.buffer.read(snapshot.cursor);
           if (!tail.ok) throw new Error("HOST_OUTPUT_GAP");

@@ -4,7 +4,7 @@ import type {
   ExperienceLearningJob,
   ExperienceLearningFailureReceipt,
 } from "@runweave/shared/experience";
-import { withExperienceStore, type ExperienceStorage } from "./storage";
+import { openExperienceStore, type ExperienceStorage } from "./storage";
 import type { LearningSource } from "./learning-source";
 
 export interface LearningJob extends ExperienceLearningJob {
@@ -18,8 +18,20 @@ export const digest = (text: string) =>
 
 export class ExperienceLearningQueue {
   readonly directory: string;
+  private store?: ReturnType<typeof openExperienceStore>;
+  private disposed = false;
   constructor(storage: ExperienceStorage) {
     this.directory = path.join(storage.home, storage.namespace, "_queue");
+  }
+  private withStore<T>(operation: (store: ReturnType<typeof openExperienceStore>) => T): T {
+    if (this.disposed) throw new Error("experience_learning_queue_disposed");
+    this.store ??= openExperienceStore(this.directory);
+    return operation(this.store);
+  }
+  dispose(): void {
+    this.disposed = true;
+    this.store?.close();
+    this.store = undefined;
   }
   enqueue(
     input: Omit<
@@ -33,7 +45,7 @@ export class ExperienceLearningQueue {
       | "leaseUntil"
     >,
   ): LearningJob {
-    return withExperienceStore(this.directory, (store) =>
+    return this.withStore((store) =>
       store.transaction(() => {
         const existing = store.get<LearningJob>("jobs", input.jobId);
         if (existing) return existing;
@@ -53,12 +65,12 @@ export class ExperienceLearningQueue {
     );
   }
   list(repositoryId?: string): LearningJob[] {
-    return withExperienceStore(this.directory, (store) =>
+    return this.withStore((store) =>
       store.list<LearningJob>("jobs"),
     ).filter((job) => !repositoryId || job.repositoryId === repositoryId);
   }
   claim(): LearningJob | null {
-    return withExperienceStore(this.directory, (store) =>
+    return this.withStore((store) =>
       store.transaction(() => {
         store.expireCheckpoints();
         const jobs = store.list<LearningJob>("jobs");
@@ -89,7 +101,7 @@ export class ExperienceLearningQueue {
     );
   }
   update(job: LearningJob, update: Partial<LearningJob>): void {
-    withExperienceStore(this.directory, (store) =>
+    this.withStore((store) =>
       store.transaction(() => {
         const current = store.get<LearningJob>("jobs", job.jobId);
         if (
@@ -108,7 +120,7 @@ export class ExperienceLearningQueue {
     );
   }
   checkpoint(job: LearningJob, key: string): unknown {
-    return withExperienceStore(this.directory, (store) => {
+    return this.withStore((store) => {
       const saved = store.get<{ expiresAt: number; value: unknown }>(
         "learning-checkpoints",
         `${job.jobId}:${key}`,
@@ -120,7 +132,7 @@ export class ExperienceLearningQueue {
     job: LearningJob,
     receipt: ExperienceLearningFailureReceipt,
   ): void {
-    withExperienceStore(this.directory, (store) =>
+    this.withStore((store) =>
       store.transaction(() => {
         const current = store.get<LearningJob>("jobs", job.jobId);
         if (
@@ -139,7 +151,7 @@ export class ExperienceLearningQueue {
     );
   }
   saveCheckpoint(job: LearningJob, key: string, value: unknown): void {
-    withExperienceStore(this.directory, (store) =>
+    this.withStore((store) =>
       store.transaction(() => {
         const current = store.get<LearningJob>("jobs", job.jobId);
         if (
@@ -156,7 +168,7 @@ export class ExperienceLearningQueue {
     );
   }
   clearCheckpoints(job: LearningJob): void {
-    withExperienceStore(this.directory, (store) =>
+    this.withStore((store) =>
       store.transaction(() => {
         const current = store.get<LearningJob>("jobs", job.jobId);
         if (current?.claim !== job.claim || current.leaseUntil <= Date.now())
@@ -166,7 +178,7 @@ export class ExperienceLearningQueue {
     );
   }
   retry(repositoryId: string, jobId: string): void {
-    withExperienceStore(this.directory, (store) =>
+    this.withStore((store) =>
       store.transaction(() => {
         const job = store.get<LearningJob>("jobs", jobId);
         if (!job || job.repositoryId !== repositoryId)

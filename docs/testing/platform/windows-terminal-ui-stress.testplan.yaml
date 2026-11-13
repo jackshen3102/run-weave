@@ -1,0 +1,76 @@
+version: 1
+name: Mac 桌面连接 Windows 终端的交互压力
+description: 使用真实 Mac Runweave 桌面页面连接专用 Windows 终端；接口回执不能替代界面验收，未运行的原生输入法或系统睡眠场景必须单独报告。
+cases:
+  - id: WTUS-001
+    name: 大量输出时键盘输入仍可见响应
+    required: true
+    description: 实际页面在 64 KiB/s、256 KiB/s 持续输出下各运行 60 秒，每秒一次键盘输入，界面保持响应并记录输入到回显的 p50、p95 和最大延迟。
+    preconditions:
+      - Mac 更新器确认的 renderer 可通过 playwright-cli 附着，当前页面为本 case 专用 Windows 终端。
+    steps:
+      - 使用 $toolkit:playwright-cli 在实际终端输入唯一文本并提交，分两档输出负载采集回显延迟、页面错误与连接状态。
+      - 停止输出后再次输入，确认页面未停留在恢复提示且没有重复输入或意外替换进程。
+  - id: WTUS-002
+    name: 页面反复切换终端不混入输出或输入
+    required: true
+    description: 在四个不同标识的专用终端之间切换 100 次，当前显示和输入目标始终一致。
+    preconditions:
+      - Mac 实际页面已连接四个专用 Windows 终端，每个进程显示唯一运行标识。
+    steps:
+      - 使用 $toolkit:playwright-cli 通过产品界面循环切换，切换后核对当前标识并发送唯一输入。
+      - 核对四个探测进程的输入归属和执行次数，检查控制台及连接恢复提示。
+  - id: WTUS-003
+    name: 多窗口查看同一终端不引发恢复循环
+    required: true
+    description: 两个真实产品页面同时查看专用终端，交错输入和关闭一个页面 50 次；仍打开的页面继续工作，输入不被重放。
+    preconditions:
+      - 两个产品页面由本 case 创建并连接同一专用终端，用户原页面保持不动。
+    steps:
+      - 使用 $toolkit:playwright-cli 建立与关闭第二页面 50 次，保留主页面并交错输入唯一文本。
+      - 核对主页面持续可交互、原 PID 未变、每条输入仅执行一次，最后只关闭本 case 页面。
+  - id: WTUS-004
+    name: 窗口和终端尺寸频繁变化后画面可继续使用
+    required: true
+    description: 在有效尺寸范围内往返缩放 200 次，终端不因陈旧或瞬时尺寸进入不可恢复状态。
+    preconditions:
+      - Mac 实际页面连接专用终端，探测进程可报告终端尺寸。
+    steps:
+      - 使用 $toolkit:playwright-cli 往返改变本 case 页面视口和产品终端布局，记录每轮实际尺寸和连接状态。
+      - 恢复初始布局后输入唯一文本，确认画面与响应正常，没有无限重连或尺寸为零的 Host 错误。
+  - id: WTUS-005
+    name: 多行粘贴和特殊字符保持输入语义
+    required: true
+    description: 对中文、emoji、组合字符、制表符和多行文本，重复 50 次真实页面粘贴；短文本保持原输入语义，达到 5000 UTF-16 单元的正文按现有合同保存为附件并插入路径，不自动提交，原文不被截断或重复。
+    preconditions:
+      - Mac 实际页面连接专用原始输入捕获进程，粘贴内容不包含真实业务命令。
+    steps:
+      - 使用 $toolkit:playwright-cli 经实际粘贴入口分档输入 1 KiB、64 KiB 和 256 KiB 内容；短文本核对 bracketed paste 字节，长文本核对附件原文哈希、插入的路径和无自动 Enter，不能把附件路径误判为正文丢失。
+      - 重复 50 次后核对执行次数和当前页面状态；系统输入法组合输入未实际操作时单列为未验证。
+  - id: WTUS-006
+    name: 客户端短时断网后恢复次数有界
+    required: true
+    description: 对专用页面独立连接断网 1 秒、5 秒和 30 秒各 10 次，恢复后取得同一 PTY 当前画面，未确认输入不自动重发。
+    preconditions:
+      - 能只控制本 case 页面网络而不阻断用户其他页面，专用终端记录输入执行次数。
+    steps:
+      - 使用 $toolkit:playwright-cli 对本 case 页面连接注入短时断网，记录恢复尝试次数、耗时和实际提示。
+      - 恢复网络后核对同一 PTY、当前输出和后续输入，检查没有无限重连或重复执行。
+  - id: WTUS-007
+    name: TUI 重绘和替代屏幕反复切换后可恢复
+    required: true
+    description: 连续五分钟运行带颜色、光标移动和替代屏幕切换的专用 TUI，期间重新加载 20 次，恢复到当前画面且后续输入可见。
+    preconditions:
+      - Mac 实际页面连接专用可控 TUI，探测进程暴露当前状态标识。
+    steps:
+      - 使用 $toolkit:playwright-cli 观察持续 TUI 重绘并对专用页面重新加载 20 次，每次重新取得页面引用。
+      - 对照进程状态标识核对当前画面和后续输入，确认没有把历史重绘当作当前屏幕重放。
+  - id: WTUS-008
+    name: 反复进入退出历史页面不重新执行命令
+    required: true
+    description: 已退出专用终端打开关闭 100 次，历史保持可读，页面不创建新 PTY 或重新执行原命令。
+    preconditions:
+      - 专用一次性命令已退出，其执行次数、终端绑定和历史均已记录。
+    steps:
+      - 使用 $toolkit:playwright-cli 通过实际产品入口打开和离开该终端历史页面 100 次。
+      - 核对执行次数仍为一次、Host 没有新增运行终端、历史尾部标识保持可读。

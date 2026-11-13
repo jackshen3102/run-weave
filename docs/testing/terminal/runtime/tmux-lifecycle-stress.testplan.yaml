@@ -1,0 +1,140 @@
+version: 1
+name: tmux 生命周期与资源压力
+description: >
+  在 macOS、Linux 独占 profile、store、socket 上分别执行，每例自建并清理 fixture。
+  保活必须核对 server、pane、任务 PID 和启动时间，thread 恢复不能代替原进程保活。
+  每例分别记录 pass、fail、blocked 或 not_run；进程替换与删除仅限本例资源。
+cases:
+  - id: TMLS-001
+    name: 短断线百次仍续接同一展示流
+    required: true
+    description: 100 次短断线保持同一观看端身份，缺口在时间及字节窗口内时恢复同流 cursor；不重放不确定输入。
+    preconditions:
+      - 独占 tmux 终端以 1 KiB/s 输出，客户端保存已消费的 resumeClientId、streamId 和 offset，网格固定。
+      - 驱动可保留该 attach 完整流作为参考，已记录 pane、任务 PID 与输入账本。
+    steps:
+      - 每次断线 1 秒再带已消费 cursor 重连，共 100 次；核对 recovery 为 resume、offset 衔接连续及每次恢复至新输入回执不超过 5 秒。
+      - 在第 25、50、75 轮保留旧 socket 半开并用同一身份重连，确认新连接接管后旧 cleanup 不销毁新连接。
+      - 核对所有输入账本无重复、任务身份不变，结束后释放本例资源。
+  - id: TMLS-002
+    name: idle attach 淘汰仅释放显示通道
+    required: true
+    description: 反复建立并关闭 16 个观看端，idle 最多 8 个且 60 秒后回收，淘汰不终止原任务，旧 cursor 重连取得明确快照。
+    preconditions:
+      - 本例独占 session 有 16 个不同观看端身份，所有用户任务和 marker 已记录。
+    steps:
+      - 连续连接并关闭 16 个观看端，重复三轮；记录 idle 数量不超过 8，最早 idle 的 attach 被释放。
+      - 每轮等待 75 秒，确认本例 idle attach 已清理且原 pane/任务仍在；携带被淘汰流 cursor 重连应取得新流快照，不能伪装同流续传。
+      - 对比三轮结束的子进程、FD 和 RSS 稳定值，按执行说明的资源预算判定，记录允许保留的缓存。
+  - id: TMLS-003
+    name: attach 进程反复退出不结束 pane 任务
+    required: true
+    description: 精确终止本例一个观看端 attach 进程 30 次，只影响该显示流，其它观看端与任务持续运行。
+    preconditions:
+      - 独占 session 有两个独立观看端，已从进程树确认各 attach PID，能区别 tmux server 与 pane PID。
+    steps:
+      - 仅终止被测观看端 attach，每轮取得 fresh 连接及当前快照；确认 5 秒内新输入可见，重新记录新 attach PID 后再进行下一轮。
+      - 核对另一观看端继续响应，原 server、pane、任务 PID 与启动时间保持不变；被杀 attach 不再占用 FD 或订阅。
+  - id: TMLS-004
+    name: 正常重启 Backend 十次保留原任务
+    required: true
+    description: preserve 策略下 16 个有输出的 session 经十次正常重启继续运行，恢复不重复建 pane；ready 后 10 秒内可重新交互。
+    preconditions:
+      - 独占实例明确设置 preserve，16 个 session 各 16 KiB/s 输出；store 和 socket 路径稳定且启动命令已记录。
+      - 已记录全部 server、pane、任务 PID/启动时间，能够独立控制本例 Backend。
+    steps:
+      - 正常停止并以相同 profile/store/socket 重启 Backend 十次，每轮重新获取鉴权、端点和 WS，不复用旧连接引用。
+      - 每轮 fresh health ready 后逐一 attach 并发送新输入，10 秒内完成恢复；核对 16 个任务身份、计数账本连续且没有替代 pane。
+      - 每轮在主动 attach 之前记录启动 watcher 选择，默认只恢复最近 8 个、并发 2；不将剩余会话缺少自动 watcher 误报为任务死亡。全部 session 的环境刷新沿用 tmux-persistence.testplan.yaml 独立用例，不用本例保活结果代替。
+  - id: TMLS-005
+    name: Backend 异常退出十次仍能接回原 pane
+    required: true
+    description: 只向隔离 Backend 发送 SIGKILL，重新启动后恢复原任务；不要求停机期间展示字节无损，不重放未确认输入。
+    preconditions:
+      - 独占 preserve 实例有四个已持久化 session 和独立任务账本，server 与任务不是待终止 PID。
+    steps:
+      - 在 64 KiB/s 输出期间精确 SIGKILL 本例 Backend，重启同一配置，重复十次；每轮重新获取 fresh endpoint 与鉴权。
+      - ready 后 10 秒内重新 attach 并发送新标识，确认 server/pane/任务身份未变，旧流降级快照而非拼接旧 cursor。
+      - 单列停机期间历史缺口和输入不确定项，核对新输入仅执行一次、无旧 watcher 或 attach 累积。
+  - id: TMLS-006
+    name: tmux 查询超时不能变成会话丢失
+    required: true
+    description: 十轮短暂停止本例 server 响应，has-session 超时必须报基础设施错误，不将 running 改成 exited 或重建任务。
+    preconditions:
+      - 独占 tmux socket 有活跃 session，另有独占健康 socket 上的对照 session，均已记录身份和 rebuild 计数。
+      - 能精确 SIGSTOP/SIGCONT 故障 server，独立 watchdog 确保 15 秒内 SIGCONT，finally 再次恢复。
+    steps:
+      - 关闭故障会话观看端后暂停其 server，调用 GET /api/terminal/session/:id/panels 触发真实 has-session；核对约 5 秒超时、HTTP 500 及 command.timeout/has-session.failed 日志。
+      - 同时读取 store 和健康 socket 的 session；确认故障会话身份与 rebuild 计数不变，健康会话能继续输入，持久状态投影成功不代替查询路径证据。
+      - 恢复 SIGCONT 并重新 attach，5 秒内新输入可见，原 PID 不变；重复十轮并核对查询子进程已回收。
+  - id: TMLS-007
+    name: 确认丢失后的并发打开只重建一次
+    required: true
+    description: 原 session 已明确不存在时，16 个并发打开只能协调一次重建；明确区分原任务丢失与 thread 恢复，不宣称原进程仍存活。
+    preconditions:
+      - 本例独占 socket 上有已初始化的可恢复 Codex thread，provider 可用且 threadId、pane、rebuild 基线已记录；Claude 不作为此 fixture。
+      - 可以精确 kill-session 并确认 exit code 1，驱动能记录每次重建开始时间与新 pane 身份。
+    steps:
+      - 删除本例 tmux session 后用 16 个观看端并发打开同一 terminalSessionId，确认只有一次重建、明确 session lost 提示并恢复同一 thread。
+      - 等待恢复完成后再次并发打开，确认复用替代 session，不增加 rebuild 计数或创建第二个 thread。
+      - 核对原任务丢失与 thread 恢复分别记录，未无限创建子进程；清理全部本例替代资源。
+  - id: TMLS-008
+    name: 创建删除循环不留下 pane 或采集进程
+    required: true
+    description: 以并发 1、4、8 累计创建删除各 200 个 session，显式删除后所有对应 attach、pane、watcher 与 pipe 资源收敛，邻居会话不受影响。
+    preconditions:
+      - 独占实例有长期存活的对照 session、空闲资源基线和可记录创建删除 API 返回的驱动。
+    steps:
+      - 各档累计创建并删除 200 个 session，删除前让每个输出 marker 并至少完成一次 attach；记录创建与删除耗时及失败数。
+      - 交错本例删除请求与尚在连接的观看端，确认已删除 session 不被迟到的 attach 回调复活，失败请求明确返回且不创建孤儿。
+      - 各档结束 75 秒后采集 30 秒稳定窗口，核对自有 pane、attach、pipe、订阅与 FD 已回收，RSS 符合执行说明预算，对照 session 的 PID 与响应不变。
+  - id: TMLS-009
+    name: 多 pane 分拆与关闭压力不串路由
+    required: true
+    description: 同一 session 在 1、2、4、8 个 pane 间循环分拆和关闭 50 轮，各 pane 负载 16 KiB/s，输入与关闭事件始终属于正确 pane。
+    preconditions:
+      - 独占 session 固定足够大的合法网格以容纳八个 pane，每个 pane 具有独立 marker、账本和可路由的 panel ID。
+    steps:
+      - 通过现有 panel API 循环分拆和关闭，每个 pane 每秒接收一条唯一输入，记录 panel ID 到 tmux pane ID 的映射。
+      - 核对关闭一个 pane 后相邻 pane 任务与账本持续，旧 panel 输入明确失败，不误投到后来创建的 pane；完成 50 轮后只保留初始 pane。
+      - 确认已关闭 pane 的 watcher 和 pipe 资源回收，初始 pane PID 不变，最终删除自有 session。
+  - id: TMLS-010
+    name: cleanup 策略只清理所属实例
+    required: true
+    description: 十轮正常关闭 cleanup 实例均释放其 server/session/attach/pipe，独立 preserve 对照实例保持运行。
+    preconditions:
+      - 两个独占实例使用不同 profile/store/socket，分别显式配置 cleanup 和 preserve，各有四个任务并记录身份。
+    steps:
+      - 为 cleanup 实例创建负载并正常关闭，确认在进程既定 shutdown 期限内完成清理；重复启动关闭十轮，每轮重新确认 socket 与 PID 归属。
+      - 每轮向 preserve 对照发送唯一输入并比对其 server/pane/任务身份，确认没有跨 socket 清理；结束后分别按归属清理两个 fixture。
+  - id: TMLS-011
+    name: 二十分钟固定负载不累积资源
+    required: true
+    description: 八个 session 各 64 KiB/s 固定运行 20 分钟，观看端每分钟断连重连一次，任务身份不变，资源不持续增长且卸载后回落。
+    preconditions:
+      - 独占实例已完成预热，驱动每秒采集进程 CPU/RSS、FD、磁盘、错误及输入延迟，具备本例自动停止和清理能力。
+    steps:
+      - 固定负载运行 20 分钟，每 session 每秒一条输入，每分钟完成一次 1 秒短断线；保存所有错误和 PID，不能因降档获得通过。
+      - 比较第 5 至 10 分钟与最后 5 分钟的 RSS 中位数，增长不超过 max(64 MiB, 20%)，FD/attach/pipe 数不按分钟累积；截断与容量事件单列。
+      - 停止负载并释放自有终端，75 秒后取 30 秒窗口，资源回到执行说明预算；只宣称 20 分钟证据。
+  - id: TMLS-012
+    name: 连续丢失超过重建预算后明确停止
+    required: true
+    description: 独立验证 60 秒内最多三次自动重建，第四次明确拒绝且不继续创建任务，不用并发恢复成功代替预算门禁。
+    preconditions:
+      - 本例独占 socket、store 和 terminalSessionId 具有可恢复的 Codex thread，已记录 rebuild 基线与任务身份。
+      - 同一隔离实例另有本例创建的健康对照 session，其输入响应和任务身份可独立观察。
+      - 驱动能在 60 秒内触发四次真实缺失恢复，记录每次开始时间；不能通过修改产品常量或仅调用计数函数代替实际恢复路径。
+    steps:
+      - 精确删除本例 session 并确认 has-session 返回 exit code 1，触发恢复，记录替代 pane；在同一 60 秒窗口内重复到第四次请求。
+      - 确认前三次最多各一次重建，第四次返回明确限制错误且没有第四个替代任务；窗口条件未成立则本例记验收阻塞，保留实际时序。
+      - 确认其它专用对照 session 可继续交互，然后清理本例资源，原任务丢失不得记成保活成功。
+  - id: TMLS-013
+    name: 两小时固定负载检验长期增长趋势
+    required: false
+    description: 全量回归独立执行两小时 soak，不能复用二十分钟的通过结果外推。
+    preconditions:
+      - 本例独占实例有八个 session 各 64 KiB/s、逐秒监控、磁盘和内存停止阈值及自动清理。
+    steps:
+      - 独立运行两小时，每分钟断连重连观看端一次，持续核对任务身份、唯一输入与恢复；每五分钟汇总一次资源趋势。
+      - 比较预热后首个与最后五分钟窗口，资源增长预算同二十分钟用例；保存首次异常，停止负载后验证回收，记录实际完成时长。

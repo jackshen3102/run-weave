@@ -1,0 +1,176 @@
+diff --git a/lib/windowsPtyAgent.js b/lib/windowsPtyAgent.js
+index 2728b765aa8f03bcfdadf46db0be5f77dcf20a25..843f56aeb8eb00535385819fe8c4af07c58004a3 100644
+--- a/lib/windowsPtyAgent.js
++++ b/lib/windowsPtyAgent.js
+@@ -214,6 +214,8 @@ var WindowsPtyAgent = /** @class */ (function () {
+     WindowsPtyAgent.prototype._$onProcessExit = function (exitCode) {
+         var _this = this;
+         this._exitCode = exitCode;
++        this._inSocket.destroy();
++        this._conoutSocketWorker.dispose();
+         if (!this._useConptyDll) {
+             this._flushDataAndCleanUp();
+             this._outSocket.on('data', function () { return _this._flushDataAndCleanUp(); });
+diff --git a/src/win/conpty.cc b/src/win/conpty.cc
+index 931c5362d13f2846b2bd570fe69368528809deb1..f71ed0c36b89b7c5cc24310c9b4eaa61131fa528 100644
+--- a/src/win/conpty.cc
++++ b/src/win/conpty.cc
+@@ -45,10 +45,12 @@ struct pty_baton {
+   HANDLE hIn;
+   HANDLE hOut;
+   HPCON hpc;
++  PFNCLOSEPSEUDOCONSOLE closeConsole;
+ 
+   HANDLE hShell = nullptr;
+ 
+-  pty_baton(int _id, HANDLE _hIn, HANDLE _hOut, HPCON _hpc) : id(_id), hIn(_hIn), hOut(_hOut), hpc(_hpc) {};
++  pty_baton(int _id, HANDLE _hIn, HANDLE _hOut, HPCON _hpc, PFNCLOSEPSEUDOCONSOLE _closeConsole)
++    : id(_id), hIn(_hIn), hOut(_hOut), hpc(_hpc), closeConsole(_closeConsole) {};
+ };
+ 
+ static std::vector<std::unique_ptr<pty_baton>> ptyHandles;
+@@ -93,16 +95,25 @@ void SetupExitCallback(Napi::Env env, Napi::Function cb, pty_baton* baton) {
+     ExitEvent *exit_event = new ExitEvent;
+     // Wait for process to complete.
+     WaitForSingleObject(baton->hShell, INFINITE);
++    HPCON console = nullptr;
++    PFNCLOSEPSEUDOCONSOLE closeConsole = nullptr;
+     {
+       std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
+       GetExitCodeProcess(baton->hShell, (LPDWORD)(&exit_event->exit_code));
+       CloseHandle(baton->hShell);
++      baton->hShell = nullptr;
++      console = baton->hpc;
++      closeConsole = baton->closeConsole;
++      baton->hpc = nullptr;
+       const int id = baton->id;
+       std::erase_if(ptyHandles, [id](const auto& ptyHandle) {
+         return ptyHandle->id == id;
+       });
+     }
+ 
++    // Closing can wait for output to drain. Never hold the registry mutex here.
++    if (console != nullptr) closeConsole(console);
++
+     auto status = tsfn.BlockingCall(exit_event, callback); // In main thread
+     switch (status) {
+       case napi_closing:
+@@ -192,6 +203,7 @@ HRESULT CreateNamedPipesAndPseudoConsole(const Napi::CallbackInfo& info,
+                                          HANDLE *phInput,
+                                          HANDLE *phOutput,
+                                          HPCON* phPC,
++                                         PFNCLOSEPSEUDOCONSOLE* closeConsole,
+                                          std::wstring& inName,
+                                          std::wstring& outName,
+                                          const std::wstring& pipeName,
+@@ -205,7 +217,10 @@ HRESULT CreateNamedPipesAndPseudoConsole(const Napi::CallbackInfo& info,
+     PFNCREATEPSEUDOCONSOLE const pfnCreate = (PFNCREATEPSEUDOCONSOLE)GetProcAddress(
+         (HMODULE)hLibrary,
+         useConptyDll ? "ConptyCreatePseudoConsole" : "CreatePseudoConsole");
+-    if (pfnCreate)
++    *closeConsole = (PFNCLOSEPSEUDOCONSOLE)GetProcAddress(
++        (HMODULE)hLibrary,
++        useConptyDll ? "ConptyClosePseudoConsole" : "ClosePseudoConsole");
++    if (pfnCreate && *closeConsole)
+     {
+       if (phPC == NULL || phInput == NULL || phOutput == NULL)
+       {
+@@ -286,7 +301,8 @@ static Napi::Value PtyStartProcess(const Napi::CallbackInfo& info) {
+ 
+   HANDLE hIn, hOut;
+   HPCON hpc;
+-  HRESULT hr = CreateNamedPipesAndPseudoConsole(info, {cols, rows}, inheritCursor ? 1/*PSEUDOCONSOLE_INHERIT_CURSOR*/ : 0, &hIn, &hOut, &hpc, inName, outName, pipeName, useConptyDll);
++  PFNCLOSEPSEUDOCONSOLE closeConsole = nullptr;
++  HRESULT hr = CreateNamedPipesAndPseudoConsole(info, {cols, rows}, inheritCursor ? 1/*PSEUDOCONSOLE_INHERIT_CURSOR*/ : 0, &hIn, &hOut, &hpc, &closeConsole, inName, outName, pipeName, useConptyDll);
+ 
+   // Restore default handling of ctrl+c
+   SetConsoleCtrlHandler(NULL, FALSE);
+@@ -301,7 +317,7 @@ static Napi::Value PtyStartProcess(const Napi::CallbackInfo& info) {
+     {
+       std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
+       ptyHandles.emplace_back(
+-          std::make_unique<pty_baton>(ptyId, hIn, hOut, hpc));
++          std::make_unique<pty_baton>(ptyId, hIn, hOut, hpc, closeConsole));
+     }
+   } else {
+     throw Napi::Error::New(env, "Cannot launch conpty");
+@@ -495,7 +511,7 @@ static Napi::Value PtyResize(const Napi::CallbackInfo& info) {
+   std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
+   const pty_baton* handle = get_pty_baton(lock, id);
+ 
+-  if (handle != nullptr) {
++  if (handle != nullptr && handle->hpc != nullptr) {
+     HANDLE hLibrary = LoadConptyDll(info, useConptyDll);
+     bool fLoadedDll = hLibrary != nullptr;
+     if (fLoadedDll)
+@@ -537,7 +553,7 @@ static Napi::Value PtyClear(const Napi::CallbackInfo& info) {
+   std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
+   const pty_baton* handle = get_pty_baton(lock, id);
+ 
+-  if (handle != nullptr) {
++  if (handle != nullptr && handle->hpc != nullptr) {
+     HANDLE hLibrary = LoadConptyDll(info, useConptyDll);
+     bool fLoadedDll = hLibrary != nullptr;
+     if (fLoadedDll)
+@@ -566,36 +582,34 @@ static Napi::Value PtyKill(const Napi::CallbackInfo& info) {
+   int id = info[0].As<Napi::Number>().Int32Value();
+   const bool useConptyDll = info[1].As<Napi::Boolean>().Value();
+ 
+-  std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
+-  pty_baton* handle = get_pty_baton(lock, id);
+-
+-  if (handle != nullptr) {
+-    HANDLE hLibrary = LoadConptyDll(info, useConptyDll);
+-    bool fLoadedDll = hLibrary != nullptr;
+-    if (fLoadedDll)
+-    {
+-      PFNCLOSEPSEUDOCONSOLE const pfnClosePseudoConsole = (PFNCLOSEPSEUDOCONSOLE)GetProcAddress(
+-        (HMODULE)hLibrary,
+-        useConptyDll ? "ConptyClosePseudoConsole" : "ClosePseudoConsole");
+-      if (pfnClosePseudoConsole)
+-      {
+-        pfnClosePseudoConsole(handle->hpc);
++  HPCON console = nullptr;
++  PFNCLOSEPSEUDOCONSOLE closeConsole = nullptr;
++  {
++    std::lock_guard<std::mutex> lock(g_ptyHandlesMutex);
++    pty_baton* handle = get_pty_baton(lock, id);
++    if (handle != nullptr) {
++      // Transfer ownership before the exit thread can remove this baton.
++      console = handle->hpc;
++      closeConsole = handle->closeConsole;
++      handle->hpc = nullptr;
++      if (handle->hIn != nullptr) {
++        CloseHandle(handle->hIn);
++        handle->hIn = nullptr;
++      }
++      if (handle->hOut != nullptr) {
++        CloseHandle(handle->hOut);
++        handle->hOut = nullptr;
++      }
++      if (useConptyDll && handle->hShell != nullptr) {
++        TerminateProcess(handle->hShell, 1);
++      }
++      // A failed/deferred connect has no exit thread to remove its baton.
++      if (handle->hShell == nullptr) {
++        std::erase_if(ptyHandles, [id](const auto& entry) { return entry->id == id; });
+       }
+-    }
+-    // Defensive: if PtyConnect was never called (or failed before closing the
+-    // pipe handles), release the named pipe server handles here.
+-    if (handle->hIn != nullptr) {
+-      CloseHandle(handle->hIn);
+-      handle->hIn = nullptr;
+-    }
+-    if (handle->hOut != nullptr) {
+-      CloseHandle(handle->hOut);
+-      handle->hOut = nullptr;
+-    }
+-    if (useConptyDll && handle->hShell != nullptr) {
+-      TerminateProcess(handle->hShell, 1);
+     }
+   }
++  if (console != nullptr) closeConsole(console);
+ 
+   return env.Undefined();
+ }
