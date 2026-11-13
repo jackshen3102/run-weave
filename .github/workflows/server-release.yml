@@ -143,6 +143,9 @@ jobs:
         run: |
           node scripts/verify/server/pty-host-spike.mjs
           node scripts/verify/server/pty-host.mjs
+      - name: Verify exact CLI Browser control protocol and credential boundaries
+        if: ${{ matrix.target == 'linux-x64' && !inputs.pty_spike_only }}
+        run: node scripts/verify/browser-control/verify.mjs --cli-entry=.runtime-artifacts/server/cli-package/dist/index.js
       - name: Verify installed tarballs and self-update
         if: ${{ needs.plan.outputs.server == 'true' && runner.os != 'Windows' && (needs.plan.outputs.full_regression == 'true' || matrix.target == 'linux-x64' || matrix.target == 'darwin-arm64') }}
         run: pnpm server:verify-installed

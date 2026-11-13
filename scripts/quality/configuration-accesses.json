@@ -13417,14 +13417,6 @@
     "reason": "读取隔离 Windows 安装夹具中本次终端生成的浏览器身份诊断回执，仅验证控制链路，不作为实例配置来源。"
   },
   {
-    "file": "scripts/verify/server/windows-terminal.mjs",
-    "kind": "file-io",
-    "expression": "writeFileSync(script)",
-    "count": 1,
-    "category": "test",
-    "reason": "在隔离 Windows 安装夹具目录写入本次终端身份诊断脚本，仅使用该终端继承的身份，不修改用户配置。"
-  },
-  {
     "file": "scripts/verify/server/registry.mjs",
     "kind": "file-io",
     "expression": "readFileSync(cliPackage)",
@@ -13439,5 +13431,45 @@
     "count": 2,
     "category": "test",
     "reason": "读取隔离 Host 生命周期验证生成的临时终端历史文件，核对持续输出按序落盘；不读取用户配置或生产终端内容。"
+  },
+  {
+    "file": "scripts/verify/browser-control/verify.mjs",
+    "kind": "environment",
+    "expression": "env[k]",
+    "count": 1,
+    "category": "test",
+    "reason": "Remove inherited Runweave and Playwright variables from private protocol fixture children; never send ambient production credentials."
+  },
+  {
+    "file": "scripts/verify/browser-control/verify.mjs",
+    "kind": "environment-forward",
+    "expression": "...env",
+    "count": 1,
+    "category": "test",
+    "reason": "Forward only the sanitized fixture environment into real CLI subprocesses with synthetic terminal identity."
+  },
+  {
+    "file": "scripts/verify/browser-control/verify.mjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "test",
+    "reason": "Copy the parent process environment before removing Runweave and Playwright context for isolated CLI verification."
+  },
+  {
+    "file": "scripts/verify/browser-control/verify.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(path.join(context.configRoot, \"settings.yaml\"))",
+    "count": 1,
+    "category": "test",
+    "reason": "Write only the private temporary fixture instance configuration through the canonical configuration library."
+  },
+  {
+    "file": "scripts/verify/browser-control/verify.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(preloader)",
+    "count": 1,
+    "category": "test",
+    "reason": "Write a temporary subprocess HOME preloader so protocol verification cannot access user instance configuration."
   }
 ]
