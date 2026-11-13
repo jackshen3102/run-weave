@@ -25,6 +25,7 @@ export class HostSession {
   private terminal!: IPty;
   private fallbackActivated = false;
   private closing = false;
+  private nativeClosing = false;
   private processGeneration = 0;
   private startupDeadline = 0;
 
@@ -39,7 +40,9 @@ export class HostSession {
       this.degraded = true;
       reportHostDiagnostic(writeHostDiagnostic, { event: "pty-host.mirror.failed", hostInstanceId,
         terminalSessionId: options.terminalSessionId, ...failure });
-    }, TERMINAL_CLIENT_SCROLLBACK_LINES);
+    }, TERMINAL_CLIENT_SCROLLBACK_LINES, data => {
+      if (!this.nativeClosing && this.info.status === "running") this.terminal?.write(data);
+    });
     this.screen.resize(options.cols, options.rows);
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
     try { this.spawn(options); }
@@ -69,6 +72,7 @@ export class HostSession {
     const started = Date.now();
     const terminal = pty.spawn(launch.command, launch.args, {
       name: "xterm-256color", cols: this.info.cols, rows: this.info.rows, cwd: this.options.cwd,
+      useConptyDll: process.platform === "win32",
       env: { ...launch.env, ...this.prepareEnv(this.info.gatewayToken, this.info.terminalSessionId) },
     });
     this.startupDeadline = this.options.fallback && isInteractiveShellLaunch(this.options) ? Date.now() + 1000 : 0;
@@ -121,12 +125,13 @@ export class HostSession {
     this.closing = true;
     if (process.platform === "win32") {
       if (signal === "SIGINT") this.terminal.write("\x03"); else this.close();
-    } else this.terminal.kill(signal);
+    } else { this.nativeClosing = signal !== "SIGINT"; this.terminal.kill(signal); }
   }
 
   close(): void {
     if (this.info.status !== "running") return;
     this.closing = true;
+    this.nativeClosing = true;
     this.terminal.kill();
   }
 

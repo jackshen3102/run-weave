@@ -1,0 +1,39 @@
+version: 1
+name: tmux 真实终端交互压力
+description: >
+  每例使用独立 tmux 终端和真实 Web 或 Electron renderer，通过 toolkit:playwright-cli 操作，
+  保存页面、WS 和进程证据。分别注明客户端与 Backend 所在平台；浏览器窄窗口不算原生 iOS 验收。
+  每例均清理自己的页面与终端，不复用上一例遗留状态。
+cases:
+  - id: TMUS-001
+    name: 双观看端连续调整尺寸后各自显示正确
+    required: true
+    description: 同一 pane 的两个独立观看端交错 resize 100 次，不混用展示流或网格；固定画面后两端均能继续输入。
+    preconditions:
+      - 独占 tmux session 运行确定性 TUI，真实页面以两组 resumeClientId 连接同一 pane，一端宽窗口、一端窄窗口。
+      - 能采集各端 resizeMode=ordered、cursor、终端网格和该端显示状态，已记录任务 PID。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 交替调整两端尺寸共 100 次并持续输出 64 KiB/s，核对每端按自己的 resize 边界更新，不共享另一个观看端的 streamId。
+      - 停止输出并等待布局稳定，分别核对当前网格的 marker、光标与同流参考；允许共享应用响应 tmux 尺寸选择而重绘，不要求两个网格字符布局相同。
+      - 在两端各发送唯一输入，确认账本仅执行一次、原 pane/任务 PID 不变，保留最终两端截图。
+  - id: TMUS-002
+    name: 历史阅读与隐藏恢复循环不打断任务
+    required: true
+    description: copy mode 中交错滚动、隐藏和恢复 100 次，不因零尺寸发起极小网格或无故重连，最终回到底部可交互。
+    preconditions:
+      - 本例真实终端已有 2000 行带编号历史，进入 tmux copy mode，输出暂停以固定阅读位置。
+      - 可记录页面可见行、网格、连接事件与 pane PID。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 循环滚动到指定编号、隐藏终端容器并恢复共 100 次；每轮检查隐藏前后阅读位置与网格一致，不产生零尺寸 resize 或额外重连。
+      - 退出 copy mode 回到底部，启动 64 KiB/s 输出 60 秒并发送唯一输入，确认显示收敛、输入可见、任务未退出，保存最终页面证据。
+  - id: TMUS-003
+    name: 背压停止自动重试后用户能恢复交互
+    required: true
+    description: 真实页面受到明确 1013 背压关闭后不产生自动重试风暴；恢复网络并手动重连能回到原任务，连做 10 轮。
+    preconditions:
+      - 独占 tmux session 的真实页面经本例专用可控网络代理连接，能真实暂停底层读取以触发 WS 发送预算。
+      - 服务端关闭理由与页面连接尝试均可观测，另一个健康页面作为对照，代理不作用于用户页面。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 保持终端打开，在合成输出期间仅限制被测连接直至服务端记录背压；确认页面有可解释的断开状态，观察 15 秒无自动重试风暴。
+      - 解除网络限制并停止负载，从真实页面手动重连，5 秒内确认当前屏幕和新输入响应，原任务 PID 不变且健康页面一直可交互。
+      - 重复十轮，记录关闭、手动恢复耗时和连接次数；无法制造真实背压时记验收阻塞，不能用主动 close 冒充。

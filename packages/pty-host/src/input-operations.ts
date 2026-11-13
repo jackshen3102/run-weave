@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PtyHostInput, PtyHostInputResult } from "@runweave/shared/terminal/pty-host";
+import { isTerminalQueryResponse } from "@runweave/shared/terminal/input";
 
 interface Operation {
   digest: string;
@@ -72,7 +73,10 @@ export class InputOperations {
         for (const step of input.steps) {
           if (acceptedGeneration !== this.generation()) throw new Error("HOST_PROCESS_CHANGED");
           if (!this.isRunning()) throw new Error("HOST_SESSION_GONE");
-          if (step.type === "text") this.write(step.data);
+          if (step.type === "text") {
+            // The Host mirror answers queries once, independently of connected viewers.
+            if (rawSequence === Infinity || !isTerminalQueryResponse(step.data)) this.write(step.data);
+          }
           else await new Promise(resolve => setTimeout(resolve, step.ms));
         }
         if (acceptedGeneration !== this.generation()) throw new Error("HOST_PROCESS_CHANGED");

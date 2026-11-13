@@ -1,0 +1,111 @@
+version: 1
+name: tmux 传输与后台采集压力
+description: >
+  在 macOS、Linux 独占实例分别执行。每例独立建立 profile、socket、终端、驱动和清理责任，
+  明确 runtimeKind 为 tmux；禁止使用默认 socket 和用户终端。执行预算与取证规则见
+  docs/plans/2026-11-13-tmux-base-stress.md。显示流按同一 attach 的 cursor 与最终屏幕判定，
+  pipe-pane 按实际保留窗口判定，不将应用原始字节等同于 tmux 重绘字节。每例结束清理自有资源。
+cases:
+  - id: TMTS-001
+    name: 连续输出逐档测出显示链容量
+    required: true
+    description: >
+      单 pane 按 64 KiB/s、256 KiB/s、1 MiB/s、4 MiB/s 升压；低两档无断连且输入
+      p95 不超过 250 毫秒、p99 不超过 1 秒、5 秒超时为零。高档明确降级只能记容量边界，任务仍存活。
+    preconditions:
+      - 本例独占 tmux 终端、正常读取的 WS 客户端、探测进程账本和同流输出记录已就绪。
+      - 驱动与 Backend 同机且已完成 60 秒无负载校准，能够区分生成速率与显示流实际吞吐。
+    steps:
+      - 每档预热 10 秒、持续 60 秒并重复三次，同时每秒发送 10 条唯一输入；记录实际吞吐、延迟分布、超时和关闭原因。
+      - 同流核对 output range 连续性，停输出后核对静止屏幕末尾 marker；不按文本重复出现次数判重。
+      - 每档确认探测账本中每条输入仅执行一次，pane 和任务 PID 不变；若有背压或镜像失败，按合同重连并验证新输入可见，单列该档容量失败。
+  - id: TMTS-002
+    name: 突发输出后显示流能收敛并继续交互
+    required: true
+    description: 512 KiB、4 MiB、16 MiB、64 MiB 突发不得导致无提示挂起或误杀任务；记录完整消费或明确降级，停止负载后恢复到最终屏幕。
+    preconditions:
+      - 独占终端可按已知长度生成输出并在结束时固定屏幕末尾 marker，客户端可记录全部协议事件。
+    steps:
+      - 分别生成四档突发，每档等待 10 秒收敛；记录生成完成时间、实际发送量、快照或关闭原因，超时判失败。
+      - 必要时手动重连；确认最终 marker、网格和新输入响应可见，原 pane 与任务 PID 未变化，旧流数据未混入新流。
+  - id: TMTS-003
+    name: 慢观看端只耗尽自己的发送预算
+    required: true
+    description: 慢端限速或停读不能拖累同会话快端及另一个会话；超过 4 MiB WS 预算时明确关闭并释放订阅。
+    preconditions:
+      - 本例有两个独占 session，第一 session 有独立 resumeClientId 的快慢两个观看端，第二 session 有输入探针。
+      - 慢端能暂停底层 socket 读取而非仅暂停渲染，服务端关闭理由可观测。
+    steps:
+      - 在第一 session 以 1 MiB/s 输出 60 秒，将慢端限到 1 KiB/s，再停读 10 秒；必要时逐档升至 4 MiB/s 直至真实触发预算。
+      - 核对服务端请求 1013 关闭及退订，未完成握手最多 1 秒后终止；若未触发预算则记录该分支未覆盖，不以停读动作本身判通过。
+      - 快端和第二 session 持续发送唯一输入并核对响应；停止负载后手动重连慢端，确认原 pane 存活且可恢复，不批量重发积压输入。
+  - id: TMTS-004
+    name: 多 session 并发保持输入输出归属
+    required: true
+    description: 1、4、8、16、32 个 session 各 64 KiB/s，任何档位不得串流或串输入；1 和 4 session 档达到常用负载延迟门禁。
+    preconditions:
+      - 独占实例可创建本例专用 session，每个探测进程持有独立 runId、账本与消费者。
+    steps:
+      - 各档预热 10 秒并输出 60 秒，重复三轮；每个 session 每秒发送 10 条唯一输入，逐 session 统计延迟和错误，不用总体平均掩盖慢会话。
+      - 核对每个输入仅进入目标账本且执行一次，显示流 cursor 不跨 session，最终屏幕 marker 与 session 一致。
+      - 逐档删除专用 session 并等待资源回落，记录最高稳定档位和首个失败档位。
+  - id: TMTS-005
+    name: 控制面长输入跨 send-keys 分片边界不损坏
+    required: true
+    description: 8191、8192、8193 字节和 64 KiB 文本包含中文及 emoji，经现有 TmuxService.sendInput 路径输入后内容正确，分片不截断 UTF-8 或混入其它 pane。
+    preconditions:
+      - 独占 tmux pane 运行已校准的输入记录进程，TTY echo 与行规程对观测的影响已明确。
+      - 集成驱动能调用当前 TmuxService.sendInput 并记录请求、完成和实际收到的字节；此证据不冒充 WS 验收。
+    steps:
+      - 每个字节档位各发送 30 次，以串行完整操作覆盖多字节跨界，比较账本内容和次数；按源码的 CR/LF 到 Enter 规则分别校验换行。
+      - 在另一个独占 pane 并行发送不同标识，核对内容不串 pane，失败后新输入仍可执行；不要求跨独立调用的文本天然具有事务原子性。
+  - id: TMTS-006
+    name: 原始 WS 输入洪峰不重复或静默丢弃
+    required: true
+    description: 每秒 1、10、50 次输入各持续 60 秒，按真实接收账本判定，不套用 PTY Host operationId 或 ACK 语义。
+    preconditions:
+      - 独占终端有原始 WS 驱动及带长度前缀的输入记录进程，能够保留发送序号和收到字节。
+    steps:
+      - 逐档发送唯一输入，另以 8 字节、256 字节分帧发送同样内容，包含中文与 emoji；核对接收账本的顺序、字节和执行次数。
+      - 记录错误、断连和未确认输入；不自动重发不确定输入，发送新标识确认恢复后仍能使用，静默缺失或重复记失败。
+  - id: TMTS-007
+    name: 无观看端输出仍由后台 watcher 采集
+    required: true
+    description: 没有 attach 观看端时，已启用 watcher 的 pane 在 64 KiB/s 下持续 60 秒，后台保留窗口不断推进，任务不因观看端回收而停止。
+    preconditions:
+      - 本例独占 session 已确认 pipe-pane watcher 安装完成，已记录 transport、持久化路径和保留配额。
+      - 所有本例观看端已关闭至少 75 秒，确认 attach client 已释放，探测进程账本独立于 watcher。
+    steps:
+      - 无观看端输出带序号和 UTF-8 的数据，每秒记录 transport 与持久化尾部，确认无须等待静默即可持续推进。
+      - 停输出并等待 10 秒 flush，核对实际保留窗口内序号、字节和末尾 marker；低负载下若有截断，记录失败及触发原因。
+      - 首次重新 attach 取得当前屏幕，发送唯一输入确认响应，pane 与任务 PID 不变。
+  - id: TMTS-008
+    name: 后台 transport 超限有诊断且旧 cursor 失效
+    required: true
+    description: 对 1 MiB 配额与两倍强制 reset 边界施压，截断必须留痕并使旧 cursor 失效；停止负载后 transport 排空而非持续占用磁盘。
+    preconditions:
+      - 本例独占 watcher 可记录 transport 大小、generation 和当前 cursor，实际配额已从运行版本确认。
+      - 驱动能对本例 poller 消费建立受控延迟；不能通过暂停共享生产进程制造积压。
+    steps:
+      - 在独占集成 fixture 内暂缓 poller 读取后输出超过 1 MiB，恢复采集；核对 transport-truncated、被跳过范围及旧 cursor 不再可用。
+      - 在同一 watcher 生命周期继续输出并延迟排空，使已消费后文件继续增长到超过 2 MiB，核对 transport-reset 和 generation 更新；未实际触发分支则记录未覆盖。
+      - 停止生成并解除延迟，10 秒内确认后续完整 UTF-8 marker 可采集、transport 排空；分别记录观察到的峰值和截断量，不把阈值当作瞬时磁盘硬上限。
+  - id: TMTS-009
+    name: Unicode 与 TUI 重绘在恢复后保持屏幕语义
+    required: true
+    description: 随机分块输出中文、emoji、组合字符、ANSI、光标移动和备用屏幕各组合 100 轮，快照恢复后屏幕、光标和后续操作与同流参考一致。
+    preconditions:
+      - 专用 TUI fixture 的最终网格和内容确定，固定随机种子并保存同一 attach 的 VT 流及参考终端状态。
+    steps:
+      - 按字符和 ANSI 边界随机分块并往返备用屏幕 100 轮，周期性通过当前连接请求恢复或重连到该观看端。
+      - 每次在静止点比较恢复屏幕和同流参考，再发送光标移动与写入；确认无 UTF-8 损坏、错网格或遗留模式，不跨观看端比较 VT 字节。
+  - id: TMTS-010
+    name: 同会话多观看端与快照洪峰不拖垮服务
+    required: true
+    description: 1、4、8、16 个独立观看端各循环快照重连 20 次，全局快照并发遵守两个工作上限，超限连接明确失败，任务与健康连接保持可用。
+    preconditions:
+      - 独占 session 输出 64 KiB/s，另有独立健康 session 持续输入探测；可记录快照工作数、超时和关闭原因。
+    steps:
+      - 分档同时打开不同 resumeClientId 的观看端，每端用失效 cursor 强制快照重连 20 次；记录 snapshot 大小、耗时和明确失败，不把新观看端当成原流恢复。
+      - 核对最多两个快照工作、单次 2 秒预算和 512 KiB 内容上限；连接间 streamId 与数据归属独立，健康 session 仍可输入。
+      - 关闭全部本例观看端，75 秒后核对 attach 与订阅回收，pane 和任务仍存活。

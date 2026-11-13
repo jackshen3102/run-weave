@@ -3,6 +3,7 @@ import { configuration } from "@runweave/config-node";
 import { PtyHostClient, hostErrorCode } from "@runweave/pty-host/client";
 import type { PtyHostBinding, PtyHostSession, PtyHostInputResult, PtyHostInputStep, PtyHostCreateSession, PtyHostUpstreams, PtyHostSnapshot } from "@runweave/shared/terminal/pty-host";
 import type { TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
+import { isTerminalQueryResponse } from "@runweave/shared/terminal/input";
 import type { TerminalOutputFrame, TerminalOutputReplay } from "./output-recovery";
 import type { PtyRuntime, TerminalRecoveryFailure } from "./pty-service";
 import { logger } from "../../logging/index";
@@ -110,7 +111,7 @@ export async function createHostedPty(options: {
   for (const event of early) receive(event);
   let tail: Promise<unknown> = Promise.resolve();
   let pendingInputs = 0, pendingBytes = 0;
-  const writeSteps = (steps: PtyHostInputStep[], operationId = randomUUID(), raw = false): Promise<void> => {
+  const enqueueSteps = (steps: PtyHostInputStep[], operationId: string = randomUUID(), raw = false): Promise<void> => {
     const bytes = steps.reduce((total, step) => total + (step.type === "text" ? Buffer.byteLength(step.data) : 0), 0);
     if (pendingInputs >= 128 || pendingBytes + bytes > 4 * 1024 * 1024) return Promise.reject(new Error("HOST_BUSY"));
     pendingInputs++; pendingBytes += bytes;
@@ -133,18 +134,55 @@ export async function createHostedPty(options: {
       hostInstanceId: client.descriptor.hostInstanceId, action, code, pendingInputs, pendingBytes });
     fail({ kind: client.isConnected ? "host-operation-failed" : "host-disconnected", action, code });
   };
+  let rawInput = "", rawInputBytes = 0, rawFlushScheduled = false;
+  const flushRawInput = () => {
+    if (!rawInputBytes) return;
+    const data = rawInput;
+    rawInput = ""; rawInputBytes = 0;
+    void enqueueSteps([{ type: "text", data }], undefined, true).catch(error => notifyFailure("writeInput", error));
+  };
+  const writeSteps = (steps: PtyHostInputStep[], operationId?: string): Promise<void> => {
+    // Structured operations must remain after any preceding raw bytes.
+    flushRawInput();
+    return enqueueSteps(steps, operationId);
+  };
+  let snapshotFlight: Promise<PtyHostSnapshot> | undefined;
+  const snapshot = () => {
+    // The Host already shares in-flight screen capture. Share its pipe response too.
+    snapshotFlight ??= client.request<PtyHostSnapshot>("getSnapshot", target)
+      .finally(() => { snapshotFlight = undefined; });
+    return snapshotFlight;
+  };
   return {
     pid: attached.session.pid,
     onData(listener) { dataListeners.add(listener); },
     onExit(listener) { exitListeners.add(listener); if (exited !== undefined) listener({ exitCode: exited }); },
-    write(data) { void writeSteps([{ type: "text", data }], undefined, true).catch(error => notifyFailure("writeInput", error)); },
+    write(data) {
+      if (disposed || failed || !data) return;
+      if (isTerminalQueryResponse(data)) {
+        // Keep replies separate so a new Host can ignore its viewers' duplicates.
+        // Old Hosts still receive the same reply unchanged.
+        flushRawInput();
+        void enqueueSteps([{ type: "text", data }], undefined, true).catch(error => notifyFailure("writeInput", error));
+        return;
+      }
+      const bytes = Buffer.byteLength(data);
+      if (rawInputBytes + bytes > 64 * 1024) flushRawInput();
+      rawInput += data; rawInputBytes += bytes;
+      // A stream's transport fragments must not each consume an operation slot.
+      if (rawInputBytes >= 64 * 1024) flushRawInput();
+      else if (!rawFlushScheduled) {
+        rawFlushScheduled = true;
+        queueMicrotask(() => { rawFlushScheduled = false; flushRawInput(); });
+      }
+    },
     resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(error => notifyFailure("resize", error)); },
     signal(signal) { void client.request("signal", { ...target, signal }).catch(error => notifyFailure("signal", error)); },
-    dispose() { disposed = true; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
+    dispose() { disposed = true; rawInput = ""; rawInputBytes = 0; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
     hosted: {
       get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },
-      snapshot: () => client.request("getSnapshot", target),
+      snapshot,
       onFrame(listener) { frameListeners.add(listener); for (const frame of pending.splice(0)) listener(frame); },
       onFailure(listener) { failureListeners.add(listener); },
       onResize(listener) { resizeListeners.add(listener); },

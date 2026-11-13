@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { copyNativeLockRuntime } from '../../../packages/config-node/scripts/native-runtime.mjs';
+import { prepareWindowsPty } from '../../release/windows-native-pty.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const require = createRequire(path.join(repo, 'packages/runweave-cli/package.json'));
@@ -28,7 +29,7 @@ await build({ ...options, entryPoints: [path.join(repo, 'packages/pty-host/src/i
 await build({ ...options, stdin: { contents: 'export * from "./packages/pty-host/src/client"; export * from "./packages/pty-host/src/lifecycle";', resolveDir: repo }, outfile: path.join(fixture, 'client.cjs') });
 copyNativeLockRuntime(fixture);
 copyNativeLockRuntime(path.join(release, 'pty-host'));
-cpSync(path.join(repo, 'backend/node_modules/node-pty'), path.join(release, 'pty-host/node_modules/node-pty'), { recursive: true, dereference: true, filter: () => true });
+cpSync(prepareWindowsPty(), path.join(release, 'pty-host/node_modules/node-pty'), { recursive: true, dereference: true, filter: () => true });
 const { PtyHostClient, ensureHost, readHost } = require(path.join(fixture, 'client.cjs'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let client, observer, second;
@@ -115,9 +116,48 @@ try {
   await assert.rejects(second.request('getInputOperation', { ...nextTarget, operationId }), /HOST_INPUT_EXPIRED/);
   await assert.rejects(second.request('writeInput', { ...nextTarget, input: { operationId, sequence: 10003, steps: [] } }), /HOST_INPUT_EXPIRED/);
   await second.request('closeSession', nextTarget);
-  await wait(async () => true, 'close');
   await sleep(400);
   assert.equal((await second.request('listSessions'))[0].status, 'exited');
+  if (process.platform === 'win32') {
+    const handles = () => Number(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${host.pid}).Handles`], { encoding: 'utf8' }).trim());
+    const resources = [];
+    // Exercise native ownership after natural exit and concurrent explicit close.
+    // A single terminal cannot reveal the per-session handle leak.
+    for (const natural of [false, true]) {
+      const rounds = [];
+      for (let round = 0; round < 3; round++) {
+        for (let index = 0; index < 10; index++) {
+          const terminalSessionId = randomUUID(), sessionInstanceId = randomUUID();
+          const target = { terminalSessionId, sessionInstanceId, hostInstanceId: host.hostInstanceId, generation: second.generation };
+          const marker = `NATIVE_TAIL_${terminalSessionId}`, code = index % 2 ? 7 : 0;
+          const program = `process.stdout.write('x'.repeat(65536)+'\\r\\n${marker}\\r\\n',()=>{${natural ? `process.exit(${code})` : 'setInterval(()=>{},1000)'}})`;
+          const session = await second.request('createSession', { ...target, projectId: 'fixture', command: process.execPath,
+            args: ['-e', program], cwd: fixture, cols: 100, rows: 30, env });
+          const deadline = Date.now() + 15000;
+          let ended = false, tail = false;
+          while (Date.now() < deadline) {
+            tail = (await observer.request('getSnapshot', target)).data.includes(marker);
+            const current = (await observer.request('listSessions')).find(value => value.terminalSessionId === terminalSessionId);
+            ended = current?.status === 'exited';
+            if (tail && (!natural || ended)) {
+              if (natural) assert.equal(current.exitCode, code);
+              break;
+            }
+            await sleep(50);
+          }
+          assert(tail, 'Native terminal lost its final output');
+          if (natural) assert(ended, 'Native terminal did not exit naturally');
+          await Promise.all(Array.from({ length: 5 }, () => second.request('closeSession', target)));
+          assert.throws(() => process.kill(session.pid, 0), 'Native process survived terminal close');
+        }
+        await sleep(2000);
+        rounds.push(handles());
+      }
+      assert(rounds[2] - rounds[0] <= 16, `Native handles grew after warmup: ${JSON.stringify({ natural, rounds })}`);
+      resources.push({ natural, sessions: 30, concurrentCloseRequests: 150, handles: rounds });
+    }
+    console.log(JSON.stringify({ platform: process.platform, nativeResourcePressure: resources }));
+  }
   console.log(JSON.stringify({ platform: process.platform, hostPid: host.pid, shellPid: info.pid, counterPid, hostIdentityPreserved: true,
     inputSurvivedDisconnect: true, actualSubmissionCount: 1, privatePipeAuth: true, writerFencing: true, outputStreamPreserved: true, eventOutboxDrained: true, expiredInputCannotReplay: true, explicitClose: true }));
 } finally {

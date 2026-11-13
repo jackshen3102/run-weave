@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareWindowsPty } from '../../release/windows-native-pty.mjs';
 
 const script = fileURLToPath(import.meta.url);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -30,7 +31,7 @@ function request(endpoint, token, action = "status") {
 const [mode, endpoint, token, fixture] = process.argv.slice(2);
 if (mode === "host") {
   const require = createRequire(new URL("../../../backend/package.json", import.meta.url));
-  const pty = require("node-pty");
+  const pty = require(prepareWindowsPty());
   const env = { ...process.env, TERM: "xterm-256color" };
   for (const key of Object.keys(env))
     if (key.startsWith("RUNWEAVE_") || key === "ELECTRON_RUN_AS_NODE" || key.toLowerCase() === "psmodulepath") delete env[key];

@@ -46,6 +46,7 @@ export class TerminalOutputScreen {
     cursor: TerminalOutputCursor,
     private readonly onFailure: (failure: TerminalMirrorFailure) => void,
     scrollback = 0,
+    onResponse?: (data: string) => void,
   ) {
     this.cursor = cursor;
     this.terminal = new headless.Terminal({
@@ -58,6 +59,7 @@ export class TerminalOutputScreen {
     // Match the Web renderer's character widths, including modern emoji.
     this.terminal.loadAddon(new unicode11.Unicode11Addon());
     this.terminal.unicode.activeVersion = "11";
+    if (onResponse) this.terminal.onData(onResponse);
   }
 
   append(frame: TerminalOutputFrame): void {

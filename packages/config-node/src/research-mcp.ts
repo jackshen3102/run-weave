@@ -1,18 +1,19 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { ResearchMcpInstallation } from "@runweave/shared/research-mcp";
+import type { EnvironmentContext } from "@runweave/shared/configuration";
 import { resolveConfigurationContext } from "./context";
 import { readPrivateFile } from "./private-file";
 
-export function researchMcpHome(): string {
-  return path.join(resolveConfigurationContext().configRoot, "research-mcp");
+export function researchMcpHome(context = resolveConfigurationContext()): string {
+  return path.join(context.configRoot, "research-mcp");
 }
 
-export function readResearchMcpInstallation(): ResearchMcpInstallation | null {
-  const file = path.join(researchMcpHome(), "installation.json");
+export function readResearchMcpInstallation(context: EnvironmentContext = resolveConfigurationContext()): ResearchMcpInstallation | null {
+  const file = path.join(researchMcpHome(context), "installation.json");
   if (!existsSync(file)) return null;
   const value = JSON.parse(readPrivateFile(file)) as ResearchMcpInstallation;
-  if (value.version !== 1 || value.instanceId !== resolveConfigurationContext().instanceId ||
+  if (value.version !== 1 || value.instanceId !== context.instanceId ||
       typeof value.enabled !== "boolean" || !Number.isInteger(value.port) || value.port < 1 || value.port > 65535 ||
       ![value.entry, value.node, value.cwd].every((v) => typeof v === "string" && path.isAbsolute(v)) ||
       typeof value.sourceRevision !== "string" || typeof value.releaseId !== "string" ||
