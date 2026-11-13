@@ -1,4 +1,4 @@
-/** Only output synchronization failures may reconnect with a fresh snapshot. */
+/** Only recoverable output connection failures may reconnect with a fresh snapshot. */
 export function isTerminalOutputRecoveryClose(code: number, reason?: string | null): boolean {
   return code === 1013 && [
     "Terminal output recovery required", // Compatibility with older Backends.
