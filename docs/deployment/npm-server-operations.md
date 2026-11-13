@@ -115,6 +115,19 @@ npm 接受上传后可能仍需处理；版本信息与包文件也可能先后�
 重新运行全部构建可能产生不同字节；若旧版本已发布，不能覆盖，应使用新版本重新发行。
 不通过删除已有版本、关闭鉴权或强改摘要绕过冲突。
 
+若候选已完整上传，公开安装验证或通道提升尚未完成，不重新构建同版本。
+可从 `main` 显式恢复原 run 中 packaging、validate、publish 全部通过的 attempt：
+
+```bash
+gh workflow run server-release.yml --repo jackshen3102/run-weave --ref main \
+  -f publish=true -f channel=latest -f resume_run_id=<原run-ID> -f resume_attempt=<成功上传的attempt>
+```
+
+恢复入口仅接受本仓库的 Server 发行标签 run，核对当前包版本、四个平台门禁和成功发布日志中的回执。
+即使原 artifacts 已删除，也只按回执中的 SHA-512 从公开 registry 取回原字节；候选源码 SHA、包版本和
+摘要均匹配后，执行四平台公开安装和 OIDC 提升，不重新上传包。来源证据缺失、版本或摘要不匹配时
+继续阻断。CLI-only 候选仍使用原任务的失败 job 重跑。
+
 ### 一次性可信发布配置
 
 六个包分别设置 npm Trusted Publisher：`@runweave/cli`、`@runweave/server` 和
