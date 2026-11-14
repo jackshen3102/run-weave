@@ -6,6 +6,7 @@ import type {
   TaskHandoffResponse,
   TaskHandoffTarget,
 } from "@runweave/shared/task-handoff";
+import { sameHandoffResult } from "@runweave/shared/task-handoff";
 import type { ActivityStore } from "../activity/recording/store";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { resolveReplyThread } from "../terminal/completion/reply-preview";
@@ -318,6 +319,9 @@ export class TaskHandoffService {
             ? { goalEditedAt: previous.goalEditedAt }
             : {}),
           ...paired,
+          confirmedResults: (previous?.confirmedResults ?? []).filter((confirmed) =>
+            paired.results.some((result) => sameHandoffResult(result, confirmed)),
+          ),
           limitations: [
             ...new Set([
               ...(previous?.limitations ?? []),
@@ -361,6 +365,7 @@ export class TaskHandoffService {
       goalEdited: true,
       goalEditedAt: new Date().toISOString(),
       results: [],
+      confirmedResults: [],
       pending: [],
       nextStep: "",
       turnIds: [],
@@ -375,6 +380,39 @@ export class TaskHandoffService {
       await saving;
       entry.checkedAt = 0;
       entry.error = undefined;
+      return card;
+    } catch (error) {
+      entry.card = previous;
+      throw error;
+    } finally {
+      entry.job = undefined;
+    }
+  }
+
+  async reviewResult(
+    target: TaskHandoffTarget,
+    revision: number,
+    resultIndex: number,
+    confirmed: boolean,
+  ): Promise<TaskHandoffCard> {
+    const current = this.resolve(target.terminalSessionId, target.panelId);
+    if (current.target?.threadId !== target.threadId || current.running)
+      throw new Error("会话已变化或仍在运行，请刷新后确认。");
+    const entry = await this.entry(target);
+    if (entry.job || !entry.card || entry.card.revision !== revision)
+      throw new Error("交接记录已更新，请刷新后确认。");
+    const result = entry.card.results[resultIndex];
+    if (!result) throw new Error("结果不存在，请刷新后确认。");
+    const previous = entry.card;
+    const confirmedResults = (previous.confirmedResults ?? []).filter((item) => !sameHandoffResult(item, result));
+    if (confirmed) confirmedResults.push({ ...result, confirmedAt: new Date().toISOString() });
+    const card = { ...previous, confirmedResults, revision: revision + 1 };
+    // Reserve before I/O, just like goal edits; two stale decisions cannot both win.
+    entry.card = card;
+    const saving = this.save(card);
+    entry.job = saving;
+    try {
+      await saving;
       return card;
     } catch (error) {
       entry.card = previous;

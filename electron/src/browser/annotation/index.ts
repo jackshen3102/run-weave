@@ -144,7 +144,7 @@ export async function startTerminalBrowserAnnotation(
 ): Promise<TerminalBrowserAnnotationState> {
   sessions.set(key, { webContents });
   const result = await webContents.executeJavaScript(
-    buildAnnotationRuntimeScript(),
+    buildAnnotationRuntimeScript({ commentLimit: 4000, maxAnnotations: 50 }),
     true,
   );
   return normalizeState(result);
@@ -205,12 +205,18 @@ export async function submitTerminalBrowserAnnotations(
   }
 
   try {
-    const image = await session.webContents.capturePage();
-    const screenshot = {
-      mimeType: "image/png" as const,
-      dataBase64: image.toPNG().toString("base64"),
-    };
-    return { annotations: state.annotations, screenshot };
+    const screenshots: NonNullable<TerminalBrowserAnnotationSubmission["screenshots"]> = [];
+    let prepared = state;
+    for (const annotation of state.annotations) {
+      prepared = normalizeState(await session.webContents.executeJavaScript(
+        buildRuntimeCallScript("prepareCapture", annotation.id), true,
+      ));
+      if (!prepared.active || !prepared.annotations.some((item) => item.id === annotation.id))
+        throw new Error("评论页面已变化，请检查后重试。");
+      const image = await session.webContents.capturePage();
+      screenshots.push({ annotationId: annotation.id, screenshot: { mimeType: "image/png", dataBase64: image.toPNG().toString("base64") } });
+    }
+    return { annotations: prepared.annotations, screenshot: null, screenshots };
   } catch (error) {
     await callAnnotationRuntime(key, "setSubmitting", false);
     throw error;

@@ -84,6 +84,7 @@ export function buildAnnotationRuntimeScript(options = {}) {
     const menuSendButton = menu.querySelector(".rw-annotation-menu-send");
     const menuAddButton = menu.querySelector(".rw-annotation-menu-add");
     const annotations = [];
+    const annotationElements = new Map();
     let pendingSubmitRequestId = null;
     let selecting = true;
     let submitting = false;
@@ -231,9 +232,10 @@ export function buildAnnotationRuntimeScript(options = {}) {
       input.select();
       notify();
     };
-    const renderAnnotations = () => {
+    const renderAnnotations = (capturingId = null) => {
       lockLayer.replaceChildren();
       for (const annotation of annotations) {
+        if (capturingId && annotation.id !== capturingId) continue;
         const lock = document.createElement("div");
         lock.className = "rw-annotation-lock";
         lock.style.left = annotation.target.rect.x + "px";
@@ -355,6 +357,7 @@ export function buildAnnotationRuntimeScript(options = {}) {
         target: selectedTarget,
       };
       annotations.push(annotation);
+      annotationElements.set(annotation.id, selectedElement);
       if (submitNow) {
         pendingSubmitRequestId = annotation.id;
       }
@@ -373,6 +376,7 @@ export function buildAnnotationRuntimeScript(options = {}) {
       }
       if (editingAnnotationId === id) hideEditor();
       annotations.splice(index, 1);
+      annotationElements.delete(id);
       annotations.forEach((annotation, nextIndex) => {
         annotation.index = nextIndex + 1;
       });
@@ -441,6 +445,7 @@ export function buildAnnotationRuntimeScript(options = {}) {
         hoverBox.style.display = "none";
         hideEditor();
       }
+      renderAnnotations();
       notify();
       return list();
     };
@@ -508,6 +513,20 @@ export function buildAnnotationRuntimeScript(options = {}) {
       setSubmitting,
       stop,
       submit: () => setSubmitting(true),
+      prepareCapture: async (id) => {
+        const annotation = annotations.find((item) => item.id === id);
+        const element = annotationElements.get(id);
+        if (!submitting || !annotation || !element?.isConnected) {
+          throw new Error("评论目标已变化，请删除该评论并重新圈选。评论仍已保留。");
+        }
+        element.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+        hidePreview();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        annotation.target = targetForElement(element);
+        renderAnnotations(id);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return list();
+      },
     };
     notify();
     return list();

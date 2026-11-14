@@ -112,11 +112,14 @@ export interface SendTerminalInterruptResponse extends SendTerminalInputResponse
 export interface CreateTerminalClipboardImageRequest {
   mimeType: string;
   dataBase64: string;
+  browserComment?: import("../../browser/annotation").TerminalBrowserAnnotationDraft;
 }
 
 export interface CreateTerminalClipboardImageResponse {
   fileName: string;
   filePath: string;
+  /** Durable Markdown evidence with a relative screenshot link, when requested. */
+  evidencePath?: string;
 }
 
 export const TERMINAL_CLIPBOARD_FILE_MAX_BYTES = 100 * 1024 * 1024;

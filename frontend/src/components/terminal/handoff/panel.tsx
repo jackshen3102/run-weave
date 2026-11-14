@@ -11,12 +11,14 @@ import type {
   TaskHandoffEvidence,
   TaskHandoffItem,
 } from "@runweave/shared/task-handoff";
+import { sameHandoffResult } from "@runweave/shared/task-handoff";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   editTaskHandoff,
   fetchTaskHandoff,
   refreshTaskHandoff,
+  reviewTaskHandoffResult,
 } from "../../../services/task-handoff";
 import { sendTerminalInput } from "../../../services/terminal";
 import { HttpError } from "../../../services/http";
@@ -78,6 +80,7 @@ function HandoffContent({
   const [editingCard, setEditingCard] = useState<TaskHandoffCard | null>(null);
   const [goal, setGoal] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [selected, setSelected] = useState<TaskHandoffEvidence[] | null>(null);
   const query = useQuery({
     queryKey: ["task-handoff", scope, sessionId, panelId],
@@ -146,6 +149,18 @@ function HandoffContent({
     } finally {
       if (mounted.current) setSaving(false);
     }
+  });
+  const review = useMemoizedFn(async (index: number, confirmed: boolean) => {
+    if (!card || reviewing) return;
+    setReviewing(true);
+    try {
+      await reviewTaskHandoffResult(apiBase, token, card, index, confirmed);
+      if (mounted.current) {
+        setNotice(confirmed ? "已确认这项结果；其他待办和随记状态不变。" : "这项结果已恢复为待用户确认。");
+        refetch();
+      }
+    } catch (error) { fail(error); }
+    finally { if (mounted.current) setReviewing(false); }
   });
   const resume = useMemoizedFn(async () => {
     if (
@@ -291,6 +306,9 @@ function HandoffContent({
                     item={item}
                     card={card}
                     onSelect={setSelected}
+                    confirmed={Boolean(card.confirmedResults?.some((result) => sameHandoffResult(result, item)))}
+                    reviewDisabled={busy || reviewing || query.data?.status !== "ready"}
+                    onReview={(confirmed) => void review(index, confirmed)}
                   />
                 ))}
                 {!card.results.length && (
@@ -422,10 +440,16 @@ function ResultRow({
   item,
   card,
   onSelect,
+  confirmed,
+  reviewDisabled,
+  onReview,
 }: {
   item: TaskHandoffItem;
   card: TaskHandoffCard;
   onSelect: (evidence: TaskHandoffEvidence[]) => void;
+  confirmed: boolean;
+  reviewDisabled: boolean;
+  onReview: (confirmed: boolean) => void;
 }) {
   const evidence = card.evidence.filter((entry) =>
     item.evidenceIds.includes(entry.id),
@@ -462,6 +486,14 @@ function ResultRow({
           onClick={() => onSelect(evidence)}
         >
           查看记录
+        </button>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-800 pt-2 text-[11px]">
+        <span className={confirmed ? "text-emerald-400" : "text-amber-300"}>
+          {confirmed ? "用户已确认此结果" : "待用户确认"}
+        </span>
+        <button className="shrink-0 text-sky-400 disabled:text-slate-600" disabled={reviewDisabled} onClick={() => onReview(!confirmed)}>
+          {confirmed ? "重新打开" : "确认此结果"}
         </button>
       </div>
     </div>
