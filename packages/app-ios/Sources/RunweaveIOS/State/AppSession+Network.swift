@@ -1,7 +1,20 @@
 import Foundation
 import Network
+import SwiftUI
 
 extension AppSession {
+  func setScenePhase(_ phase: ScenePhase) {
+    recordConnection("scene.changed", ["phase": String(describing: phase)])
+    terminalController?.recordScenePhase(phase)
+    switch phase {
+    case .active: setForeground(true)
+    case .background: setForeground(false)
+    // Notification Center and other temporary interruptions do not suspend the app.
+    case .inactive: break
+    @unknown default: setForeground(false)
+    }
+  }
+
   func handle(_ failure: Error, epoch: Int, reportFailure: Bool = true) async {
     guard generation == epoch, !Task.isCancelled, !isRequestCancellation(failure) else { return }
     if reportFailure { error = displayError(failure) }

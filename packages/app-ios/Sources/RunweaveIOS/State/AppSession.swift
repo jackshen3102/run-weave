@@ -446,19 +446,7 @@ final class AppSession: ObservableObject {
     terminalController?.recordUserAction(action)
   }
 
-  func setScenePhase(_ phase: ScenePhase) {
-    recordConnection("scene.changed", ["phase": String(describing: phase)])
-    terminalController?.recordScenePhase(phase)
-    switch phase {
-    case .active: setForeground(true)
-    case .background: setForeground(false)
-    // Notification Center and other temporary interruptions do not suspend the app.
-    case .inactive: break
-    @unknown default: setForeground(false)
-    }
-  }
-
-  private func setForeground(_ value: Bool) {
+  func setForeground(_ value: Bool) {
     guard foreground != value else { return }
     foreground = value
     ConnectionRouteResolver.setForeground(value)
