@@ -25,6 +25,16 @@
 
 `preview.py` 专用于已配置 Runweave Backend 的 HTML 或 MP4 文件。它不创建公开文件服务，不转移文件到另一台服务器：传入文件必须存在于对应 Backend 机器，项目身份与路径须符合服务端检查。当前 HTML 接口限入口 1 MiB、同目录单个资源 5 MiB；视频使用独立 Range 入口，不把 MP4 塞进 HTML 静态资源通道。
 
+HTML 在读取连接凭据、访问网络和申请票据之前执行本地交付预检。对于邻近 `manifest.json` 的 `index.html`，只检查生成器固定文件 `index.html`、`reader.css`、`reader.js`、`task.json`、`manifest.json`，模板 1.1.0/1.2.0 的 `viewer.css`，以及 manifest 中显式列出的素材路径，不递归扫描无关文件。入口上限 1 MiB、其他资源上限 5 MiB；manifest 另限 2 MiB 并校验 JSON 与清单结构（允许空素材数组）。文件缺失、超限、非法路径或符号链接逃出成果目录均阻止申请票据，并指出具体文件。预检不解码素材，也不验证素材摘要与实际字节一致。
+
+`gallery.py build` 默认 `--target runweave`，在输出目录定稿前执行同一预检，失败不交付最终目录；显式 `--target portable` 可保留超限的离线成果，但返回的 `deliveryCheck` 仍如实表示 Runweave 是否就绪。已有成果可不联网单独检查：
+
+```bash
+python3 "$SKILL/scripts/gallery.py" preflight --directory "$RUN/gallery"
+```
+
+结果含 `target: "runweave-html"`、`ready`、`filesChecked` 和逐文件 `issues`（大小问题含 `bytes`、`limitBytes`）；`filesChecked` 计入尝试检查的唯一文件路径，非目录文件总数。`ready: true` 仅代表这些本地路径和大小符合交付条件，不代表浏览器加载成功或手机可达。非图册 HTML 只检查入口的 1 MiB 限额，不分析 HTML 引用，也不声称资源已核验。MP4 仍走原有视频链路，不套用 HTML 限额。
+
 ```bash
 python3 "$SKILL/scripts/preview.py" \
   --file "$RUN/gallery/index.html" --project-id <实际项目ID> \
@@ -39,7 +49,7 @@ python3 "$SKILL/scripts/preview.py" \
 
 默认读取 `~/.runweave/settings.yaml` 中 `cli.profiles.<profile>` 的 `baseUrl/accessToken`，要求 0600 权限，需 PyYAML。没有该连接时不遍历凭据或读取应用密码。已有 API token 环境变量可用 `--token-env RUNWEAVE_PREVIEW_TOKEN --backend <已配置地址>`，参数只传变量名称，不传 token 值。
 
-脚本只向配置中的 Backend 发送 Bearer，先核对 viewer `/health` 的服务身份，再匿名核对 HEAD、类型、长度。视频检查 Range 206 与本地字节一致；HTML 检查 GET 与本地字节一致，其脚本、样式和图片还须实际打开核对。拒绝重定向，避免转发凭据或预览权限；新票据保存到新的 0600 JSON。读取 `url/expiresAt` 用于交付，不将链接 JSON、连接文件或素材提交 Git。
+脚本只向配置中的 Backend 发送 Bearer，先核对 viewer `/health` 的服务身份，再匿名核对 HEAD、类型、长度。视频检查 Range 206 与本地字节一致；HTML 检查 GET 与本地字节一致，其脚本、样式和图片还须实际打开核对。HTML 回执的 `localPreflight` 单列本地检查结果和 `scope`，普通 HTML 标为 `html-entry-only` 且资源未检查；`resources` 仍标为浏览器实际加载未核验，`physicalPhoneReachability` 仍为未验证，不由本地 `ready` 推导通过。拒绝重定向，避免转发凭据或预览权限；新票据保存到新的 0600 JSON。读取 `url/expiresAt` 用于交付，不将链接 JSON、连接文件或素材提交 Git。
 
 票据不是永久链接；文件变化可能使旧票据失效。材料定稿后再生成，过期后换新输出文件续期。旧 `video.py preview --video ...` 仍转发到这套实现，不维护独立逻辑。
 
