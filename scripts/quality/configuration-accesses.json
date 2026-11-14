@@ -13591,5 +13591,29 @@
     "count": 2,
     "category": "test",
     "reason": "Compare private fixture resume arguments before and after a lost Host acknowledgement to prove reconnect does not replay the command."
+  },
+  {
+    "file": "backend/src/terminal/attachments/browser-comment-evidence.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(temporary, \"screenshot.png\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存用户显式提交的 Browser 评论截图，属于当前 Backend profile 的证据数据，不作为实例业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/browser-comment-evidence.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(temporary, \"evidence.json\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存 Browser 评论与页面定位元数据的对应关系，属于本地证据数据，不作为实例业务配置来源。"
+  },
+  {
+    "file": "backend/src/terminal/attachments/browser-comment-evidence.ts",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(temporary, \"comment.md\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "保存用户 Browser 评论及相对截图链接，属于本地交接材料，不作为实例业务配置来源。"
   }
 ]
