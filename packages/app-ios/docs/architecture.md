@@ -37,6 +37,11 @@ ios/RunweaveNative → RootView → AppSession
 旧 socket 的发送失败回调不能停止新连接；当前 socket 发送失败时继续走接收循环的重连，
 仅重同步窗口尺寸。输入结果未确认仍显示提示，不自动重发输入。
 设备 online/offline 与后端 TerminalState 分开管理；socket open 不等于业务已连接。
+短暂 `inactive` 保留连接，进入 `background` 才暂停传输和恢复任务。
+网络路径变化后的 WebSocket 存活探测等待最多 5 秒。终端因 `1013` 关闭后按
+5/10/15 秒最多自动恢复三次；普通传输断线按 2 秒递增、最多 30 秒退避。
+两种重试次数均在连接保持至少 30 秒后重置，`1008`/`1011` 仍停止恢复。
+URLSession 未暴露远端关闭码时使用普通传输退避，不把 `1005` 推断为 `1013`。
 
 ## 同一电脑的多线路连接
 
@@ -45,6 +50,8 @@ ios/RunweaveNative → RootView → AppSession
 `ConnectionRouteResolver` 统一处理前台、通知与电量请求的 endpoint，
 `ComputerCredentialSession` 按 Keychain account 共享凭据和一次在途 refresh。
 每条身份探测预算 2.5 秒，认证检查单次 5 秒；失败按 5/15/30 秒退避，后台取消。
+当前线路验证遇到暂时性网络或服务不可用时，保留现有传输，间隔 1 秒复核一次，
+再次失败才交给选路恢复；身份不匹配、无效证明和重定向不进入此复核。
 刷新响应丢失时保留草稿并要求重新登录，不在其他线路重放可能已被消费的 refresh token。
 
 新线路先使用随机 nonce 验证已绑定的 Ed25519 公钥，再发送已有认证。

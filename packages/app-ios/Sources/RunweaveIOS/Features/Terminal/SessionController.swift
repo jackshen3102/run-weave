@@ -157,10 +157,12 @@ public final class SessionController: ObservableObject {
     task = Task { [weak self] in
       guard let self else { return }
       var retries = 0
+      var recoveryRetries = 0
       while !Task.isCancelled && !self.stopped && self.generation == epoch {
         let action = ClientDiagnosticOperation(.connectionRecover)
         self.connectionDiagnostics = action
         let attemptID = UUID().uuidString
+        var connectedAt: TimeInterval?
         self.record("socket.connecting", extra: ["attemptId": attemptID, "retry": retries])
         do {
           self.connectionStatus = retries == 0 ? "连接中" : "重新连接中"
@@ -194,7 +196,9 @@ public final class SessionController: ObservableObject {
               return
             }
             if self.stopped { return }
-            if self.connected { retries = 0 }
+            if self.connected {
+              if connectedAt == nil { connectedAt = ProcessInfo.processInfo.systemUptime }
+            }
           }
         } catch {
           guard self.generation == epoch, !Task.isCancelled, !self.stopped else { return }
@@ -208,7 +212,12 @@ public final class SessionController: ObservableObject {
           self.socket?.cancel(with: .goingAway, reason: nil)
           self.socket = nil
           self.clearQueue()
-          if closeCode == 1013 || closeCode == 1008 || closeCode == 1011 {
+          if let connectedAt, ProcessInfo.processInfo.systemUptime - connectedAt >= 30 {
+            retries = 0
+            recoveryRetries = 0
+          }
+          if closeCode == 1013 { recoveryRetries += 1 }
+          if closeCode == 1008 || closeCode == 1011 || recoveryRetries > 3 {
             self.halt("终端恢复已停止，请在网络稳定后手动重连")
             return
           }
@@ -223,7 +232,7 @@ public final class SessionController: ObservableObject {
           }
           self.connectionStatus = "离线"
           retries += 1
-          let delay = min(30, retries * 2)
+          let delay = min(30, max(retries * 2, recoveryRetries * 5))
           self.record("socket.retry.scheduled", extra: ["attemptId": attemptID, "retry": retries, "retryDelayMs": delay * 1000])
           try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
         }
