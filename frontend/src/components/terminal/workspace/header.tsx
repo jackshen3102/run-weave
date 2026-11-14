@@ -169,6 +169,11 @@ export function TerminalWorkspaceHeader({
     ? (activePanelIdBySessionId[activeSession.terminalSessionId] ??
       activeSession.activePanelId)
     : null;
+  const hostedRecovery = activeSession?.agentRecovery;
+  const canRecoverAgent = hostedRecovery
+    ? ["shell_idle", "agent_idle"].includes(activeSession?.terminalState?.state ?? "")
+    : !!activeSession?.tmuxSessionName && activeSession.terminalState?.state === "agent_idle" &&
+      ["codex", "pi"].includes(activeSession.terminalState.agent ?? "");
   const startCodeReview = useStartCodeReview(activeSession);
   const codeReviewAction = useCodeReviewActionState(activeSessionId);
   const codeReviews = useCodeReviews(activeSessionId);
@@ -202,12 +207,12 @@ export function TerminalWorkspaceHeader({
     setHistoryDrawerOpen(true);
   };
   const recoverActiveAgent = useMemoizedFn(async (): Promise<void> => {
-    if (!activeSession?.tmuxSessionName || recoveringAgent) {
+    if (!activeSession || !canRecoverAgent || recoveringAgent) {
       return;
     }
     if (
       !window.confirm(
-        "Restart the current agent pane and resume its saved thread? Unsaved prompt text in this pane will be discarded.",
+        "Restart this terminal and resume its saved agent conversation? Unsaved prompt text will be discarded.",
       )
     ) {
       return;
@@ -218,7 +223,8 @@ export function TerminalWorkspaceHeader({
         apiBase,
         token,
         activeSession.terminalSessionId,
-        { panelId: activeSession.activePanelId },
+        { panelId: hostedRecovery ? "default" : activeSession.activePanelId,
+          ...(hostedRecovery ? { expectedThreadId: hostedRecovery.threadId } : {}) },
       );
       bumpAgentRecoveryRevision(activeSession.terminalSessionId);
       setRequestError(null);
@@ -427,13 +433,9 @@ export function TerminalWorkspaceHeader({
                 <Share2 className="h-4 w-4" />
                 {sharing ? "正在创建快照…" : "分享终端快照"}
               </DropdownMenuItem>
-              {activeSession?.tmuxSessionName && <DropdownMenuItem
+              {(activeSession?.tmuxSessionName || hostedRecovery) && <DropdownMenuItem
                 disabled={
-                  recoveringAgent ||
-                  activeSession?.terminalState?.state !== "agent_idle" ||
-                  !["codex", "pi"].includes(
-                    activeSession.terminalState.agent ?? "",
-                  )
+                  recoveringAgent || !canRecoverAgent
                 }
                 onSelect={() => {
                   void recoverActiveAgent();

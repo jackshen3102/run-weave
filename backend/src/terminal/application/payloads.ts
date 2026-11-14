@@ -8,6 +8,8 @@ import type {
   TerminalState,
 } from "@runweave/shared/terminal-protocol";
 import type { TerminalSessionManager } from "../manager/manager";
+import { resolveHostedAgentRecovery } from "../runtime/recovery-policy";
+import { supportsHostedAgentRecovery } from "../runtime/pty-host-client";
 
 type TerminalProject = NonNullable<
   ReturnType<TerminalSessionManager["getProject"]>
@@ -69,7 +71,9 @@ export function toSessionListItem(
   terminalState?: TerminalState,
   panelWorkspace?: TerminalPanelWorkspace | null,
 ): TerminalSessionListItem {
+  const agentRecovery = supportsHostedAgentRecovery() ? resolveHostedAgentRecovery(session, terminalState) : null;
   return {
+    ...(agentRecovery ? { agentRecovery } : {}),
     source: session.source,
     terminalSessionId: session.id,
     projectId: session.projectId,

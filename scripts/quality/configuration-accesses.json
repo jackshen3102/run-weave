@@ -13567,5 +13567,21 @@
     "count": 1,
     "category": "test",
     "reason": "Signal an isolated process-stop fixture to change its command and verify ownership rejection."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(directory, `${restoredProvider}.args`))",
+    "count": 3,
+    "category": "test",
+    "reason": "Read real Host fixture resume arguments to verify a single explicit recovery and reject duplicate execution."
+  },
+  {
+    "file": "scripts/verify/backend/hosted-terminal-loss.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(directory, \"traecli.args\"))",
+    "count": 2,
+    "category": "test",
+    "reason": "Compare private fixture resume arguments before and after a lost Host acknowledgement to prove reconnect does not replay the command."
   }
 ]

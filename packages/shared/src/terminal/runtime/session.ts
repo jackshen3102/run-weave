@@ -1,6 +1,7 @@
 import type { TerminalProjectListItem } from "../project";
 import type { ScheduledTaskSource } from "../../scheduled-tasks/types";
 import type { TerminalAgentKind, TerminalState } from "./state";
+import type { TerminalAgentRecoveryTarget } from "./agent-preparation";
 
 export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
 
@@ -67,6 +68,8 @@ export interface TerminalSessionStatusResponse {
 export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 
 export interface TerminalSessionListItem {
+  /** Explicit restore target approved by this Backend; not a current Agent binding. */
+  agentRecovery?: TerminalAgentRecoveryTarget;
   source?: ScheduledTaskSource;
   /** Backend-generated UTC timestamp; missing/null means unpinned. */
   pinnedAt?: string | null;

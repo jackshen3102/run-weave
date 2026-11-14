@@ -1,9 +1,19 @@
-import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
+import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
+import { isInteractiveShellLaunch, terminalShellName } from "@runweave/shared/terminal/shell";
+import type { TerminalAgentRecoveryTarget } from "@runweave/shared/terminal/agent-preparation";
 import type { TerminalSessionRecord } from "../manager/manager";
 import { getAgentForCommand } from "../state/terminal-state-service";
 
 export const RebuildWindowMs = 60_000;
 export const MaxRebuildAttempts = 3;
+
+/** Only hosted PTY recovery recognizes this fixed MSYS interactive wrapper. */
+export function isInteractiveHostedShellLaunch(launch: Pick<TerminalSessionRecord, "command" | "args">): boolean {
+  if (isInteractiveShellLaunch(launch)) return true;
+  const name = terminalShellName(launch.command);
+  return ["bash", "zsh"].includes(name) && launch.args.length === 2 && launch.args[0] === "-c" &&
+    launch.args[1] === `export CHERE_INVOKING=1 MSYS2_PATH_TYPE=inherit; exec /usr/bin/${name} -il`;
+}
 
 export class TerminalRebuildLimitError extends Error {
   constructor(
@@ -49,4 +59,20 @@ export function resolveAgentThreadToResume(
   return recentThreadId && session.lastThreadProvider === activeProvider
     ? { provider: activeProvider, threadId: recentThreadId }
     : null;
+}
+
+/** Historical threads may be restored only through an explicit user action. */
+export function resolveHostedAgentRecovery(
+  session: TerminalSessionRecord,
+  state: TerminalState | undefined = session.terminalState,
+): TerminalAgentRecoveryTarget | null {
+  if (session.runtimeKind !== "pty" || !session.ptyHost || session.status !== "running" ||
+      !isInteractiveHostedShellLaunch(session)) return null;
+  if (session.terminalState?.state === "agent_running" || session.terminalState?.state === "agent_starting") return null;
+  if (state?.state === "agent_idle") return getAgentForCommand(session.activeCommand) === state.agent
+    ? resolveAgentThreadToResume({ ...session, terminalState: state }) : null;
+  if (state?.state !== "shell_idle" || session.activeCommand) return null;
+  const provider = session.lastThreadProvider;
+  const threadId = session.lastThreadId?.trim();
+  return provider && provider !== "claude" && threadId ? { provider, threadId } : null;
 }

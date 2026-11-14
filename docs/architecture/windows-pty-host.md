@@ -28,8 +28,21 @@ Host 暂时失联、凭据或配置范围不匹配仍报告错误，不推断会
 启动时先确定 Backend 实际监听地址并更新 Host 上游，再恢复丢失的 PTY，确保新进程继承当前实例的控制面地址。
 已明确 exited 的终端仍提供保存的历史，输入不再执行，也不会因打开历史页面自行恢复 Agent。
 恢复保留终端 ID 与历史，但使用新的 Host/PTY 绑定；不声称原进程仍在，也不保证包含 Host 未交付的输出。
+MSYS 的固定启动包装 `export CHERE_INVOKING=1 MSYS2_PATH_TYPE=inherit; exec /usr/bin/zsh -il`
+（以及同形的 bash 包装）仅在 hosted PTY 恢复判定中按交互 Shell 处理；其他 `-c` 脚本仍不能据此自动重跑。
 新的 Backend 通过比较并交换取得 writer generation；旧代不能输入、resize 或 close。
 只读快照、输出和操作查询不取得写权限。
+
+网页的 `Recover agent` 也支持 hosted PTY：空闲 Agent 可重建当前终端并恢复原对话；
+已经回到空 Shell 的终端，允许用户显式选择恢复其保存的非 Claude 对话。Backend 返回可用的
+`agentRecovery` 目标，并在提交时重新校验状态与 thread ID；运行中/启动中的 Agent、正在交付的输入
+和并发恢复均拒绝。旧 PTY 退出不删除终端记录，连接以 1012 重连；返回 `starting` 只表示恢复命令
+已写入，新 Agent 的就绪仍需原生证据。历史 thread 不触发普通空闲 Shell 的自动恢复。
+旧 PTY 关闭后若新建失败，保存的对话仍可显式重试；自动重连和启动对账暂停重建，避免耗尽重试次数并归档终端。
+若 resume 提交结果不确定，提示先检查终端，
+重连只附着同一 PTY，不自动重发恢复命令。
+该入口需要运行中的 Host 在 hello 中声明 `replaceExitedSession` 能力；仅更新 Backend 不会
+自动启用旧 Host 不支持的操作。替换必须匹配旧的已退出会话实例，旧请求不能关闭或替换更新后的 PTY。
 
 Backend 的 registry dispose 只释放托管连接；显式结束终端发送 close 并等待退出。
 Host 本身崩溃、用户注销或 Windows 重启无法保留原进程；管理进程启动新 Host 后，Backend 才能按上述规则重建并恢复已保存的对话。
@@ -96,7 +109,7 @@ Windows 使用 `active-release.json`，内容是相对 releases 路径、发行�
 
 普通更新不替换全局 CLI，也不更新正在运行的兼容 Host。Host bundle 与原生 DLL 保留在不可变旧发行目录。
 `rw server host status` 分别显示运行和已安装发行目录；`host stop`、`host update` 有活跃终端时拒绝。
-Windows 系统服务、Host 自身热更新、tmux 分屏和 Fork/Recover 不在当前范围。
+Windows 系统服务、Host 自身热更新、tmux 分屏和 Fork 不在当前范围。
 
 ## 验证边界
 

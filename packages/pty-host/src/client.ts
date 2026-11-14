@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import type { EnvironmentContext } from "@runweave/shared/configuration";
-import type { PtyHostDescriptor, PtyHostEvent } from "@runweave/shared/terminal/pty-host";
+import type { PtyHostDescriptor, PtyHostEvent, PtyHostCapabilities } from "@runweave/shared/terminal/pty-host";
 import { readHostAsync } from "./discovery";
 import { HostTransportError, receiveJsonLines, sendJson } from "./transport";
 import { diagnosticAction, hostErrorCode, reportHostDiagnostic, writeHostDiagnostic, type HostDiagnosticSink } from "./diagnostics";
@@ -11,6 +11,7 @@ export { hostErrorCode } from "./diagnostics";
 export class PtyHostClient {
   readonly descriptor: PtyHostDescriptor;
   generation = 0;
+  supportsSessionReplacement = false;
   readonly events = new Set<(event: PtyHostEvent) => void>();
   readonly disconnected = new Set<(error: Error) => void>();
   private readonly pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
@@ -59,7 +60,8 @@ export class PtyHostClient {
         client.socket.once("error", error => { clearTimeout(timer); reject(error); });
         client.socket.once("connect", () => { clearTimeout(timer); client.connected = true; resolve(); });
       });
-      const hello = await client.request<{ generation: number }>("hello", requested);
+      const hello = await client.request<{ generation: number; capabilities?: PtyHostCapabilities }>("hello", requested);
+      client.supportsSessionReplacement = hello.capabilities?.replaceExitedSession === true;
       if (ownerId) client.generation = (await client.request<{ generation: number }>("claimWriter", { ownerId, expectedGeneration: expectedHostInstanceId && expectedHostInstanceId !== client.descriptor.hostInstanceId ? hello.generation : expectedGeneration ?? hello.generation })).generation;
       return client;
     } catch (error) { client.close(); throw error; }
