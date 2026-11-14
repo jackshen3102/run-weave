@@ -482,12 +482,21 @@ export async function resolveOpenTarget(manifest, surface) {
     if (!frontend?.url) {
       throw new DevSessionError("web surface is disabled", 4);
     }
+    // A packaged Beta serves the same frontend release through its owned
+    // Backend. The runweave:// URL is only the desktop renderer entry.
+    const backend = inspection.services.backend;
+    const packagedWeb = manifest.profile === "beta" &&
+      frontend.url === "runweave://app/index.html" &&
+      backend?.ownership === "dedicated" &&
+      backend.ownerDevSessionId === manifest.devSessionId &&
+      frontend.expectedBackendServiceInstanceId === backend.serviceInstanceId;
+    const host = packagedWeb ? backend : frontend;
     return {
       devSessionId: manifest.devSessionId,
       surface,
-      serviceInstanceId: frontend.serviceInstanceId,
-      endpoint: assertLoopbackUrl(frontend.url, "frontend URL"),
-      pid: frontend.pid,
+      serviceInstanceId: host.serviceInstanceId,
+      endpoint: assertLoopbackUrl(host.url, "frontend URL"),
+      pid: host.pid,
       revision: frontend.sourceRevision,
       health: "ready",
       suggestedPlaywrightSession: `${manifest.devSessionId}-web`,

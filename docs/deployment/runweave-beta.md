@@ -1,5 +1,9 @@
 # Runweave Beta 开发与使用指南
 
+Beta Session 的 `dev:open --surface web` 使用本 Session 独占 Backend 提供的同版本 HTTP 网页；
+桌面 renderer 仍使用 `runweave://app`。解析器核对 Backend 归属及 renderer 的 Backend 绑定身份，
+不把 shared Backend 的网页当作当前源码的 Web surface。
+
 本文中的 Beta 是 macOS 打包测试资源池的历史名称，不是独立运行环境或发行通道。正式版 Runweave（Stable）继续承载终端和开发上下文；测试只能通过 `pnpm dev:session` 创建有归属的 Dev Session，再由控制面使用 Beta 池槽位构建、重启、验证和恢复。
 
 日常开发不再自行命名 Beta 实例。`pnpm dev:session` 从固定的 `pool-01` 至 `pool-05` 中分配一个槽位，并用 lease 隔离并行 worktree；调用方只保存返回的 `devSessionId`。`default`、`agent-a` 等自定义实例只作为既有 legacy 资源被只读盘点、停止或显式清理，不能再更新、打开或回滚。

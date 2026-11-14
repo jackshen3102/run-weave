@@ -352,6 +352,43 @@ Web 交互边界：
 - iPhone SE、iPhone 14 和 Pixel 7 模式暂不应用最小宽度，也不显示宿主横向轨道；切回 Desktop 后恢复此前选择并从最左侧开始。外部 CDP metrics 在 Desktop 下同样遵守 minimum floor，截图、layout metrics 和 Agent 输入仍使用完整逻辑视口坐标，不叠加人类横向偏移。
 - 最小宽度、Zoom、Device 和 automation metrics 共用同一条主进程 mutation queue。主进程只接受封闭档位并根据 live entry 计算原生子 View 尺寸；Renderer 不能通过 bounds IPC 请求任意内容宽度。
 
+### HTML 方案元素评审
+
+Web 与 Electron 的终端工作区 HTML 文件 Preview 提供显式“评审”，复用同一 renderer。
+产物需有 `runweave-visual-plan=1` meta、自包含且完整正文不超过 1 MiB；未保存源码、
+外部资源、base、嵌套文档或模块脚本不进入评审，仍可使用普通票据 Preview/Source。
+技能入口为 [visual-plan-review](../../plugins/toolkit/skills/visual-plan-review/SKILL.md)。
+
+评审基于已保存正文重建隔离 srcDoc，内层 CSP 和点选 bootstrap 先于页面脚本。
+固定外层文档只允许 `frame-src about:`，包裹内层方案，阻止方案通过自身导航绕过
+`connect-src none`。两层 iframe 均仅 `allow-scripts`，不开放同源；内层仍禁止嵌套文档。
+用户正文通过转义的 srcdoc 属性序列化，不拼入外层脚本。外层只转交一次专用 port，
+并报告内层文档导航；宿主核对外层 window/source 和 generation 后关闭旧通道。
+专用 MessageChannel 与临时 generation 传递有界 DOM 证据，
+页面无权选择终端、文件或发送请求。页内编辑器产生的评论作为不可信状态交给宿主校验并保留，最多 20 条、每条 2,000 字符，
+反馈总长不超过 64,000 字符。canvas、shadow DOM 深层和自由截图圈选不在合同内。
+
+圈选 DOM、selector、页内评论编辑器、编号标记与样式统一来自 `packages/browser-annotation`，由 Electron Browser 与 HTML 评审 iframe 两个真实消费者使用。宿主统一复用 Browser comments 面板；HTML 仅适配文档专用 MessagePort，不引入 Browser 的轮询、截图或发送链路。页面提交请求只打开宿主待检查评论，最终加入输入框仍需宿主用户动作。页内未保存评论参与退出确认与插入禁用。
+
+“加入输入框”固定评审开始时的连接 scope、项目、绝对路径、terminal 和 pane。
+加入前复读同路径的完整正文并作字符串全等比较；mtime 只作依据展示。正文变化、读取失败、
+输入资格失效或目标变化均保留评论并拒绝加入。该比较不能锁住随后的外部写入；Agent
+修改前仍须复读并核对原文。页面文本与 selector 在反馈中明确为不可信证据。
+
+本功能复用 composer 队列的可选进程内回执。消费与取消一次移除，只有连接 scope、pane
+均匹配且实际草稿插入成功才返回 inserted；scope 或 pane 失配返回 target-changed，
+拒绝/取消返回 cancelled。回执即使抛错也不重复调用。保留原草稿，
+同批评论成功后禁止重复加入，编辑后可再次明确加入；用户使用现有发送按钮发送。
+退出、Source、换文件和刷新通过宿主丢弃确认释放通道及待消费请求，旧 generation 回执无效。
+评论仅在当前页面内存中，强制退出不保证提示或恢复。
+
+独立 `/prototypes` 原型库和原生 iOS 保持阅读入口，不绑定生成者、不提供本次元素反馈。
+同一方案在 iPhone 通过现有文件 HTML Preview 阅读，使用 viewport、可换行导航与局部宽表滚动；不提供手机圈选。真机阅读、锚点、本地交互与保存后重新打开须单独验证，不能由桌面截图或安装成功替代。
+
+Git 变更/旧版本预览不启用评审。普通 Electron Browser comments 仍走下述原链路。
+行为合同见 [可视化方案评审验收](../testing/terminal/visual-plan-review.testplan.yaml)，
+编译检查不能替代该用例的真实 DOM、草稿和隔离证据。
+
 ### Terminal Browser 注释模式
 
 Electron 桌面端的 Browser 工具支持 Browser comments 注释模式。它用于让用户在右侧真实网页内容上选择目标、写评论，并把结构化页面证据发送给当前 terminal 中的 agent。

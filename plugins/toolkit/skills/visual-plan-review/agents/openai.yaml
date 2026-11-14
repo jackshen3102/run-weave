@@ -1,0 +1,3 @@
+interface:
+  display_name: "可视化方案评审"
+  short_description: "根据真实源码制作自包含 HTML 方案，支持阅读、交互讨论与元素反馈"

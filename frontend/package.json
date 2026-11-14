@@ -59,7 +59,8 @@
     "turndown-plugin-gfm": "^1.0.2",
     "workbox-window": "^7.4.0",
     "yet-another-react-lightbox": "^3.32.0",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "@runweave/browser-annotation": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

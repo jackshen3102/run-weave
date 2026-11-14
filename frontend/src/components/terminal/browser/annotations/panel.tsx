@@ -24,6 +24,7 @@ interface TerminalBrowserAnnotationsPanelProps {
   onFocus: (annotationId: string) => void;
   onSelectingChange: (selecting: boolean) => void;
   onSubmit: () => void;
+  fileReview?: { disabled: boolean; label: string; notice: string | null };
 }
 
 interface TerminalBrowserAnnotationModeBarProps {
@@ -85,6 +86,7 @@ export function TerminalBrowserAnnotationsPanel({
   onFocus,
   onSelectingChange,
   onSubmit,
+  fileReview,
 }: TerminalBrowserAnnotationsPanelProps) {
   const discard = useMemoizedFn(() => {
     if (
@@ -102,11 +104,13 @@ export function TerminalBrowserAnnotationsPanel({
   }
 
   return (
-    <aside className="absolute inset-y-0 right-0 z-10 flex w-[320px] flex-col border-l border-slate-800 bg-slate-950">
+    <aside aria-label={fileReview ? "方案评审评论" : "Browser comments"} className={fileReview
+      ? "flex max-h-[45%] shrink-0 flex-col border-t border-slate-800 bg-slate-950"
+      : "absolute inset-y-0 right-0 z-10 flex w-[320px] flex-col border-l border-slate-800 bg-slate-950"}>
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
         <MessageSquarePlus className="h-3.5 w-3.5 text-sky-300" />
         <p className="min-w-0 flex-1 text-xs font-medium text-slate-200">
-          Browser comments
+          {fileReview ? "方案评审评论" : "Browser comments"}
         </p>
         <span className="rounded-full bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
           {state.annotations.length}
@@ -199,9 +203,10 @@ export function TerminalBrowserAnnotationsPanel({
       <div className="shrink-0 space-y-2 border-t border-slate-800 p-3">
         {error ? (
           <p className="rounded-md border border-rose-900/60 bg-rose-950/30 px-2.5 py-2 text-[11px] leading-4 text-rose-300">
-            {error} Your comments are still available to retry.
+            {error}{fileReview ? "" : " Your comments are still available to retry."}
           </p>
         ) : null}
+        {fileReview?.notice ? <p role="status" className="text-xs text-sky-300">{fileReview.notice}</p> : null}
         <Button
           type="button"
           size="sm"
@@ -217,11 +222,11 @@ export function TerminalBrowserAnnotationsPanel({
           type="button"
           size="sm"
           className="h-9 w-full rounded-md text-xs"
-          disabled={state.annotations.length === 0 || submitting}
+          disabled={state.annotations.length === 0 || submitting || fileReview?.disabled}
           onClick={onSubmit}
         >
           <Send className="mr-1.5 h-3.5 w-3.5" />
-          {submitting
+          {fileReview ? fileReview.label : submitting
             ? "Sending comments..."
             : `Send ${state.annotations.length} to Agent`}
         </Button>

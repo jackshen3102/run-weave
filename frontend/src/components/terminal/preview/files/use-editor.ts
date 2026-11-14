@@ -44,7 +44,7 @@ export function useTerminalPreviewFileEditor(input: {
     }
     if (
       !input.filePreview ||
-      input.filePreview.path !== input.selectedFilePath
+      (input.filePreview.path !== input.selectedFilePath && input.filePreview.absolutePath !== input.selectedFilePath)
     ) {
       setLoadedFile({
         editorContent: "",
@@ -58,12 +58,12 @@ export function useTerminalPreviewFileEditor(input: {
       editorContent: draft.editorContent,
       loadedContent: draft.loadedContent,
       loadedMtimeMs: draft.loadedMtimeMs,
-      path: input.filePreview.path,
+      path: input.selectedFilePath,
     } : {
       editorContent: input.filePreview.content,
       loadedContent: input.filePreview.content,
       loadedMtimeMs: input.filePreview.mtimeMs,
-      path: input.filePreview.path,
+      path: input.selectedFilePath,
     });
     setSaveError(null);
     setSaveConflict(false);
@@ -100,7 +100,7 @@ export function useTerminalPreviewFileEditor(input: {
         editorContent: file.content,
         loadedContent: file.content,
         loadedMtimeMs: file.mtimeMs,
-        path: file.path,
+        path: input.selectedFilePath ?? file.path,
       });
       setSaveError(null);
       setSaveConflict(false);
@@ -148,7 +148,7 @@ export function useTerminalPreviewFileEditor(input: {
           editorContent: payload.content,
           loadedContent: payload.content,
           loadedMtimeMs: payload.mtimeMs,
-          path: payload.path,
+          path: input.selectedFilePath ?? payload.path,
         });
         setLastSavedAt(Date.now());
       } catch (error) {

@@ -31,6 +31,7 @@ scripts/dev-session    开发会话与 Beta 生命周期
 | `app-server/`                         | 独立事件中心、Thread 状态投影和实时消费                               | `app-server/src/index.ts`                                      |
 | `packages/shared/`                    | 跨运行时纯 TypeScript 合同                                            | `packages/shared/package.json#exports`                         |
 | `packages/common/`                    | Web 终端与图片基础能力                                                | `packages/common/AGENTS.md`                                    |
+| `packages/browser-annotation/`        | Browser 与隔离 HTML 评审共用的纯 DOM 圈选、页内编辑器与样式           | [实现边界](../../packages/browser-annotation/README.md)        |
 | `packages/browser-history/`           | 本机浏览记录、Native Messaging 接收器与只读材料 CLI                   | [记录合同](../../packages/browser-history/README.md)           |
 | `packages/browser-history-extension/` | Chrome / Edge 共用 MV3 采集扩展                                       | [安装入口](../../packages/browser-history-extension/README.md) |
 | `packages/runweave-cli/`              | `rw` CLI                                                              | `packages/runweave-cli/src/index.ts`                           |

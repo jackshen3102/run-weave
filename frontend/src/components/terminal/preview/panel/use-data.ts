@@ -148,7 +148,11 @@ export function useTerminalPreviewPanelData({
 
   const setCachedFile = useMemoizedFn(
     (file: TerminalPreviewFileResponse | null) => {
-      const path = file?.path ?? selectedFilePath;
+      // A save response uses the canonical project-relative path; the active
+      // query may have been opened with an absolute path to the same file.
+      const path = file && file.absolutePath === filePreview?.absolutePath
+        ? selectedFilePath ?? file.path
+        : file?.path ?? selectedFilePath;
       if (!path) {
         return;
       }
@@ -184,9 +188,10 @@ export function useTerminalPreviewPanelData({
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const confirmDiscardDraft = useMemoizedFn((): boolean => {
-    return (
-      !editor.isDirty || window.confirm("Discard unsaved Preview changes?")
-    );
+    if (!editor.isDirty) return true;
+    if (!window.confirm("Discard unsaved Preview changes?")) return false;
+    if (filePreview) editor.replaceLoadedFile(filePreview);
+    return true;
   });
   const handleRequestError = useMemoizedFn((error: unknown): string => {
     if (error instanceof HttpError && error.status === 401) {
