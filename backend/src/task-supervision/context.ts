@@ -18,7 +18,8 @@ export const INPUT_BUDGET_BYTES = 180_000;
 export const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 export const isSupervisionPrompt = (text: string) =>
-  text.includes("[runweave-task-supervision:");
+  text.includes("[runweave-task-supervision:") ||
+  text.startsWith("[runweave-code-review-feedback:");
 export async function readWatchContext(
   watch: TaskWatch,
   threadId: string,

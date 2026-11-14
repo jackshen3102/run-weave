@@ -78,11 +78,12 @@ struct TerminalCodeReviewView: View {
             Text(detail.run.status)
             Text(detail.run.createdAt).font(.caption).foregroundStyle(.secondary)
             if let round = detail.run.round { Text("第 \(round) 轮审查").font(.caption).foregroundStyle(.secondary) }
-            if detail.run.stale { Text("审查期间代码已变化，结论仅对应原快照。").foregroundColor(.orange) }
+            if detail.run.stale { Text("审查期间代码或需求已变化，结论仅对应原冻结输入。").foregroundColor(.orange) }
             if let fingerprint = detail.snapshot?.fingerprint { Text(fingerprint).font(.caption.monospaced()).textSelection(.enabled) }
           }
           if let report = detail.report {
             Section("结论") {
+              Text(report.scope == "code" ? "本轮范围：仅代码，未核验用户目标。" : report.scope == "code_and_goals" ? "本轮范围：代码及用户目标。" : "旧报告未单独声明目标核验范围。")
               Text(report.summary).textSelection(.enabled)
               Text(report.coverageComplete ? "已声明覆盖完整，仍需核对证据" : "覆盖存在缺口")
             }
@@ -96,7 +97,7 @@ struct TerminalCodeReviewView: View {
                 }
               }
             }
-            Section("验证") {
+            Section("验证与目标核验") {
               ForEach(Array(report.checks.enumerated()), id: \.offset) { _, check in
                 VStack(alignment: .leading, spacing: 6) {
                   Text("\(check.description) · \(check.status)")
@@ -117,7 +118,7 @@ struct TerminalCodeReviewView: View {
             Text("报告尚未完成")
             ForEach(Array((detail.snapshot?.omissions ?? []).enumerated()), id: \.offset) { _, text in Text(text) }
           }
-          Text("Review 只评审代码，不表示符合原对话需求或可发布，不自动授予修复、提交和外部操作权限。").font(.caption).foregroundStyle(.secondary)
+          Text("Review 核对冻结代码与可取得的用户要求；目标或证据缺失会保留缺口，不自动授权修复或发布。").font(.caption).foregroundStyle(.secondary)
         } else if failure == nil { ProgressView("读取报告…") }
       }.navigationTitle("代码 Review").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { dismiss() } } }

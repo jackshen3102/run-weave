@@ -39,7 +39,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - [`playwright-cli`](./skills/playwright-cli/SKILL.md)：附着 Runweave Browser 做真实页面操作与验收；CDP/隧道故障转到 `rw browser doctor/recover`，恢复后重新解析并核对原页面。
 - [`product-exploration`](./skills/product-exploration/SKILL.md)：显式调用的产品探索，默认 30 分钟；只取证报告，不生成测试代码或自动修复。
 - `react-best-practices`
-- `review-only`
+- [`review-only`](./skills/review-only/SKILL.md)：统一计划、代码与交付目标核验；自然语言 Review 与专门入口沿用同一职责，不再叠加独立核验技能。
 - `runweave-change-validation`
 - `runweave-dev-session`
 - `run-test-cases`
