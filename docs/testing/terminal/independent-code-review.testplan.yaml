@@ -2,7 +2,7 @@ version: 1
 name: 终端页面一键独立代码 Review
 description: >
   功能合同见 docs/cli/terminal-task-control.md 的「终端页面独立代码 Review」。
-  验证两端统一从更多菜单直接启动、来源上下文隔离、当前变更快照与安全回传。
+  验证两端统一从更多菜单直接启动、用户要求白名单、实现者探索隔离、当前变更快照与安全回传。
   每例使用自己的项目、终端和证据目录，不操作用户工作终端；模型答案不能代替运行事实。
   本文件的格式通过不表示产品已实现或行为通过。
 cases:
@@ -31,16 +31,16 @@ cases:
       - 打开 Reviewer 入口观察真实独立终端，再回到来源；等待报告显示与结果回传，保存真实 UI 树及截图。
       - 明确证据来源为模拟器；清理本例终端与环境，执行设备 stop/finish，恢复本例启动的设备状态。
   - id: ICR-003
-    name: 来源历史不能进入 Reviewer 上下文
+    name: 用户要求进入冻结输入但实现者探索与自评不进入
     required: true
-    description: 当前及历史任务的来源内容不被读取提取或注入，Reviewer 只接收白名单输入。
+    description: 入口自动取得用户要求，Reviewer 能核对目标，仍不继承来源 Agent 的探索与结论。
     preconditions:
-      - 本例来源有两个历史任务，对话、任务标题和自评结论含唯一标记，标记未写入代码或仓库规则。
-      - 当前工作区只有最后一组改动，创建链路的 history/handoff 调用及 Reviewer 启动输入可审计。
+      - 本例来源的用户要求、后续取消、assistant 探索与自评各含不同唯一标记，未写入代码或规则。
+      - 当前工作区有可审变更，来源会话完整可读，创建链路与 Reviewer 派发可审计。
     steps:
-      - 从真实页面点击代码 Review；检查系统未请求来源消息正文、交接摘要或任务目标提取。
-      - 检查 Reviewer bootstrap、业务 prompt、输入快照和注入上下文，确认不含唯一标记、来源身份、历史结论或来源自动生成上下文。
-      - 检查新 thread 和新 Browser Group 归属，确认未 fork/resume 来源；保存证据并清理本例资源。
+      - 从真实页面点击代码 Review，读取本轮只读 requirements.json，确认用户要求与后续修订原文和消息ID存在，实现者探索与自评标记不存在。
+      - 检查 Reviewer 业务 prompt 自动包含该冻结包，并明确使用当前要求而不把旧任务和未采纳计划变成义务；没有再次创建其他 Reviewer。
+      - 读取报告，确认 checks 逐项目标核验，未验证项进入限制而非 Bug，保存来源读取与派发证据并清理自有资源。
   - id: ICR-004
     name: 快照保持变更页的两层 Git 语义
     required: true

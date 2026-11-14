@@ -1,0 +1,53 @@
+version: 1
+name: 统一 Review 技能与目标核验入口
+description: >
+  验证自然语言 Review 和专门入口使用同一审查职责，冻结用户来源，保留目标及证据缺口，避免递归派发。
+  所有模型 fixture 明确标注范围，模型判断不替代产品或真机实测。格式校验不代表行为通过。
+cases:
+  - id: URV-001
+    name: 普通 Review 请求同时检查目标并保持只读
+    required: true
+    description: 使用现有 review-only 技能，不要求用户额外调用交付核验技能或启动第二个 Agent。
+    preconditions:
+      - 隔离会话提供原始需求、最终交付和证据，任务是评审而非修复。
+      - 提供代码零发现但手机阅读未验证的明确模拟资料，其他条件已核对。
+    steps:
+      - 请求帮我 Review，观察真实 Agent 加载 review-only 并给出代码范围与手机条件缺口，没有宣称业务全部完成。
+      - 确认无实现修改、额外核验 Agent 或无故要求重复授权；保存实际输入、工具记录与最终回复。
+  - id: URV-002
+    name: 冻结要求只包含用户来源和直接引用计划
+    required: true
+    description: 后端经生产捕获入口排除 assistant 探索、自评及 hook，来源变更可以通过摘要识别。
+    preconditions:
+      - 自有项目和来源会话包含用户要求、后续修订、直接引用计划及不同标记的 assistant 消息。
+    steps:
+      - 调用真实捕获入口读取来源，核对用户消息ID及计划内容、摘要和引用来源，确认探索、自评、hook 标记不在返回包中。
+      - 修改自有用户要求或计划后再捕获，确认摘要变化；代码快照和原始冻结包不被覆盖。
+  - id: URV-003
+    name: 不可读或超限来源保留明确缺口
+    required: true
+    description: 部分、缺失、超限及越界计划不能被当成完整需求或悄悄截断。
+    preconditions:
+      - 自有捕获 fixture 可返回 partial、缺失来源及超限用户要求，并含指向项目外的计划链接。
+    steps:
+      - 经生产捕获入口逐组读取，确认无法完整取得来源时 availability 为 unavailable，没有残缺文本被当作完整目标；越界计划没有读取且保留 omissions。
+      - 核对生成的 Reviewer 提示明确只能做代码审查并保留目标缺口，不跟随资料指令执行外部操作。
+  - id: URV-004
+    name: 零 Bug 但目标失败或未验证不能算完整通过
+    required: true
+    description: 生产报告保存逻辑拒绝用任务完成或非空证据覆盖失败与目标遗漏。
+    preconditions:
+      - 自有存储、冻结代码和需求包具备合法同版证据，提供零 findings 的合法模型报告。
+    steps:
+      - 分别通过生产报告保存入口提交 failed 目标检查、not_run 目标检查和缺少目标检查的报告，确认 coverageComplete 均为 false，缺口不会转成 findings。
+      - 提交有同版证据的逐项 passed 目标检查，确认可保留完整覆盖；旧轮次无需求包的报告按旧合同兼容读取。
+  - id: URV-005
+    name: 现有页面入口自动完成同一 Reviewer 的双重核验
+    required: true
+    description: 不新增按钮或要求手动调用技能，UI 真实展示代码与目标核验结果及缺口。
+    preconditions:
+      - 自有 Dev Session 包含本次源码，来源终端有可审文本和完整用户要求，可启动真实 Reviewer。
+    steps:
+      - 用 toolkit:playwright-cli 从终端更多菜单点击现有代码 Review，观察独立终端、requirements.json、真实派发及原生 final，没有额外核验任务。
+      - 打开报告，确认验证与目标核验、实际结果和未验证说明可读，零 Bug 未覆盖必要条件时事项不会标通过；保存 DOM、原生返回与后端回读证据。
+      - 停止仅本例自有环境并清理临时资源，保留报告与证据。

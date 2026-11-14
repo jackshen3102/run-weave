@@ -4,9 +4,21 @@ import { chmod, mkdir, open, readFile, rename, unlink, lstat, realpath } from "n
 import path from "node:path";
 import type { CodeReviewRun, CreateCodeReviewRequest, CodeReviewSnapshot, CodeReviewReport } from "@runweave/shared/terminal/code-review";
 
+
 export class CodeReviewError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); }
 }
+/** Frozen user sources only. Never hand off implementation reasoning or self-assessment. */
+export interface ReviewRequirements {
+  version: 1;
+  availability: "available" | "unavailable";
+  reason: string;
+  digest: string;
+  messages: Array<{ id: string; text: string }>;
+  plans: Array<{ path: string; sourceMessageIds: string[]; digest: string; text: string }>;
+  omissions: string[];
+}
+
 export interface SourceBinding {
   terminalId: string; projectId: string; rootPath: string;
 }
@@ -110,6 +122,10 @@ export class CodeReviewStore {
   }
   async snapshot(id: string): Promise<CodeReviewSnapshot> {
     return JSON.parse((await readOwnedFile(this.input(id), "snapshot.json", 128 * 1024 * 1024)).toString("utf8"));
+  }
+  async requirements(id: string): Promise<ReviewRequirements | null> {
+    try { return JSON.parse((await readOwnedFile(this.input(id), "requirements.json", 256 * 1024)).toString("utf8")); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
   }
   async report(id: string): Promise<CodeReviewReport> {
     return JSON.parse((await readOwnedFile(this.saved(id), "report.json", 2 * 1024 * 1024)).toString("utf8"));

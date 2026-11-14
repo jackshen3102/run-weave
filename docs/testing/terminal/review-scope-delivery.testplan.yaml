@@ -1,0 +1,46 @@
+version: 1
+name: Review 代码范围收口与目标反馈
+description: >
+  验证需求不可得时纯代码审查可以结束，明确目标缺口会回传主 Agent，自动反馈不变成新需求。
+  使用自有项目和当前源码 Dev Session；代码通过不等于业务目标通过，written 不等于 Agent 已消费。
+cases:
+  - id: RSD-001
+    name: 没有需求来源的纯代码审查独立结束
+    required: true
+    description: 需求不可得本身不阻塞代码范围，报告和界面明确目标未核验。
+    preconditions:
+      - 自有 Dev Session 和 Git 项目存在可审且可真实执行的简单文本代码，来源是没有 Agent 会话的 Shell 终端。
+    steps:
+      - 使用 toolkit:playwright-cli 从现有菜单启动 Review，核对冻结需求不可用；等待真实 Reviewer 执行代码并保存报告。
+      - 确认 scope 为 code，代码覆盖完整时 caseStatus 为 passed、delivery 为 skipped；报告显示仅代码且未核验用户目标，没有把需求缺失当作待完成条件。
+      - 读取真实页面报告，保存 DOM 和原始报告，清理本例自有资源。
+  - id: RSD-002
+    name: 目标缺口回传并被主 Agent 接收
+    required: true
+    description: 零 Bug 但目标未验证时保留未通过状态，并可靠回传具体事实而不冒充 Bug 或新增授权。
+    preconditions:
+      - 自有来源 Agent 的明确要求包括已能通过的代码条件和缺少指定真机证据的条件，只允许核对报告、不修改实现。
+      - 原生来源和独立 Reviewer 可运行，目标代码不会在本例执行时变化。
+    steps:
+      - 用 toolkit:playwright-cli 点击现有 Review，等待原生完整 final；确认 scope 为 code_and_goals、目标为 not_run、findings 为空、事项保持 open。
+      - 观察 blocked 报告的 delivery 从 pending 到 written，读取来源原生 user message，确认出现本轮唯一反馈标记、条件、实际缺口、报告路径和非新增授权说明；再观察来源 Agent 的实际回复确认消费，不能只靠 written 判定。
+      - 继续观察多个调度周期，确认同一 reviewId 未重复回传，没有伪造 Bug 或触发未经授权的实现；保存消息和账本后清理自有资源。
+  - id: RSD-003
+    name: 用户取消条件后反馈不再阻塞或污染需求
+    required: true
+    description: 仅真实用户修订改变目标，自动 Review 反馈不会被当作新增要求；完成后的零问题报告不重复打扰。
+    preconditions:
+      - 本例自有来源已有一条带自动 Review 反馈的原生会话，随后用户明确取消未验证条件、保留可执行代码条件。
+      - 原 Reviewer 保有可用原生会话且回传已结束，或由既有恢复规则创建新的本轮 Reviewer。
+    steps:
+      - 用 toolkit:playwright-cli 发起复审，读取新冻结包，确认包含真实用户修订，不包含任何自动反馈标记或其正文；核对包的摘要和当前用户条件。
+      - 等待 Reviewer 实际执行仍必要的路径，确认已取消项不进入未完成检查，当前条件通过后 caseStatus 为 passed、delivery 为 skipped，不新增反馈；保留旧报告和原始证据。
+  - id: RSD-004
+    name: 不确定投递在重启后不重放
+    required: false
+    description: 全量回归时对目标反馈执行真实故障注入，沿用未知写入与身份恢复边界。
+    preconditions:
+      - 本例独立环境可在目标反馈已持久化 attemptedAt 后中断写入确认，并记录来源输入计数。
+    steps:
+      - 制造一次不确定写入，确认 delivery 为 unknown，再在本例内停止和重启 Backend，重新取得准确端点。
+      - 回读原记录并观察多个周期，确认反馈和报告保留、无新派发或自动重发，来源消息计数不增加；保存故障证据并清理仅本例资源。

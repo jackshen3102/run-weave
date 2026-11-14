@@ -9,8 +9,9 @@ import { atomicJson, CodeReviewError, CodeReviewStore, readOwnedFile, type Revie
 import { captureReviewSnapshot, reviewDigest } from "./snapshot";
 import { saveReviewReport } from "./report";
 import { buildCodeReviewPrompt } from "./prompt";
-import { deliverCodeReview, readSourceBinding } from "./delivery";
+import { deliverCodeReview, readSourceBinding, shouldDeliverCodeReview } from "./delivery";
 import { prepareReviewerLaunch } from "./hooks";
+import { readReviewRequirements } from "./requirements";
 
 const active = (run: CodeReviewRun) => ["preparing", "starting", "reviewing"].includes(run.phase);
 /** One Backend owner, serial ticks and request mutations. UI has no scheduling role. */
@@ -28,7 +29,7 @@ export class CodeReviewService {
     // A null attempt proves no PTY write was started. Requeue saved reports
     // rejected by the old source-binding checks, without replaying uncertain I/O.
     for (const record of this.store.records.values()) {
-      if (record.run.caseStatus !== "closed" && record.run.phase === "completed" && record.run.reportId && !record.delivery.attemptedAt &&
+      if (record.run.caseStatus !== "closed" && ["completed", "blocked"].includes(record.run.phase) && record.run.reportId && !record.delivery.attemptedAt &&
           ["unavailable", "target_changed"].includes(record.run.delivery)) {
         record.run.delivery = "pending"; record.run.deliveryError = null;
       }
@@ -172,7 +173,7 @@ export class CodeReviewService {
   }
   private async advance(record: ReviewRecord) {
     const { run } = record; const id = run.reviewId;
-    if (run.phase === "completed") {
+    if (run.reportId && ["completed", "blocked"].includes(run.phase) && run.delivery === "pending") {
       if (record.recovered && record.delivery.attemptedAt) {
         run.delivery = "unknown"; run.deliveryError = "Backend 重启后未恢复自动回传，请查看已保存报告";
         await this.touch(record); return;
@@ -184,6 +185,9 @@ export class CodeReviewService {
       if (!record.snapshotId) {
         const snapshot = await captureReviewSnapshot(record.source.projectId, record.source.rootPath);
         if (!snapshot.entries.length) throw new CodeReviewError(409, "no_changes", "当前工作区没有待审查的改动");
+        const requirements = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath);
+        await atomicJson(path.join(this.store.input(id), "requirements.json"), requirements);
+        await chmod(path.join(this.store.input(id), "requirements.json"), 0o400);
         await atomicJson(path.join(this.store.input(id), "snapshot.json"), snapshot);
         await chmod(path.join(this.store.input(id), "snapshot.json"), 0o400);
         record.snapshotId = snapshot.snapshotId; await this.touch(record);
@@ -228,7 +232,7 @@ export class CodeReviewService {
       record.reviewerThreadId = task.threadId;
       run.phase = "reviewing"; record.startedAt = Date.now(); await this.touch(record);
       await this.tasks.send(task.taskId, { expectedRevision: task.revision, dispatchId: record.dispatchId, delivery: "when_idle",
-        text: buildCodeReviewPrompt({ reviewId: id, round: run.round, snapshot, inputPath: path.join(this.store.input(id), "snapshot.json"), outputPath: this.store.output(id) }) });
+        text: buildCodeReviewPrompt({ reviewId: id, round: run.round, snapshot, inputPath: path.join(this.store.input(id), "snapshot.json"), outputPath: this.store.output(id), requirements: await this.store.requirements(id) }) });
       return;
     }
     if (run.phase !== "reviewing" || observation.availability !== "available") return;
@@ -249,19 +253,27 @@ export class CodeReviewService {
     const finals = turn.messages.filter((message) => message.role === "assistant" && message.phase === "final" && message.text.trim());
     if (finals.length !== 1) throw new CodeReviewError(422, "final_unavailable", "缺少完整且唯一的原生 final");
     const snapshot = await this.store.snapshot(id);
-    const report = await saveReviewReport(this.store, id, snapshot, finals[0]!.text);
+    const requirements = await this.store.requirements(id);
+    const report = await saveReviewReport(this.store, id, snapshot, finals[0]!.text, requirements);
     try { run.stale = (await captureReviewSnapshot(record.source.projectId, record.source.rootPath)).fingerprint !== snapshot.fingerprint; }
     catch { run.stale = true; }
-    run.reportId = id; run.summary = report.summary; run.findingCount = report.findings.length;
+    if (requirements && report.scope === "code_and_goals") {
+      const current = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath);
+      run.stale ||= current.digest !== requirements.digest;
+    }
+    run.reportId = id; run.scope = report.scope; run.summary = report.summary; run.findingCount = report.findings.length;
     const unverified = !report.findings.length && !report.coverageComplete;
-    run.phase = unverified ? "blocked" : "completed"; run.delivery = report.findings.length ? "pending" : "skipped";
-    run.error = unverified ? { code: "review_incomplete", message: "验收阻塞：存在覆盖或复现缺口" } : null;
+    run.phase = unverified ? "blocked" : "completed"; run.delivery = shouldDeliverCodeReview(report) ? "pending" : "skipped";
+    const goalFailed = report.checks.some((check) => check.description.startsWith("目标核验：") && check.status === "failed");
+    run.error = unverified ? goalFailed
+      ? { code: "review_goal_failed", message: "目标核验发现未达成项，请查看报告中的实际结果与证据" }
+      : { code: "review_incomplete", message: "验收阻塞：存在覆盖或复现缺口" } : null;
     for (const item of this.store.records.values()) {
       if (item.run.caseId === run.caseId) item.run.caseStatus = !report.findings.length && !unverified ? "passed" : "open";
     }
     record.delivery.reportHash = reviewDigest(report);
     await this.touch(record);
-    // Findings are delivered on a following serial tick after the report is durable.
+    // Feedback is delivered on a following serial tick, including blocked goal checks.
   }
   async dispose() {
     this.closing = true; if (this.timer) clearTimeout(this.timer); this.unlisten?.();

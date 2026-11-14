@@ -1,5 +1,7 @@
 import type { TerminalPreviewChangeFile, TerminalPreviewChangeKind, TerminalPreviewContentSide } from "./preview.js";
 
+export type CodeReviewScope = "code" | "code_and_goals";
+
 export type CodeReviewPhase = "preparing" | "starting" | "reviewing" | "completed" | "blocked" | "failed" | "cancelled";
 export type CodeReviewDeliveryState = "not_ready" | "skipped" | "pending" | "writing" | "written" | "target_changed" | "unavailable" | "unknown";
 export type CodeReviewCaseStatus = "open" | "passed" | "closed";
@@ -61,6 +63,8 @@ export interface CodeReviewArtifact {
   mimeType: "text/plain" | "application/json" | "image/png" | "image/jpeg";
 }
 export interface CodeReviewReport {
+  /** Absent in historical reports. Coverage applies only to this declared scope. */
+  scope?: CodeReviewScope;
   schemaVersion: 1;
   reviewId: string;
   snapshotId: string;
@@ -75,6 +79,7 @@ export interface CodeReviewReport {
   artifacts: CodeReviewArtifact[];
 }
 export interface CodeReviewRun {
+  scope?: CodeReviewScope;
   reviewId: string;
   /** One case can contain multiple immutable snapshot/report rounds. */
   caseId: string;

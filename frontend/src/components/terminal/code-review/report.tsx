@@ -39,8 +39,9 @@ export function CodeReviewReportView() {
       <p>第 {value.run.round ?? 1} 轮审查</p>
       {value.run.deliveryError ? <p className="text-muted-foreground">{value.run.deliveryError}</p> : null}
       <p className="break-all text-xs text-muted-foreground">{value.run.createdAt} · {value.snapshot?.fingerprint}</p>
-      {value.run.stale ? <p className="text-muted-foreground">审查期间代码已变化，结论仅对应原快照。</p> : null}
+      {value.run.stale ? <p className="text-muted-foreground">审查期间代码或需求已变化，结论仅对应原冻结输入。</p> : null}
       {report ? <>
+        <p>{report.scope === "code" ? "本轮范围：仅代码，未核验用户目标。" : report.scope === "code_and_goals" ? "本轮范围：代码及用户目标。" : "旧报告未单独声明目标核验范围。"}</p>
         <p className="whitespace-pre-wrap">{report.summary}</p>
         <p>{report.coverageComplete ? "已声明覆盖完整，仍需核对证据" : "覆盖存在缺口"} · {report.findings.length} 个问题</p>
         {report.findings.map((finding, index) => <article key={index} className="flex flex-col gap-1 rounded border border-border p-3">
@@ -49,7 +50,7 @@ export function CodeReviewReportView() {
           <p className="whitespace-pre-wrap">{finding.impact}</p>
           {finding.evidenceRefs.map((id) => <Button key={id} variant="link" size="sm" onClick={() => void download(id)}>{id}</Button>)}
         </article>)}
-        <h3>验证记录</h3>
+        <h3>验证与目标核验</h3>
         {report.checks.map((check, index) => <div key={index} className="rounded border border-border p-2">
           <p>{check.description} · {check.status}</p><p className="text-xs text-muted-foreground">{check.environment}</p><p className="whitespace-pre-wrap">{check.observedResult}</p>
           {check.evidenceRefs.map((id) => <Button key={id} variant="link" size="sm" onClick={() => void download(id)}>{id}</Button>)}
@@ -58,7 +59,7 @@ export function CodeReviewReportView() {
         <p>资源清理：{report.cleanup}</p>
         <details><summary>受审文件（{report.reviewedChanges.length}）</summary>{report.reviewedChanges.map((entry) => <p key={`${entry.changeKind}:${entry.path}`} className="break-all">{entry.changeKind} · {entry.path}</p>)}</details>
       </> : <p>报告尚未完成。{value.snapshot?.omissions.join("；")}</p>}
-      <p className="text-xs text-muted-foreground">Review 只评审代码，不表示符合原对话需求或可发布；不自动授予修复、提交和外部操作权限。</p>
+      <p className="text-xs text-muted-foreground">Review 核对冻结代码与可取得的用户要求；目标或证据缺失会保留缺口，不自动授权修复、发布或其他外部操作。</p>
     </>}
     {artifactError ? <p role="alert">{artifactError}</p> : null}
   </div>;

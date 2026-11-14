@@ -3,10 +3,12 @@ import path from "node:path";
 import { z } from "zod";
 import type { CodeReviewReport, CodeReviewSnapshot } from "@runweave/shared/terminal/code-review";
 import { atomicJson, CodeReviewError, CodeReviewStore, readOwnedFile } from "./store";
+import type { ReviewRequirements } from "./requirements";
 const text = z.string().min(1).max(16000);
 const kind = z.enum(["staged", "working"]);
 const refs = z.array(z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/)).max(100);
 export const codeReviewReportSchema = z.object({
+  scope: z.enum(["code", "code_and_goals"]).optional(),
   schemaVersion: z.literal(1), reviewId: z.string(), snapshotId: z.string(), fingerprint: z.string(),
   summary: text, findings: z.array(z.object({
     severity: z.enum(["P0", "P1", "P2", "P3"]), title: text, path: text, changeKind: kind,
@@ -25,7 +27,7 @@ export const codeReviewReportSchema = z.object({
 }).strict();
 
 /** Structural validation cannot establish semantic correctness or actual reproduction. */
-export async function saveReviewReport(store: CodeReviewStore, reviewId: string, snapshot: CodeReviewSnapshot, final: string): Promise<CodeReviewReport> {
+export async function saveReviewReport(store: CodeReviewStore, reviewId: string, snapshot: CodeReviewSnapshot, final: string, requirements?: ReviewRequirements | null): Promise<CodeReviewReport> {
   if (Buffer.byteLength(final) > 2 * 1024 * 1024) throw new CodeReviewError(413, "report_invalid", "报告超过大小上限");
   let report: CodeReviewReport;
   try { report = codeReviewReportSchema.parse(JSON.parse(final.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/, "$1"))); }
@@ -61,8 +63,15 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
         finding.evidenceRefs.every((id) => check.evidenceRefs.includes(id))))
       invalid("运行时问题缺少关联的同版已执行检查");
   }
+  report.scope = requirements?.availability === "available" ? report.scope ?? "code_and_goals" : "code";
+  if (report.scope === "code") {
+    report.summary = `仅代码审查，未核验用户目标。${report.summary}`;
+  } else {
+    if (!report.checks.some((check) => check.description.startsWith("目标核验：")))
+      report.limitations.push("未逐项交代目标核验，仅有代码审查结果。");
+  }
   report.limitations = [...new Set([...report.limitations, ...snapshot.omissions])];
-  if (snapshot.omissions.length || report.checks.some((check) => check.status === "not_run") || report.limitations.length)
+  if (snapshot.omissions.length || report.checks.some((check) => check.status !== "passed") || report.limitations.length)
     report.coverageComplete = false;
   const ids = new Set<string>();
   let total = 0;
@@ -80,6 +89,7 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
   }
   for (const item of [...report.findings, ...report.checks])
     if (item.evidenceRefs.some((id) => !ids.has(id))) invalid("报告引用未登记的证据");
+  if (Buffer.byteLength(JSON.stringify(report)) > 2 * 1024 * 1024) invalid("归档报告超过大小上限");
   await atomicJson(path.join(store.saved(reviewId), "report.json"), report);
   return report;
 }

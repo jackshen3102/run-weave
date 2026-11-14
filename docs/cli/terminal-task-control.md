@@ -108,7 +108,7 @@ Dots 可通过现有 MCP run_command 调用这些命令并有界等待。command
 
 桌面 / Web 与原生 iOS 的终端「更多 → 代码 Review」直接请求 Backend 创建独立的可见
 Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执行能力，但**不调用
-`task review` 登记验收**；单轮执行结束表示独立报告已保存，事项是否结束另由审查结果或用户决定，不表示需求符合或可发布。
+`task review` 登记验收**；单轮执行结束表示独立报告已保存，事项是否结束另由审查结果或用户决定，不自动表示需求符合或可发布，需求与验证结果须逐项核对。
 
 [共享合同](../../packages/shared/src/terminal/code-review.ts)与
 [Backend owner](../../backend/src/terminal/code-review/service.ts)定义当前协议。
@@ -117,9 +117,9 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
 每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 且覆盖完整时 caseStatus 为 passed，
 事项自动结束、状态条隐藏，delivery 为 skipped，不向来源终端发送消息；有 Bug 时事项保持 open，
-只回传问题的级别、位置、标题和触发影响，陈述已观察事实，不主动要求来源 Agent 修复或补做验收，不附总结、覆盖清单或例行说明。
+回传已复现问题的级别、位置、标题和影响。目标未达成、目标未验证或核验覆盖缺口单独标记为非 Bug 结论，一并回传条件、实际结果及完整报告路径；不主动要求来源 Agent 修复或补做验收。
 问题必须由 Reviewer 实际复现并提供同版检查与证据；静态推断不能进入新报告的问题列表，也不回传旧报告中的静态问题。
-无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不投递疑点。
+无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不把疑点作为 Bug 投递。已保存的目标反馈即使 phase=blocked 也按原投递账本回传；纯代码范围的非 Bug 覆盖缺口仅展示报告。
 此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
 仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
 `POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；
@@ -134,7 +134,18 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 明确缺口。无变更或全部不可读时停止自动推进，不启动空审查。
 
 来源身份、工作区及回传账本仅存于 Backend。Reviewer prompt 通过白名单模板构造，只包含
-本轮编号、代码路径、冻结快照、通用规则和自有输出目录，不读取来源历史、目标或交接。
+本轮编号、代码路径、冻结快照、冻结用户要求、通用规则和自有输出目录。冻结用户要求由
+Backend 通过当前终端的会话阅读接口取得，只保留用户消息及其直接引用的项目内计划，
+不传入实现者探索、自评或完整对话；Reviewer 不再自行读取来源历史或交接。
+每轮自动保存只读 `requirements.json`，最多64条用户消息、5份单份不超过24000字节的计划，
+总包不超过48000字节。缺失、不完整、超限或身份漂移时降级为 scope=code，只评价代码覆盖，
+summary 与客户端明确“未核验用户目标”；需求缺失本身不阻塞代码审查结束，也不生成目标待办。
+需求可用时默认 scope=code_and_goals；用户明确仅审代码、没有可核验业务要求或目标已全部取消时，可在报告中引用用户来源声明 scope=code。不得因目标失败或证据缺失降级范围。必要目标或证据缺口仍使事项保持 open。scope 为可选兼容字段，旧报告不回填。
+计划引用并不自动表示采纳；按原文及后续修订判断当前范围。需求包摘要与代码指纹分别保留，
+完成时比较代码指纹，code_and_goals 范围另比较需求摘要，变化均标 stale；旧轮次没有需求包时继续按代码审查语义读取。
+同一 Reviewer 使用统一 `review-only` 职责，在 checks 中以“目标核验：”记录逐项条件、用户来源、
+预期、实际、版本及证据；不再创建第二个核验 Agent。必要条件失败或未执行使 coverageComplete
+为 false，缺口本身不伪造为 findings。旧报告保持原文，现有 Web/iOS 验证记录直接展示目标核验。
 Reviewer 自行选择审查方法和必要验证，省略例行步骤播报；最终 JSON 由 Backend 保存，无需重复写报告文件。
 没有待复现疑点或必要运行检查时 checks 可为空；有问题时必须关联已执行的同版复现检查，记录步骤、预期与实际结果及证据。
 新 Reviewer 使用现有 Codex provider 和用户模型配置；缺少原生 thread/final 或工具环境时
@@ -153,7 +164,7 @@ Backend 管理的白名单目录。文件存在及 JSON 合法不证明语义正
 忙闲、草稿、任务或会话切换判断，不新增设置；排队及输入行为与手动发送相同。界面切换
 到其他终端不会改变回传目标。写入意图先持久化，不确定写入记 unknown，不重放；written
 只说明输入 I/O 接受，不代表来源 Agent 已确认。Backend 重启后只重新排队从未尝试写入
-的已保存报告，不恢复通用任务的 supervisor 权限；已尝试且结果不确定的回传记 unknown。
+的已保存报告（包括带目标反馈的 blocked 报告），不恢复通用任务的 supervisor 权限；已尝试且结果不确定的回传记 unknown。
 启动等待上限 120 秒，审查观察上限 30 分钟，超时不强杀 Reviewer。
 
 验收入口为 [独立 Review 计划](../testing/terminal/independent-code-review.testplan.yaml)。
@@ -169,3 +180,5 @@ Reviewer 启动先通过原生 `hooks/list` 只读核对该工作区的配置。
 预检解析 `agents.codex.binary`（缺省为 PATH 中的 Codex）后，将同一绝对可执行路径用于
 Hooks 查询和 Reviewer 启动，避免预检与实际启动使用不同版本；解析失败时停止启动。
 对应行为验收见 [Reviewer Hooks 启动计划](../testing/terminal/independent-code-review-hooks.testplan.yaml)。
+
+Review 反馈使用 `[runweave-code-review-feedback:<reviewId>]` 标记，后续 Review 需求冻结和任务监督目标提取都排除该自动反馈，避免把反馈当成用户新增要求。超过48000字节的反馈仅投递明确标记的摘要与完整报告路径，不声称已传递全部条目。written 仍不表示原 Agent 已消费。

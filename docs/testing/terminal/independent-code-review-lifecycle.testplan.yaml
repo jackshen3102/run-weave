@@ -5,7 +5,7 @@ cases:
   - id: ICL-001
     name: 无 Bug 的报告自动结束事项
     required: true
-    description: 本轮报告有效且 findings 为空时事项标为 passed，状态条消失，历史报告仍可读取。
+    description: 本轮报告有效、当前声明范围覆盖完整且 findings 为空时事项标为 passed，状态条消失，历史报告仍可读取。
     preconditions:
       - 自有 Backend 和客户端来自当前源码，隔离项目有可审文本改动，Reviewer 可返回有效的无 Bug 报告。
     steps:
