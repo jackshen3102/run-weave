@@ -9,4 +9,3 @@ public final class TerminalOutputMetrics: ObservableObject {
   func addQueued(_ count: Int) { queuedBytes += count }
   func clearQueued() { queuedBytes = 0 }
 }
-
