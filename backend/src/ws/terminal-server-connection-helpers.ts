@@ -96,7 +96,7 @@ export function sendEvent(
     socket.bufferedAmount + Buffer.byteLength(payload, "utf8") >
     TERMINAL_WS_MAX_PENDING_BYTES
   ) {
-    closeSlowTerminalSocket(socket, "Terminal output recovery required", {
+    closeSlowTerminalSocket(socket, "Terminal output backpressure; reconnect manually", {
       trigger: "send-buffer-limit", payloadBytes: Buffer.byteLength(payload, "utf8"),
       limitBytes: TERMINAL_WS_MAX_PENDING_BYTES, messageType: event.type,
     });

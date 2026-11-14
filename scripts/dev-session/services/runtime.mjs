@@ -1,5 +1,5 @@
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -30,6 +30,24 @@ export function isProcessLive(pid) {
 
 export function readProcessSignature(pid) {
   try {
+    if (process.platform === "linux") {
+      // ps lstart is wall-clock derived and can drift when the VM clock adjusts.
+      // Kernel start ticks plus boot ID retain the exact process birth identity.
+      const readBirth = () => {
+        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+        const fields = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/);
+        return fields[0] !== "Z" && /^\d+$/.test(fields[19] ?? "")
+          ? fields[19]
+          : "";
+      };
+      const bootId = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+      const startTicks = readBirth();
+      const command = readFileSync(`/proc/${pid}/cmdline`);
+      if (!bootId || !startTicks || !command.length || readBirth() !== startTicks) {
+        return "";
+      }
+      return `linux:${bootId}:${startTicks}:${command.toString("base64")}`;
+    }
     return execFileSync(
       "ps",
       ["-p", String(pid), "-o", "lstart=", "-o", "command="],

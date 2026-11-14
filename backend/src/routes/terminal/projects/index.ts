@@ -10,7 +10,7 @@ import {
   normalizeProjectPath,
   TerminalPreviewError,
 } from "../../../terminal/preview/preview";
-import { killTmuxSessionForTerminal } from "../../../terminal/runtime/launcher";
+import { deleteTerminalSession } from "../../../terminal/application/delete-session";
 import type { TerminalRuntimeRegistry } from "../../../terminal/runtime/registry";
 import type { TmuxService } from "../../../terminal/tmux/service";
 import type { TmuxOutputWatcher } from "../../../terminal/tmux/output-watcher";
@@ -237,16 +237,8 @@ export function registerTerminalProjectRoutes(
             req.params.id,
         );
 
-      if (options?.runtimeRegistry) {
-        for (const session of childSessions) {
-          await options.runtimeRegistry.disposeSessionRuntimes(session.id);
-        }
-      }
       for (const session of childSessions) {
-        await options?.tmuxOutputWatcher?.unwatchSession(session.id);
-      }
-      for (const session of childSessions) {
-        await killTmuxSessionForTerminal(session, options?.tmuxService);
+        await deleteTerminalSession(session.id, { ...options, terminalSessionManager });
       }
 
       const deleted = await terminalSessionManager.deleteProject(req.params.id);

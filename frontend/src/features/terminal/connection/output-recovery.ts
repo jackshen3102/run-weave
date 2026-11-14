@@ -15,6 +15,13 @@ export interface TerminalOutputDelivery {
   resizeMode?: "ordered";
 }
 
+export class TerminalOutputBackpressureError extends Error {
+  constructor() {
+    super("Terminal output backlog exceeded; reconnect required");
+    this.name = "TerminalOutputBackpressureError";
+  }
+}
+
 /** Tracks renderer acceptance, not websocket receipt. Never persists to storage. */
 export class TerminalClientOutputRecovery {
   readonly clientId = crypto.randomUUID();
@@ -114,7 +121,7 @@ export class TerminalClientOutputRecovery {
   ): TerminalOutputDelivery {
     const bytes = new TextEncoder().encode(data).byteLength;
     if (this.pendingBytes + bytes > 1024 * 1024 || this.pending.length >= 8192)
-      throw new Error("Terminal renderer output limit; reconnect required");
+      throw new TerminalOutputBackpressureError();
     const entry = { bytes, cursor, done: false };
     this.pending.push(entry);
     this.pendingBytes += bytes;

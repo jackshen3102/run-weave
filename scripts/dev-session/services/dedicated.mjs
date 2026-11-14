@@ -2,7 +2,9 @@ import { sessionConfiguration } from "../configuration.mjs";
 import { persistBackendHealthAuth } from "../../lib/backend-health-auth.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 
 import {
@@ -25,6 +27,8 @@ import {
   waitForPage,
 } from "./runtime.mjs";
 
+const execFileAsync = promisify(execFile);
+
 export async function startDedicatedAppServer({
   sourceRoot,
   sessionId,
@@ -39,7 +43,14 @@ export async function startDedicatedAppServer({
   const processInfo = spawnDetached({
     name: "app-server",
     command: "pnpm",
-    args: ["--filter", "@runweave/app-server", "dev", ...sessionConfiguration(sessionId, paths).args, "--port", String(port)],
+    args: [
+      ...(process.platform === "linux"
+        ? ["-C", "./app-server", "exec", "tsx", "src/index.ts"]
+        : ["--filter", "@runweave/app-server", "dev"]),
+      ...sessionConfiguration(sessionId, paths).args,
+      "--port",
+      String(port),
+    ],
     cwd: sourceRoot,
     env: {
       ...process.env,
@@ -139,13 +150,51 @@ export async function startDedicatedBackend({
   ]) {
     delete backendBaseEnv[key];
   }
+  const backendEnv = {
+    ...createBackendEnv({
+      baseEnv: backendBaseEnv,
+      backendPort: port,
+      sourceRoot,
+    }),
+    RUNWEAVE_DESKTOP_STATE_DIR: path.join(paths.sessionDir,"electron","user-data"),
+    RUNWEAVE_DESKTOP_CHANNEL: "stable",
+    RUNWEAVE_DEV_BROWSER_PROFILE_DIR: profileDir,
+    BROWSER_PROFILE_DIR: profileDir,
+    RUNWEAVE_DEV_SESSION_ID: sessionId,
+    RUNWEAVE_SOURCE_REVISION: revision,
+    RUNWEAVE_RESOURCE_NAMESPACE: namespace,
+    RUNWEAVE_APP_SERVER_DISCOVERY: appServer?.url ? "explicit" : "disabled",
+    ...(appServer?.url
+      ? {
+          RUNWEAVE_APP_SERVER_URL: appServer.url,
+          RUNWEAVE_APP_SERVER_TOKEN: appServerToken,
+        }
+      : {}),
+  };
+  if (process.platform === "linux") {
+    // pnpm run adds a shell on Linux that can swallow its forwarded SIGTERM.
+    // Keep the predev hook, then use pnpm exec so tsx owns signal forwarding.
+    try {
+      const result = await execFileAsync("pnpm", ["-C", "./backend", "run", "predev"], {
+        cwd: sourceRoot,
+        env: backendEnv,
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      await appendFile(logPath, `${result.stdout}${result.stderr}`, { mode: 0o600 });
+    } catch (error) {
+      await appendFile(logPath, `${error.stdout ?? ""}${error.stderr ?? ""}`, { mode: 0o600 });
+      throw error;
+    }
+  }
   const processInfo = spawnDetached({
     name: "backend",
     command: "pnpm",
     args: [
       "-C",
       "./backend",
-      "dev",
+      ...(process.platform === "linux"
+        ? ["exec", "tsx", "watch", "src/index.ts"]
+        : ["dev"]),
       "--",
       ...sessionConfiguration(sessionId, paths).args,
       "--port",
@@ -154,27 +203,7 @@ export async function startDedicatedBackend({
       "127.0.0.1",
     ],
     cwd: sourceRoot,
-    env: {
-      ...createBackendEnv({
-        baseEnv: backendBaseEnv,
-        backendPort: port,
-        sourceRoot,
-      }),
-      RUNWEAVE_DESKTOP_STATE_DIR: path.join(paths.sessionDir,"electron","user-data"),
-      RUNWEAVE_DESKTOP_CHANNEL: "stable",
-      RUNWEAVE_DEV_BROWSER_PROFILE_DIR: profileDir,
-      BROWSER_PROFILE_DIR: profileDir,
-      RUNWEAVE_DEV_SESSION_ID: sessionId,
-      RUNWEAVE_SOURCE_REVISION: revision,
-      RUNWEAVE_RESOURCE_NAMESPACE: namespace,
-      RUNWEAVE_APP_SERVER_DISCOVERY: appServer?.url ? "explicit" : "disabled",
-      ...(appServer?.url
-        ? {
-            RUNWEAVE_APP_SERVER_URL: appServer.url,
-            RUNWEAVE_APP_SERVER_TOKEN: appServerToken,
-          }
-        : {}),
-    },
+    env: backendEnv,
     logPath,
   });
   onSpawn(processInfo);
@@ -319,7 +348,7 @@ export async function startDedicatedFrontend({
     args: [
       "-C",
       "./frontend",
-      "dev",
+      ...(process.platform === "linux" ? ["exec", "vite"] : ["dev"]),
       "--",
       ...sessionConfiguration(sessionId, paths).args,
       "--port",

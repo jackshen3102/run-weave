@@ -38,6 +38,16 @@ if (mode.startsWith('orphan-')) {
     if (mode !== 'ignore') setTimeout(() => { log('drained'); process.exit(0); }, 700);
   });
 }
+if (mode === 'command-change') {
+  let changed = false;
+  setInterval(() => {
+    if (!changed && fs.existsSync(process.env.STOP_FLAG)) {
+      changed = true;
+      process.title = 'runweave-shutdown-changed-command';
+      log('command-changed');
+    }
+  }, 25);
+}
 log('ready');
 setInterval(() => {}, 1000);
 `;
@@ -89,7 +99,11 @@ export async function verifyProcessStop(sourceRoot, root) {
     const processInfo = spawnDetached({
       name: "shutdown verifier",
       command: watcher ? "pnpm" : process.execPath,
-      args: watcher ? ["-C", root, "dev"] : [entry, mode],
+      args: watcher
+        ? process.platform === "linux"
+          ? ["-C", root, "exec", process.execPath, tsx, "watch", entry, "drain"]
+          : ["-C", root, "dev"]
+        : [entry, mode],
       cwd: sourceRoot,
       env: {
         ...process.env,
@@ -227,12 +241,31 @@ export async function verifyProcessStop(sourceRoot, root) {
     );
     assert(isProcessLive(orphan.child.pid));
 
+    if (process.platform === "linux") {
+      const changed = await start("command-change");
+      const originalSignature = changed.processInfo.processSignature;
+      await writeFile(`${changed.evidence}.flag`, "change");
+      const deadline = Date.now() + 5_000;
+      while (!(await events(changed.evidence)).some((event) => event.event === "command-changed")) {
+        assert(Date.now() < deadline, "fixture command did not change");
+        await pause(25);
+      }
+      const changedSignature = readProcessSignature(changed.processInfo.pid);
+      // The controlled fixture kept its boot and birth identity but changed argv.
+      assert.equal(changedSignature.split(":").slice(0, 3).join(":"), originalSignature.split(":").slice(0, 3).join(":"));
+      assert.notEqual(changedSignature, originalSignature);
+      await assert.rejects(stopOwnedProcess(changed.processInfo), /identity no longer matches/);
+      assert(!(await events(changed.evidence)).some((event) => event.event === "signal"));
+      changed.processInfo.processSignature = changedSignature;
+      assert.equal((await stopOwnedProcess(changed.processInfo)).outcome, "exited");
+    }
+
     const dedicated = await start("drain");
-    const shared = await start("drain");
+    const shared = await start("shared-drain");
     await assert.rejects(
       stopOwnedProcess({
         ...dedicated.processInfo,
-        processSignature: "mismatched-owner",
+        processSignature: shared.processInfo.processSignature,
       }),
       /identity no longer matches/,
     );
@@ -263,6 +296,7 @@ export async function verifyProcessStop(sourceRoot, root) {
       "wait-for-orphan-drain",
       "orphan-stale-fail-closed",
       "pid-signature-gate",
+      ...(process.platform === "linux" ? ["same-birth-command-change-gate"] : []),
       "shared-process-preserved",
     ];
   } finally {

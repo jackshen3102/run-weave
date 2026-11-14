@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { rename } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { assertPrivateDirectory, canonicalPath, processStartIdentity, readPrivateFile } from "@runweave/config-node";
+import { assertPrivateDirectory, assertPrivateDirectoryAsync, canonicalPath, processStartIdentity, processStartIdentityAsync, readPrivateFile, readPrivateFileAsync } from "@runweave/config-node";
 import type { EnvironmentContext } from "@runweave/shared/configuration";
 import { PTY_HOST_PROTOCOL_VERSION, type PtyHostDescriptor } from "@runweave/shared/terminal/pty-host";
 
@@ -33,10 +33,10 @@ export function prepareHostDirectory(scope: EnvironmentContext): ReturnType<type
   return paths;
 }
 
-export function readHost(scope: EnvironmentContext): { descriptor: PtyHostDescriptor; token: string } {
-  const paths = hostPaths(scope);
-  assertPrivateDirectory(paths.root);
-  const descriptor = JSON.parse(readPrivateFile(paths.descriptor, 16_384)) as PtyHostDescriptor;
+type HostDiscovery = { descriptor: PtyHostDescriptor; token: string };
+const discoveries = new Map<string, Promise<HostDiscovery>>();
+
+function validateDescriptor(scope: EnvironmentContext, paths: ReturnType<typeof hostPaths>, descriptor: PtyHostDescriptor): void {
   if (descriptor.protocolVersion !== PTY_HOST_PROTOCOL_VERSION) throw new Error("HOST_PROTOCOL_INCOMPATIBLE");
   if (descriptor.scope?.kind !== scope.kind || descriptor.scope.instanceId !== scope.instanceId ||
       canonicalPath(descriptor.scope.configRoot) !== canonicalPath(scope.configRoot) || descriptor.endpoint !== paths.endpoint ||
@@ -46,10 +46,49 @@ export function readHost(scope: EnvironmentContext): { descriptor: PtyHostDescri
   const url = new URL(descriptor.gatewayUrl);
   if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port || url.pathname !== "/")
     throw new Error("HOST_IDENTITY_MISMATCH");
-  if (processStartIdentity(descriptor.pid) !== descriptor.startedAt) throw new Error("HOST_UNAVAILABLE");
-  const token = readPrivateFile(paths.token, 256).trim();
+}
+
+function validateToken(token: string): string {
+  token = token.trim();
   if (token.length < 32) throw new Error("HOST_AUTH_FAILED");
+  return token;
+}
+
+export function readHost(scope: EnvironmentContext): HostDiscovery {
+  const paths = hostPaths(scope);
+  assertPrivateDirectory(paths.root);
+  const descriptor = JSON.parse(readPrivateFile(paths.descriptor, 16_384)) as PtyHostDescriptor;
+  validateDescriptor(scope, paths, descriptor);
+  if (processStartIdentity(descriptor.pid) !== descriptor.startedAt) throw new Error("HOST_UNAVAILABLE");
+  const token = validateToken(readPrivateFile(paths.token, 256));
   return { descriptor, token };
+}
+
+async function discoverHost(scope: EnvironmentContext): Promise<HostDiscovery> {
+  const paths = hostPaths(scope);
+  await assertPrivateDirectoryAsync(paths.root);
+  const descriptor = JSON.parse(await readPrivateFileAsync(paths.descriptor, 16_384)) as PtyHostDescriptor;
+  validateDescriptor(scope, paths, descriptor);
+  if (await processStartIdentityAsync(descriptor.pid) !== descriptor.startedAt) throw new Error("HOST_UNAVAILABLE");
+  const token = validateToken(await readPrivateFileAsync(paths.token, 256));
+  return { descriptor, token };
+}
+
+/** Share only concurrent checks, never a previously verified identity or credential. */
+export async function readHostAsync(scope: EnvironmentContext): Promise<HostDiscovery> {
+  const requested = { ...scope };
+  const key = JSON.stringify([requested.kind, requested.instanceId, canonicalPath(requested.configRoot)]);
+  let flight = discoveries.get(key);
+  if (!flight) {
+    flight = discoverHost(requested);
+    discoveries.set(key, flight);
+  }
+  try {
+    const { descriptor, token } = await flight;
+    return { descriptor: { ...descriptor, scope: { ...descriptor.scope } }, token };
+  } finally {
+    if (discoveries.get(key) === flight) discoveries.delete(key);
+  }
 }
 
 export async function writeHostJson(file: string, data: unknown): Promise<void> {

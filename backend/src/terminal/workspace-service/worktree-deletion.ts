@@ -16,7 +16,7 @@ import type {
   TerminalSessionRecord,
 } from "../manager/manager";
 import { clearPreviewFileSearchCache } from "../preview/preview";
-import { killTmuxSessionForTerminal } from "../runtime/launcher";
+import { deleteTerminalSession } from "../application/delete-session";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
 import type { TerminalEventService } from "../state/terminal-event-service";
 import type { TerminalStateService } from "../state/terminal-state-service";
@@ -325,10 +325,7 @@ export class TerminalWorktreeDeletionService {
     sessions: TerminalSessionRecord[],
   ): Promise<void> {
     for (const session of sessions) {
-      await this.options.runtimeRegistry?.disposeSessionRuntimes(session.id);
-      await this.options.tmuxOutputWatcher?.unwatchSession(session.id);
-      await killTmuxSessionForTerminal(session, this.options.tmuxService);
-      await this.options.terminalSessionManager.destroySession(session.id);
+      await deleteTerminalSession(session.id, this.options);
       this.options.terminalEventService?.record({
         kind: "terminal_session_deleted",
         terminalSessionId: session.id,
