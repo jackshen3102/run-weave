@@ -94,7 +94,7 @@ v2 文字项的 `summary` 是面向用户的简短摘要，按正常正文排版
 - 已生成报告可运行 `gallery.py preflight --directory <成果目录>`，输出本地检查 JSON，ready 为 false 时退出 1。详细入口与票据流程见 [预览与检查](delivery.md)。
 - 成功退出 0；输入、文件或运行错误退出 1，命令参数错误退出 2，stderr 给出原因。`serve` 前台长驻，第一行返回 `{url,pid,directory,stop}`；Ctrl-C 正常停止。
 
-输出文件：`index.html`、`reader.css`、`viewer.css`、`reader.js`、`task.json`、`manifest.json` 与 `assets/`。文字内嵌进页面，不依赖 fetch 或外网；原始文字与图片也单独保留。task.json 保持输入合同，path 改为成果内相对路径。manifest 保存 schemaVersion、templateVersion、原始输入摘要及复制素材 SHA-256。
+输出文件：`index.html`、`reader.css`、`report.css`、`viewer.css`、`reader.js`、`task.json`、`manifest.json` 与 `assets/`。文字内嵌进页面，不依赖 fetch 或外网；原始文字与图片也单独保留。task.json 保持输入合同，path 改为成果内相对路径。manifest 保存 schemaVersion、templateVersion、原始输入摘要及复制素材 SHA-256。
 
 生成失败不留下最终目录，已有输出拒绝覆盖。生成器用同目标的临时锁串行化生成；进程被强杀可能留下 `.gallery-lock` 和 `.gallery-*`，核对没有相同目标构建在运行后，才清理这些本次临时文件或换新输出目录。不要删除旧成果绕过覆盖检查。
 

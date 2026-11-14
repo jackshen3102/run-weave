@@ -15,7 +15,7 @@ cases:
     steps:
       - 用当前 gallery.py validate 与 build 处理 v1 输入，确认成功且输出未自动补出通过结论。
       - 逐项比较输入与输出素材 SHA-256，确认原图、文字和来源保留，再次向同一目录 build 应拒绝覆盖。
-      - 用当前 serve 打开重建成果，核对 index、reader.css、viewer.css、reader.js 与素材均可读取，未列入清单或越界路径不能访问。
+      - 用当前 serve 打开重建成果，核对 index、reader.css、report.css、viewer.css、reader.js 与素材均可读取，未列入清单或越界路径不能访问。
 
   - id: ARP-002
     name: 验收项只接受自洽状态和有效证据引用

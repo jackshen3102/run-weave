@@ -299,7 +299,7 @@ def build(loaded, output, target='runweave'):
         before, after = template.split('@@DATA@@')
         before = before.replace('@@TITLE@@', html.escape(task['task']['title']))
         (stage / 'index.html').write_text(before + embedded + after, encoding='utf-8')
-        for name in ('reader.css', 'reader.js', 'viewer.css'):
+        for name in ('reader.css', 'reader.js', 'viewer.css', 'report.css'):
             shutil.copyfile(TEMPLATES / name, stage / name)
         dump(stage / 'task.json', snapshot)
         dump(stage / 'manifest.json', manifest)
@@ -324,6 +324,8 @@ def serve(directory, port):
     allowed = {'index.html', 'reader.css', 'reader.js', 'task.json', 'manifest.json'}
     if manifest.get('templateVersion') in ('1.1.0', TEMPLATE_VERSION):
         allowed.add('viewer.css')
+    if manifest.get('templateVersion') == TEMPLATE_VERSION:
+        allowed.add('report.css')
     allowed.update(asset['path'] for asset in manifest['assets'])
     for relative in allowed:
         local_file(root, relative)

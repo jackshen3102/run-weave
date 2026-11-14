@@ -1,0 +1,80 @@
+/* Acceptance overview and readable summaries, separate from evidence paging. */
+.report-overview .limits h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.report-overview {
+  max-width: 1312px;
+  width: calc(100% - 88px);
+  margin: 0 auto 24px;
+  padding: 26px 30px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.report-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.report-checks {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+.report-check {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.check-outcome {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.check-facts {
+  margin: 12px 0;
+}
+.check-facts dt {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.check-facts dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.check-evidence {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+.evidence-summary {
+  white-space: pre-wrap;
+  font-size: 16px;
+  line-height: 1.85;
+}
+#back-overview {
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .report-overview {
+    width: calc(100% - 28px);
+    padding: 22px 18px;
+  }
+  .check-facts dd,
+  .evidence-summary {
+    font-size: 15px;
+  }
+}
+@media print {
+  .report-overview {
+    width: 100%;
+    padding: 0 0 20px;
+    border: 0;
+  }
+  .report-check > summary {
+    display: block;
+  }
+}

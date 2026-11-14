@@ -103,6 +103,8 @@ def check_gallery(directory: Path) -> dict:
         issue('manifest.json', 'Unsupported or missing templateVersion')
     if version in ('1.1.0', '1.2.0'):
         inspect('viewer.css', MAX_RESOURCE_BYTES)
+    if version == '1.2.0':
+        inspect('report.css', MAX_RESOURCE_BYTES)
     if not isinstance(manifest.get('inputSha256'), str) or not _SHA256.fullmatch(manifest['inputSha256']):
         issue('manifest.json', 'inputSha256 must be a SHA-256 hex string')
     assets = manifest.get('assets')

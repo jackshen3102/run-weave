@@ -25,7 +25,7 @@
 
 `preview.py` 专用于已配置 Runweave Backend 的 HTML 或 MP4 文件。它不创建公开文件服务，不转移文件到另一台服务器：传入文件必须存在于对应 Backend 机器，项目身份与路径须符合服务端检查。当前 HTML 接口限入口 1 MiB、同目录单个资源 5 MiB；视频使用独立 Range 入口，不把 MP4 塞进 HTML 静态资源通道。
 
-HTML 在读取连接凭据、访问网络和申请票据之前执行本地交付预检。对于邻近 `manifest.json` 的 `index.html`，只检查生成器固定文件 `index.html`、`reader.css`、`reader.js`、`task.json`、`manifest.json`，模板 1.1.0/1.2.0 的 `viewer.css`，以及 manifest 中显式列出的素材路径，不递归扫描无关文件。入口上限 1 MiB、其他资源上限 5 MiB；manifest 另限 2 MiB 并校验 JSON 与清单结构（允许空素材数组）。文件缺失、超限、非法路径或符号链接逃出成果目录均阻止申请票据，并指出具体文件。预检不解码素材，也不验证素材摘要与实际字节一致。
+HTML 在读取连接凭据、访问网络和申请票据之前执行本地交付预检。对于邻近 `manifest.json` 的 `index.html`，只检查生成器固定文件 `index.html`、`reader.css`、`reader.js`、`task.json`、`manifest.json`，模板 1.1.0/1.2.0 的 `viewer.css`、模板 1.2.0 的 `report.css`，以及 manifest 中显式列出的素材路径，不递归扫描无关文件。入口上限 1 MiB、其他资源上限 5 MiB；manifest 另限 2 MiB 并校验 JSON 与清单结构（允许空素材数组）。文件缺失、超限、非法路径或符号链接逃出成果目录均阻止申请票据，并指出具体文件。预检不解码素材，也不验证素材摘要与实际字节一致。
 
 `gallery.py build` 默认 `--target runweave`，在输出目录定稿前执行同一预检，失败不交付最终目录；显式 `--target portable` 可保留超限的离线成果，但返回的 `deliveryCheck` 仍如实表示 Runweave 是否就绪。已有成果可不联网单独检查：
 
