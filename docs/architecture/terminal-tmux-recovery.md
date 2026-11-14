@@ -107,6 +107,9 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
 和不可恢复的执行状态；有可恢复 thread 时可按保存的身份启动 resume，并记录丢失提示。
 具体分支以 Launcher 为准，不能把重建后的 shell 宣称为原 TUI 未中断。
 
+`Recover agent` 提供用户显式重建并恢复对话的入口。tmux 继续限定为空闲 Codex/Pi pane；
+Windows hosted PTY 的同一入口与状态边界见 [PTY Host](./windows-pty-host.md)，不依赖 tmux pane 身份。
+
 自动重建受时间窗口与次数限制；当前常量为 60 秒内最多 3 次。超过限制会标记不可恢复/退出并返回错误，
 不能无限重建。tmux 不可用、探测失败和 session 明确不存在也要分别保留诊断信息。
 

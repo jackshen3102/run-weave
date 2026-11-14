@@ -11,6 +11,7 @@ import type {
   TerminalSessionRecord,
 } from "../terminal/manager/manager";
 import type { TerminalRuntimeRegistry } from "../terminal/runtime/registry";
+import type { TerminalRecoveryFailure } from "../terminal/runtime/pty-service";
 import type { TmuxPaneMetadata, TmuxService } from "../terminal/tmux/service";
 import {
   isTmuxBackedSession,
@@ -121,6 +122,19 @@ export function closeSlowTerminalSocket(
   const timer = setTimeout(() => socket.terminate(), 1000);
   timer.unref();
   socket.once("close", () => clearTimeout(timer));
+}
+
+export function closeTerminalForRecovery(socket: WebSocket, failure: TerminalRecoveryFailure): void {
+  terminalWsLogger.warn("terminal.runtime.recovery.failed", { ...socketContexts.get(socket), ...failure });
+  closeSlowTerminalSocket(socket, TERMINAL_RECOVERY_CLOSE_REASONS[failure.kind]);
+}
+
+export function closeTerminalForRestart(socket: WebSocket, batcher: { flush(): void }): void {
+  batcher.flush();
+  socket.close(1012, "Terminal runtime restarting");
+  socket.emit("terminal-output-stopped");
+  const timer = setTimeout(() => { if (socket.readyState !== 3) socket.terminate(); }, 1000);
+  timer.unref();
 }
 
 export function sendStatusEvent(

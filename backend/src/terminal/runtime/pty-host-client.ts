@@ -16,6 +16,9 @@ let generation: number | undefined;
 let hostInstanceId: string | undefined;
 let upstreams: PtyHostUpstreams | undefined;
 let stopped = false;
+let sessionReplacementSupported = false;
+let currentControl: PtyHostClient | undefined;
+export function supportsHostedAgentRecovery(): boolean { return sessionReplacementSupported; }
 async function closeHostTarget(
   client: PtyHostClient,
   target: PtyHostBinding & { terminalSessionId: string; generation: number },
@@ -35,8 +38,13 @@ export async function getPtyHost(): Promise<PtyHostClient> {
   connection ??= PtyHostClient.connect(configuration().context, ownerId, generation, hostInstanceId,
     ({ event, ...fields }) => hostLogger.warn(event, fields)).then(async client => {
     generation = client.generation;
+    currentControl = client;
+    sessionReplacementSupported = client.supportsSessionReplacement;
     hostInstanceId = client.descriptor.hostInstanceId;
-    client.disconnected.add(() => { connection = undefined; });
+    client.disconnected.add(() => {
+      if (currentControl !== client) return;
+      connection = undefined; currentControl = undefined; sessionReplacementSupported = false;
+    });
     try {
       // A replacement Host has a new gateway. Restore its verified upstreams
       // before launching resumed Agents that inherit that gateway's environment.
@@ -203,11 +211,12 @@ export async function createHostedPty(options: {
   };
 }
 
-export async function closeHostedSession(terminalSessionId: string): Promise<void> {
+export async function closeHostedSession(terminalSessionId: string): Promise<PtyHostSession | undefined> {
   const client = await getPtyHost();
   const session = (await client.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === terminalSessionId);
   if (session) await closeHostTarget(client, { hostInstanceId: session.hostInstanceId,
     sessionInstanceId: session.sessionInstanceId, terminalSessionId, generation: client.generation });
+  return session;
 }
 
 export async function disconnectPtyHost(): Promise<void> {

@@ -13,6 +13,7 @@ import { isInteractiveShellLaunch } from "../tmux/output-watcher-helpers";
 import { prepareTerminalAgent } from "./agent-preparation";
 import { TerminalPanelError, type TerminalPanelOptions } from "./panel-common";
 import { resolvePanelTarget } from "./panel-targets";
+import { recoverHostedAgent } from "./hosted-agent-recovery";
 
 const agentRecoveryLogger = logger.child({
   component: "terminal-agent-recovery",
@@ -24,6 +25,8 @@ export async function recoverTerminalAgent(
   options: TerminalPanelOptions,
   request: RecoverTerminalAgentRequest,
 ): Promise<RecoverTerminalAgentResponse> {
+  if (session.runtimeKind === "pty" && session.ptyHost)
+    return recoverHostedAgent(terminalSessionManager, session, options, request);
   const { panel } = await resolvePanelTarget(
     terminalSessionManager,
     session,
@@ -64,6 +67,8 @@ export async function recoverTerminalAgent(
       "Terminal panel has no saved agent thread",
     );
   }
+  if (request.expectedThreadId && request.expectedThreadId !== resumedThreadId)
+    throw new TerminalPanelError(409, "Terminal recovery target changed; refresh before retrying");
 
   agentRecoveryLogger.warn("terminal.agent-recovery.requested", {
     message: "Idle agent panel recovery requested",

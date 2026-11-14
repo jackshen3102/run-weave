@@ -21,6 +21,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
   const { ensureHost, readHost } = await import("../../../packages/pty-host/src/lifecycle");
   const { PtyHostClient } = await import("../../../packages/pty-host/src/client");
   const { ensureHostedTerminal } = await import("../../../backend/src/terminal/runtime/pty-host-runtime");
+  const { recoverHostedAgent } = await import("../../../backend/src/terminal/application/hosted-agent-recovery");
   const { createHostedPty, disconnectPtyHost, getPtyHost } = await import("../../../backend/src/terminal/runtime/pty-host-client");
   const { TerminalSessionManager } = await import("../../../backend/src/terminal/manager/manager");
   const { LowDbTerminalSessionStore } = await import("../../../backend/src/terminal/store/lowdb-store");
@@ -144,6 +145,103 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
         "reattach reuses the replacement instead of replaying resume");
       assert.equal(await readFile(path.join(directory, `${provider}.args`), "utf8"), captured);
     }
+    // Explicit restore from an idle shell must keep the record/history, replace
+    // only its PTY, and deliver one resume even when two clients click together.
+    const restored = manager.getSession(terminalIds[0]!)!;
+    const restoredProvider = restored.threadProvider!;
+    const savedThread = restored.threadId!;
+    await manager.updateSessionLastThread(restored.id, savedThread, "idle", new Date(), restoredProvider);
+    await manager.updateSessionThreadId(restored.id, null);
+    await manager.updateSessionMetadata(restored.id, { cwd: directory, activeCommand: null });
+    await manager.updateSessionTerminalState(restored.id, { state: "shell_idle", agent: null });
+    const oldBinding = restored.ptyHost!.sessionInstanceId;
+    const oldPid = registry.getSessionRuntime(restored.id)!.pid;
+    const beforeRestore = await readFile(path.join(directory, `${restoredProvider}.args`), "utf8");
+    assert.equal(toSessionListItem(restored).agentRecovery?.threadId, savedThread);
+    await assert.rejects(recoverHostedAgent(manager, restored, { runtimeRegistry: registry }, { expectedThreadId: "wrong-thread" }), /target changed/);
+    assert.equal(registry.getSessionRuntime(restored.id)!.pid, oldPid, "stale recovery cannot close the PTY");
+    const writer = await getPtyHost();
+    const hostRequest = writer.request;
+    let rejectedCreate = false;
+    writer.request = function<T>(action: string, body: unknown = {}): Promise<T> {
+      if (action === "createSession" && !rejectedCreate) {
+        rejectedCreate = true;
+        return Promise.reject(new Error("HOST_BUSY"));
+      }
+      return hostRequest.call(this, action, body) as Promise<T>;
+    };
+    try {
+      await assert.rejects(recoverHostedAgent(manager, restored, { runtimeRegistry: registry }, { expectedThreadId: savedThread }), /HOST_BUSY/);
+    } finally { writer.request = hostRequest; }
+    assert.equal((await writer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === restored.id)!.status,
+      "exited", "failure occurs after the old PTY has closed");
+    assert.equal(toSessionListItem(restored).agentRecovery?.threadId, savedThread, "the same saved thread remains available for explicit retry");
+    const reloaded = new TerminalSessionManager(new LowDbTerminalSessionStore(storeFile));
+    await reloaded.initialize();
+    try {
+      const persisted = reloaded.getSession(restored.id)!;
+      assert.equal(persisted.recoverable, false, "explicit retry requirement survives a Backend store reload");
+      await assert.rejects(ensureHostedTerminal({ session: persisted, terminalSessionManager: reloaded, runtimeRegistry: registry }), /explicit recovery/);
+    } finally { await reloaded.dispose(); }
+    for (let reconnect = 0; reconnect < 2; reconnect++)
+      await assert.rejects(ensureHostedTerminal({ session: restored, terminalSessionManager: manager, runtimeRegistry: registry }), /explicit recovery/);
+    assert.equal(restored.status, "running", "reconnect after failure cannot archive the terminal or consume the retry budget");
+    assert.equal(await readFile(path.join(directory, `${restoredProvider}.args`), "utf8"), beforeRestore,
+      "failed creation cannot submit a resume command");
+    const resumeMarkersBeforeRetry = restored.scrollback.split(`HOST_RESUME_${restoredProvider}`).length;
+    const restoring = recoverHostedAgent(manager, restored, { runtimeRegistry: registry }, { expectedThreadId: savedThread });
+    await assert.rejects(recoverHostedAgent(manager, restored, { runtimeRegistry: registry }, { expectedThreadId: savedThread }), /in progress/);
+    const response = await restoring;
+    assert.equal(response.recoveryMode, "pty_respawn");
+    assert.equal(response.resumedThreadId, savedThread);
+    assert.equal(manager.getSession(restored.id), restored);
+    assert.equal(restored.status, "running");
+    assert.notEqual(restored.ptyHost!.sessionInstanceId, oldBinding);
+    assert.notEqual(registry.getSessionRuntime(restored.id)!.pid, oldPid);
+    const staleReplacement = { generation: writer.generation, terminalSessionId: restored.id,
+      sessionInstanceId: crypto.randomUUID(), replacesSessionInstanceId: oldBinding,
+      projectId: restored.projectId, command, args, cwd: directory, cols: 80, rows: 24, env: {} };
+    await assert.rejects(writer.request("createSession", staleReplacement), /HOST_INPUT_CONFLICT/);
+    await wait(() => restored.scrollback.split(`HOST_RESUME_${restoredProvider}`).length > resumeMarkersBeforeRetry, "explicit restore delivered to real PTY");
+    assert.equal(await readFile(path.join(directory, `${restoredProvider}.args`), "utf8"),
+      beforeRestore + beforeRestore, "exactly one additional resume was executed");
+    assert((await manager.readScrollback(restored.id)).includes(`SAVED_HISTORY_${restoredProvider}`));
+    await manager.updateSessionMetadata(restored.id, { cwd: directory, activeCommand: restoredProvider });
+    await manager.updateSessionTerminalState(restored.id, { state: "agent_running", agent: restoredProvider });
+    await assert.rejects(recoverHostedAgent(manager, restored, { runtimeRegistry: registry }, {}), /Only an idle/);
+    // Lose the response only after the real Host has written resume. Reattach
+    // must inspect that same PTY instead of replaying an uncertain command.
+    const uncertain = await manager.createSession({ command, args, cwd: directory });
+    terminalIds.push(uncertain.id);
+    await ensureHostedTerminal({ session: uncertain, terminalSessionManager: manager, runtimeRegistry: registry });
+    await manager.updateSessionLastThread(uncertain.id, "saved-traecli", "idle", new Date(), "traecli");
+    await manager.updateSessionTerminalState(uncertain.id, { state: "shell_idle", agent: null });
+    manager.appendOutput(uncertain.id, "\r\nSAVED_HISTORY_traecli\r\n");
+    const beforeUncertain = await readFile(path.join(directory, "traecli.args"), "utf8");
+    const rpc = PtyHostClient.prototype.request;
+    let lostResumeReply = false;
+    PtyHostClient.prototype.request = async function<T>(action: string, body: unknown = {}): Promise<T> {
+      const result = await rpc.call(this, action, body) as T;
+      if (action === "writeInput" && !lostResumeReply &&
+          (body as { input?: { operationId?: string } }).input?.operationId?.startsWith("recovery:")) {
+        lostResumeReply = true;
+        throw new Error("HOST_RESPONSE_TIMEOUT");
+      }
+      return result;
+    };
+    try {
+      await assert.rejects(recoverHostedAgent(manager, uncertain, { runtimeRegistry: registry }, {}), /may already have been submitted/);
+    } finally { PtyHostClient.prototype.request = rpc; }
+    assert.equal(lostResumeReply, true);
+    assert.equal((await writer.request<{ state: string }>("getInputOperation", { ...uncertain.ptyHost,
+      terminalSessionId: uncertain.id, generation: writer.generation, operationId: `recovery:${uncertain.ptyHost!.sessionInstanceId}` })).state, "written");
+    await assert.rejects(recoverHostedAgent(manager, uncertain, { runtimeRegistry: registry }, {}), /Only an idle/);
+    const uncertainPid = (await writer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === uncertain.id)!.pid;
+    const inspected = await ensureHostedTerminal({ session: uncertain, terminalSessionManager: manager, runtimeRegistry: registry });
+    assert.equal(inspected.runtime.pid, uncertainPid, "uncertain resume retains the same PTY");
+    await wait(() => uncertain.scrollback.includes("HOST_RESUME_traecli"), "uncertain resume inspected after reconnect");
+    assert.equal(await readFile(path.join(directory, "traecli.args"), "utf8"), beforeUncertain + beforeUncertain,
+      "lost acknowledgement cannot execute resume twice");
     // Creating with the wrong Host identity still rejects as an identity violation.
     await assert.rejects(createHostedPty({ terminalSessionId: terminalIds[0], binding: { hostInstanceId: oldHostId, sessionInstanceId: crypto.randomUUID() },
       create: { terminalSessionId: terminalIds[0], sessionInstanceId: crypto.randomUUID(), projectId: "fixture", command, args, cwd: directory, cols: 80, rows: 24, env: {} } }), /HOST_IDENTITY_MISMATCH/);
@@ -156,6 +254,8 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
       await wait(() => manager.getSession(id)!.status === "exited", "explicit terminal exit recorded");
       await registry.disposeRuntime(id);
     }
+    await assert.rejects(writer.request("createSession", staleReplacement), /HOST_INPUT_CONFLICT/,
+      "an old replacement request cannot resurrect an exited newer generation");
     await manager.dispose();
     manager = new TerminalSessionManager(new LowDbTerminalSessionStore(storeFile));
     await manager.initialize();
@@ -195,8 +295,10 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     assert.ok(archived.every(session => session.status === "exited" && terminalIds.includes(session.terminalSessionId)));
     const fresh = await manager.createSession({ command, args, cwd: directory });
     const { runtime } = await ensureHostedTerminal({ session: fresh, terminalSessionManager: manager, runtimeRegistry: registry });
-    await runtime.hosted!.writeSteps([{ type: "text", data: "echo FRESH_TERMINAL_OK\r" }]);
-    await wait(() => /\r?\nFRESH_TERMINAL_OK\r?\n/.test(manager.getSession(fresh.id)!.scrollback), "new terminal executes input");
+    const freshCommand = process.platform === "win32"
+      ? "Write-Output ('FRESH_' + 'TERMINAL_OK')" : "printf 'FRESH_%s\\n' TERMINAL_OK";
+    await runtime.hosted!.writeSteps([{ type: "text", data: freshCommand }, { type: "delay", ms: 200 }, { type: "text", data: "\r" }]);
+    await wait(() => manager.getSession(fresh.id)!.scrollback.includes("FRESH_TERMINAL_OK"), "new terminal executes input");
     // Real persistence must advance while output keeps arriving, not only after
     // the terminal becomes quiet. Verify ordered, exact UTF-8 bytes on disk.
     const streaming = await manager.createSession({ command, args, cwd: directory });
@@ -303,7 +405,7 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     const preserved = (await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!;
     assert.equal(preserved.pid, originalPid);
     assert.equal(preserved.status, "running");
-    return "verified Host replacement and archived WS history; rejected resize preserves the original PTY and a lost terminal pipe reattaches the same PTY without affecting its peer; a closed control pipe leaves both outputs connected; real slow WS recovers by snapshot without restarting the PTY";
+    return "verified Host replacement, explicit saved-thread recovery in the same terminal, retry after closed-PTY create failure, no replay after lost resume acknowledgement, duplicate/stale/running-agent rejection, exited-generation replacement guards and archived WS history; rejected resize and lost output/control pipes preserve peer PTYs; slow WS recovers by snapshot without restarting the PTY";
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;

@@ -42,6 +42,8 @@ export interface PtyHostInputResult {
   error?: string;
 }
 export interface PtyHostCreateSession {
+  /** Replace only this confirmed exited generation; never an active or newer PTY. */
+  replacesSessionInstanceId?: string;
   sessionInstanceId: string;
   terminalSessionId: string;
   projectId: string;
@@ -53,6 +55,10 @@ export interface PtyHostCreateSession {
   env: Record<string, string | undefined>;
   /** Host owns spawn failure handling; Backend must not retry an uncertain create RPC. */
   fallback?: { command: string; args: string[]; env: Record<string, string | undefined> };
+}
+
+export interface PtyHostCapabilities {
+  replaceExitedSession?: boolean;
 }
 export interface PtyHostSnapshot {
   data: string;

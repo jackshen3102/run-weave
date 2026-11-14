@@ -23,6 +23,7 @@ interface RuntimeSubscriber {
   onOutputFrame?(frame: TerminalOutputFrame): void;
   onResize?(cols: number, rows: number): void;
   onRecoveryError?(failure: TerminalRecoveryFailure): void;
+  onRestart?(): void;
   onExit(event: { exitCode: number; signal?: number }): void;
 }
 
@@ -300,6 +301,15 @@ export class TerminalRuntimeRegistry {
         await entry.runtime.hosted?.close();
         await this.disposeRuntime(runtimeId);
       }
+    }
+  }
+
+  /** Detach recorders before replacing a PTY so the old exit cannot archive it. */
+  async detachSessionForRecovery(terminalSessionId: string): Promise<void> {
+    for (const [runtimeId, entry] of this.runtimes) {
+      if (entry.terminalSessionId !== terminalSessionId) continue;
+      for (const subscriber of entry.subscribers) subscriber.onRestart?.();
+      await this.disposeRuntime(runtimeId);
     }
   }
 }

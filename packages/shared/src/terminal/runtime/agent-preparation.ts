@@ -38,11 +38,19 @@ export interface PrepareTerminalAgentResponse {
 
 export interface RecoverTerminalAgentRequest {
   panelId?: string;
+  expectedThreadId?: string;
 }
 
-export interface RecoverTerminalAgentResponse extends PrepareTerminalAgentResponse {
+export interface TerminalAgentRecoveryTarget {
+  provider: TerminalAgentKind;
+  threadId: string;
+}
+
+export interface RecoverTerminalAgentResponse extends Omit<PrepareTerminalAgentResponse, "panelId" | "tmuxPaneId"> {
+  panelId: string | null;
+  tmuxPaneId: string | null;
   resumedThreadId: string;
-  recoveryMode: "pane_respawn";
+  recoveryMode: "pane_respawn" | "pty_respawn";
 }
 
 export type TerminalAgentPreparationFailurePhase =

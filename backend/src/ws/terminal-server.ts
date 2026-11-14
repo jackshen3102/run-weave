@@ -43,7 +43,7 @@ import {
 import { logTerminalConnectionOpened } from "./terminal-connection-logging";
 import { createTerminalMetadataSyncController } from "./terminal-metadata-sync";
 import { createTerminalOutputRecovery } from "./terminal-output-recovery";
-import { closeSlowTerminalSocket, registerTerminalSocketContext, TERMINAL_RECOVERY_CLOSE_REASONS } from "./terminal-server-connection-helpers";
+import { closeSlowTerminalSocket, registerTerminalSocketContext, closeTerminalForRecovery, closeTerminalForRestart } from "./terminal-server-connection-helpers";
 
 const terminalWsLogger = logger.child({ component: "terminal-ws" });
 
@@ -379,12 +379,10 @@ export function attachTerminalWebSocketServer(
     });
     socket.on("pong", () => heartbeat.markAlive());
     unsubscribe = runtimeRegistry.subscribe(runtimeId, {
+      onRestart: () => closeTerminalForRestart(socket, outputBatcher),
       onOutputFrame: (frame) => outputRecovery?.onFrame(frame),
       onResize: (cols, rows) => outputRecovery?.onResize(cols, rows),
-      onRecoveryError: failure => {
-        terminalWsLogger.warn("terminal.runtime.recovery.failed", { terminalSessionId, ...failure });
-        closeSlowTerminalSocket(socket, TERMINAL_RECOVERY_CLOSE_REASONS[failure.kind]);
-      },
+      onRecoveryError: failure => closeTerminalForRecovery(socket, failure),
       onData(data) {
         runtimeOutputSequence += 1;
         logTerminalPerf("terminal.runtime.output", () => ({

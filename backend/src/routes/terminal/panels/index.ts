@@ -100,6 +100,7 @@ const prepareTerminalAgentSchema = z
 const recoverTerminalAgentSchema = z
   .object({
     panelId: z.string().trim().min(1).optional(),
+    expectedThreadId: z.string().trim().min(1).optional(),
   })
   .strict();
 

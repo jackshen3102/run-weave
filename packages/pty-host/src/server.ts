@@ -17,6 +17,7 @@ const scopeSchema = z.object({ kind: z.enum(["stable", "dev"]), instanceId: z.st
 const targetSchema = z.object({ hostInstanceId: z.string().uuid(), sessionInstanceId: z.string().uuid(), terminalSessionId: z.string().min(1), generation: z.number().int().positive() });
 const createSchema = z.object({
   generation: z.number().int().positive(), sessionInstanceId: z.string().uuid(), terminalSessionId: z.string().min(1).max(256),
+  replacesSessionInstanceId: z.string().uuid().optional(),
   projectId: z.string().min(1).max(256), command: z.string().min(1).max(32768), args: z.array(z.string()).max(256),
   cwd: z.string().min(1), cols: z.number().int().min(2).max(500), rows: z.number().int().min(1).max(200),
   env: z.record(z.string().optional()),
@@ -41,7 +42,10 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
-    for (const session of sessions.values()) session.close();
+    for (const session of sessions.values()) {
+      session.close();
+      session.screen.dispose();
+    }
     for (const socket of sockets) socket.destroy();
     await gateway.close();
     if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
@@ -103,7 +107,8 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
         if (request.action === "hello") {
           const expected = scopeSchema.parse(request.body);
           if (expected.kind !== scope.kind || expected.instanceId !== scope.instanceId || expected.configRoot !== scope.configRoot) throw new Error("HOST_IDENTITY_MISMATCH");
-          return reply({ descriptor, generation, frozen, sessions: sessions.size, outboxIncomplete: gateway.outbox.incomplete });
+          return reply({ descriptor, generation, frozen, sessions: sessions.size, outboxIncomplete: gateway.outbox.incomplete,
+            capabilities: { replaceExitedSession: true } });
         }
         if (request.action === "claimWriter") {
           const body = z.object({ ownerId: z.string().uuid(), expectedGeneration: z.number().int().nonnegative() }).parse(request.body);
@@ -119,8 +124,14 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
           requireWriter(requested);
           const previous = sessions.get(body.terminalSessionId);
           if (previous) {
-            if (previous.createDigest !== createHash("sha256").update(JSON.stringify(body)).digest("hex")) throw new Error("HOST_INPUT_CONFLICT");
-            return reply(await previous.ready());
+            if (previous.createDigest === createHash("sha256").update(JSON.stringify(body)).digest("hex"))
+              return reply(await previous.ready());
+            if (previous.info.status !== "exited" || body.replacesSessionInstanceId !== previous.info.sessionInstanceId ||
+                body.sessionInstanceId === previous.info.sessionInstanceId) throw new Error("HOST_INPUT_CONFLICT");
+            previous.screen.dispose();
+            sessions.delete(body.terminalSessionId);
+          } else if (body.replacesSessionInstanceId) {
+            throw new Error("HOST_SESSION_GONE");
           }
           if ([...sessions.values()].filter(session => session.info.status === "running").length >= 64) throw new Error("HOST_BUSY");
           if (sessions.size >= 256) {
