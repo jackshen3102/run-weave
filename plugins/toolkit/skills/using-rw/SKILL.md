@@ -98,6 +98,9 @@ Dev Session 先核对其绑定实例与 surface，不能用当前终端的 ambie
 未绑定、权限/身份拒绝、Profile 冲突和登录失效按实际错误处理，不借恢复命令改绑或绕过认证。
 一次恢复仍失败时保留错误和期限，报告阻塞，不无限重试或重启用户服务。
 
+升级后使用临时终端验收时，先按 [临时终端绑定前检](../playwright-cli/SKILL.md#remote-upgrade-acceptance-with-a-temporary-terminal)
+完成桌面授权绑定和报告分类。`BROWSER_BINDING_REQUIRED` 不能直接当作原有绑定丢失或升级回归。
+
 恢复后重新 resolve，立即通过 [playwright-cli](../playwright-cli/SKILL.md) attach 新 endpoint，
 先观察原页面再继续用户任务。`healthy` 不证明页面请求、登录或业务操作成功；
 恢复不会重放点击或表单，断线前结果未知的操作先核对页面及业务结果。

@@ -98,6 +98,46 @@ CDP boundary or browser-version skew. Prove Trace, HAR, screencast, downloads,
 and other advanced capabilities on the exact Runweave surface before claiming
 support; a successful attach or snapshot proves only that exercised path.
 
+## Remote upgrade acceptance with a temporary terminal
+
+Before checking a cloud desktop or SSH host after an upgrade, record whether its
+existing terminals have persisted Browser owners. Check temporary-terminal setup
+separately: CLI creation, including `--inherit-from`, does not select a Browser
+binding. Automatic selection runs in the desktop UI for its current terminal.
+
+1. Create an isolated terminal on the target Backend. Keep its actual terminal
+   identity; do not borrow an existing Agent's identity or send it probe commands.
+2. In the authenticated target desktop, remember the current page, open the new
+   terminal and let the unique ready channel bind. With multiple candidates, use
+   the intended desktop's explicit selection; ask only if that choice is unknown.
+   Do not edit persisted ownership or guess a binding on the Backend.
+3. In that terminal/instance, run `rw browser doctor --json`, keeping any explicitly
+   requested Profile/Group. Capture its JSON even when it exits nonzero, then run
+   `node <this-skill>/scripts/remote-preflight.mjs <doctor-report.json>` using the
+   [preflight script](scripts/remote-preflight.mjs).
+   `preparation_required` means identity/binding setup is incomplete: complete
+   setup and rerun the preflight before attempting page acceptance. If the desktop
+   is inaccessible, report that specific setup blocker. `control_failed` follows
+   the recovery flow above. Neither result alone proves an upgrade regression.
+4. Only `control_ready` permits fresh resolve → attach → snapshot/page checks →
+   detach. It is not page acceptance. In `finally`, detach any attached session,
+   restore the desktop's original page and delete only the temporary terminal;
+   confirm deletion even when preparation or CDP checks fail.
+
+Report existing-owner preservation, temporary-terminal preparation and actual
+CDP/page results separately. The preflight script reads only the doctor report;
+it does not select bindings, recover channels or verify page interaction.
+Keep its three `acceptance` fields independent in the final receipt:
+`existingOwnerPreservation`, `temporaryTerminalPreparation` and
+`cdpPageVerification`. Replace `not_checked`/`not_run` only with observed results
+and evidence; a ready preflight cannot mark owner preservation or page checks as
+passed. After `finally`, record and verify both `cleanup.temporaryTerminalDeleted`
+and `cleanup.originalPageRestored`. If the page was never changed, record
+`not_needed` with that basis; failed or unverified cleanup must remain explicit.
+Exit codes are 0 for `control_ready`, 2 for `preparation_required`, 3 for
+`control_failed`, and 1 for invalid input. Exit 2 is an incomplete acceptance
+setup, not an upgrade failure; finish the binding step before drawing conclusions.
+
 ## Scheduled tasks and browser assistance
 
 Runweave's right-side Browser is its Terminal Browser CDP surface, not Computer
