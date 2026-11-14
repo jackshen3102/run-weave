@@ -2,7 +2,7 @@ import { createConnection, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import type { EnvironmentContext } from "@runweave/shared/configuration";
 import type { PtyHostDescriptor, PtyHostEvent } from "@runweave/shared/terminal/pty-host";
-import { readHost } from "./discovery";
+import { readHostAsync } from "./discovery";
 import { HostTransportError, receiveJsonLines, sendJson } from "./transport";
 import { diagnosticAction, hostErrorCode, reportHostDiagnostic, writeHostDiagnostic, type HostDiagnosticSink } from "./diagnostics";
 export { hostErrorCode } from "./diagnostics";
@@ -20,8 +20,7 @@ export class PtyHostClient {
   private readonly connectionId = randomUUID();
   private disconnectError?: Error;
   get isConnected(): boolean { return this.connected && !this.socket.destroyed; }
-  private constructor(scope: EnvironmentContext, private readonly diagnostic: HostDiagnosticSink) {
-    const discovery = readHost(scope);
+  private constructor(discovery: Awaited<ReturnType<typeof readHostAsync>>, private readonly diagnostic: HostDiagnosticSink) {
     this.descriptor = discovery.descriptor;
     this.token = discovery.token;
     this.socket = createConnection(this.descriptor.endpoint);
@@ -48,7 +47,8 @@ export class PtyHostClient {
     });
   }
   static async connect(scope: EnvironmentContext, ownerId?: string, expectedGeneration?: number, expectedHostInstanceId?: string, diagnostic: HostDiagnosticSink = writeHostDiagnostic): Promise<PtyHostClient> {
-    const client = new PtyHostClient(scope, diagnostic);
+    const requested = { ...scope };
+    const client = new PtyHostClient(await readHostAsync(requested), diagnostic);
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -59,7 +59,7 @@ export class PtyHostClient {
         client.socket.once("error", error => { clearTimeout(timer); reject(error); });
         client.socket.once("connect", () => { clearTimeout(timer); client.connected = true; resolve(); });
       });
-      const hello = await client.request<{ generation: number }>("hello", scope);
+      const hello = await client.request<{ generation: number }>("hello", requested);
       if (ownerId) client.generation = (await client.request<{ generation: number }>("claimWriter", { ownerId, expectedGeneration: expectedHostInstanceId && expectedHostInstanceId !== client.descriptor.hostInstanceId ? hello.generation : expectedGeneration ?? hello.generation })).generation;
       return client;
     } catch (error) { client.close(); throw error; }

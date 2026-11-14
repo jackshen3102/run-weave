@@ -245,8 +245,8 @@ export async function verifyHostedTerminalLoss(): Promise<string> {
     assert.equal(accepted, false, "real socket must reach its bounded send queue");
     slowSocket.resume();
     const slowClose = await slowClosed;
-    assert.deepEqual(slowClose, { code: 1013, reason: "Terminal output recovery required" });
-    assert.equal(isTerminalOutputRecoveryClose(slowClose.code, slowClose.reason), true);
+    assert.deepEqual(slowClose, { code: 1013, reason: "Terminal output backpressure; reconnect manually" });
+    assert.equal(isTerminalOutputRecoveryClose(slowClose.code, slowClose.reason), false);
     const snapshotSocket = await openFreshSocket();
     assert.equal((await observer.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === fresh.id)!.pid, runtime.pid);
     snapshotSocket.close();

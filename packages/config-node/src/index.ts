@@ -8,7 +8,7 @@ export * from "./migration";
 export * from "./version-migrations";
 export * from "./owner";
 export * from "./platform";
-export { assertPrivateDirectory, assertPrivateDescriptor, readPrivateFile } from "./private-file";
+export { assertPrivateDirectory, assertPrivateDirectoryAsync, assertPrivateDescriptor, readPrivateFile, readPrivateFileAsync } from "./private-file";
 export { assertWindowsPrivatePath } from "./windows-permissions";
 export * from "./domain";
 export * from "./migration-discovery";

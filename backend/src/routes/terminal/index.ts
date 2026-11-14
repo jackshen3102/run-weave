@@ -40,10 +40,10 @@ import type { TerminalEventService } from "../../terminal/state/terminal-event-s
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
 import {
   isTmuxBackedSession,
-  killTmuxSessionForTerminal,
   readTerminalScrollback,
   readTerminalScrollbackCapture,
 } from "../../terminal/runtime/launcher";
+import { deleteTerminalSession } from "../../terminal/application/delete-session";
 import type { TmuxService } from "../../terminal/tmux/service";
 import type { TmuxOutputWatcher } from "../../terminal/tmux/output-watcher";
 import type { TerminalQuickInputService } from "../../terminal/quick-input/service";
@@ -427,16 +427,10 @@ export function createTerminalRouter(
       existed: Boolean(session),
     });
     try {
-      if (options?.runtimeRegistry) {
-        await options.runtimeRegistry.disposeSessionRuntimes(req.params.id);
-      }
-      await options?.tmuxOutputWatcher?.unwatchSession(req.params.id);
-      if (session) {
-        await killTmuxSessionForTerminal(session, options?.tmuxService);
-      }
-      const deleted = await terminalSessionManager.destroySession(
-        req.params.id,
-      );
+      const deleted = await deleteTerminalSession(req.params.id, {
+        ...options,
+        terminalSessionManager,
+      });
       if (!deleted) {
         res.status(404).json({ message: "Terminal session not found" });
         return;

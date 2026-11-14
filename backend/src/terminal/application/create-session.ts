@@ -6,7 +6,6 @@ import { recordTerminalSessionCreated } from "../runtime/activity-events";
 import {
   ensureTerminalStarted,
   isTmuxBackedSession,
-  killTmuxSessionForTerminal,
 } from "../runtime/launcher";
 import type { PtyService } from "../runtime/pty-service";
 import type { TerminalRuntimeRegistry } from "../runtime/registry";
@@ -20,6 +19,7 @@ import { ensureTerminalPanelWorkspace } from "./panel-workspace";
 import { toPanelWorkspacePayload, toSessionListItem } from "./payloads";
 import { resolveEffectiveTerminalState } from "./terminal-state-projection";
 import { resolveTerminalCreateDefaults } from "./create-defaults";
+import { deleteTerminalSession } from "./delete-session";
 
 const terminalLogger = logger.child({ component: "terminal" });
 
@@ -89,13 +89,7 @@ export async function createTerminalSession(
     recordTerminalSessionCreated(options.activity, created);
     return created;
   } catch (error) {
-    await options.runtimeRegistry?.disposeSessionRuntimes(session.id);
-    await options.tmuxOutputWatcher?.unwatchSession(session.id);
-    await killTmuxSessionForTerminal(
-      manager.getSession(session.id) ?? session,
-      options.tmuxService,
-    );
-    await manager.destroySession(session.id);
+    await deleteTerminalSession(session.id, { ...options, terminalSessionManager: manager });
     throw error;
   }
 }

@@ -4691,7 +4691,7 @@
     "file": "packages/config-node/src/private-file.ts",
     "kind": "file-io",
     "expression": "readFileSync(fd)",
-    "count": 1,
+    "count": 2,
     "category": "configuration-adapter",
     "reason": "统一配置库负责私有文件、显式迁移或启动身份校验；readFileSync(fd)"
   },
@@ -12700,7 +12700,7 @@
     "file": "packages/config-node/src/windows-permissions.ts",
     "kind": "environment-forward",
     "expression": "...process.env",
-    "count": 1,
+    "count": 2,
     "category": "system",
     "reason": "Pass the system process environment and a private path to PowerShell for Windows ACL validation; not a source of product settings."
   },
@@ -13527,5 +13527,45 @@
     "count": 1,
     "category": "build",
     "reason": "生成 Windows PTY 原生构建回执，保存平台、ABI、源码与二进制哈希，仅写入构建产物目录。"
+  },
+  {
+    "file": "scripts/dev-session/services/dedicated.mjs",
+    "kind": "file-io",
+    "expression": "appendFile(logPath)",
+    "count": 2,
+    "category": "runtime-state",
+    "reason": "Append owned Backend predev output to the Dev Session log; not a source of product configuration."
+  },
+  {
+    "file": "scripts/dev-session/services/runtime.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(\"/proc/sys/kernel/random/boot_id\")",
+    "count": 1,
+    "category": "system",
+    "reason": "Read Linux boot identity to distinguish reused process IDs before signaling an owned launcher."
+  },
+  {
+    "file": "scripts/dev-session/services/runtime.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(`/proc/${pid}/cmdline`)",
+    "count": 1,
+    "category": "system",
+    "reason": "Read Linux process arguments to verify launcher identity before signaling an owned process."
+  },
+  {
+    "file": "scripts/dev-session/services/runtime.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(`/proc/${pid}/stat`)",
+    "count": 1,
+    "category": "system",
+    "reason": "Read Linux kernel process birth ticks and zombie status to verify the owned launcher identity."
+  },
+  {
+    "file": "scripts/dev-session/verify/process-stop.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(`${changed.evidence}.flag`)",
+    "count": 1,
+    "category": "test",
+    "reason": "Signal an isolated process-stop fixture to change its command and verify ownership rejection."
   }
 ]

@@ -88,22 +88,21 @@ async function ensureTerminalRuntimeInternal(
     ? options.runtimeRegistry.getRuntime(runtimeId)
     : options.runtimeRegistry.getSessionRuntime(options.session.id);
   const existingRuntime = findRuntime();
-  if (existingRuntime) {
+  if (existingRuntime && !isTmuxBackedSession(options.session)) {
     await existingRuntime.ready;
     return { runtime: existingRuntime };
   }
 
   if (isTmuxBackedSession(options.session) && options.tmuxService) {
     return options.tmuxService.withSessionLock(options.session.id, async () => {
+      let currentSession = options.terminalSessionManager.getSession(options.session.id);
+      if (!currentSession) throw new Error("Terminal session no longer exists");
       const existingLockedRuntime = findRuntime();
       if (existingLockedRuntime) {
         await existingLockedRuntime.ready;
         return { runtime: existingLockedRuntime };
       }
 
-      let currentSession =
-        options.terminalSessionManager.getSession(options.session.id) ??
-        options.session;
       let target = resolveTmuxTarget(currentSession, options.tmuxService!);
       await options.tmuxService!.sanitizeGlobalEnvironment(target);
       let hasSession = await options.tmuxService!.hasSession(target);

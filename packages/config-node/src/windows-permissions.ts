@@ -1,10 +1,9 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { ConfigurationError } from "./errors";
 
-/** POSIX mode bits do not express Windows privacy. Check the actual DACL instead. */
-export function assertWindowsPrivatePath(file: string): void {
-  if (process.platform !== "win32") return;
-  const script = `
+const executeFile = promisify(execFile);
+const script = `
 $ErrorActionPreference = 'Stop'
 try {
 # Use .NET directly: a parent pwsh may export a PSModulePath incompatible with Windows PowerShell.
@@ -22,6 +21,25 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
   [Console]::Write('check-failed:' + $_.Exception.GetType().FullName + ':' + $_.Exception.HResult)
 }
 `;
+
+function checkFailure(file: string, startedAt: number, cause: unknown): ConfigurationError {
+  const error = cause as NodeJS.ErrnoException & { status?: number; signal?: string; killed?: boolean };
+  const timedOut = error.code === "ETIMEDOUT" || error.killed === true && error.signal === "SIGTERM" && error.code == null;
+  // Child-process errors include the command and raw stderr; keep them private.
+  return new ConfigurationError(timedOut ? "CONFIG_WINDOWS_ACL_CHECK_TIMEOUT" : "CONFIG_WINDOWS_ACL_CHECK_FAILED",
+    [file, `exit=${error.status ?? "none"}`, `signal=${error.signal ?? "none"}`, `code=${error.code ?? "none"}`,
+      `elapsedMs=${Math.round(performance.now() - startedAt)}`]);
+}
+
+function assertResult(file: string, result: string): void {
+  if (result === "owner" || result === "access") throw new ConfigurationError("CONFIG_WINDOWS_ACL_NOT_PRIVATE", [file, result]);
+  if (/^check-failed:[A-Za-z0-9_.]+:-?\d+$/.test(result)) throw new ConfigurationError("CONFIG_WINDOWS_ACL_CHECK_FAILED", [file, result]);
+  if (result !== "private") throw new ConfigurationError("CONFIG_WINDOWS_ACL_CHECK_FAILED", [file, "invalid-result"]);
+}
+
+/** POSIX mode bits do not express Windows privacy. Check the actual DACL instead. */
+export function assertWindowsPrivatePath(file: string): void {
+  if (process.platform !== "win32") return;
   const startedAt = performance.now();
   let result: string;
   try {
@@ -30,13 +48,23 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
       maxBuffer: 64 * 1024, timeout: 10_000, windowsHide: true,
     }).trim();
   } catch (cause) {
-    const error = cause as NodeJS.ErrnoException & { status?: number; signal?: string };
-    // Do not embed execFileSync's message: it contains the command and raw stderr.
-    throw new ConfigurationError(error.code === "ETIMEDOUT" ? "CONFIG_WINDOWS_ACL_CHECK_TIMEOUT" : "CONFIG_WINDOWS_ACL_CHECK_FAILED",
-      [file, `exit=${error.status ?? "none"}`, `signal=${error.signal ?? "none"}`, `code=${error.code ?? "none"}`,
-        `elapsedMs=${Math.round(performance.now() - startedAt)}`]);
+    throw checkFailure(file, startedAt, cause);
   }
-  if (result === "owner" || result === "access") throw new ConfigurationError("CONFIG_WINDOWS_ACL_NOT_PRIVATE", [file, result]);
-  if (/^check-failed:[A-Za-z0-9_.]+:-?\d+$/.test(result)) throw new ConfigurationError("CONFIG_WINDOWS_ACL_CHECK_FAILED", [file, result]);
-  if (result !== "private") throw new ConfigurationError("CONFIG_WINDOWS_ACL_CHECK_FAILED", [file, "invalid-result"]);
+  assertResult(file, result);
+}
+
+export async function assertWindowsPrivatePathAsync(file: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  const startedAt = performance.now();
+  let result: string;
+  try {
+    const { stdout } = await executeFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+      env: { ...process.env, RUNWEAVE_PRIVATE_PATH: file }, encoding: "utf8",
+      maxBuffer: 64 * 1024, timeout: 10_000, windowsHide: true,
+    });
+    result = stdout.trim();
+  } catch (cause) {
+    throw checkFailure(file, startedAt, cause);
+  }
+  assertResult(file, result);
 }

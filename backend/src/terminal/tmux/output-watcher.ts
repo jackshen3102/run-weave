@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { logger } from "../../logging/index";
 import { createTerminalRuntimeRecorder } from "../runtime/recorder";
@@ -22,12 +21,12 @@ import {
   readScrollbackBufferFromPosition,
   resolvePaneWatcherKey,
   resolveTmuxTarget,
-  sanitizeOutputPathSegment,
   shouldWatchSession,
   type WatchedTmuxPane,
   waitForPaneOutputBoundary,
 } from "./output-watcher-helpers";
 import { TmuxOutputPoller } from "./output-poller";
+import { TmuxOutputWatcherOperations } from "./output-watcher-operations";
 import { beginTerminalInput } from "../runtime/input-admission";
 
 interface TmuxOutputWatcherOptions {
@@ -76,6 +75,7 @@ export class TmuxOutputWatcher {
   private reconciling: Promise<void> | null = null;
   private nextWatcherGeneration = 1;
   private readonly outputPoller: TmuxOutputPoller;
+  private readonly operations: TmuxOutputWatcherOperations;
   private disposed = false;
 
   constructor(options: TmuxOutputWatcherOptions) {
@@ -94,6 +94,7 @@ export class TmuxOutputWatcher {
     );
     this.terminalSessionManager = options.terminalSessionManager;
     this.tmuxService = options.tmuxService;
+    this.operations = new TmuxOutputWatcherOperations(this.outputDir, this.tmuxService);
     this.tmuxLifecycleCoordinator = options.tmuxLifecycleCoordinator;
     this.outputPoller = new TmuxOutputPoller(
       this.terminalSessionManager,
@@ -143,7 +144,11 @@ export class TmuxOutputWatcher {
   }
 
   async watchSession(session: TerminalSessionRecord): Promise<void> {
-    if (this.disposed || !shouldWatchSession(session)) {
+    return this.operations.run(session.id, () => this.watchSessionNow(session));
+  }
+
+  private async watchSessionNow(session: TerminalSessionRecord): Promise<void> {
+    if (this.disposed || !shouldWatchSession(session) || this.terminalSessionManager.getSession(session.id) !== session) {
       return;
     }
 
@@ -210,9 +215,9 @@ export class TmuxOutputWatcher {
         existingLifecycleWatcher.target.paneId,
       );
       this.watchedPanes.delete(existingKey);
-      await this.stopPipe(session.id, existingLifecycleWatcher);
+      await this.operations.stop(existingLifecycleWatcher);
     }
-    await this.ensurePaneWatcher(session, paneTarget, {
+    await this.ensurePaneWatcherNow(session, paneTarget, {
       reconcileSessionLifecycle: true,
       recordSessionOutput: true,
     });
@@ -343,46 +348,51 @@ export class TmuxOutputWatcher {
     );
   }
 
-  async unwatchPane(terminalSessionId: string, paneId: string): Promise<void> {
-    const key = resolvePaneWatcherKey(terminalSessionId, paneId);
-    const watched = this.watchedPanes.get(key);
-    if (!watched) {
-      return;
-    }
-    this.watchedPanes.delete(key);
-    await this.stopPipe(terminalSessionId, watched);
-    this.stopPollingIfIdle();
+  async unwatchPane(terminalSessionId: string, paneId: string, expected?: WatchedTmuxPane): Promise<void> {
+    return this.operations.run(terminalSessionId, async () => {
+      const key = resolvePaneWatcherKey(terminalSessionId, paneId);
+      const watched = this.watchedPanes.get(key);
+      if (expected && watched !== expected) return;
+      this.watchedPanes.delete(key);
+      if (watched) await this.operations.stop(watched);
+      else await this.operations.removePaneTransport(terminalSessionId, paneId);
+      this.stopPollingIfIdle();
+    });
   }
 
   async unwatchSession(terminalSessionId: string): Promise<void> {
-    const watchedPanes = Array.from(this.watchedPanes.entries()).filter(
-      ([, watched]) => watched.terminalSessionId === terminalSessionId,
-    );
-    watchedPanes.forEach(([key]) => this.watchedPanes.delete(key));
-    await Promise.all(
-      watchedPanes.map(([, watched]) =>
-        this.stopPipe(terminalSessionId, watched),
-      ),
-    );
-    this.stopPollingIfIdle();
+    return this.operations.run(terminalSessionId, async () => {
+      const watchedPanes = Array.from(this.watchedPanes.entries()).filter(
+        ([, watched]) => watched.terminalSessionId === terminalSessionId,
+      );
+      watchedPanes.forEach(([key]) => this.watchedPanes.delete(key));
+      await this.operations.stopAll(watchedPanes.map(([, watched]) => watched));
+      await this.operations.removeSessionTransports(terminalSessionId);
+      this.stopPollingIfIdle();
+    });
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
     this.stopPolling();
     await Promise.all([this.polling, this.reconciling]);
+    await this.operations.drain();
     await Promise.all(
       Array.from(this.watchedPanes.values()).map((watched) => watched.polling),
     );
-    await Promise.all(
-      Array.from(this.watchedPanes.values()).map((watched) =>
-        this.stopPipe(watched.terminalSessionId, watched),
-      ),
-    );
+    await this.operations.stopAll(this.watchedPanes.values(), false);
     this.watchedPanes.clear();
   }
 
   private async ensurePaneWatcher(
+    session: TerminalSessionRecord,
+    target: TmuxPaneTarget,
+    options: { reconcileSessionLifecycle: boolean; recordSessionOutput: boolean },
+  ): Promise<WatchedTmuxPane | null> {
+    return this.operations.run(session.id, () => this.ensurePaneWatcherNow(session, target, options));
+  }
+
+  private async ensurePaneWatcherNow(
     session: TerminalSessionRecord,
     target: TmuxPaneTarget,
     options: {
@@ -390,7 +400,7 @@ export class TmuxOutputWatcher {
       recordSessionOutput: boolean;
     },
   ): Promise<WatchedTmuxPane | null> {
-    if (this.disposed) return null;
+    if (this.disposed || !shouldWatchSession(session) || this.terminalSessionManager.getSession(session.id) !== session) return null;
     const key = resolvePaneWatcherKey(session.id, target.paneId);
     const existing = this.watchedPanes.get(key);
     if (existing && isSamePaneTarget(existing.target, target)) {
@@ -401,10 +411,10 @@ export class TmuxOutputWatcher {
 
     if (existing) {
       this.watchedPanes.delete(key);
-      await this.stopPipe(session.id, existing);
+      await this.operations.stop(existing);
     }
 
-    const filePath = this.resolveOutputPath(session.id, target.paneId);
+    const filePath = this.operations.outputPath(session.id, target.paneId);
     try {
       await mkdir(this.outputDir, { recursive: true });
       await writeFile(filePath, "", { flag: "a" });
@@ -548,7 +558,7 @@ export class TmuxOutputWatcher {
                 !livePaneIds.has(watched.target.paneId),
               )
               .map((watched) =>
-                this.unwatchPane(terminalSessionId, watched.target.paneId),
+                this.unwatchPane(terminalSessionId, watched.target.paneId, watched),
               ),
           );
         },
@@ -563,27 +573,4 @@ export class TmuxOutputWatcher {
     watched.outputBuffer = createScrollbackBuffer("", this.maxTransportBytes);
   }
 
-  private async stopPipe(
-    terminalSessionId: string,
-    watched: WatchedTmuxPane,
-  ): Promise<void> {
-    try {
-      await this.tmuxService.stopPaneOutputPipe(watched.target);
-    } catch (error) {
-      tmuxOutputLogger.debug("terminal.tmux.output-watch.stop.failed", {
-        message: "Failed to stop tmux output pipe",
-        terminalSessionId,
-        sessionName: watched.target.sessionName,
-        socketPath: watched.target.socketPath,
-        error,
-      });
-    }
-  }
-
-  private resolveOutputPath(terminalSessionId: string, paneId: string): string {
-    return path.join(
-      this.outputDir,
-      `${sanitizeOutputPathSegment(terminalSessionId)}--${sanitizeOutputPathSegment(paneId)}.log`,
-    );
-  }
 }

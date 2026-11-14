@@ -18,6 +18,7 @@ import { logTerminalPerf, summarizeTerminalChunk } from "../output/performance";
 import { buildTerminalWsUrl, sendMessage } from "./socket-transport";
 import {
   TerminalClientOutputRecovery,
+  TerminalOutputBackpressureError,
   hasTerminalDimensions,
   type TerminalOutputDelivery,
 } from "./output-recovery";
@@ -437,11 +438,14 @@ export function useTerminalConnection(params: {
                 onAuthExpired?.();
               }
             }
-          } catch {
+          } catch (error) {
             outputRecovery.invalidate();
             socket.close(4000, "Terminal output requires resynchronization");
-            closeReasonRef.current = "Invalid terminal message";
-            setError("Invalid terminal message");
+            const reason = error instanceof TerminalOutputBackpressureError
+              ? error.message
+              : "Invalid terminal message";
+            closeReasonRef.current = reason;
+            setError(reason);
           }
         });
       } catch (error) {
