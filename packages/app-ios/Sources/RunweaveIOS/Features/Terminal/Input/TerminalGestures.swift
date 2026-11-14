@@ -12,6 +12,11 @@ final class NativeTerminalView: TerminalView {
   private var selectionMenu: AnyObject?
   private var menuPoint = CGPoint.zero
 
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    scrollHandler?.cancelScroll()
+    super.touchesBegan(touches, with: event)
+  }
+
   override func mouseModeChanged(source: Terminal) {
     // Runweave owns remote scrolling. SwiftTerm's mouse pan would compete with
     // UIScrollView even though allowMouseReporting is disabled.
@@ -215,13 +220,22 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   private weak var view: NativeTerminalView?
   private let pan = UIPanGestureRecognizer()
   private var accumulated: CGFloat = 0
+  private var gestureID = UUID().uuidString
+  private var cancelled = false
+  private var momentum: CADisplayLink?
+  private var momentumVelocity: CGFloat = 0
+  private var lastMomentumTime: CFTimeInterval = 0
+  var usesNormalizedScroll: () -> Bool = { false }
+  var normalizedScrollUsesHistory: () -> Bool = { false }
+  var sendNormalizedScroll: ((String, Int, String) -> Bool)?
+  var stopNormalizedScroll: ((String) -> Void)?
   // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
   private let tmuxRowsPerWheel = 5
   var active = true {
     didSet {
       view?.isScrollEnabled = active
       pan.isEnabled = active
-      accumulated = 0
+      cancelScroll()
     }
   }
   var isTmux: () -> Bool = { false }
@@ -249,35 +263,99 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     guard active, let view, !view.hasActiveSelection else { return false }
     // Normal-buffer history already has pixel scrolling and native inertia.
-    guard view.getTerminal().isCurrentBufferAlternate else { return false }
+    guard view.getTerminal().isCurrentBufferAlternate || (isTmux() && usesNormalizedScroll()) else { return false }
     let position = pan.location(in: view)
     let start = position.x - pan.translation(in: view).x - view.bounds.minX
     let velocity = pan.velocity(in: view)
     // Leave the leading edge and horizontal navigation gestures to the host.
     return start > 24 && abs(velocity.y) > abs(velocity.x)
   }
+  func cancelScroll() {
+    momentum?.invalidate()
+    momentum = nil
+    momentumVelocity = 0
+    accumulated = 0
+    cancelled = true
+    if usesNormalizedScroll() { stopNormalizedScroll?(gestureID) }
+  }
+
+  func applyScrollState(_ state: TerminalScrollState) {
+    if state.gestureId == gestureID && state.status == "cancelled" {
+      momentum?.invalidate()
+      momentum = nil
+      accumulated = 0
+      cancelled = true
+    }
+  }
+
+  private func move(_ points: CGFloat, phase: String) {
+    guard active, !cancelled, let view, view.window != nil, !view.hasActiveSelection, isTmux() else { return }
+    let lineHeight = view.getOptimalFrameSize().height / CGFloat(max(1, view.getTerminal().rows))
+    guard lineHeight > 0 else { return }
+    if points.sign != accumulated.sign { accumulated = 0 }
+    // Preserve the existing history drag gain; application wheels use their own distance.
+    let distanceScale: CGFloat = !usesNormalizedScroll() || normalizedScrollUsesHistory() ? 2 : 1
+    accumulated += points * distanceScale
+    let unit = lineHeight * CGFloat(usesNormalizedScroll() ? 1 : tmuxRowsPerWheel)
+    let steps = Int(accumulated / unit)
+    guard steps != 0 else { return }
+    accumulated -= CGFloat(steps) * unit
+    let accepted = usesNormalizedScroll()
+      ? (sendNormalizedScroll?(gestureID, steps, phase) ?? false)
+      : sendTmuxScroll(wheels: steps)
+    if !accepted { cancelScroll() }
+  }
+
   @objc private func drag(_ gesture: UIPanGestureRecognizer) {
     guard let view else { return }
-    if gesture.state == .began { accumulated = 0 }
-    if gesture.state == .began || gesture.state == .changed {
-      guard active, !view.hasActiveSelection, view.getTerminal().isCurrentBufferAlternate,
-        isTmux() else { accumulated = 0; return }
-      accumulated += gesture.translation(in: view).y * 2
+    if gesture.state == .began {
+      cancelScroll()
+      gestureID = UUID().uuidString
+      cancelled = false
+    }
+    if gesture.state == .began || gesture.state == .changed || gesture.state == .ended {
+      move(gesture.translation(in: view).y, phase: "direct")
       gesture.setTranslation(.zero, in: view)
-      let lineHeight = view.getOptimalFrameSize().height / CGFloat(max(1, view.getTerminal().rows))
-      guard lineHeight > 0 else { return }
-      let wheels = Int(accumulated / (lineHeight * CGFloat(tmuxRowsPerWheel)))
-      if wheels != 0 {
-        accumulated -= CGFloat(wheels * tmuxRowsPerWheel) * lineHeight
-        _ = sendTmuxScroll(wheels: wheels)
+    }
+    if gesture.state == .ended, usesNormalizedScroll(), !cancelled {
+      let velocity = gesture.velocity(in: view).y
+      if abs(velocity) >= 80 {
+        momentumVelocity = min(max(velocity, -view.bounds.height * 4), view.bounds.height * 4)
+        lastMomentumTime = 0
+        let link = CADisplayLink(target: self, selector: #selector(decelerate(_:)))
+        momentum = link
+        link.add(to: .main, forMode: .common)
       }
-    } else {
+    } else if gesture.state == .cancelled || gesture.state == .failed {
+      cancelScroll()
+    }
+  }
+
+  @objc private func decelerate(_ link: CADisplayLink) {
+    guard active, !cancelled, let view, view.window != nil, !view.hasActiveSelection, usesNormalizedScroll() else {
+      cancelScroll(); return
+    }
+    let elapsed = lastMomentumTime == 0 ? link.duration : min(0.05, link.timestamp - lastMomentumTime)
+    lastMomentumTime = link.timestamp
+    let decay = pow(Double(UIScrollView.DecelerationRate.normal.rawValue), elapsed * 1000)
+    let previousVelocity = momentumVelocity
+    momentumVelocity *= CGFloat(decay)
+    move((previousVelocity + momentumVelocity) * CGFloat(elapsed) / 2, phase: "momentum")
+    if abs(momentumVelocity) < 20 {
+      momentum?.invalidate()
+      momentum = nil
       accumulated = 0
     }
   }
   @discardableResult func scroll(rows: Int) -> Bool {
     guard active, let view, !view.hasActiveSelection, rows != 0 else { return false }
     let terminal = view.getTerminal()
+    if isTmux(), usesNormalizedScroll() {
+      cancelScroll()
+      gestureID = UUID().uuidString
+      cancelled = false
+      return sendNormalizedScroll?(gestureID, rows, "direct") ?? false
+    }
     if terminal.isCurrentBufferAlternate, isTmux() {
       // VoiceOver requests a page, measured in rows rather than wheel events.
       let wheels = max(1, Int((Double(abs(rows)) / Double(tmuxRowsPerWheel)).rounded()))
@@ -297,6 +375,9 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     return sendScroll?(input, wheels * tmuxRowsPerWheel) ?? false
   }
   func dispose() {
+    cancelScroll()
+    sendNormalizedScroll = nil
+    stopNormalizedScroll = nil
     if let view {
       view.removeGestureRecognizer(pan)
       view.scrollHandler = nil

@@ -63,7 +63,7 @@ export function useTerminalFloatingComposerController({
   const visible = draft.visible;
   const showTrigger = draft.showTrigger;
   const showFloatingScroll =
-    visible && (!scroll.terminalAtBottom || scroll.tmuxScrollbackActive);
+    visible && !scroll.remoteApplication && (!scroll.terminalAtBottom || scroll.tmuxScrollbackActive);
   const scrollButtonMode: "floating" | "legacy" | "none" = showFloatingScroll
     ? "floating"
     : scroll.showScrollToBottomControl && !visible

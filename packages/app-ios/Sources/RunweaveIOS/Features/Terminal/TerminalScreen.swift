@@ -69,7 +69,7 @@ struct TerminalScreen: View {
   private var projectID: String { currentTerminal?.projectId ?? details.projectId }
   private var canReportCompletionViewed: Bool {
     session.foreground && session.canWrite && session.terminal?.id == details.id
-      && controller.canSend && !controller.scrolledBack && tab == "Chat"
+      && controller.canSend && controller.scrollPositionKnown && !controller.scrolledBack && tab == "Chat"
       && !showingBranchUpdates && !sideChat.visible && browser.state != .presented && !showingHistory && !showingConversation
       && !codeReview.showingReport && !showingInfo && !showingSupervision && !showingDiagnostics && !showingComposer && fileTap == nil
       && replyContext == nil && snapshotShare == nil && !deleting

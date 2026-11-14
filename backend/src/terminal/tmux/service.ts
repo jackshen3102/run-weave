@@ -1,4 +1,4 @@
-import { TmuxPaneService } from "./pane-service";
+import { TmuxScrollService } from "./scroll-service";
 
 export type {
   KillOrphanedTmuxSessionsOptions,
@@ -21,4 +21,4 @@ export {
   TmuxRebuildLimitError,
 } from "./types";
 
-export class TmuxService extends TmuxPaneService {}
+export class TmuxService extends TmuxScrollService {}

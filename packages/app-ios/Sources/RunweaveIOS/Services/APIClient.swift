@@ -163,7 +163,7 @@ public actor APIClient {
   }
 
   func details(id: String) async throws -> TerminalDetails {
-    try await authorized("/api/terminal/session/\(Self.pathComponent(id))")
+    try await authorized("/api/terminal/session/\(Self.pathComponent(id))?includeScrollback=false")
   }
   func history(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/history")

@@ -533,6 +533,7 @@ export function attachTerminalWebSocketServer(
         terminalSessionId,
         runtimeKind: session && isTmuxBackedSession(session) ? "tmux" : "pty",
         tmuxScrollMode: session && isTmuxBackedSession(session) ? "single-row" : undefined,
+        scrollInput: session && isTmuxBackedSession(session) ? "normalized-v1" : undefined,
       });
       if (session) {
         if (sendInitialSnapshot) {

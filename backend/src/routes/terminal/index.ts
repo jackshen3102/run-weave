@@ -20,6 +20,7 @@ import type { TerminalCompletionEventListResponse } from "@runweave/shared/termi
 import type {
   CreateTerminalSessionRequest,
   CreateTerminalSessionResponse,
+  TerminalSessionStatusQuery,
 } from "@runweave/shared/terminal/session";
 import type { AuthService } from "../../auth/service";
 import {
@@ -403,15 +404,16 @@ export function createTerminalRouter(
       return;
     }
 
+    const query: TerminalSessionStatusQuery = { includeScrollback: req.query.includeScrollback !== "false" };
     res.json(
       toStatusPayload(
         session,
-        await readTerminalScrollback(
+        query.includeScrollback ? await readTerminalScrollback(
           session,
           terminalSessionManager,
           options?.tmuxService,
           "live",
-        ),
+        ) : "",
       ),
     );
   });

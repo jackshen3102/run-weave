@@ -5,6 +5,7 @@ import type { PtyRuntime } from "../terminal/runtime/pty-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { beginTerminalInput, queueBehindTextAttachment } from "../terminal/runtime/input-admission";
 import { rawTerminalInputIntent } from "../terminal/runtime/input-intent";
+import { createTerminalScrollController } from "../terminal/runtime/scroll-service";
 import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
@@ -48,6 +49,12 @@ export function createTerminalInputHandler({
   terminalSessionId,
   terminalSessionManager,
 }: TerminalInputHandlerOptions): (data: string, isBinary: boolean) => void {
+  const scroll = tmuxService ? createTerminalScrollController({
+    manager: terminalSessionManager, terminalId: terminalSessionId, tmux: tmuxService, runtime,
+    alive: () => socket.readyState === 1, publish: (state) => { sendEvent(socket, state); },
+  }) : undefined;
+  socket.once("close", () => scroll?.dispose());
+  void scroll?.sync();
   return (data, isBinary) => {
     if (isBinary) {
       return;
@@ -60,6 +67,12 @@ export function createTerminalInputHandler({
         messageLength: data.length,
       });
       sendEvent(socket, { type: "error", message: "Invalid message" });
+      return;
+    }
+    if (parsed.type === "scroll-stop") { scroll?.cancel(parsed.gestureId); return; }
+    if (parsed.type === "scroll") {
+      outputBatcher.markNextChunkInteractive();
+      scroll?.enqueue(parsed);
       return;
     }
     if (parsed.type === "input") {
@@ -135,6 +148,7 @@ export function createTerminalInputHandler({
       return;
     }
     const current = terminalSessionManager.getSession(terminalSessionId);
+    void scroll?.sync();
     sendStatusEvent(socket, current?.status ?? "running", current?.exitCode);
   };
 }

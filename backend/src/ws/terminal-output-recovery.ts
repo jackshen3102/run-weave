@@ -111,6 +111,7 @@ export function createTerminalOutputRecovery(options: {
           terminalSessionId,
           runtimeKind: registry.getRuntime(runtimeId)?.hosted ? "pty" : "tmux",
           tmuxScrollMode: registry.getRuntime(runtimeId)?.hosted ? undefined : "single-row",
+          scrollInput: registry.getRuntime(runtimeId)?.hosted ? undefined : "normalized-v1",
           resizeMode: orderedResize ? "ordered" : undefined,
           recovery: includeSnapshot
             ? { mode: resume ? "resume" : "snapshot", reason }

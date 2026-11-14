@@ -49,6 +49,17 @@ export function parseTerminalClientMessage(
     }
 
     const candidate = parsed as Record<string, unknown>;
+    if (candidate.type === "scroll-stop" && typeof candidate.gestureId === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(candidate.gestureId)) {
+      return { type: "scroll-stop", gestureId: candidate.gestureId };
+    }
+    if (candidate.type === "scroll" &&
+      typeof candidate.gestureId === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(candidate.gestureId) &&
+      Number.isSafeInteger(candidate.sequence) && (candidate.sequence as number) >= 0 &&
+      Number.isInteger(candidate.deltaSteps) && Math.abs(candidate.deltaSteps as number) <= 128 && candidate.deltaSteps !== 0 &&
+      (candidate.phase === "direct" || candidate.phase === "momentum")) {
+      return { type: "scroll", gestureId: candidate.gestureId, sequence: candidate.sequence as number,
+        deltaSteps: candidate.deltaSteps as number, phase: candidate.phase };
+    }
     if (candidate.type === "input" && typeof candidate.data === "string") {
       return { type: "input", data: candidate.data };
     }

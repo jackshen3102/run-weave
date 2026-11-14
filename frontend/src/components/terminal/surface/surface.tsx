@@ -1,3 +1,4 @@
+import { useRemoteTerminalScrollState, useVisibleTerminalOutput } from "./use-remote-scroll-state";
 import { consumeComposerInsertion, usePromptInsertionRequest } from "./composer-insertion";
 import { parseTerminalFileReference, type TerminalFileReference, type TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { useMemoizedFn } from "ahooks";
@@ -155,6 +156,7 @@ export function TerminalSurface({
   const search = useTerminalSearch({ active: active && !obscured, clientMode, terminalRef });
   const scroll = useTerminalScrollController({
     resetScrollInput,
+    refreshRemoteState: () => remoteScroll.refresh(),
     active,
     apiBase,
     runtimeKindRef,
@@ -187,10 +189,7 @@ export function TerminalSurface({
       websocketContentVersionRef,
     });
 
-  useLayoutEffect(() => {
-    outputVisibleRef.current = active && !obscured;
-    if (active && !obscured) replayDeferredOutput();
-  }, [active, obscured, replayDeferredOutput]);
+  useVisibleTerminalOutput(outputVisibleRef, active && !obscured, replayDeferredOutput, resetScrollInput);
 
   const {
     invalidateOutputRecovery,
@@ -203,7 +202,7 @@ export function TerminalSurface({
     sendInput,
     sendResize,
     runtimeKind,
-    singleRowScrollRef,
+    singleRowScrollRef, normalizedScrollRef, sendScroll, requestScrollState,
     orderedResizeRef,
     terminalStatus: connectionTerminalStatus,
   } = useTerminalConnection({
@@ -212,12 +211,13 @@ export function TerminalSurface({
     token,
     onAuthExpired,
     onSnapshot,
-    onOutput,
+    onOutput, onScrollState: (state) => remoteScroll.receive(state),
   });
+  const remoteScroll = useRemoteTerminalScrollState(scroll, resetScrollInput, requestScrollState, connectionStatus, activePanelId);
   invalidateOutputRecoveryRef.current = invalidateOutputRecovery;
   useCompletionViewed({
     apiBase, token, terminalSessionId, panelId: paneWorkspace?.activePanelId,
-    active: active && !obscured, atBottom: scroll.terminalAtBottom && !scroll.tmuxScrollbackActive && !scroll.hasNewOutputBelow,
+    active: active && !obscured, atBottom: !scroll.remoteApplication && scroll.terminalAtBottom && !scroll.tmuxScrollbackActive && !scroll.hasNewOutputBelow,
     connected: connectionStatus === "connected", terminalRef,
   });
   const runtimeStatusItem = useMemo<RuntimeStatusItem>(() => {
@@ -425,7 +425,7 @@ export function TerminalSurface({
     paneWorkspaceRef,
     refreshTerminalViewportRef,
     runtimeKindRef,
-    singleRowScrollRef,
+    singleRowScrollRef, normalizedScrollRef, sendScroll, scrollFeedbackRef: remoteScroll.feedbackRef,
     resetScrollInputRef,
     searchAddonRef: search.addonRef,
     sendResize,
