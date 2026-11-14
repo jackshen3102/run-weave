@@ -164,6 +164,34 @@ final class ConnectionRouteResolver: ObservableObject {
     return health
   }
   private func proveCurrent(_ client: APIClient, route: ConnectionRoute) async throws -> DeviceHealthSnapshot {
+    let epoch = revision
+    do { return try await probeCurrent(client, route: route) }
+    catch {
+      try check(epoch)
+      // A single transport failure must not tear down otherwise healthy sockets.
+      // Identity/proof failures are never retried as connectivity failures.
+      let retryable: Bool
+      switch error {
+      case let failure as URLError:
+        retryable = [.timedOut, .networkConnectionLost, .notConnectedToInternet,
+          .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed].contains(failure.code)
+      case is RouteHealthFailure, ConnectionIdentityFailure.unavailable:
+        retryable = true
+      default: retryable = false
+      }
+      guard retryable else { throw error }
+      DiagnosticStore.shared.append(scope: client.connectionID,
+        .connection("health.probe.retry.scheduled", details: ["retryDelayMs": "1000"], error: error))
+      try await Task.sleep(nanoseconds: 1_000_000_000)
+      try check(epoch)
+      let health = try await probeCurrent(client, route: route)
+      try check(epoch)
+      DiagnosticStore.shared.append(scope: client.connectionID,
+        .connection("health.probe.retry.recovered"))
+      return health
+    }
+  }
+  private func probeCurrent(_ client: APIClient, route: ConnectionRoute) async throws -> DeviceHealthSnapshot {
     let started = ProcessInfo.processInfo.systemUptime
     let credentials = try ComputerCredentialSession.shared(account: computer.credentialAccount)
     if let trust = await credentials.trust() {

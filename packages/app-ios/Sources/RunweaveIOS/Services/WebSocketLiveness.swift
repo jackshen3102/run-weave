@@ -16,7 +16,7 @@ final class WebSocketLiveness {
         guard !Task.isCancelled else { continuation.resume(returning: false); return }
         self.continuation = continuation
         timeout = Task { [weak self] in
-          do { try await Task.sleep(nanoseconds: 2_500_000_000) } catch { return }
+          do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
           self?.finish(false)
         }
         socket.sendPing { [weak self] error in
