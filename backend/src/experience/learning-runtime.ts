@@ -77,6 +77,10 @@ export class ExperienceLearningRuntime {
   }
   async status(cwd: string): Promise<ExperienceLearningStatus> {
     const scope = await this.service.scope(cwd);
+    const candidates = (await this.service.candidates(cwd)).sort(
+      (a, b) => b.record.updatedAt.localeCompare(a.record.updatedAt) ||
+        a.candidateId.localeCompare(b.candidateId),
+    );
     return {
       enabled: this.enabled,
       repositoryId: scope.repositoryId,
@@ -93,7 +97,20 @@ export class ExperienceLearningRuntime {
             return job;
           },
         ),
-      candidates: await this.service.candidates(cwd),
+      candidateTotal: candidates.length,
+      candidatesTruncated: candidates.length > 50,
+      candidates: candidates.slice(0, 50).map((candidate) => ({
+        ...candidate,
+        record: {
+          ...candidate.record,
+          // Status is an overview; candidate/catalog reads retain full evidence.
+          evidence: candidate.record.evidence.map(
+            ({ path, startLine, endLine, note, sha256 }) => ({
+              path, startLine, endLine, note, sha256,
+            }),
+          ),
+        },
+      })),
     };
   }
   async retry(cwd: string, jobId: string): Promise<void> {

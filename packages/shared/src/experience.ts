@@ -238,5 +238,9 @@ export interface ExperienceLearningStatus {
   repositoryId: string;
   namespace: string;
   jobs: ExperienceLearningJob[];
+  /** Absent on older Backends, whose status returned every full candidate. */
+  candidateTotal?: number;
+  candidatesTruncated?: boolean;
+  /** Recent candidates only; archived evidence is read through candidate/catalog. */
   candidates: ExperienceCandidate[];
 }

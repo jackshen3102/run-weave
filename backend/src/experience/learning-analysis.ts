@@ -357,7 +357,10 @@ supported 只能引用候选已经归档的本轮 evidenceIds 和所列历史证
       );
       await writeFile(outputSchemaPath, schemaText, { mode: 0o600 });
       const request = {
-        prompt,
+        // Native constrained decoding can stall on evidence-heavy schemas.
+        // Validate the complete response locally before any checkpoint or write.
+        prompt: `${prompt}\n仅输出符合以下 JSON Schema 的完整 JSON 对象，不要 Markdown 或额外文字：\n${schemaText}`,
+        outputSchemaMode: "prompt" as const,
         workingDirectory: directory,
         outputSchemaPath,
         maxWallTimeMs: 90_000,
@@ -366,6 +369,8 @@ supported 只能引用候选已经归档的本轮 evidenceIds 和所列历史证
       };
       let callAttempt = 0;
       const run = async () => {
+        if (Buffer.byteLength(request.prompt) > 600_000)
+          throw new Error("experience_partial_prompt_budget_exceeded");
         callAttempt++;
         const startedAt = Date.now();
         let output: unknown;
