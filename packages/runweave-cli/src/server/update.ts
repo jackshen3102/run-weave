@@ -1,6 +1,7 @@
 import { CONFIGURATION_COMPATIBILITY, supportsConfiguration, type ConfigurationUpgradePreview, type ConfigurationUpgradeResult } from "@runweave/shared/configuration";
 import { BACKEND_CORE_CONFIGURATION_DOMAINS, resolveActiveServerRelease, withConfigurationUpgradeOwnership } from "@runweave/config-node";
 import { PtyHostClient } from "@runweave/pty-host/client";
+import type { PtyHostSession } from "@runweave/shared/terminal/pty-host";
 import { execFileSync } from "node:child_process";
 import type { ServerMaintenanceLease, ServerConfigurationObservation } from "@runweave/shared/server-management";
 import { createHash, randomUUID } from "node:crypto";
@@ -162,7 +163,9 @@ export async function updateServer(
         const host = await PtyHostClient.connect(ctx.context);
         try {
           hostIdentity = { hostInstanceId: host.descriptor.hostInstanceId,
-            sessions: await host.request("listSessions") };
+            // Exited entries are a bounded cache, not live processes to preserve.
+            sessions: (await host.request<PtyHostSession[]>("listSessions"))
+              .filter(session => session.status === "running") };
         } finally { host.close(); }
       }
     }

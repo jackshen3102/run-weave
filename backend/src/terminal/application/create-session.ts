@@ -4,7 +4,7 @@ import type { TerminalSessionManager } from "../manager/manager";
 import type { TerminalActivityDependencies } from "../runtime/activity-events";
 import { recordTerminalSessionCreated } from "../runtime/activity-events";
 import {
-  ensureTerminalRuntime,
+  ensureTerminalStarted,
   isTmuxBackedSession,
   killTmuxSessionForTerminal,
 } from "../runtime/launcher";
@@ -60,13 +60,13 @@ export async function createTerminalSession(
         launchSession = (await manager.updateRuntimeMetadata(session.id, { runtimeKind: "pty", tmuxUnavailableReason: unavailableReason ?? "tmux unavailable", recoverable: false })) ?? session;
       }
       try {
-        await ensureTerminalRuntime({ session: launchSession, terminalSessionManager: manager, runtimeRegistry: options.runtimeRegistry, ptyService: options.ptyService, tmuxService: options.tmuxService, tmuxOutputWatcher: options.tmuxOutputWatcher, allowMissingTmuxSession: true });
+        await ensureTerminalStarted({ session: launchSession, terminalSessionManager: manager, runtimeRegistry: options.runtimeRegistry, ptyService: options.ptyService, tmuxService: options.tmuxService, tmuxOutputWatcher: options.tmuxOutputWatcher, allowMissingTmuxSession: true });
       } catch (error) {
         if (error instanceof TmuxShellStartupError || preference !== "auto" || !options.tmuxService || !isTmuxBackedSession(launchSession)) throw error;
         terminalLogger.warn("terminal.session.runtime.tmux-launch-fallback", { terminalSessionId: session.id, error: String(error) });
         if (attemptedTarget) await options.tmuxService.killSession(attemptedTarget);
         launchSession = (await manager.updateRuntimeMetadata(session.id, { runtimeKind: "pty", tmuxUnavailableReason: "tmux launch failed; fell back to pty", recoverable: false })) ?? session;
-        await ensureTerminalRuntime({ session: launchSession, terminalSessionManager: manager, runtimeRegistry: options.runtimeRegistry, ptyService: options.ptyService, tmuxService: options.tmuxService, tmuxOutputWatcher: options.tmuxOutputWatcher, allowMissingTmuxSession: true });
+        await ensureTerminalStarted({ session: launchSession, terminalSessionManager: manager, runtimeRegistry: options.runtimeRegistry, ptyService: options.ptyService, tmuxService: options.tmuxService, tmuxOutputWatcher: options.tmuxOutputWatcher, allowMissingTmuxSession: true });
       }
     }
     const created = manager.getSession(session.id) ?? session;

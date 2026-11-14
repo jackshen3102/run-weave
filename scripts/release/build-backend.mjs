@@ -2,6 +2,7 @@ import { prepareLinuxSqlite } from "./linux-native-runtime.mjs";
 import { prepareWindowsPty } from "./windows-native-pty.mjs";
 import { buildDevResources } from "../../scripts/dev-resources/build.mjs";
 import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
+import { buildTmuxOutputWriter } from "../../backend/scripts/build-tmux-output-writer.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -94,6 +95,7 @@ function sha256(file) {
 rmSync(releaseDir, { recursive: true, force: true });
 mkdirSync(backendDir, { recursive: true });
 buildResourceSampler(backendDir);
+buildTmuxOutputWriter(backendDir);
 await buildDevResources(backendDir);
 // npm_execpath is the pnpm JS entry when invoked by pnpm server:build.
 if (process.platform === "win32") {

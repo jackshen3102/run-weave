@@ -133,6 +133,9 @@ if (!existsSync(backendEntry)) {
 if (process.platform === "darwin" && !existsSync(path.join(resourcesBackendDir, "resource-sampler"))) {
   throw new Error("Backend resource sampler is missing from the macOS runtime");
 }
+if (process.platform !== "win32" && !existsSync(path.join(resourcesBackendDir, "tmux-output-writer"))) {
+  throw new Error("Backend tmux output writer is missing from the runtime");
+}
 if (!existsSync(cliEntry)) {
   throw new Error("CLI bundle is missing electron/dist/cli/index.cjs");
 }

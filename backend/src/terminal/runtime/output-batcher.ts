@@ -49,10 +49,10 @@ export class TerminalOutputBatcher {
 
   markNextChunkInteractive(): void {
     this.flushNextChunkImmediately = true;
-    logTerminalPerf("terminal.batcher.interactive", {
+    logTerminalPerf("terminal.batcher.interactive", () => ({
       label: this.label,
       bufferedLen: this.bufferedOutput.length,
-    });
+    }));
   }
 
   push(chunk: string): void {
@@ -62,11 +62,11 @@ export class TerminalOutputBatcher {
 
     if (this.flushNextChunkImmediately) {
       this.flushNextChunkImmediately = false;
-      logTerminalPerf("terminal.batcher.push.immediate", {
+      logTerminalPerf("terminal.batcher.push.immediate", () => ({
         label: this.label,
         chunkLen: chunk.length,
         bufferedLen: this.bufferedOutput.length,
-      });
+      }));
       this.flush();
       this.bufferedOutput += chunk;
       this.flush();
@@ -74,11 +74,11 @@ export class TerminalOutputBatcher {
     }
 
     if (this.bufferedOutput.length + chunk.length >= OUTPUT_BATCH_MAX_SIZE) {
-      logTerminalPerf("terminal.batcher.push.max-size", {
+      logTerminalPerf("terminal.batcher.push.max-size", () => ({
         label: this.label,
         chunkLen: chunk.length,
         bufferedLen: this.bufferedOutput.length,
-      });
+      }));
       this.flush();
     }
 
@@ -88,11 +88,11 @@ export class TerminalOutputBatcher {
       return;
     }
 
-    logTerminalPerf("terminal.batcher.schedule", {
+    logTerminalPerf("terminal.batcher.schedule", () => ({
       label: this.label,
       bufferedLen: this.bufferedOutput.length,
       delayMs: OUTPUT_BATCH_DURATION_MS,
-    });
+    }));
     this.flushTimer = setTimeout(() => {
       this.flush();
     }, OUTPUT_BATCH_DURATION_MS);
@@ -112,10 +112,10 @@ export class TerminalOutputBatcher {
     const range = this.range;
     this.range = undefined;
     this.bufferedOutput = "";
-    logTerminalPerf("terminal.batcher.flush", {
+    logTerminalPerf("terminal.batcher.flush", () => ({
       label: this.label,
       outputLen: output.length,
-    });
+    }));
     this.onFlush(output, range);
   }
 

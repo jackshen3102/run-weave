@@ -109,11 +109,12 @@ for (const component of ["backend", "app-server", "server", "pty-host"]) {
   mkdirSync(path.join(platform, "native"), { recursive: true });
   renameSync(modules, path.join(platform, "native", component));
 }
-// resource-sampler is platform-specific, keep the common main package portable.
-const sampler = path.join(payload, "backend/resource-sampler");
-if (process.platform === "darwin") {
+// Native helpers belong to the platform artifact, not the portable payload.
+const nativeHelpers = process.platform === "win32" ? [] : ["tmux-output-writer"];
+if (process.platform === "darwin") nativeHelpers.push("resource-sampler");
+for (const helper of nativeHelpers) {
   mkdirSync(path.join(platform, "resources"), { recursive: true });
-  renameSync(sampler, path.join(platform, "resources/resource-sampler"));
+  renameSync(path.join(payload, "backend", helper), path.join(platform, "resources", helper));
 }
 function files(dir, prefix = "") {
   return readdirSync(dir)
@@ -179,7 +180,7 @@ const manifest = {
     .update(databaseSources + snapshot.files.map(file => `${file.path}:${file.sha256}\n`).join("")).digest("hex")),
   files: [...backendManifest, ...nativeFiles],
 };
-if (process.platform === "darwin")
+if (nativeHelpers.length)
   manifest.files.push(...files(path.join(platform, "resources"), "backend"));
 json(path.join(platform, "manifest.json"), manifest);
 json(path.join(platform, "package.json"), {
@@ -242,7 +243,7 @@ for (const component of ["backend", "server", "app-server", "pty-host"])
     path.join(expanded, component, "node_modules"),
     { recursive: true },
   );
-if (process.platform === "darwin")
+if (nativeHelpers.length)
   cpSync(path.join(platform, "resources"), path.join(expanded, "backend"), {
     recursive: true,
   });

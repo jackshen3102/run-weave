@@ -375,7 +375,10 @@ async function startPackagedBackendForRelease(options: {
     appServerConnection,
   });
 
-  const child = spawn(process.execPath, [backendPaths.backendEntry, ...configurationArguments(configuration().context), "--port", String(backendPort), "--host", setting<string>("backend.server.host", LAN_BIND_HOST)!], {
+  // Favor reclamation in the long-lived control process and bound its young
+  // generation. Terminal bursts otherwise leave a large idle heap even after
+  // their sessions and native resources have been released.
+  const child = spawn(process.execPath, ["--memory-saver-mode", "--max-semi-space-size=8", backendPaths.backendEntry, ...configurationArguments(configuration().context), "--port", String(backendPort), "--host", setting<string>("backend.server.host", LAN_BIND_HOST)!], {
     env: backendEnv,
     stdio: "pipe",
   });

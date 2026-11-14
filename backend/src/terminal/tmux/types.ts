@@ -78,6 +78,7 @@ export type TmuxExecFile = (
     cwd?: string;
     env?: NodeJS.ProcessEnv;
     timeout?: number;
+    killSignal?: NodeJS.Signals;
     maxBuffer?: number;
   },
 ) => Promise<{ stdout: string; stderr: string }>;

@@ -251,6 +251,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
             filter: [
               "index.cjs",
               "resource-sampler",
+              "tmux-output-writer",
               "dev-resources/**/*",
               "ios-simulators/**/*",
               "activity-sqlite-worker.cjs",

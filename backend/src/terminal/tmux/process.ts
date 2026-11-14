@@ -285,6 +285,9 @@ export abstract class TmuxProcess {
       return await this.execFileImpl(this.binary, normalizedArgs, {
         env: this.env,
         timeout: TmuxCommandTimeoutMs,
+        // tmux can handle SIGTERM by exiting successfully, hiding the timeout.
+        // Kill only this command client so timeout remains an infrastructure error.
+        killSignal: "SIGKILL",
         maxBuffer: 10 * 1024 * 1024,
       });
     } catch (error) {

@@ -1,5 +1,6 @@
 import { buildDevResources } from "../../scripts/dev-resources/build.mjs";
 import { buildResourceSampler } from "../../backend/scripts/build-resource-sampler.mjs";
+import { buildTmuxOutputWriter } from "../../backend/scripts/build-tmux-output-writer.mjs";
 import { copyNativeLockRuntime } from "../../packages/runweave-cli/scripts/native-lock-runtime.mjs";
 import { buildAgentAssets } from "../../scripts/agents/build.mjs";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -118,6 +119,7 @@ await build({
 });
 
 buildResourceSampler(path.resolve(outputDir, "backend"));
+buildTmuxOutputWriter(path.resolve(outputDir, "backend"));
 await buildDevResources(path.resolve(outputDir, "backend"));
 
 const activityWorkerEntry = path.resolve(

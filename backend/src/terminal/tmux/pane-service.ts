@@ -13,6 +13,7 @@ import {
   TMUX_AGENT_PREPARE_EXIT_OPTION,
 } from "./types";
 import { TmuxSessionService } from "./session-service";
+import { resolveTmuxOutputWriter } from "./output-transport";
 import {
   CaptureHistoryLines,
   InteractivePaneReadyMinWaitMs,
@@ -531,8 +532,9 @@ export class TmuxPaneService extends TmuxSessionService {
     outputPath: string,
   ): Promise<void> {
     const tmuxTarget = resolveTmuxTargetName(target);
+    const writer = await resolveTmuxOutputWriter();
     await this.runTmux(
-      ["pipe-pane", "-t", tmuxTarget, `cat >> ${shellQuote(outputPath)}`],
+      ["pipe-pane", "-t", tmuxTarget, `exec ${shellQuote(writer)} ${shellQuote(outputPath)}`],
       target,
     );
   }

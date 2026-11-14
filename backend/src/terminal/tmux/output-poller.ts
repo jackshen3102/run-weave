@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { stat, truncate } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
 import { logger } from "../../logging/index";
 import type { TerminalSessionManager } from "../manager/manager";
@@ -12,6 +12,7 @@ import {
   type WatchedTmuxPane,
 } from "./output-watcher-helpers";
 import type { TmuxService } from "./service";
+import { lockTmuxOutputTransport } from "./output-transport";
 
 const FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER = 2;
 const tmuxOutputLogger = logger.child({ component: "terminal" });
@@ -65,9 +66,14 @@ export class TmuxOutputPoller {
         this.invalidatePaneCursor(watched);
       }
       if (fileStat.size === watched.offset) {
+        // A preceding poll may have found the writer holding the lock. Retry
+        // compaction even if no new output arrives after that poll.
+        if (watched.offset > 0) {
+          await this.truncateTransportIfDrained(terminalSessionId, watched);
+        }
         return true;
       }
-      if (fileStat.size > this.maxTransportBytes) {
+      if (fileStat.size - watched.offset > this.maxTransportBytes) {
         tmuxOutputLogger.warn(
           "terminal.tmux.output-watch.transport-truncated",
           {
@@ -180,38 +186,38 @@ export class TmuxOutputPoller {
     terminalSessionId: string,
     watched: WatchedTmuxPane,
   ): Promise<void> {
-    const latestStat = await stat(watched.filePath);
-    if (latestStat.size !== watched.offset) {
-      if (
-        latestStat.size <=
-        this.maxTransportBytes * FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER
-      ) {
+    const file = await lockTmuxOutputTransport(watched.filePath);
+    if (!file) return;
+    try {
+      const latestStat = await file.stat();
+      if (latestStat.size !== watched.offset) {
+        if (
+          latestStat.size <=
+          this.maxTransportBytes * FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER
+        ) {
+          return;
+        }
+        tmuxOutputLogger.warn("terminal.tmux.output-watch.transport-reset", {
+          message:
+            "Tmux output transport exceeded hard quota; pending output will be dropped",
+          terminalSessionId,
+          bytes: latestStat.size,
+          maxBytes: this.maxTransportBytes,
+        });
+        await file.truncate(0);
+        watched.offset = 0;
+        this.invalidatePaneCursor(watched);
+        watched.decoder.end();
+        watched.decoder = new StringDecoder("utf8");
         return;
       }
-      tmuxOutputLogger.warn("terminal.tmux.output-watch.transport-reset", {
-        message:
-          "Tmux output transport exceeded hard quota; pending output will be dropped",
-        terminalSessionId,
-        bytes: latestStat.size,
-        maxBytes: this.maxTransportBytes,
-      });
-      await truncate(watched.filePath, 0);
-      watched.offset = 0;
-      this.invalidatePaneCursor(watched);
-      watched.decoder.end();
-      watched.decoder = new StringDecoder("utf8");
-      return;
-    }
 
-    await truncate(watched.filePath, 0);
-    watched.offset = 0;
-    const remainingOutput = watched.decoder.end();
-    if (remainingOutput) {
-      appendToScrollbackBuffer(watched.outputBuffer, remainingOutput);
-      if (watched.recordSessionOutput) {
-        watched.recorder.onData(remainingOutput);
-      }
+      await file.truncate(0);
+      watched.offset = 0;
+      // Draining a transport file is not the end of the byte stream. Preserve a
+      // partial UTF-8 character for the next writer append / poll.
+    } finally {
+      await file.close();
     }
-    watched.decoder = new StringDecoder("utf8");
   }
 }

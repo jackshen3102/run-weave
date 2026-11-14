@@ -1,6 +1,7 @@
 import { isInteractiveShellLaunch as isShellLaunch } from "@runweave/shared/terminal/shell";
 import { usesPtyHost } from "./pty-host-client";
 import { ensureHostedTerminal } from "./pty-host-runtime";
+import { createTmuxInputPacedRuntime } from "./tmux-input-runtime";
 import { buildAgentResumeCommand, getAgentAdapter } from "./agent-adapters";
 export { buildAgentResumeCommand } from "./agent-adapters";
 import type {
@@ -42,9 +43,6 @@ interface EnsureTerminalRuntimeOptions {
   displayRuntimeId?: string;
 }
 
-const TmuxPostEnterInputDelayMs = 300;
-const BRACKETED_PASTE_START = "\u001b[200~";
-const BRACKETED_PASTE_END = "\u001b[201~";
 const terminalLogger = logger.child({ component: "terminal" });
 
 export function isTmuxBackedSession(
@@ -67,6 +65,22 @@ export function resolveTmuxTarget(
 export async function ensureTerminalRuntime(
   options: EnsureTerminalRuntimeOptions,
 ): Promise<EnsureTerminalRuntimeResult> {
+  const result = await ensureTerminalRuntimeInternal(options, true);
+  if (!result) throw new Error("Terminal runtime was not attached");
+  return result;
+}
+
+/** Start the task owner and recorder without allocating an unused tmux display. */
+export async function ensureTerminalStarted(
+  options: EnsureTerminalRuntimeOptions,
+): Promise<void> {
+  await ensureTerminalRuntimeInternal(options, false);
+}
+
+async function ensureTerminalRuntimeInternal(
+  options: EnsureTerminalRuntimeOptions,
+  attach: boolean,
+): Promise<EnsureTerminalRuntimeResult | undefined> {
   const runtimeId = isTmuxBackedSession(options.session)
     ? options.displayRuntimeId ?? options.session.id
     : options.session.id;
@@ -75,6 +89,7 @@ export async function ensureTerminalRuntime(
     : options.runtimeRegistry.getSessionRuntime(options.session.id);
   const existingRuntime = findRuntime();
   if (existingRuntime) {
+    await existingRuntime.ready;
     return { runtime: existingRuntime };
   }
 
@@ -82,6 +97,7 @@ export async function ensureTerminalRuntime(
     return options.tmuxService.withSessionLock(options.session.id, async () => {
       const existingLockedRuntime = findRuntime();
       if (existingLockedRuntime) {
+        await existingLockedRuntime.ready;
         return { runtime: existingLockedRuntime };
       }
 
@@ -300,6 +316,10 @@ export async function ensureTerminalRuntime(
       );
       await options.tmuxOutputWatcher?.watchSession(currentSession);
 
+      // The tmux pane owns the task. Creating a terminal does not need a PTY
+      // attach, replay buffer or screen mirror before a viewer/input needs one.
+      if (!attach) return;
+
       const attachCommand = options.tmuxService!.buildAttachCommand(
         target,
         currentSession.cwd,
@@ -331,6 +351,14 @@ export async function ensureTerminalRuntime(
         recoverableOutput: true,
         runtimeId,
       });
+      try {
+        // tmux emits its initial redraw after configuring the attach PTY. Until
+        // then its line discipline can echo, buffer or discard a burst of input.
+        await runtime.ready;
+      } catch (error) {
+        await options.runtimeRegistry.disposeRuntime(runtimeId);
+        throw error;
+      }
       if (!options.displayRuntimeId)
         options.runtimeRegistry.retainIdleRuntime(runtimeId);
       return {
@@ -381,122 +409,6 @@ export async function ensureTerminalRuntime(
 
 function isInteractiveShellLaunch(command: string, args: string[]): boolean {
   return isShellLaunch({ command, args });
-}
-
-function createTmuxInputPacedRuntime(runtime: PtyRuntime): PtyRuntime {
-  const queuedInput: string[] = [];
-  let holdInputUntil = 0;
-  let flushTimer: NodeJS.Timeout | null = null;
-  let disposed = false;
-  let insideBracketedPaste = false;
-
-  const scheduleFlush = (delayMs: number): void => {
-    if (flushTimer) {
-      return;
-    }
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      flushInput();
-    }, delayMs);
-  };
-
-  const flushInput = (): void => {
-    if (disposed || queuedInput.length === 0) {
-      return;
-    }
-
-    const delayMs = holdInputUntil - Date.now();
-    if (delayMs > 0) {
-      scheduleFlush(delayMs);
-      return;
-    }
-
-    const next = queuedInput.shift();
-    if (next === undefined) {
-      return;
-    }
-
-    runtime.write(next);
-    if (next === "\r" || next === "\n") {
-      holdInputUntil = Date.now() + TmuxPostEnterInputDelayMs;
-    }
-    if (queuedInput.length > 0) {
-      scheduleFlush(0);
-    }
-  };
-
-  return {
-    get pid() {
-      return runtime.pid;
-    },
-    onData(listener) {
-      runtime.onData(listener);
-    },
-    onExit(listener) {
-      runtime.onExit(listener);
-    },
-    write(data) {
-      const splitResult = splitInputAtLineBreaks(data, insideBracketedPaste);
-      insideBracketedPaste = splitResult.insideBracketedPaste;
-      for (const chunk of splitResult.chunks) {
-        queuedInput.push(chunk);
-      }
-      flushInput();
-    },
-    resize(cols, rows) {
-      runtime.resize(cols, rows);
-    },
-    signal(signal) {
-      runtime.signal(signal);
-    },
-    dispose() {
-      disposed = true;
-      if (flushTimer) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-      queuedInput.length = 0;
-      runtime.dispose();
-    },
-  };
-}
-
-function splitInputAtLineBreaks(
-  data: string,
-  initialInsideBracketedPaste = false,
-): { chunks: string[]; insideBracketedPaste: boolean } {
-  const chunks: string[] = [];
-  let insideBracketedPaste = initialInsideBracketedPaste;
-  let start = 0;
-  for (let index = 0; index < data.length; index += 1) {
-    if (data.startsWith(BRACKETED_PASTE_START, index)) {
-      insideBracketedPaste = true;
-      index += BRACKETED_PASTE_START.length - 1;
-      continue;
-    }
-    if (data.startsWith(BRACKETED_PASTE_END, index)) {
-      insideBracketedPaste = false;
-      index += BRACKETED_PASTE_END.length - 1;
-      continue;
-    }
-    if (insideBracketedPaste) {
-      continue;
-    }
-    if (data[index] === "\r" || data[index] === "\n") {
-      if (index > start) {
-        chunks.push(data.slice(start, index));
-      }
-      chunks.push(data[index] ?? "");
-      start = index + 1;
-    }
-  }
-  if (start < data.length) {
-    chunks.push(data.slice(start));
-  }
-  return {
-    chunks: chunks.length > 0 ? chunks : [data],
-    insideBracketedPaste,
-  };
 }
 
 export async function readTerminalScrollback(

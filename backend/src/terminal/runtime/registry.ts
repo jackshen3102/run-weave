@@ -30,7 +30,8 @@ interface RuntimeEntry {
   terminalSessionId: string;
   runtime: PtyRuntime;
   attachedClients: Set<string>;
-  bufferedOutput: string;
+  bufferedOutputChunks: string[];
+  bufferedOutputLength: number;
   bracketedPasteMode: boolean | null;
   terminalModeSequenceTail: string;
   subscribers: Set<RuntimeSubscriber>;
@@ -58,7 +59,8 @@ export class TerminalRuntimeRegistry {
       terminalSessionId,
       runtime,
       attachedClients: new Set<string>(),
-      bufferedOutput: "",
+      bufferedOutputChunks: [],
+      bufferedOutputLength: 0,
       bracketedPasteMode: null,
       terminalModeSequenceTail: "",
       subscribers: new Set<RuntimeSubscriber>(),
@@ -123,9 +125,23 @@ export class TerminalRuntimeRegistry {
       entry.terminalModeSequenceTail = modeData.slice(
         -TERMINAL_MODE_SEQUENCE_TAIL_LENGTH,
       );
-      entry.bufferedOutput = `${entry.bufferedOutput}${data}`.slice(
-        -TerminalRuntimeRegistry.MAX_BUFFERED_OUTPUT_LENGTH,
-      );
+      // Retain the same 64K-character tail without copying the entire buffer on
+      // every PTY write. Materialize it only when a caller requests a snapshot.
+      const limit = TerminalRuntimeRegistry.MAX_BUFFERED_OUTPUT_LENGTH;
+      if (data.length >= limit) {
+        entry.bufferedOutputChunks = [data.slice(-limit)];
+        entry.bufferedOutputLength = limit;
+      } else if (data) {
+        entry.bufferedOutputChunks.push(data);
+        entry.bufferedOutputLength += data.length;
+        while (entry.bufferedOutputLength > limit) {
+          const first = entry.bufferedOutputChunks[0]!;
+          const remove = Math.min(first.length, entry.bufferedOutputLength - limit);
+          if (remove === first.length) entry.bufferedOutputChunks.shift();
+          else entry.bufferedOutputChunks[0] = first.slice(remove);
+          entry.bufferedOutputLength -= remove;
+        }
+      }
       if (entry.outputRecovery && !runtime.hosted) {
         const { output } = extractShellPromptMetadata(data);
         for (const frame of (entry.outputRecovery as TerminalOutputRecoveryBuffer).append(output)) {
@@ -177,7 +193,7 @@ export class TerminalRuntimeRegistry {
   }
 
   getBufferedOutput(runtimeId: string): string {
-    return this.runtimes.get(runtimeId)?.bufferedOutput ?? "";
+    return this.runtimes.get(runtimeId)?.bufferedOutputChunks.join("") ?? "";
   }
 
   getOutputRecovery(
