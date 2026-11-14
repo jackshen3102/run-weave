@@ -4,10 +4,12 @@ import path from "node:path";
 import { commandName } from "./core.mjs";
 import { readJsonFile, runChecked, runCaptureChecked } from "./system.mjs";
 
-export async function runResearchMcpUpdate({ sourceRoot }) {
+export async function runResearchMcpUpdate({ sourceRoot, sourceGuard }) {
   const installation = configurationLibrary.readResearchMcpInstallation();
   if (!installation) return { action: "skip", reason: "not installed" };
+  await sourceGuard.check("before Research MCP update");
   await runChecked(process.execPath, ["./scripts/install/research-mcp.mjs", ...explicitConfigurationArguments()], { cwd: sourceRoot });
+  await sourceGuard.check("after Research MCP update");
   return { action: "update", releaseId: configurationLibrary.readResearchMcpInstallation()?.releaseId };
 }
 
@@ -17,7 +19,9 @@ export async function runRuntimeUpdate({
   installedAppVersion,
   runtimeHome,
   sourceRoot,
+  sourceGuard,
 }) {
+  await sourceGuard.check("before Runtime build");
   const releaseId = `local-${Date.now()}`;
   const shellVersionArg = installedAppVersion
     ? [`--shell-version=${installedAppVersion}`]
@@ -49,6 +53,7 @@ export async function runRuntimeUpdate({
       },
     },
   );
+  await sourceGuard.check("before Runtime install");
   await runChecked(
     commandName("pnpm"),
     [
@@ -68,6 +73,7 @@ export async function runRuntimeUpdate({
       `runtime manifest identity mismatch: expected ${releaseId}`,
     );
   }
+  await sourceGuard.check("after Runtime update");
   return manifest;
 }
 
@@ -76,7 +82,9 @@ export async function runAppServerUpdate({
   controlCliPath,
   gitHead,
   sourceRoot,
+  sourceGuard,
 }) {
+  await sourceGuard.check("before App Server update");
   const instanceKey = path.basename(path.resolve(appServerHome));
   const releaseId = `local-app-server-${instanceKey}-${Date.now()}`;
   const cliEntry =
@@ -93,6 +101,7 @@ export async function runAppServerUpdate({
     ],
     { cwd: sourceRoot },
   );
+  await sourceGuard.check("before App Server restart");
   await fs.access(cliEntry);
 
   const restart = await runCaptureChecked(

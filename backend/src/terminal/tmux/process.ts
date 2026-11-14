@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { sanitizeTerminalProcessEnv } from "../runtime/env";
-import { applyShellIntegration } from "../runtime/shell-integration";
+import { applyShellIntegration, isShellIntegrationLaunch } from "../runtime/shell-integration";
 import { TmuxShellStartupError } from "./types";
 import type {
   TmuxAvailability,
@@ -23,7 +23,6 @@ import {
   TmuxCommandTimeoutMs,
   categorizeTmuxCommand,
   isTimeoutError,
-  isInteractiveShellLaunchCommand,
   isUnsetEnvValue,
   isUtf8Locale,
   resolveExecutableFromPath,
@@ -156,7 +155,7 @@ export abstract class TmuxProcess {
   protected buildShellIntegrationEnvArgs(
     launchCommand: TmuxLaunchCommand,
   ): string[] {
-    if (!isInteractiveShellLaunchCommand(launchCommand)) {
+    if (!isShellIntegrationLaunch(launchCommand)) {
       return [];
     }
     const integratedEnv = applyShellIntegration(launchCommand.command, {

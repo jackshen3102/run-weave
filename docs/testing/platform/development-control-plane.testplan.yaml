@@ -222,3 +222,20 @@ cases:
     steps:
       - 在源码和构建环境不变时重新启动，核对本次没有触发构建，且新 Session ID、Backend lock、终端探针和桌面身份均属于新 owner。
       - 修改源码、前端构建环境或安装 App identity 后分别启动，确认缓存失效并重新构建；旧 userData、凭据或服务身份不得被带入。
+
+  - id: DCP-019
+    name: 更新来源漂移拒绝安装或推进成功状态
+    required: true
+    description: >
+      允许稳定的 dirty 源码更新，但计划、构建和成功 state 必须描述同一份可观察源码；
+      检测到漂移保留旧 state，不伪造产物 revision，也不宣称多组件原子回滚。
+    preconditions:
+      - 已创建独立 Git fixture、私有产物注册表和 state 目录；构建与安装入口仅写入 fixture 自有路径，不接触真实 App、全局 CLI 或运行服务。
+      - 探针导入当前更新器与产物发布模块，使用真实 Git、子进程和文件，记录与完整更新或 UI 验收不同的范围。
+    steps:
+      - 分别以干净源码和稳定 dirty 源码捕获计划身份，发布并执行最小产物，再写入成功 state；确认 revision、dirty、文件快照与运行产物一致。
+      - 在构建期间独立提交、修改已 dirty 文件、修改未跟踪文件，以及改动带空格或换行的路径；确认边界报告 UPDATE_SOURCE_CHANGED，即使 revision 和 dirty 布尔值未变也拒绝，旧 state 字节不变。
+      - 经真实 runAppUpdate 和 runRuntimeUpdate 的子进程构建入口制造源码漂移，确认 Desktop 退出与安装、Runtime 安装之前拒绝；独立制造过期或缺少身份的 Desktop/CLI 元数据，确认产物身份校验拒绝而不重标旧 revision。
+      - 在 Runtime 私有安装步骤或 App Server 内部安装之后制造漂移，确认后续边界停止；仅私有安装 marker 可保留，不推进成功 state，也不把部分完成说成已回滚。
+      - 在 state 写入前改动源码或令 Git 不可读，确认失败保留上一次 state；源码恢复稳定后重新捕获计划并成功写入，新 state 可作为下次增量规划基线。
+      - 确认稳定 runtime-only 更新允许未重建的 Desktop shell 保持旧身份；记录忽略文件与采样间改后还原不受保证的边界，并仅清理 fixture 自有资源。

@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { appName, electronBuilderConfig, isBetaTarget } from "./context.mjs";
+import { assertUpdateSourceUnchanged } from "./source-identity.mjs";
 import {
   assertNoActiveScheduledRuns,
   scheduledTaskDatabasePath,
@@ -428,7 +429,9 @@ export async function runAppUpdate({
   launchAfterInstall,
   desktopVerification,
   sourceRoot,
+  sourceGuard,
 }) {
+  await sourceGuard.check("before Desktop build");
   const releaseAppPath = path.join(
     process.env.RUNWEAVE_ELECTRON_BUILD_ROOT ??
       path.join(sourceRoot, "electron"),
@@ -476,6 +479,7 @@ export async function runAppUpdate({
       "build-info.json",
     ),
   );
+  await sourceGuard.check("before Desktop install", info);
   if (!info?.version) throw new Error("Desktop artifact version is missing");
   if (desktopVerification)
     desktopVerification.expectedAppVersion = info.version;
@@ -491,6 +495,7 @@ export async function runAppUpdate({
 
 export async function writeUpdateState(statePath, state) {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
+  await assertUpdateSourceUnchanged(state.sourceRoot, state, "before writing update state");
   await fs.writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 

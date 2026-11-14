@@ -260,22 +260,20 @@ export async function getGitChangedFilesSinceState(sourceRoot, state) {
   });
 }
 
-export async function createWorktreeSnapshot(sourceRoot) {
+export async function createWorktreeSnapshot(sourceRoot, { strict = false } = {}) {
   const files = [];
   for (const args of [
-    ["diff", "--name-only"],
-    ["diff", "--cached", "--name-only"],
-    ["ls-files", "--others", "--exclude-standard"],
+    ["diff", "--name-only", "-z"],
+    ["diff", "--cached", "--name-only", "-z"],
+    ["ls-files", "--others", "--exclude-standard", "-z"],
   ]) {
-    const result = await runCapture("git", args, { cwd: sourceRoot });
+    const capture = strict ? runCaptureChecked : runCapture;
+    const result = await capture("git", args, { cwd: sourceRoot });
     if (result.ok) {
-      files.push(...result.stdout.split(/\r?\n/));
+      files.push(...result.stdout.split("\0"));
     }
   }
-  return await createFileSnapshot(
-    sourceRoot,
-    files.map((file) => file.trim()).filter(Boolean),
-  );
+  return await createFileSnapshot(sourceRoot, files.filter(Boolean));
 }
 
 export async function createFileSnapshot(sourceRoot, filePaths) {

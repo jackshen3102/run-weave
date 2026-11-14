@@ -1,0 +1,57 @@
+version: 1
+name: 官网静态构建
+description: >
+  验证官网包入口使用真实 Astro 构建默认源码及隔离快照，保持预览/生产配置门禁、
+  参数语义与源码身份；非法 root 不得回退到其他源码。不包含浏览器、托管或发布验收。
+cases:
+  - id: WEBSITE-001
+    name: 默认入口生成预览静态站点
+    required: true
+    description: >
+      默认构建经过包入口和官方 Astro CLI，首页、教程、404 与静态素材齐全，
+      预览保持 noindex、禁止抓取且不启用正式采集。
+    preconditions:
+      - 当前 worktree 的官网依赖已安装，使用仓库要求的 Node 与 pnpm。
+      - 已确认构建不会覆盖需要保留的包内 dist；未设置官网生产环境变量。
+    steps:
+      - 在当前 worktree 执行 pnpm --filter @runweave/website lint 与 typecheck，确认均成功且 Astro 模板无错误。
+      - 执行 pnpm --filter @runweave/website build，保存完整命令、退出码和日志，确认真实 Astro 完成静态构建与图片处理。
+      - 检查 packages/website/dist 中首页、start/index.html、404.html 和响应式图片存在；首页有 noindex，robots 禁止抓取，不生成 sitemap 或 Clarity tag。
+  - id: WEBSITE-002
+    name: 隔离源码的别名和真实 root 等价构建
+    required: true
+    description: >
+      root 规范化消除符号链接路径的编译缓存差异；隔离输出来自指定快照而非当前包，
+      且 outDir 不需要预先存在或规范化。
+    preconditions:
+      - 已复制当前官网配置、源码、素材到临时快照，并链接可解析的官网依赖；不修改安装态或依赖内容。
+      - 在快照中加入独有的公开标记文件；别名路径和真实路径指向同一份源码，输出和缓存按组隔离。
+      - macOS 使用 /tmp 与 /private/tmp 对照；其他平台使用临时目录符号链接并分别记录平台结论。
+    steps:
+      - 从当前 worktree 通过 pnpm --filter @runweave/website exec astro build 分别传入别名 root 与真实 root，使用各自的外部 outDir；记录原始 Astro 对照结果，不将其当作维护入口。
+      - 使用 pnpm --filter @runweave/website build 分别传入别名 root 与真实 root；覆盖 --root 空格形式、等号形式以及带空格的路径，确认两组均成功且没有 No cached compile metadata 或 Sharp 解析错误。
+      - 对照两组首页、教程、404、公开标记及静态素材的文件集合与哈希，确认输出一致且来自指定快照；相对 root 按包目录解析，外部 outDir 保持调用者指定的目标。
+  - id: WEBSITE-003
+    name: 无效 root 明确失败且不构建其他源码
+    required: true
+    description: >
+      错误 root 输入必须非零退出，不因 Astro 将非字符串 root 忽略而静默构建包内源码。
+    preconditions:
+      - 已准备不存在的路径、普通文件、有效快照目录和每次调用独立的空输出位置。
+      - 已记录包内源码与已有 dist 的文件身份，以便核对没有回退输出。
+    steps:
+      - 通过包 build 入口分别传入缺值的 --root、--root 后紧跟其他选项、空字符串与 --root=，确认非零退出并显示 root 错误。
+      - 分别传入不存在目录、普通文件、重复 --root、--no-root 与 --root.child；确认非零退出，不出现 Astro 构建完成信息，不生成首页或覆盖原有产物。
+  - id: WEBSITE-004
+    name: Astro 参数和预览生产门禁保持有效
+    required: true
+    description: >
+      包装只改显式 root，其他选项仍由官方 Astro CLI 处理；生产地址与采集配置门禁不被绕过。
+    preconditions:
+      - 使用相同隔离快照与可公开的 HTTPS 站点地址，所有产物写入临时目录且不发布。
+      - 每组构建独立设置 WEBSITE 环境变量，不继承用户的生产配置。
+    steps:
+      - 使用 --config、--mode、--base 和相对 --outDir 构建，对照原始 Astro 真实 root 构建的产物与日志，确认配置、模式和目标目录语义不变；--help、--version 仍输出官方 CLI 信息，-- 后的 root 样式文本不作为选项处理。
+      - 使用默认 preview 及 preview 下 WEBSITE_CLARITY_ENABLED=true 构建，确认均为 noindex、robots 禁止抓取、无 sitemap 和 Clarity tag。
+      - 使用 WEBSITE_ENV=production 与有效 WEBSITE_SITE_URL 构建，确认 canonical、robots 与 sitemap 使用该地址，无 noindex，默认包含正式 Clarity tag；显式关闭采集后 tag 消失。
+      - 分别使用非法 WEBSITE_ENV、生产缺少站点地址、HTTP 或 localhost 生产地址、非法 Clarity 开关及项目 ID，确认真实 Astro 配置门禁非零退出且不产生可发布站点。

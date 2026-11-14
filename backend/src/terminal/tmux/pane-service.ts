@@ -133,19 +133,12 @@ export class TmuxPaneService extends TmuxSessionService {
         "-P",
         "-F",
         "#{pane_id}",
+        ...(launch ? this.buildShellIntegrationEnvArgs(launch) : []),
         "-t",
         target.paneId,
         "-c",
         params.cwd,
-        ...(fallback ? [""] : params.command
-          ? [
-              formatShellCommand({
-                command: params.command,
-                args: params.args ?? [],
-                env: params.env,
-              }),
-            ]
-          : []),
+        ...(fallback ? [""] : launch ? [formatShellCommand(launch)] : []),
       ],
       target,
     );

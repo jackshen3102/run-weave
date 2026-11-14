@@ -345,3 +345,26 @@ cases:
       - >
         确认 checkpoint 创建的临时 tmux server、Socket、Backend 和目录全部在命令结束后清理；若只 有静态命令通过而任一真实行为 Case
         未执行，不得据此宣称整份计划通过。
+
+  - id: TTP-015
+    name: bash 自定义启动文件保留 prompt 集成但不扩大失败回退
+    required: true
+    description: >
+      验证真实 tmux 会话中 bash 的 rcfile 和 init-file 参数不会导致命令与目录 hook 被跳过，
+      同时脚本、命令模式和显式 stdin 模式不因集成兼容而获得自动回退资格。
+    preconditions:
+      - 当前源码、bash 和 tmux 可用；本例拥有独立 Socket、配置根、HOME 和临时启动文件，不使用既有用户终端。
+      - 启动文件只写入可核对的 marker，不覆盖 PROMPT_COMMAND；另准备执行后返回非零退出码的启动文件及脚本。
+    steps:
+      - >
+        调用当前 TmuxService 创建普通交互 bash 对照及使用 --rcfile、--init-file 的交互会话，
+        文件路径包含空格；发送真实输入，确认自定义启动文件 marker、交互状态和 _runweave_precmd
+        均存在，PROMPT_COMMAND 非空，命令与目录 hook 产生可读取结果。
+      - >
+        使用相同参数创建分屏，确认仍加载指定文件并注入 hook；保留原会话和其它 Pane 的身份。
+      - >
+        在自定义启动文件参数后分别运行脚本、-c 命令和 -s stdin 模式，确认未注入新的 prompt
+        环境；执行返回非零状态的自定义启动文件及脚本，确认退出事实保留、不被替换成系统默认 Shell。
+      - >
+        核对共享恢复判定仍拒绝带启动文件操作数、脚本及命令模式的自动回退；清理本例创建的所有
+        Session 和 Socket，确认没有遗留 tmux server，也未触及用户已有资源。此集成验收不代替 UI 验收。
