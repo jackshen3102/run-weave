@@ -1,0 +1,69 @@
+version: 1
+name: "右侧浏览器持续可靠性回归"
+description: "短测不能替代长期证据。以下全为必要可靠性门禁，未达到时长或轮数保留未执行；Windows 云桌面与 Linux devbox 各跑独立样本，不合并成功率。保存每轮耗时、失败层、进程/监听/句柄、清理结果与版本，不保存连接凭据。"
+cases:
+  - id: "BRS-001"
+    name: "连续一百次解析附着释放"
+    required: true
+    description: "重复使用不会耗尽票据、CDP 上限或遗留 Profile 占用。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "同一终端依次执行 100 轮 fresh resolve、$toolkit:playwright-cli attach、读取标识和安全点击、detach，逐轮记录结果。"
+      - "确认 100/100 成功、服务端计数精确，连接/票据/进程数量结束后回到基线；任一失败记录该轮现场并修复后重跑。"
+  - id: "BRS-002"
+    name: "二十次断线恢复循环"
+    required: true
+    description: "同一种传输故障反复发生后仍能自动收敛，无 generation 竞态和资源增长。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "独立重复 20 轮仅终止本例 Browser 反向子进程，逐轮等待恢复并 fresh resolve，通过 $toolkit:playwright-cli 验证原页面。"
+      - "确认 20/20 在故障解除后 90 秒内可交互，逐轮没有多余监听/孤儿进程或自动页面动作；记录最大值与分位耗时。"
+  - id: "BRS-003"
+    name: "两小时随机网络抖动"
+    required: true
+    description: "10 至 70 秒的故障在两小时使用中不积累成永久不可用。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例自有故障代理、确定可记录的随机种子和两小时执行窗口。"
+    steps:
+      - "持续两小时，每分钟一次 fresh resolve 与 $toolkit:playwright-cli 页面标识/安全点击；按记录种子随机施加本例网络黑洞。"
+      - "分别统计故障期间和解除后样本，确认每次解除后 90 秒内恢复，零次永久卡死、误路由或重复提交；未跑满时长不得判通过。"
+  - id: "BRS-004"
+    name: "八小时闲置后首次使用"
+    required: true
+    description: "跨工作日闲置后第一次需要 Browser 时可直接恢复并操作原归属页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例专用后台终端和持久标识页面已准备，不保留活跃自动化连接。"
+    steps:
+      - "保持该终端闲置八小时且不人工预热，记录期间实际发生的休眠/凭据续期状态。"
+      - "首次使用时仅从原终端执行 rw 诊断和恢复、fresh resolve，再通过 $toolkit:playwright-cli 读取页面并点击；记录首次可交互耗时，未满八小时不判通过。"
+  - id: "BRS-005"
+    name: "双远端并发使用"
+    required: true
+    description: "云桌面和 devbox 同时操作各自 Group，不因重连把控制流串到另一终端。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有独立 Windows 与 Linux 专用终端、各自明确绑定和可区分页面，所有测试页面归本例所有。"
+    steps:
+      - "两端各执行 30 轮 fresh resolve、$toolkit:playwright-cli 读取与点击，只对其中一端注入其自有 Browser 断连。"
+      - "确认两端分别计数精确、另一端无断连或误操作，故障端恢复后仍为原 Group，分别记录成功率。"
+  - id: "BRS-006"
+    name: "恢复后资源完整回收"
+    required: true
+    description: "完成或中途失败都只回收本例资源，用户任务与配置完整保留。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例运行前已记录专用进程/端口/终端/标签清单及用户对照资源摘要，可模拟本例执行中途取消。"
+    steps:
+      - "在独立正常结束和中途取消样本执行 cleanup，关闭本例标签、detach、删除自建终端、移除故障并停止自有 Dev Session。"
+      - "核对无自有孤儿进程/端口/票据/租约，用户配置摘要、终端 PID 和已有页面保持；回收受阻必须明确记录，不盲杀或删锁。"

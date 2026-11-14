@@ -121,14 +121,20 @@ export class BrowserChannel {
           redirect: "error",
         },
       );
-      if (!response.ok)
+      if (!response.ok) {
+        const error = await response.json().catch(() => null) as { code?: string } | null;
         throw new Error(
           response.status === 401
             ? "NEEDS_AUTH: 远端登录已过期"
+            : error?.code === "BROWSER_RECOVERY_REQUESTED"
+              ? "BROWSER_RECOVERY_REQUESTED: 终端请求重建浏览器通道"
+            : error?.code === "DESKTOP_UNAVAILABLE"
+              ? "BROWSER_DISCONNECTED: 浏览器反向通道已失效，正在重建"
             : response.status >= 500 || response.status === 429
               ? "BACKEND_UNAVAILABLE: 浏览器通道续期暂时失败"
               : "BROWSER_SCOPE_DENIED: 无法注册浏览器通道，请检查远端版本",
         );
+      }
       const binding = (await response.json()) as DesktopBrowserBinding;
       if (
         binding.protocolVersion !== 2 ||

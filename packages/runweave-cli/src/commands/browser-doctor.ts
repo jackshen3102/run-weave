@@ -5,7 +5,7 @@ import { CliError } from "../errors.js";
 import { readCliVersion } from "../version.js";
 import { resolveBrowserProfile, type BrowserCommandIo } from "./browser-profile.js";
 
-export async function runBrowserDoctorCommand(args: string[], io: BrowserCommandIo): Promise<void> {
+export async function diagnoseBrowser(args: string[], io: BrowserCommandIo): Promise<BrowserDiagnosticReport> {
   const report: BrowserDiagnosticReport = {
     schemaVersion: 1,
     scope: "terminal-browser-control",
@@ -17,7 +17,6 @@ export async function runBrowserDoctorCommand(args: string[], io: BrowserCommand
   };
   let stage: BrowserDiagnosticStage = "identity";
   let cdp: BrowserCdpClient | undefined;
-  let failure: unknown;
   const passed = (current: BrowserDiagnosticStage) => {
     report.checks.find(check => check.stage === current)!.status = "passed";
   };
@@ -34,10 +33,11 @@ export async function runBrowserDoctorCommand(args: string[], io: BrowserCommand
       Object.assign(report.checks[0]!, { status: "skipped", code: "NO_TERMINAL_IDENTITY" });
     }
     stage = "cdp";
-    cdp = await BrowserCdpClient.connect(resolved.cdpEndpoint);
+    cdp = await BrowserCdpClient.connect(resolved.cdpEndpoint, io.deadline);
     passed(stage);
     stage = "proxy";
-    const state = await cdp.send<BrowserProxyState>("Runweave.getProxyState", {}, undefined, 5000);
+    const state = await cdp.send<BrowserProxyState>("Runweave.getProxyState", {}, undefined,
+      Math.max(1, Math.min(5000, (io.deadline ?? Infinity) - Date.now())));
     if (!state || !["direct", "whistle"].includes(state.proxyMode) || typeof state.effectiveProxy !== "string")
       throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Desktop proxy state is unavailable", 3);
     if (state.profileId !== resolved.profileId) throw new CliError("BROWSER_SCOPE_DENIED: Proxy Profile differs from resolution", 4);
@@ -50,7 +50,6 @@ export async function runBrowserDoctorCommand(args: string[], io: BrowserCommand
     report.healthy = true;
   } catch (error) {
     if (error instanceof CliError && error.exitCode === 2) throw error;
-    failure = error;
     // Peer errors can contain URLs or credentials. Emit only a stable code.
     const code = error instanceof Error ? error.message.match(/^[A-Z][A-Z0-9_]+(?=:|\s|$)/)?.[0] : undefined;
     Object.assign(report.checks.find(check => check.stage === stage)!, {
@@ -59,6 +58,11 @@ export async function runBrowserDoctorCommand(args: string[], io: BrowserCommand
   } finally {
     cdp?.close();
   }
+  return report;
+}
+
+export async function runBrowserDoctorCommand(args: string[], io: BrowserCommandIo): Promise<void> {
+  const report = await diagnoseBrowser(args, io);
   io.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (failure) throw new CliError(`Browser doctor failed at ${stage}; see checks in the report`, 3);
+  if (!report.healthy) throw new CliError(`Browser doctor failed at ${report.checks.find(check => check.status === "failed")?.stage}; see checks in the report`, 3);
 }

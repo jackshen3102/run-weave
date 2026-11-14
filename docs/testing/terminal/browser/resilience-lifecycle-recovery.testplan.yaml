@@ -1,0 +1,139 @@
+version: 1
+name: "右侧浏览器进程与认证恢复"
+description: "分别控制单一生命周期，每例重新建立独立健康基线。Backend、Desktop、renderer、WebContents、认证和终端 Host 的重建分别取证，重启后重新获取 surface、endpoint 和 UI ref，不复用失效票据。"
+cases:
+  - id: "BRL-001"
+    name: "远端 Backend 正常重启"
+    required: true
+    description: "相同存储重启后后台终端原归属恢复，不需在桌面重新打开该终端。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "记录后台终端与页面标识，只正常重启本例远端 Backend，核对新进程身份、同安装身份和同数据目录。"
+      - "不打开后台终端，等待通道恢复并在原终端 fresh resolve，用 $toolkit:playwright-cli 操作原页面；旧 capability 被拒绝。"
+  - id: "BRL-002"
+    name: "远端 Backend 崩溃后启动"
+    required: true
+    description: "非正常退出后持久归属完整，恢复不会误切其他桌面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "仅强制终止本例 Backend，然后从同一配置重启，记录异常退出与新 PID。"
+      - "等待原桌面重新注册，用原终端 fresh resolve 和 $toolkit:playwright-cli 验证原页面；确认未丢终端或改绑。"
+  - id: "BRL-003"
+    name: "桌面完整退出后重启"
+    required: true
+    description: "同 userData 的 autoConnect 意图重建通道，不借用旧 PID 或旧 endpoint。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例 Session 支持受管重启并重新解析 desktop 与 terminal-browser surface。"
+    steps:
+      - "记录本例配置摘要和终端归属，完整退出本例 Electron，再以同 userData 经受管入口启动。"
+      - "取得 fresh surface，确认新 PID 和原配置；原远端终端 fresh resolve 并以 $toolkit:playwright-cli 验证可交互页面，按实际持久化合同核对已保存标签。"
+  - id: "BRL-004"
+    name: "renderer 重载"
+    required: true
+    description: "只重载前端不会销毁 main 持有的隧道、用户页与 Browser 连接。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "记录主 SSH/反向 PID 和页面标识，使用 $toolkit:playwright-cli 在本例 desktop 重载 renderer。"
+      - "重新读取 fresh UI ref，确认隧道 PID 未变；原 Browser Playwright 会话仍可读取标识和点击。"
+  - id: "BRL-005"
+    name: "终端 Host 丢失后新 shell"
+    required: true
+    description: "由本例 Backend 恢复的新 shell 含当前地址和自己的有效 Hook，可重新解析 Browser。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占 Windows PTY Host 与终端，可在保持终端持久记录的情况下终止自有 Host。"
+    steps:
+      - "仅终止本例 Host 并按受管入口恢复 Backend/Host，确认新 Host 与 shell PID，记录当前 shell 自有环境。"
+      - "在新 shell 不手工补地址运行 doctor/resolve；确认身份通过并用 $toolkit:playwright-cli 打开实际页面，不以 BROWSER_BINDING_REQUIRED 代替页面成功。"
+  - id: "BRL-006"
+    name: "同账号重新登录"
+    required: true
+    description: "连续性证明允许恢复已确认后台终端，无需重新选择绑定。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例后台终端已保存 ownerKeyHash，当前桌面显示另一终端。"
+    steps:
+      - "只重新登录本例 Browser 通道的同一 Backend 账号，记录新认证会话；不打开原后台终端。"
+      - "原终端 fresh resolve 并用 $toolkit:playwright-cli 读取原页面，确认 desktopId、hostId、Profile 不变。"
+  - id: "BRL-007"
+    name: "访问令牌自动刷新"
+    required: true
+    description: "可刷新登录到期时由原通道续期，不要求用户重登或销毁健康页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例认证服务可设置短有效期且 refresh 有效。"
+    steps:
+      - "等待本例 access token 过期并跨过下一次心跳，记录刷新及绑定结果但不保存令牌。"
+      - "确认 Browser 恢复或持续 ready，原 $toolkit:playwright-cli 会话可交互，刷新使用原安装身份且无重复通道。"
+  - id: "BRL-008"
+    name: "刷新凭据失效"
+    required: true
+    description: "无法刷新时明确要求认证，普通 SSH 转发仍可用，不能无限伪重试。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例拥有可撤销的独立登录与健康普通转发。"
+    steps:
+      - "撤销本例 refresh 并使 access 到期，确认 Browser needs_auth/认证失败，普通转发标识持续正确。"
+      - "仅在本例桌面重新认证，原终端重新 resolve 并用 $toolkit:playwright-cli 验证恢复；不能绕过登录取得页面。"
+  - id: "BRL-009"
+    name: "Backend 安装身份更换"
+    required: true
+    description: "另一安装不能沿用原连续性密钥自动接管旧终端。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例拥有不同 installationId 的两套隔离 Backend，公开桌面/主机标识可相同。"
+    steps:
+      - "记录 A 的已选归属，将本例目标切到 B，观察凭据与归属处理。"
+      - "确认不会向 B 沿用 A 的连续性证明或静默接管；回到 A 后原终端 fresh resolve 和 $toolkit:playwright-cli 页面访问恢复。"
+  - id: "BRL-010"
+    name: "旧新版本不支持协议"
+    required: true
+    description: "缺失协议 2 或 doctor/recover 能力时给出明确版本缺失，不能伪造已恢复。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有新 CLI 与可控旧版本 Backend/桌面样本，版本及能力响应可记录。"
+    steps:
+      - "在各独立样本执行 doctor、resolve 与本轮恢复入口，记录缺失能力及退出码。"
+      - "确认不启动独立浏览器、不改全局配置、不宣称成功；换回兼容版本后 fresh resolve 并用 $toolkit:playwright-cli 验证。"
+  - id: "BRL-011"
+    name: "关闭面板后再打开"
+    required: true
+    description: "同一 Browser 页面只因面板折叠不丢输入和 target。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "使用 $toolkit:playwright-cli 在本例页面填写文本，折叠右侧面板并切回终端，再展开。"
+      - "确认 target、文本和计数保留，点击仍生效；用户其它面板不受影响。"
+  - id: "BRL-012"
+    name: "闲置后首次使用"
+    required: true
+    description: "超过休眠检查窗口后首次自动化能唤醒可交互页面，不能只返回空白或 0×0。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占一个允许休眠的无表单静态页，并已记录用户配置的闲置期限。"
+    steps:
+      - "detach 本例自动化并将页面隐藏，等待实际闲置期限跨过一次扫描，记录是否真正休眠。"
+      - "从原终端 fresh resolve 并用 $toolkit:playwright-cli attach，确认页面可见且 viewport 非零，读取标识并点击；未触发休眠只能记该分支未执行。"

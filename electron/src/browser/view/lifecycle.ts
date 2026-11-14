@@ -91,6 +91,17 @@ export function getOrCreateTerminalBrowserView(
   });
   const viewportView = new View();
   viewportView.addChildView(view);
+  // Background automation can start before the panel supplies its first layout.
+  // Chromium's default 0x0 viewport cannot receive clicks or capture screenshots.
+  const contentBounds = win.getContentBounds();
+  const initialBounds = {
+    x: 0,
+    y: 0,
+    width: Math.max(1, contentBounds.width),
+    height: Math.max(1, contentBounds.height),
+  };
+  viewportView.setBounds(initialBounds);
+  view.setBounds(initialBounds);
   viewportView.setVisible(false);
   view.webContents.setWindowOpenHandler(({ url, disposition }) => {
     if (options.localPreview) {

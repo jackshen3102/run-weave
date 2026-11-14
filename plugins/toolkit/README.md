@@ -36,7 +36,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `github-pr`
 - `handoff`
 - `karpathy-guidelines`
-- `playwright-cli`
+- [`playwright-cli`](./skills/playwright-cli/SKILL.md)：附着 Runweave Browser 做真实页面操作与验收；CDP/隧道故障转到 `rw browser doctor/recover`，恢复后重新解析并核对原页面。
 - [`product-exploration`](./skills/product-exploration/SKILL.md)：显式调用的产品探索，默认 30 分钟；只取证报告，不生成测试代码或自动修复。
 - `react-best-practices`
 - `review-only`
@@ -45,7 +45,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `run-test-cases`
 - `shadcn`
 - `sync-branch-hard-reset`
-- `using-rw`
+- [`using-rw`](./skills/using-rw/SKILL.md)：Runweave CLI 入口；右侧 Browser、云桌面或 devbox 隧道不可用时，通过 `browser doctor` 诊断和 `browser recover` 恢复，并识别版本缺失及升级入口。
 - `write-plan`
 - `write-test-cases`
 

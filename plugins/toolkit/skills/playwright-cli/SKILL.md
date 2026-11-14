@@ -3,8 +3,9 @@ name: playwright-cli
 description: >-
   操作浏览器页面、检查 UI、截图、浏览器验收及运行 Playwright 测试时使用。在 Runweave 中先解析 Profile/Group，
   附着已有桌面浏览器，包括 SSH 远端且没有 CDP 环境变量的场景；禁止改用服务器无头浏览器。
+  右侧 Browser 打不开、CDP 或隧道断连时，用 rw browser doctor/recover 诊断恢复后重新附着验收。
   代理、泳道、请求头和下载取回配合 using-rw。
-allowed-tools: Bash(playwright-cli:*) Bash(pnpm:*) Bash(npx:*) Bash(npm:*)
+allowed-tools: Bash(playwright-cli:*) Bash(pnpm:*) Bash(npx:*) Bash(npm:*) Bash(rw:*)
 ---
 
 # Browser Automation with playwright-cli
@@ -72,11 +73,23 @@ pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" snapshot
 pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" detach
 ```
 
-If resolution or CDP attachment fails, including a Profile route conflict,
-Whistle startup failure, missing terminal binding, or unsupported old version,
-stop this browser path and report the actual error. Do not attach an unresolved
-ambient endpoint, switch browsers, copy login state, or restart the user's browser.
-HTTP checks and simulated pages are separate evidence, not browser acceptance.
+If resolution or CDP attachment fails, pause page actions and use the
+[using-rw recovery entry](../using-rw/SKILL.md#浏览器故障诊断与恢复): run
+`${RUNWEAVE_CLI_BIN:-rw} browser doctor --json` in the original terminal/instance.
+Keep the original explicit `--profile` and `--group-id` options. For a Dev Session,
+keep its validated instance/surface; do not substitute the ambient Stable browser.
+For a temporary failure of its already selected channel, use one bounded
+`browser recover --wait-timeout-ms 60000 --json`. Missing bindings, denied scope,
+Profile conflicts, expired login and unsupported versions require their actual
+cause to be addressed; recovery cannot bypass them. If recovery fails, report
+the layer/error instead of retrying indefinitely.
+
+After recovery succeeds, resolve again, attach the fresh endpoint and observe
+the original page before continuing. Do not replay clicks or submissions whose
+outcome was unknown. Control-path health is not page or business acceptance.
+Do not attach an unresolved ambient endpoint, switch browsers, copy login state,
+or restart the user's browser. HTTP checks and simulated pages are separate
+evidence, not browser acceptance.
 
 The repository-pinned CLI connects to an existing CDP browser with
 `noDefaults: true`, so it does not apply Playwright's download, focus, or media
