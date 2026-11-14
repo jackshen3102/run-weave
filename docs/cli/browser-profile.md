@@ -71,6 +71,36 @@ CLI 源码版本和分层 `checks`。失败层返回稳定错误码，后续层�
 代理 ready、CDP 连通不能证明业务域名可达或登录有效，业务页面仍需通过 Playwright 单独验收。
 旧终端的地址发现及实例核验也在同一个 resolver 等待期限内；实例身份不符时立即拒绝，不发送终端令牌。
 
+## 远端通道恢复
+
+```bash
+rw browser recover --json
+rw browser recover --wait-timeout-ms 90000 --json
+```
+
+恢复先诊断当前终端选定的 Browser；健康时返回 `action: "none"`，不拆建连接。
+可恢复故障时，使用该终端自己的 Hook 向所属 Backend 请求恢复，返回 `action: "requested"`。
+桌面在下一次认证控制心跳中取得请求，复用隧道管理器重建自己的 Browser 子通道；
+即使反向监听已丢失，也不依赖坏掉的 CDP 数据连接传递恢复请求。普通转发与远端任务不重启。
+同一所有者的并发请求合并；恢复请求只在内存保留最多 120 秒，不改变已确认归属。
+命令跟踪同一请求的 `pending`、`rebuilding`、`complete` 状态；只有桌面已确认请求、
+新代际完成网关核验和注册、控制链路诊断也通过后才退出 0，避免先报成功再被迟到恢复断开。
+
+默认总等待期限为 60 秒，可设置 0–120000；0 表示单次诊断和恢复检查，最多 5 秒。
+stdout 始终为一个 JSON，沿用 doctor 的分层 `checks`、`healthy` 与
+`pageRequestsVerified: false`，增加 `action` 和可选 `recoveryStatus`；未完成时包含 `recoveryCode`。
+退出 0 证明控制链路恢复，退出 3 表示未恢复；参数错误退出 2。提示仅写 stderr，
+不输出 Hook、连续性密钥或 CDP 票据。请求被接受不等于恢复成功，业务页面须重新 resolve、
+立即 attach 并观察实际页面，不自动重放导航、点击、表单或未知结果的操作。
+
+CLI、Backend 和桌面均需支持该能力。旧 Backend 返回 `REMOTE_CAPABILITY_UNSUPPORTED`。
+未绑定终端仍需先在桌面确认归属；权限、身份和 Profile 冲突不通过恢复绕过。
+桌面已退出、SSH 无法连通或登录失效时，命令有界失败；需启动原桌面、恢复网络或在
+「端口与隧道」重新认证。恢复命令不安装软件、不修改系统 SSH、不创建替代隧道。
+
+专项验收见 [仅使用 rw 恢复](../testing/terminal/browser/resilience-command-recovery.testplan.yaml)
+及 [隧道断线恢复](../testing/terminal/browser/resilience-transport-recovery.testplan.yaml)。
+
 ## 请求头规则（Agent 操作）
 
 通过 Header 路由的泳道或 PPE 环境也使用此入口；先从业务配置或文档确认 Header 名称、值和

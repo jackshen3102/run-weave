@@ -1,0 +1,134 @@
+version: 1
+name: "右侧浏览器端到端可用性"
+description: "逐例建立环境；本机、Windows 云桌面和 Linux devbox 分开记录结果。服务 healthy、隧道 ready、doctor healthy 均不能替代实际页面交互。每次 attach 使用 fresh resolve，凭据只留内存，结束关闭本例标签并 detach。"
+cases:
+  - id: "BRA-001"
+    name: "本机终端首次使用"
+    required: true
+    description: "当前终端无需手工设置端口即可在自己的 Browser Group 导航、输入和点击。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例使用当前已安装桌面及新建专用本机终端，已有用户标签清单已记录。"
+    steps:
+      - "在专用终端执行 rw browser doctor --json 和 rw browser profile resolve --json；记录退出码和耗时，不落盘 CDP 凭据。"
+      - "通过 $toolkit:playwright-cli 立即 attach，在本例新标签打开受控页面，填写唯一文本并点击计数按钮；确认 DOM 回显与服务端记录一致，用户标签未导航或关闭。"
+  - id: "BRA-002"
+    name: "Windows 云桌面首次使用"
+    required: true
+    description: "Windows 终端自己的身份能够穿过产品反向隧道控制桌面页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "已确认云桌面 SSH、Backend 安装身份和所选桌面通道；可创建专用 PowerShell 7 终端。"
+    steps:
+      - "从该云桌面新终端的实例绑定 rw 记录版本、health、doctor 和 resolve；不得代用 Mac 身份或手工 SSH -R。"
+      - "在云桌面使用仓库固定版本 Playwright CLI attach fresh endpoint，建立专用页面，填写文本并点击按钮，保存 DOM 与服务端计数；detach，删除本例终端。"
+  - id: "BRA-003"
+    name: "Linux devbox 首次使用"
+    required: true
+    description: "devbox 终端自己的身份能够通过产品通道完成页面操作。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "已确认 devbox SSH、Backend 安装身份和所选桌面通道；可创建专用 Linux 终端。"
+    steps:
+      - "从该 devbox 专用终端记录实例绑定 rw 版本、health、doctor 和 resolve，不使用本机 resolver 结果。"
+      - "用固定版本 $toolkit:playwright-cli attach fresh endpoint，建立专用页面并验证输入回显和按钮计数；保存证据，detach，删除本例终端。"
+  - id: "BRA-004"
+    name: "没有 CDP 环境变量的远端终端"
+    required: true
+    description: "缺少 ambient endpoint 时仍通过自己的 Backend、Hook 和终端身份找到 Browser。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "只在本例 shell 子进程移除 PLAYWRIGHT_MCP_CDP_ENDPOINT，保留自己的终端身份；执行 resolve。"
+      - "用 $toolkit:playwright-cli attach 新地址并读取原唯一标识；确认桌面和 Profile 不变，没有创建独立浏览器。"
+  - id: "BRA-005"
+    name: "旧终端缺失 Backend 地址"
+    required: true
+    description: "旧 shell 可依据实例配置核验实际 Backend 后使用自己的 Hook 恢复。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例可在子进程移除 Backend URL、端口和 CDP 环境变量，保留终端身份与明确实例配置。"
+    steps:
+      - "在该子进程执行实例绑定 doctor 和 resolve；记录 health 实例核验及 runtime-identity 请求次序。"
+      - "确认成功后以 $toolkit:playwright-cli 读取原页面标识，未借用其他终端或其他 Backend 的登录。"
+  - id: "BRA-006"
+    name: "空工作组首次使用"
+    required: true
+    description: "resolver 初始化自己的空 Group，不破坏已有页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例新终端从未使用 Browser，其他终端有带对照标识的页面。"
+    steps:
+      - "记录对照页面清单，执行本例终端 resolve 并用 $toolkit:playwright-cli attach。"
+      - "确认本例可新建标签并交互，对照页面 target、URL 和内容未变；清理本例标签并 detach。"
+  - id: "BRA-007"
+    name: "后台终端未显示也可使用"
+    required: true
+    description: "已确认归属的后台终端无需重新打开 UI 就能访问其原工作组。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "桌面当前显示另一专用对照终端。"
+    steps:
+      - "不切回本例终端，在本例远端 shell 重新 resolve 并用 $toolkit:playwright-cli 连接。"
+      - "确认读取原页面标识、输入值和 target，未导航桌面当前对照页面。"
+  - id: "BRA-008"
+    name: "连接切换不串用浏览器"
+    required: true
+    description: "切换连接时迟到的安装身份和自动绑定结果不能绑定当前另一连接。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例有可区分的 A/B Backend 与各自专用终端，可延迟 A 的身份请求。"
+    steps:
+      - "通过 $toolkit:playwright-cli 操作本例 desktop，延迟 A capabilities，切换到 B，再释放 A 响应。"
+      - "分别从 A/B 自己的终端 resolve 并观察页面；确认 installationId、desktopId、hostId、Group 均属于各自连接。"
+  - id: "BRA-009"
+    name: "同 Profile 不同终端互不操作页面"
+    required: true
+    description: "同 Profile 可共享登录态，但专属 Group 的页面和自动化目标保持隔离。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占两个有效终端 A/B，使用同一获准 Profile，各有唯一标识页面。"
+    steps:
+      - "分别 resolve 并用 $toolkit:playwright-cli attach A/B，交替输入和导航各自页面。"
+      - "确认 A 只能列出和操作获准 Group 的目标，B 页面未变化；分别 detach。"
+  - id: "BRA-010"
+    name: "多个桌面不猜绑定"
+    required: true
+    description: "多候选时要求明确选择，不能按最后注册者恢复到其他电脑。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例有隔离 A/B 桌面和同一测试 Backend，页面可区分，专用终端尚未绑定。"
+    steps:
+      - "在终端执行 doctor/resolve；确认提示 BROWSER_BINDING_REQUIRED，未返回任一桌面 endpoint。"
+      - "通过真实桌面为本例终端选择 A，重新 resolve 并以 $toolkit:playwright-cli 验证 A 页面；B 再注册不能改变已选归属。"
+  - id: "BRA-011"
+    name: "Profile 冲突可诊断并释放"
+    required: true
+    description: "同一终端活跃自动化不能跨 Profile，detach 后不遗留占用。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有可授权两个 Profile 的隔离桌面和专用终端，两个 Profile 有对照页面。"
+    steps:
+      - "用 $toolkit:playwright-cli 在当前 Profile attach，尝试第二 Profile，确认 AUTOMATION_PROFILE_CONFLICT 或授权拒绝，原连接仍可读取页面。"
+      - "detach 本例所有连接，再使用合法 Profile 重新 resolve/attach；确认连接占用释放且两侧页面均未被误导航。"
+  - id: "BRA-012"
+    name: "业务不可达不冒充浏览器健康"
+    required: true
+    description: "控制链路通过而业务站点失败时，能将 DNS、TLS、HTTP 与控制面区分。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例有独立的不可解析域名、自签证书站点和返回 503 的站点，不修改系统 DNS 或全局证书。"
+    steps:
+      - "分别打开这些受控故障地址，使用 $toolkit:playwright-cli 读取页面、console 和网络证据；记录具体失败层。"
+      - "执行 doctor，确认 pageRequestsVerified=false，未把其 healthy 当业务成功；返回健康页面并确认交互恢复。"

@@ -1,0 +1,114 @@
+version: 1
+name: "右侧浏览器页面数据链路恢复"
+description: "控制链路之外验证真实 HTTP、WebSocket、预览与代理。每例操作专属 Session/Profile；Direct/Whistle 不能改动用户共享设置。SSH -R 是远端 Agent 控制桌面，远端 localhost 预览是另一条数据链，分别判定。"
+cases:
+  - id: "BRD-001"
+    name: "远端 localhost 页面真实来自服务器"
+    required: true
+    description: "右侧打开远端 localhost 时访问该 Backend 的回环服务而非 Mac 同端口。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "远端与桌面自有同端口 fixture 返回不同标识，该端口不使用已有同号转发。"
+    steps:
+      - "在专用远端终端的右侧地址栏打开远端 localhost，使用 $toolkit:playwright-cli 读取 DOM 和网络。"
+      - "确认远端标识、连接来源与地址显示正确，点击请求只计入远端服务；不以本机 curl 通过代替。"
+  - id: "BRD-002"
+    name: "远端预览 HTTP 连接断开"
+    required: true
+    description: "预览流断开后有明确错误，恢复可重新打开并操作正确来源。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例有已授权远端 localhost 预览及能单独中断的预览 WebSocket。"
+    steps:
+      - "记录源终端、连接和服务标识，只关闭本例预览流；确认 UI 不再伪显示可用。"
+      - "恢复数据链并按产品入口重新打开预览，fresh $toolkit:playwright-cli 观察远端标识与接口回显，原 Profile 代理设置未变。"
+  - id: "BRD-003"
+    name: "远端服务停止再启动"
+    required: true
+    description: "服务不可用与 SSH/Browser 控制可用可区分，服务上线后页面可恢复。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例远端预览服务有独立 PID，不承载用户业务。"
+    steps:
+      - "仅停止本例 HTTP 服务，打开预览并记录连接拒绝，不应错误要求重登 Browser。"
+      - "在原端口重启自有服务，显式安全刷新，使用 $toolkit:playwright-cli 确认新服务实例标识和按钮可用。"
+  - id: "BRD-004"
+    name: "预览 WebSocket 与 HMR 断后重连"
+    required: true
+    description: "页面相对 WebSocket 在链路恢复后有真实消息，不只加载静态 HTML。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例预览提供相对资源与同源 WebSocket，服务端记录连接和消息序号。"
+    steps:
+      - "用 $toolkit:playwright-cli 打开预览并确认递增消息，暂断本例预览连接后恢复。"
+      - "确认新连接取得后序消息且无重复写操作，HTTP 标识仍来自原远端；记录 HMR 是否实际恢复，不能只看首页。"
+  - id: "BRD-005"
+    name: "Direct 出口独立于服务器代理"
+    required: true
+    description: "右侧公网请求使用桌面 Profile 的 Direct 出口，不被服务器环境代理替代。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占测试 Profile 的 Direct 模式及记录请求来源的 HTTPS 站点。"
+    steps:
+      - "在本例终端 resolve 后通过 $toolkit:playwright-cli 访问受控 HTTPS 站点，核对服务端来源和响应标识。"
+      - "确认 doctor 状态与实际请求一致，服务器 curl 或代理环境不构成此用例的页面证据。"
+  - id: "BRD-006"
+    name: "Whistle 进程退出后恢复"
+    required: true
+    description: "Whistle 意图保留且失败可见，恢复后实际 HTTPS 请求仍命中原规则。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占测试 Profile、Whistle 进程及无敏感测试规则；受控站点能回显命中标识。"
+    steps:
+      - "用 $toolkit:playwright-cli 证明规则已命中，只结束本例 Whistle 进程；确认错误或重建状态，不静默切 Direct。"
+      - "按本轮 rw 恢复或已有代理入口恢复，触发一次新的安全页面请求，确认服务端/响应标识仍命中原规则，规则摘要不变。"
+  - id: "BRD-007"
+    name: "代理端口被占用"
+    required: true
+    description: "Whistle 端口冲突明确失败，恢复不抢占其他进程或漂移到用户端口。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例独占隔离桌面和 Profile，配置端口由本例 listener 占用，另有健康 Profile 对照。"
+    steps:
+      - "在真实桌面选择本例 Whistle 模式，确认应用失败、保留意图且占用 listener PID 不变。"
+      - "释放自有占用者后只恢复本例 Profile，以 $toolkit:playwright-cli 验证代理命中；对照 Profile 未变。"
+  - id: "BRD-008"
+    name: "Headers 在重连后保持有效范围"
+    required: true
+    description: "通道恢复不丢失 Profile 请求头意图，也不泄漏到不匹配域名。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独占 Profile 且有两个受控 HTTPS 域名和精确域名匹配的无秘密测试 Header。"
+    steps:
+      - "先用 $toolkit:playwright-cli 发出请求证明匹配/不匹配范围，制造一次本例 Browser 断连并恢复。"
+      - "fresh resolve/attach 后分别发出新安全请求，确认只有原匹配域名收到 Header，规则 revision 和内容未被恢复覆盖。"
+  - id: "BRD-009"
+    name: "下载中断的结果可判定"
+    required: true
+    description: "下载断流后记录失败或未完成，恢复不能把半文件当完整文件。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例测试服务提供已知大小和 SHA-256 的非敏感文件，下载捕获及输出目录专用。"
+    steps:
+      - "使用 rw browser downloads capture 和 $toolkit:playwright-cli 在真实页面触发下载，中途截断本例数据流。"
+      - "确认下载结果与字节数一致，不将残缺文件标 completed；恢复链路后由本例显式重新下载，fetch 后核对大小/哈希，再 release。"
+  - id: "BRD-010"
+    name: "页面 renderer 崩溃可重新打开"
+    required: true
+    description: "单个网页进程失败不拖死 Electron 和其他标签，错误页提供可执行恢复入口。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例独占网页 WebContents，可仅终止该页面 renderer，另有对照标签。"
+    steps:
+      - "终止本例页面 renderer，使用真实 desktop 观察错误状态而非无限 loading；记录对照页面仍可操作。"
+      - "使用页面重载或重新打开入口获取 fresh target，再以 $toolkit:playwright-cli 验证服务标识与交互；不声称崩溃前未持久输入必然保留。"

@@ -10,12 +10,14 @@ import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/
 import { resolveRunweaveBaseUrl } from "../config/profile-store.js";
 import { verifyBackendEnvironment } from "../client/environment.js";
 import { ConfigurationError } from "@runweave/config-node";
+import type { BrowserRecoveryAccepted } from "@runweave/shared/browser-diagnostics";
 
 export interface BrowserCommandIo {
   stdout: Pick<NodeJS.WriteStream, "write">;
   stderr: Pick<NodeJS.WriteStream, "write">;
   env: NodeJS.ProcessEnv;
   onBrowserStage?: (stage: "identity" | "binding", passed: boolean) => void;
+  deadline?: number;
 }
 
 interface ResolveOptions {
@@ -47,11 +49,11 @@ function parseProfile(value: string): TerminalBrowserProfileId {
   return profileId;
 }
 
-function parseResolveOptions(args: string[]): ResolveOptions {
+export function parseResolveOptions(args: string[], defaultWaitTimeoutMs = 30000): ResolveOptions {
   let profileId: TerminalBrowserProfileId | null = null;
   let groupId: string | null = null;
   let json = false;
-  let waitTimeoutMs = 30000;
+  let waitTimeoutMs = defaultWaitTimeoutMs;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--json") {
@@ -288,7 +290,7 @@ async function resolveBrowserProfileAttempt(
 
 export async function resolveBrowserProfile(args: string[], io: BrowserCommandIo): Promise<ResolvedTerminalBrowserProfile> {
   const options = parseResolveOptions(args);
-  options.deadline = Date.now() + (options.waitTimeoutMs || 5000);
+  options.deadline = Math.min(io.deadline ?? Infinity, Date.now() + (options.waitTimeoutMs || 5000));
   let attempt = 0;
   for (;;) {
     try {
@@ -304,4 +306,37 @@ export async function resolveBrowserProfile(args: string[], io: BrowserCommandIo
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
+}
+
+export async function requestBrowserRecovery(args: string[], io: BrowserCommandIo, requestId?: string): Promise<BrowserRecoveryAccepted> {
+  const options = parseResolveOptions(args);
+  options.deadline = io.deadline;
+  const id = io.env.RUNWEAVE_TERMINAL_SESSION_ID?.trim();
+  const hook = io.env.RUNWEAVE_HOOK_TOKEN?.trim();
+  if (!id || !hook)
+    throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Recovery requires this terminal's identity", 3);
+  let base = io.env.RUNWEAVE_BASE_URL?.trim() ||
+    (io.env.RUNWEAVE_BACKEND_PORT ? `http://127.0.0.1:${io.env.RUNWEAVE_BACKEND_PORT}` : "");
+  if (!base) {
+    base = resolveRunweaveBaseUrl({});
+    await verifyBackendEnvironment(base, AbortSignal.timeout(requestTimeout(options)));
+  }
+  const projectId = await resolveCurrentProjectId({ ...io, env: { ...io.env, RUNWEAVE_BASE_URL: base } }, options);
+  if (!projectId) throw new CliError("BROWSER_SCOPE_DENIED: Terminal project is unavailable", 3);
+  const response = await fetch(`${base.replace(/\/+$/, "")}/api/terminal/session/${encodeURIComponent(id)}/browser/recover`, {
+    method: "POST", redirect: "error",
+    headers: { "content-type": "application/json", "x-runweave-hook-token": hook },
+    body: JSON.stringify({ projectId, requestId }), signal: AbortSignal.timeout(requestTimeout(options)),
+  });
+  const body = await response.json().catch(() => null) as (Partial<BrowserRecoveryAccepted> & { code?: string }) | null;
+  if (!response.ok) {
+    const code = response.status === 404 ? "REMOTE_CAPABILITY_UNSUPPORTED"
+      : response.status === 401 || response.status === 403 ? "BROWSER_SCOPE_DENIED"
+        : body?.code?.match(/^[A-Z][A-Z0-9_]+$/)?.[0] ?? "DESKTOP_UNAVAILABLE";
+    throw new CliError(`${code}: Browser recovery request was not accepted`, 3);
+  }
+  if (body?.protocolVersion !== 2 || typeof body.requestedAt !== "number" ||
+      typeof body.requestId !== "string" || !["pending", "rebuilding", "complete"].includes(body.status ?? ""))
+    throw new CliError("REMOTE_CAPABILITY_UNSUPPORTED: Backend recovery protocol is unavailable", 3);
+  return body as BrowserRecoveryAccepted;
 }

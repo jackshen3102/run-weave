@@ -30,11 +30,12 @@ export class BrowserCdpClient {
     socket.addEventListener("error", () => this.rejectPending());
   }
 
-  static async connect(endpoint: string): Promise<BrowserCdpClient> {
+  static async connect(endpoint: string, deadline = Date.now() + 10000): Promise<BrowserCdpClient> {
+    const timeout = () => Math.max(1, Math.min(5000, deadline - Date.now()));
     let url = new URL(endpoint);
     if (url.protocol === "http:") {
       url.pathname = "/json/version";
-      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(timeout()) });
       if (!response.ok) throw new CliError("CDP discovery failed", 3);
       const version = (await response.json()) as {
         webSocketDebuggerUrl: string;
@@ -56,7 +57,7 @@ export class BrowserCdpClient {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new CliError("CDP connection timed out", 3)),
-          5_000,
+          timeout(),
         );
         socket.addEventListener(
           "open",

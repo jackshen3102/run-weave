@@ -4,6 +4,8 @@ description: >-
   使用 rw 操作 Runweave。需要设置或排查当前浏览器代理、Whistle、泳道、请求头
   Headers、Profile/Group、CDP 连接、取回下载或请求登录协助，以及管理项目与终端、
   发送输入、读取历史/快照/交接、读取 rw-knowledge 分享引用、查询健康与认证时使用。
+  右侧 Browser 打不开、断线或隧道不可用，包括云桌面、devbox、SSH 远端时，
+  用 rw browser doctor 诊断、rw browser recover 恢复，再通过 playwright-cli 验证页面。
   Runweave 上下文中无需用户明确提到 rw 或 CLI；页面交互配合 playwright-cli。
   不用于普通系统代理、业务流水线泳道配置或泳道图绘制。
 ---
@@ -21,6 +23,7 @@ description: >-
 | 开关浏览器代理、切直连、检查 Whistle         | 下方“浏览器代理与泳道”：`browser proxy`                                                   |
 | 给页面设置泳道、PPE、环境请求头、Headers     | 下方“浏览器代理与泳道”：`browser headers`；先确认业务 Header 与域名                       |
 | 连接右侧浏览器、选择 Profile、排查 CDP       | `browser profile resolve`；页面操作继续使用 [playwright-cli](../playwright-cli/SKILL.md)  |
+| 右侧 Browser 打不开、隧道断线、远端无法控制  | 下方“浏览器故障诊断与恢复”：`browser doctor` → `browser recover` → fresh resolve/页面验证 |
 | 下载文件取回服务器、网页工具、请用户完成登录 | 下方“其他浏览器能力”；页面交互与协助流程使用 [playwright-cli](../playwright-cli/SKILL.md) |
 | 查看项目、终端进度、发送指令、读取历史或交接 | 下方 Projects、Terminals、Send input、Read context                                        |
 | 读取 `rw-knowledge:v1:…` 分享内容            | 下方 Read a shared knowledge result                                                       |
@@ -55,7 +58,7 @@ RW_BIN=(node packages/runweave-cli/dist/index.js)
 ## 浏览器代理与泳道
 
 浏览器控制统一使用 Runweave 桌面 Browser。禁止启动服务器无头浏览器、独立 Chromium/Chrome
-或 Playwright standalone 会话作为替代。Profile 解析或 CDP 连接不可用时停止该浏览器路径并报告原因；
+或 Playwright standalone 会话作为替代。Profile 解析或 CDP 连接不可用时暂停页面操作，按下方入口诊断和恢复；
 不复制登录态、不借用其他终端身份、不重启用户浏览器。
 
 先确认目标 Profile/Group。当前终端按 Worktree 绑定及全局默认解析；仅用户明确指定时覆盖 Profile。
@@ -70,6 +73,39 @@ SSH 远端即使没有 `PLAYWRIGHT_MCP_CDP_ENDPOINT`，也应运行 resolver，�
 resolver 可能返回含短期凭据的 CDP 地址，不打印到交付内容或持久保存。`proxy`、`headers`、
 `downloads`、`tools` 自动调用同一 resolver；用户指定覆盖时，对相关命令保持相同的 `--profile 1|2|3`
 与 `--group-id`，不要改全局偏好。
+
+### 浏览器故障诊断与恢复
+
+右侧 Browser 打不开、SSH 远端突然不能控制、resolve/attach 超时或隧道断连时，
+在发生故障的原终端、原实例和原 Profile/Group 下诊断：
+
+```bash
+"${RW_BIN[@]}" browser doctor --json
+```
+
+原命令显式使用 `--profile` 或 `--group-id` 时，doctor/recover 保持相同参数。
+Dev Session 先核对其绑定实例与 surface，不能用当前终端的 ambient Stable 连接代替。
+
+查看 `identity`、`binding`、`cdp`、`proxy` 的失败层。已确认归属的通道暂时不可达时，
+执行一次有界恢复；恢复通过原 Backend 的认证控制路径通知原桌面，不需 Agent 自建 SSH 转发：
+
+```bash
+"${RW_BIN[@]}" browser recover --wait-timeout-ms 60000 --json
+```
+
+健康通道返回 `action: "none"`；发起恢复时跟踪 `pending/rebuilding/complete`。
+退出 0 才表示控制链路已恢复；请求已接受、仍在 pending 或命令失败都不能记为恢复成功。
+未绑定、权限/身份拒绝、Profile 冲突和登录失效按实际错误处理，不借恢复命令改绑或绕过认证。
+一次恢复仍失败时保留错误和期限，报告阻塞，不无限重试或重启用户服务。
+
+恢复后重新 resolve，立即通过 [playwright-cli](../playwright-cli/SKILL.md) attach 新 endpoint，
+先观察原页面再继续用户任务。`healthy` 不证明页面请求、登录或业务操作成功；
+恢复不会重放点击或表单，断线前结果未知的操作先核对页面及业务结果。
+
+旧版本没有 doctor/recover，或返回 `REMOTE_CAPABILITY_UNSUPPORTED` 时，记录实际 CLI、Backend、
+Desktop 版本与缺失能力；三层都需支持，不能只更新服务器 CLI 就宣称已恢复。
+用户要求升级 Linux CLI/Backend 时使用 [update-runweave-backend](../update-runweave-backend/SKILL.md)；
+桌面与 Dev Session 沿用各自更新/生命周期入口，不因命令缺失擅自发布或升级。
 
 ### 代理
 

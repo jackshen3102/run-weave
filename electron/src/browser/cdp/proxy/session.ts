@@ -7,6 +7,7 @@ import {
 } from "../../view/index.js";
 import { shouldMarkTerminalBrowserMcpActivity } from "../activity.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
+import { acquireTerminalBrowserRendering } from "../../view/rendering.js";
 import {
   captureTerminalBrowserScreenshot,
   getTerminalBrowserAutomationLayoutMetrics,
@@ -49,6 +50,7 @@ let nextSyntheticContextId = 1_000_000_000;
 interface SharedDebuggerAttachment {
   webContents: WebContents;
   refCount: number;
+  releaseRendering(): void;
 }
 
 const sharedDebuggerAttachments = new Map<string, SharedDebuggerAttachment>();
@@ -112,7 +114,9 @@ function attachSharedDebugger(
     }
   }
 
-  sharedDebuggerAttachments.set(targetId, { webContents, refCount: 1 });
+  sharedDebuggerAttachments.set(targetId, {
+    webContents, refCount: 1, releaseRendering: acquireTerminalBrowserRendering(webContents),
+  });
   setTerminalBrowserCdpProxyAttached(targetId, true);
 }
 
@@ -129,6 +133,7 @@ function releaseSharedDebugger(targetId: string): void {
   }
 
   sharedDebuggerAttachments.delete(targetId);
+  shared.releaseRendering();
   const found = getTerminalBrowserEntryByTargetId(targetId);
   if (!found?.entry.deviceDebuggerAttached) {
     try {
@@ -141,6 +146,7 @@ function releaseSharedDebugger(targetId: string): void {
 }
 
 function clearSharedDebugger(targetId: string): void {
+  sharedDebuggerAttachments.get(targetId)?.releaseRendering();
   sharedDebuggerAttachments.delete(targetId);
   setTerminalBrowserCdpProxyAttached(targetId, false);
 }

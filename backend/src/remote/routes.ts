@@ -5,6 +5,7 @@ import { createRequireAuth, readBearerToken } from "../auth/middleware";
 import type { AuthService } from "../auth/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalSessionIdentityResponse } from "@runweave/shared/terminal/session";
+import type { BrowserRecoveryAccepted } from "@runweave/shared/browser-diagnostics";
 import { DesktopBrowserBindings, RemoteBrowserError } from "./browser-bindings";
 import { registerRemoteCapabilitiesRoute } from "./capabilities";
 import { createRequireTerminalHook } from "./terminal-hook-auth";
@@ -69,6 +70,16 @@ export function registerRemoteBrowserRoutes(
     if (typeof projectId !== "string") { res.sendStatus(400); return; }
     try {
       res.json({ capability: bindings.issueCapability(String(req.params.id), projectId), expiresIn: 3600 });
+    } catch (error) { sendError(res, error); }
+  });
+  app.post("/api/terminal/session/:id/browser/recover", requireTerminalHook, (req, res) => {
+    if (typeof req.body?.projectId !== "string" ||
+        (req.body.requestId !== undefined && (typeof req.body.requestId !== "string" || !/^[a-f0-9-]{36}$/.test(req.body.requestId)))) {
+      res.sendStatus(400); return;
+    }
+    try {
+      const accepted: BrowserRecoveryAccepted = { protocolVersion: 2, ...bindings.requestRecovery(String(req.params.id), req.body.projectId, req.body.requestId) };
+      res.status(202).json(accepted);
     } catch (error) { sendError(res, error); }
   });
   app.post("/api/terminal/session/:id/browser/resolve", async (req, res) => {

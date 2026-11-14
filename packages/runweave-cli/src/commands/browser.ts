@@ -5,19 +5,24 @@ import { CliError } from "../errors.js";
 import { runBrowserAssistCommand } from "./browser-assist.js";
 import { runBrowserToolsCommand } from "./browser-tools.js";
 import { runBrowserDoctorCommand } from "./browser-doctor.js";
+import { runBrowserRecoverCommand } from "./browser-recover.js";
 import {
   resolveBrowserProfile,
   type BrowserCommandIo,
 } from "./browser-profile.js";
 
 const USAGE =
-  "Usage: rw browser doctor [options] | rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--wait-timeout-ms <0..120000>] [--json] | rw browser proxy <status|set> [options] | rw browser headers <list|set|remove> [options] | rw browser downloads <capture|release|list|fetch> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
+  "Usage: rw browser recover [options] | rw browser doctor [options] | rw browser profile resolve [--profile 1|2|3] [--group-id <id>] [--wait-timeout-ms <0..120000>] [--json] | rw browser proxy <status|set> [options] | rw browser headers <list|set|remove> [options] | rw browser downloads <capture|release|list|fetch> [options] | rw browser tools <list|call> [options] | rw browser assist <request|status|acknowledge|cancel> [options]";
 
 export async function runBrowserCommand(
   subcommand: string | undefined,
   args: string[],
   io: BrowserCommandIo,
 ): Promise<void> {
+  if (subcommand === "recover") {
+    await runBrowserRecoverCommand(args, io);
+    return;
+  }
   if (subcommand === "doctor") {
     await runBrowserDoctorCommand(args, io);
     return;

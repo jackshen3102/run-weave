@@ -2,6 +2,7 @@ import { BaseWindow, BrowserWindow } from "electron";
 import { borrowTerminalBrowserPresentation } from "../view/presentation.js";
 import { relayoutTerminalBrowserViewport } from "../device/viewport-layout.js";
 import { getTerminalBrowserEntryByTargetId } from "../view/index.js";
+import { acquireTerminalBrowserRendering } from "../view/rendering.js";
 
 export function attachCaptureSurface(
   windowId: number,
@@ -15,10 +16,9 @@ export function attachCaptureSurface(
     return null;
   }
   const currentBounds = entry.view.getBounds();
+  const releaseRendering = acquireTerminalBrowserRendering(entry.view.webContents);
   if (entry.attached && currentBounds.width > 0 && currentBounds.height > 0) {
-    const throttling = entry.view.webContents.getBackgroundThrottling();
-    entry.view.webContents.setBackgroundThrottling(false);
-    return () => { if (!entry.view.webContents.isDestroyed()) entry.view.webContents.setBackgroundThrottling(throttling); };
+    return releaseRendering;
   }
   const releasePresentation = borrowTerminalBrowserPresentation(owner, entry);
   if (entry.visible) {
@@ -27,19 +27,12 @@ export function attachCaptureSurface(
   }
   const previousViewportBounds = entry.viewportView.getBounds();
   const previousContentBounds = entry.view.getBounds();
-  const previousBackgroundThrottling =
-    entry.view.webContents.getBackgroundThrottling();
-  entry.view.webContents.setBackgroundThrottling(false);
   const wasAttached = entry.attached;
   const hasCompositorSize =
     previousContentBounds.width > 0 && previousContentBounds.height > 0;
   if (wasAttached && hasCompositorSize) {
     return () => {
-      if (!entry.view.webContents.isDestroyed()) {
-        entry.view.webContents.setBackgroundThrottling(
-          previousBackgroundThrottling,
-        );
-      }
+      releaseRendering();
       releasePresentation(() => relayoutTerminalBrowserViewport(entry));
     };
   }
@@ -96,11 +89,7 @@ export function attachCaptureSurface(
       owner.contentView.addChildView(entry.viewportView);
       entry.attached = true;
     }
-    if (!entry.view.webContents.isDestroyed()) {
-      entry.view.webContents.setBackgroundThrottling(
-        previousBackgroundThrottling,
-      );
-    }
+    releaseRendering();
     entry.viewportView.setVisible(false);
     entry.viewportView.setBounds(previousViewportBounds);
     entry.view.setBounds(previousContentBounds);

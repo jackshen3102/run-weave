@@ -106,6 +106,16 @@ HCL-005～015 未正式执行。后续执行需要同一实现的可用纯 Web �
 
 ## 验证
 
+右侧 Browser 的可靠性回归按能力拆分为
+[首次可用](./terminal/browser/resilience-availability.testplan.yaml)、
+[传输恢复](./terminal/browser/resilience-transport-recovery.testplan.yaml)、
+[进程与认证](./terminal/browser/resilience-lifecycle-recovery.testplan.yaml)、
+[仅使用 rw 恢复](./terminal/browser/resilience-command-recovery.testplan.yaml)、
+[页面数据链路](./terminal/browser/resilience-data-path-recovery.testplan.yaml)及
+[持续可靠性](./terminal/browser/resilience-soak-recovery.testplan.yaml)。
+各计划分别记录本机、Windows 云桌面和 Linux devbox 的版本、操作及未执行边界；
+短时通过不能替代两小时抖动或八小时闲置验收。
+
 ```bash
 pnpm testplan:validate
 pnpm testplan:verify

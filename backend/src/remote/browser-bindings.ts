@@ -9,6 +9,7 @@ import type {
 } from "@runweave/shared/remote";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalBrowserBindingOwner } from "../terminal/store/store";
+import type { BrowserRecoveryAccepted } from "@runweave/shared/browser-diagnostics";
 
 interface BindingRecord extends DesktopBrowserBinding {
   ownerSessionId: string;
@@ -18,7 +19,7 @@ interface BindingRecord extends DesktopBrowserBinding {
   registeredAt: number;
 }
 
-function matchesOwner(owner: TerminalBrowserBindingOwner, binding: BindingRecord): boolean {
+function matchesOwner(owner: TerminalBrowserBindingOwner, binding: Pick<BindingRecord, "desktopId" | "hostId" | "ownerSessionId" | "ownerKeyHash">): boolean {
   return owner.desktopId === binding.desktopId && owner.hostId === binding.hostId &&
     (owner.ownerKeyHash ? owner.ownerKeyHash === binding.ownerKeyHash
       : owner.ownerSessionId === binding.ownerSessionId);
@@ -46,8 +47,44 @@ export class DesktopBrowserBindings {
   private readonly bindings = new Map<string, BindingRecord>();
   private pendingSelection: Promise<void> = Promise.resolve();
   private readonly capabilities = new Map<string, CapabilityRecord>();
+  private readonly recoveryRequests = new Map<string, {
+    owner: TerminalBrowserBindingOwner;
+    requestedAt: number;
+    requestId: string;
+    complete: boolean;
+    acknowledgedGeneration?: number;
+  }>();
 
   constructor(private readonly sessions: TerminalSessionManager) {}
+
+  requestRecovery(terminalSessionId: string, projectId: string, requestId?: string): Omit<BrowserRecoveryAccepted, "protocolVersion"> {
+    const session = this.sessions.getSession(terminalSessionId);
+    if (!session || session.status === "exited" || session.projectId !== projectId)
+      throw new RemoteBrowserError("BROWSER_SCOPE_DENIED", 403, "Terminal identity does not match");
+    const owner = session.browserBinding;
+    if (!owner)
+      throw new RemoteBrowserError("BROWSER_BINDING_REQUIRED", 409, "Select a desktop Browser binding first");
+    this.pruneRecoveryRequests();
+    const key = JSON.stringify([owner.desktopId, owner.hostId, owner.ownerKeyHash ?? owner.ownerSessionId]);
+    let existing = this.recoveryRequests.get(key);
+    if (requestId && (!existing || existing.requestId !== requestId))
+      throw new RemoteBrowserError("BROWSER_RECOVERY_EXPIRED", 409, "Browser recovery request is no longer available");
+    if (existing?.complete && !requestId) existing = undefined;
+    if (existing) return {
+      requestId: existing.requestId, requestedAt: existing.requestedAt,
+      status: existing.complete ? "complete" : existing.acknowledgedGeneration === undefined ? "pending" : "rebuilding",
+    };
+    if (!this.recoveryRequests.has(key) && this.recoveryRequests.size >= 64)
+      throw new RemoteBrowserError("BROWSER_CAPACITY_EXCEEDED", 503, "Too many pending Browser recoveries");
+    const request = { owner: { ...owner }, requestedAt: Date.now(), requestId: randomUUID(), complete: false };
+    this.recoveryRequests.set(key, request);
+    return { requestId: request.requestId, requestedAt: request.requestedAt, status: "pending" };
+  }
+
+  private pruneRecoveryRequests(): void {
+    for (const [key, request] of this.recoveryRequests)
+      if (Date.now() - request.requestedAt >= 120_000) this.recoveryRequests.delete(key);
+  }
 
   async bind(
     ownerSessionId: string,
@@ -72,6 +109,18 @@ export class DesktopBrowserBindings {
         400,
         "Invalid desktop binding",
       );
+    }
+    const ownerKeyHash = input.ownerKey
+      ? createHash("sha256").update(input.ownerKey).digest("hex") : undefined;
+    this.pruneRecoveryRequests();
+    for (const request of this.recoveryRequests.values()) {
+      if (request.complete || !matchesOwner(request.owner, { ...input, ownerSessionId, ownerKeyHash })) continue;
+      if (request.acknowledgedGeneration === undefined) {
+        request.acknowledgedGeneration = input.generation;
+        // Delivered over the independent authenticated control path, even when
+        // the reverse listener is gone. Only its proven owner can consume it.
+        throw new RemoteBrowserError("BROWSER_RECOVERY_REQUESTED", 409, "Rebuild this Browser channel");
+      }
     }
     let challenge: Response;
     try {
@@ -106,8 +155,6 @@ export class DesktopBrowserBindings {
         "Desktop bridge identity does not match",
       );
     }
-    const ownerKeyHash = input.ownerKey
-      ? createHash("sha256").update(input.ownerKey).digest("hex") : undefined;
     let existingId: string | undefined;
     for (const [id, binding] of this.bindings) {
       if (
@@ -133,6 +180,11 @@ export class DesktopBrowserBindings {
       registeredAt: Date.now(),
     };
     this.bindings.set(record.id, record);
+    for (const request of this.recoveryRequests.values()) {
+      if (!request.complete && request.acknowledgedGeneration !== undefined &&
+          request.acknowledgedGeneration !== record.generation && matchesOwner(request.owner, record))
+        request.complete = true;
+    }
     return this.publicBinding(record);
   }
 

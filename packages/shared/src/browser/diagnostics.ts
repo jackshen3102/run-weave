@@ -19,3 +19,16 @@ export interface BrowserDiagnosticReport {
   effectiveProxy?: string;
   pageRequestsVerified: false;
 }
+
+export interface BrowserRecoveryReport extends BrowserDiagnosticReport {
+  action: "none" | "requested";
+  recoveryStatus?: "pending" | "rebuilding" | "complete";
+  recoveryCode?: string;
+}
+
+export interface BrowserRecoveryAccepted {
+  protocolVersion: 2;
+  requestId: string;
+  requestedAt: number;
+  status: "pending" | "rebuilding" | "complete";
+}

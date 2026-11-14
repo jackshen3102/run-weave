@@ -1,0 +1,140 @@
+version: 1
+name: "仅使用 rw 的浏览器故障恢复"
+description: "这是用户要求的恢复能力门禁：诊断成功、等待成功与实际发起恢复分别记录。当前源码只有 doctor/resolve，尚无 recover；缺少命令必须记为能力缺口并修复，不能改为手工重建 SSH 或点击桌面后判通过。每个故障采用独立可恢复 fixture，恢复不得重放未知页面动作。"
+cases:
+  - id: "BRR-001"
+    name: "恢复入口存在且机器可读"
+    required: true
+    description: "rw 提供明确的 Browser 恢复命令并输出单一 JSON 的实际结论。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例可执行候选 CLI 并读取其 usage、文档和版本；只查询命令能力，不接触用户页面。"
+    steps:
+      - "核对 browser usage 与文档存在恢复入口；实际执行合法参数与非法参数，确认合法路径有 JSON、非法参数退出 2。"
+      - "确认输出能区分已恢复、仍不可用及需用户认证；不把 doctor healthy 或发出恢复请求当作页面恢复成功。"
+  - id: "BRR-002"
+    name: "健康通道恢复为无操作"
+    required: true
+    description: "重复恢复健康通道不会无故断开活跃 Browser 或改用户设置。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "记录 generation、PID、页面计数和配置摘要；连续执行两次 rw 恢复命令。"
+      - "确认可用结果、配置未变、原会话继续可交互，未反复重建健康通道；以 $toolkit:playwright-cli 核对原页面。"
+  - id: "BRR-003"
+    name: "坏反向通道可仅用 rw 恢复"
+    required: true
+    description: "取消反向监听后，远端原终端只使用 rw 即可触发并验证恢复。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "可取消本例 -R 监听并保留 SSH 进程，已确认故障不是全网中断。"
+    steps:
+      - "使本例反向监听失效，记录 doctor 失败层，随后仅在该终端运行 rw 恢复命令，不点击桌面、不手工 ssh 转发。"
+      - "确认命令有界等待原归属通道变为可用；fresh resolve 并用 $toolkit:playwright-cli 在原页面点击成功，记录前后 generation 和耗时。"
+  - id: "BRR-004"
+    name: "桌面离线时恢复有界失败"
+    required: true
+    description: "桌面不可达时 rw 明确报不可恢复原因，不能永久挂住或切换另一桌面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例原终端已绑定 A，A 受管停止，另有 B 对照桌面。"
+    steps:
+      - "从原终端仅执行 rw 恢复命令并指定等待期限，记录耗时、stdout 和 stderr。"
+      - "确认期限内非零退出并指出原桌面离线；没有切换到 B、没有新建独立浏览器，也未改终端归属。"
+  - id: "BRR-005"
+    name: "未绑定终端不能猜桌面"
+    required: true
+    description: "恢复不能用唯一或最后注册候选绕过首次绑定确认。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例专用终端尚未选择任何 Browser 归属。"
+    steps:
+      - "在本例终端执行 rw 恢复命令；确认 BROWSER_BINDING_REQUIRED 或明确待绑定结果。"
+      - "核对终端持久记录未被恢复命令静默改写；通过已授权桌面完成一次明确绑定后再 fresh resolve 验证。"
+  - id: "BRR-006"
+    name: "认证失效恢复不绕过登录"
+    required: true
+    description: "rw 给出需认证和可执行下一步，不能宣称修复了无效凭据。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例独立 Browser 登录已失效，SSH 与 Backend 健康。"
+    steps:
+      - "运行 doctor 和 rw 恢复命令，记录分层原因、退出码和等待时间。"
+      - "确认明确认证阻塞且未切换身份；只恢复本例合法登录后命令才可成功，随后用 $toolkit:playwright-cli 验证原页面。"
+  - id: "BRR-007"
+    name: "恢复请求严格限定原所有者"
+    required: true
+    description: "其他终端、登录或桌面的恢复请求不能重建或抢占本例通道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例拥有无共享凭据的 A/B 所有者及可区分页面。"
+    steps:
+      - "分别以 B 的终端身份、错误 Hook 和复制公开 ID 的登录尝试恢复 A，记录拒绝结果。"
+      - "确认 A generation、页面与配置未变；A 合法身份恢复后以 $toolkit:playwright-cli 验证 A 页面。"
+  - id: "BRR-008"
+    name: "并发恢复收敛"
+    required: true
+    description: "同一终端并发恢复请求不会反复拆建通道或产生孤儿进程。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "使本例通道发生同一可恢复故障，并发启动 5 个属于同一终端的 rw 恢复命令。"
+      - "记录每个命令结论，确认收敛到一个有效代际且没有不断重启；fresh resolve 后 $toolkit:playwright-cli 原页面操作成功，资源数量回归基线。"
+  - id: "BRR-009"
+    name: "恢复后票据必须更新"
+    required: true
+    description: "恢复不能返回或重用旧代际票据，旧票据不能访问新通道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "把本例未消费的旧票据仅存在内存，制造一次通道重建并通过 rw 恢复。"
+      - "确认旧票据拒绝；立即 fresh resolve 并用 $toolkit:playwright-cli attach 新地址、操作原页面，凭据未写入报告或 shell 历史。"
+  - id: "BRR-010"
+    name: "恢复不重放未知业务写入"
+    required: true
+    description: "点击响应丢失时，恢复只修连接，不重复提交计数或表单。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例服务持久记录带唯一操作号的提交次数，可在提交成功后丢弃响应。"
+    steps:
+      - "发起一次本例提交并在服务记录成功后切断返回链路，确认客户端结果未知；运行 rw 恢复。"
+      - "以 $toolkit:playwright-cli 只观察服务端提交次数仍为 1、页面状态可读取；恢复命令未自动导航或重放提交。"
+  - id: "BRR-011"
+    name: "诊断和恢复输出脱敏"
+    required: true
+    description: "JSON、stderr、事件和截图不含 Hook、Bearer、ownerKey 或带票据 endpoint。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例使用可识别的专用凭据并拥有脱敏日志导出权限。"
+    steps:
+      - "分别采集正常、超时、鉴权失败与恢复成功的 doctor/recover 输出及相关日志，只在内存比对专用凭据。"
+      - "确认 stdout 为单个 JSON，提示在 stderr，报告不含凭据和完整敏感 URL；恢复成功不把 pageRequestsVerified 改成无证据的 true。"
+  - id: "BRR-012"
+    name: "恢复局部失败不清空配置"
+    required: true
+    description: "无法修复时保留最后有效意图和用户数据，不借重置配置制造成功。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例可对恢复所需控制请求持续返回 503，配置和持久终端摘要已记录。"
+    steps:
+      - "运行有期限的 rw 恢复并保持故障至超时，确认非零退出且说明失败层。"
+      - "核对 Profile、代理规则、标签和终端归属未被删除；解除故障后合法恢复并以 $toolkit:playwright-cli 验证原页面。"

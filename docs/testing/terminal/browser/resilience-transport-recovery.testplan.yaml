@@ -1,0 +1,193 @@
+version: 1
+name: "右侧浏览器隧道断线恢复"
+description: "在 Windows SSH 主机与 Linux devbox 的独立 fixture 分别执行；每个故障样本均从本例健康基线开始并完成清理。测量故障发现、首次重试和恢复可交互的时间；网络解除后 90 秒仍不恢复记失败。该预算是本计划验收目标，不声称现有实现已保证。"
+cases:
+  - id: "BRT-001"
+    name: "反向 SSH 子进程退出"
+    required: true
+    description: "仅 Browser 反向连接退出后自动重建，主 SSH 和普通转发不被拖死。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+    steps:
+      - "记录各子进程 PID、binding generation 和普通转发计数，仅结束本例 Browser -R 子进程。"
+      - "观察桌面 Browser 状态和重试，确认 90 秒内恢复；本例终端 fresh resolve 后用 $toolkit:playwright-cli 读取原页面并点击，普通转发持续成功。"
+  - id: "BRT-002"
+    name: "SSH 进程活着但反向监听丢失"
+    required: true
+    description: "丢失 -R 监听即使进程存活也能被发现并重建，不能一直显示重连而永不恢复。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例独占 SSH master socket，可仅取消本例反向端口转发而不杀 SSH 进程。"
+    steps:
+      - "记录本例反向进程 PID，通过自有 master socket 取消其 -R 监听，确认 PID 仍存活但 Backend 网关 challenge 不可达。"
+      - "保持本例配置不变并观察至少两个心跳；确认识别失效数据通道并产生新有效监听，90 秒内 fresh resolve 和 $toolkit:playwright-cli 原页面操作成功。"
+  - id: "BRT-003"
+    name: "主 SSH 连接退出"
+    required: true
+    description: "主控制连接意外退出后按原连接意图自动恢复全部自有子通道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例有一条返回独特标识的普通转发。"
+    steps:
+      - "仅结束本例主 SSH 进程，记录 Browser 和普通转发失效及远端终端仍存活。"
+      - "确认 90 秒内自动重连，旧进程及监听回收；本例终端 fresh resolve 并通过 $toolkit:playwright-cli 验证原页面，普通转发标识正确。"
+  - id: "BRT-004"
+    name: "短暂网络黑洞"
+    required: true
+    description: "10 秒无响应后恢复网络，不需重启客户端即可重新使用原页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "故障代理仅承载本例 SSH 流量，可暂停双向字节转发。"
+    steps:
+      - "阻断本例链路 10 秒后解除，记录既有 CDP 读取是成功、明确断连还是超时。"
+      - "不手工改配置，90 秒内重新 resolve/attach，通过 $toolkit:playwright-cli 确认页面标识及计数可继续。"
+  - id: "BRT-005"
+    name: "超过 SSH 保活期限的网络黑洞"
+    required: true
+    description: "70 秒黑洞会退出无效连接并自动恢复，而不是永久等待。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例流量经过自有可控故障代理。"
+    steps:
+      - "阻断本例 SSH 双向流量 70 秒，记录 ServerAlive 检测、断连状态和退避，不关闭其他网络。"
+      - "解除故障，确认 90 秒内新代际可 resolve 并由 $toolkit:playwright-cli 操作原页面；核对无孤儿连接。"
+  - id: "BRT-006"
+    name: "单向网络失效"
+    required: true
+    description: "只有一个方向丢包时也能超时退出并收敛，不因 TCP 未关闭而永久卡住。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例代理能独立阻断 SSH 上行或下行。"
+    steps:
+      - "在独立基线样本分别阻断一个方向 70 秒，记录各方向的故障识别和有界超时。"
+      - "逐样本解除故障并 fresh resolve/attach，用 $toolkit:playwright-cli 验证原页面与服务端计数；每个方向单独判定。"
+  - id: "BRT-007"
+    name: "首次 SSH 不可达后上线"
+    required: true
+    description: "启动时主机不可达，主机上线后保持原意图自动建立 Browser。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例 SSH 主机初始在独立故障代理后被阻断，桌面已保存自动连接意图。"
+    steps:
+      - "启动本例桌面，确认状态为连接中或失败且有原因，未伪造 ready。"
+      - "恢复本例 SSH 可达，90 秒内确认 Browser ready；专用终端 resolve 并用 $toolkit:playwright-cli 建立页面和验证按钮。"
+  - id: "BRT-008"
+    name: "一次控制查询 503"
+    required: true
+    description: "临时控制面失败不销毁健康数据连接和页面。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "可以只对本例 capabilities 的一次响应注入 503，实际 SSH 数据通道保持健康。"
+    steps:
+      - "注入一次 503，记录原 binding、反向 PID、CDP 会话和页面标识。"
+      - "使用 $toolkit:playwright-cli 在原连接读取页面；恢复后确认原数据连接未被重建、binding 与页面保留。"
+  - id: "BRT-009"
+    name: "注册接口临时 5xx"
+    required: true
+    description: "暂时不能续期与确认反向网关已坏必须区分，短暂 500 不应无故重建健康隧道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例可只使 bindings 注册接口返回一次普通 500。"
+    steps:
+      - "注入普通 500，记录原连接可用且页面未断；观察重试状态。"
+      - "恢复响应后确认自动恢复 ready，原 Playwright 会话仍可点击，未重复创建隧道或页面。"
+  - id: "BRT-010"
+    name: "控制响应 429"
+    required: true
+    description: "限流时有界退避，解除后恢复，不忙循环或切换身份。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例独占限流代理能记录请求时间。"
+    steps:
+      - "只对本例控制请求返回 429 持续 15 秒，记录请求频率和 stderr。"
+      - "解除限流，在同一终端重新解析并以 $toolkit:playwright-cli 读取原页面；确认没有重复页面动作。"
+  - id: "BRT-011"
+    name: "控制接口只返回响应头"
+    required: true
+    description: "响应体不结束时仍遵守请求期限，不挂住恢复循环。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "自有代理可将 capabilities 或 bindings 响应体截断并保持连接。"
+    steps:
+      - "在独立样本中分别让一个控制接口只返回 200 响应头和部分 JSON；记录已收头但体不结束。"
+      - "确认请求在自身期限内终止并进入重试；解除故障，90 秒内 fresh resolve 和 $toolkit:playwright-cli 页面交互恢复，逐接口判定。"
+  - id: "BRT-012"
+    name: "反向端口分配冲突"
+    required: true
+    description: "分配端口到建立监听间发生占用时失败明确，不能误连占用者或永久卡死。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例可在其动态端口分配后由自有 listener 抢占该端口，普通转发另有健康对照。"
+    steps:
+      - "对本例一次 -R 分配注入占用，记录错误和占用者仍存活；确认没有访问占用者提供的伪网关。"
+      - "释放本例占用者，确认随后重试可建立有效网关，fresh resolve 并以 $toolkit:playwright-cli 验证页面；普通转发未受影响。"
+  - id: "BRT-013"
+    name: "本机网关不可达"
+    required: true
+    description: "网关 listener 失效后不能因 SSH PID 活着而永远保留坏通道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "可仅关闭本例网关 listener，保留主 SSH 和普通转发。"
+    steps:
+      - "关闭本例网关，观察 Backend challenge 与 Browser 状态；确认不会继续把旧 binding 当可用。"
+      - "90 秒内确认自有网关和反向监听重建，fresh resolve 后 $toolkit:playwright-cli 可以操作原页面。"
+  - id: "BRT-014"
+    name: "用户明确断开不自动复活"
+    required: true
+    description: "断开意图优先于迟到重试结果，后台退避不能重新建通道。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例可延迟 SSH 握手，所有资源归属可核对。"
+    steps:
+      - "在本例重连期间通过真实桌面显式断开主机，再释放旧握手响应。"
+      - "观察至少两个最大退避周期，确认没有新 SSH 或监听；本例远端终端仍存活，需显式连接后才恢复。"
+  - id: "BRT-015"
+    name: "重试通道不重启其他业务"
+    required: true
+    description: "Browser 重试只处理本例 Browser，不杀普通转发、Backend 或远端任务。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例有连续输出的专用任务及独立普通转发，PID 和计数已记录。"
+    steps:
+      - "在真实 desktop 使用重试浏览器通道，记录旧新 generation。"
+      - "fresh resolve 并用 $toolkit:playwright-cli 验证原页面，确认任务 PID/输出连续、普通转发 PID 不变、Backend 未重启。"
+  - id: "BRT-016"
+    name: "网络故障下快照不伪造 ready"
+    required: true
+    description: "已陈旧状态不会被当作当前健康；明确区分 SSH、Backend 和 Browser。"
+    preconditions:
+      - "每次执行建立本例独占终端、页面和故障注入资源；记录源码及 Desktop、Backend、CLI 实际版本、平台和资源身份，只回收本例资源，不中断用户现有任务。"
+      - "本例拥有隔离 Electron 桌面及可控 SSH 测试主机、远端 Backend 和有效独立登录；终端已确认绑定该桌面，Profile 和 Group 归属明确。"
+      - "本例页面由可控 HTTP 服务提供，显示唯一标识、计数按钮和输入框；已在该终端自己的 resolver 返回地址上用 $toolkit:playwright-cli 验证交互并记录 target、Profile、Group。"
+      - "本例可使执行器或状态发布停止更新，而不修改用户状态文件。"
+    steps:
+      - "暂停本例状态发布超过 15 秒，读取状态 UI 和受认证只读接口。"
+      - "确认标记离线或陈旧并保留原因；恢复发布后重新判断，最终以 fresh resolve 和 $toolkit:playwright-cli 操作判定可用。"
