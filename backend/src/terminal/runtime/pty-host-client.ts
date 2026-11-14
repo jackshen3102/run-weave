@@ -16,6 +16,17 @@ let generation: number | undefined;
 let hostInstanceId: string | undefined;
 let upstreams: PtyHostUpstreams | undefined;
 let stopped = false;
+async function closeHostTarget(
+  client: PtyHostClient,
+  target: PtyHostBinding & { terminalSessionId: string; generation: number },
+): Promise<void> {
+  try { await client.request("closeSession", target); }
+  catch (error) {
+    // Exited sessions can leave the Host's bounded retention window before the
+    // Backend releases its cached runtime. There is nothing left to terminate.
+    if (!(error instanceof Error) || error.message !== "HOST_SESSION_GONE") throw error;
+  }
+}
 export function usesPtyHost(): boolean {
   return process.platform === "win32" && Boolean(process.env.RUNWEAVE_RUNTIME_RELEASE_ID);
 }
@@ -187,7 +198,7 @@ export async function createHostedPty(options: {
       onFailure(listener) { failureListeners.add(listener); },
       onResize(listener) { resizeListeners.add(listener); },
       writeSteps,
-      async close() { await client.request("closeSession", target); },
+      async close() { await closeHostTarget(client, target); },
     },
   };
 }
@@ -195,7 +206,7 @@ export async function createHostedPty(options: {
 export async function closeHostedSession(terminalSessionId: string): Promise<void> {
   const client = await getPtyHost();
   const session = (await client.request<PtyHostSession[]>("listSessions")).find(item => item.terminalSessionId === terminalSessionId);
-  if (session) await client.request("closeSession", { hostInstanceId: session.hostInstanceId,
+  if (session) await closeHostTarget(client, { hostInstanceId: session.hostInstanceId,
     sessionInstanceId: session.sessionInstanceId, terminalSessionId, generation: client.generation });
 }
 

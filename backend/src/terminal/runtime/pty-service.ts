@@ -39,6 +39,8 @@ export interface TerminalRecoveryFailure {
 }
 
 export interface PtyRuntime {
+  /** A tmux attach must initialize its PTY before input can be accepted. */
+  ready?: Promise<void>;
   hosted?: {
     readonly grid: { cols: number; rows: number };
     output: import("./output-recovery").TerminalOutputSource;
@@ -403,12 +405,12 @@ export class PtyService {
       currentPid = runtime.pid;
       runtime.onData((data) => {
         dataSequence += 1;
-        logTerminalPerf("pty.output", {
+        logTerminalPerf("pty.output", () => ({
           pid: runtime.pid,
           seq: dataSequence,
           sinceLastWriteMs: lastWriteAt === null ? null : Date.now() - lastWriteAt,
           ...summarizeTerminalChunk(data),
-        });
+        }));
         emitData(data);
       });
       runtime.onExit((event) => {
@@ -482,11 +484,11 @@ export class PtyService {
         inputStarted = true;
         writeSequence += 1;
         lastWriteAt = Date.now();
-        logTerminalPerf("pty.write", {
+        logTerminalPerf("pty.write", () => ({
           pid: currentRuntime?.pid ?? currentPid,
           seq: writeSequence,
           ...summarizeTerminalChunk(data),
-        });
+        }));
         currentRuntime?.write(data);
       },
       resize(cols, rows) {

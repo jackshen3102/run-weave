@@ -293,7 +293,7 @@ export function attachTerminalWebSocketServer(
     let flushedOutputSequence = 0;
     const outputBatcher = new TerminalOutputBatcher((output, range) => {
       flushedOutputSequence += 1;
-      logTerminalPerf("terminal.ws.output.flush", {
+      logTerminalPerf("terminal.ws.output.flush", () => ({
         terminalSessionId,
         clientId,
         seq: flushedOutputSequence,
@@ -302,7 +302,7 @@ export function attachTerminalWebSocketServer(
             ? null
             : Date.now() - inputState.lastInputAt,
         ...summarizeTerminalChunk(output),
-      });
+      }));
       sendEvent(socket, { type: "output", data: output, range });
     }, `${terminalSessionId}/${clientId}`);
     const outputRecovery = createTerminalOutputRecovery({
@@ -387,7 +387,7 @@ export function attachTerminalWebSocketServer(
       },
       onData(data) {
         runtimeOutputSequence += 1;
-        logTerminalPerf("terminal.runtime.output", {
+        logTerminalPerf("terminal.runtime.output", () => ({
           terminalSessionId,
           clientId,
           seq: runtimeOutputSequence,
@@ -397,7 +397,7 @@ export function attachTerminalWebSocketServer(
               ? null
               : Date.now() - inputState.lastInputAt,
           ...summarizeTerminalChunk(data),
-        });
+        }));
         const metadata = shellPromptTracker.consume(data);
         metadataSync.setShellPromptCommandActive(
           Boolean(metadata.activeCommand),
@@ -427,12 +427,12 @@ export function attachTerminalWebSocketServer(
         }
 
         if (!snapshotDelivered) {
-          logTerminalPerf("terminal.runtime.output.buffered-before-snapshot", {
+          logTerminalPerf("terminal.runtime.output.buffered-before-snapshot", () => ({
             terminalSessionId,
             clientId,
             seq: runtimeOutputSequence,
             ...summarizeTerminalChunk(metadata.output),
-          });
+          }));
           pendingInitialOutput += metadata.output;
           if (Buffer.byteLength(pendingInitialOutput, "utf8") > 512 * 1024) {
             pendingInitialOutput = "";
@@ -441,12 +441,12 @@ export function attachTerminalWebSocketServer(
           return;
         }
 
-        logTerminalPerf("terminal.runtime.output.to-batcher", {
+        logTerminalPerf("terminal.runtime.output.to-batcher", () => ({
           terminalSessionId,
           clientId,
           seq: runtimeOutputSequence,
           ...summarizeTerminalChunk(metadata.output),
-        });
+        }));
         outputBatcher.push(metadata.output);
       },
       onExit(event) {

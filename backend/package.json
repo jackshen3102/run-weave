@@ -7,11 +7,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "node scripts/build-resource-sampler.mjs && tsc -p tsconfig.json",
+    "build": "node scripts/build-native-helpers.mjs && tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "predev": "node scripts/build-resource-sampler.mjs",
-    "prestart": "node scripts/build-resource-sampler.mjs"
+    "predev": "node scripts/build-native-helpers.mjs",
+    "prestart": "node scripts/build-native-helpers.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -22,6 +22,7 @@
     "better-sqlite3": "13.0.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "fs-native-extensions": "1.5.1",
     "lowdb": "^7.0.1",
     "node-pty": "1.2.0-beta.14",
     "uuid": "^11.1.0",

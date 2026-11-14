@@ -67,12 +67,12 @@ export function createTerminalInputHandler({
         const intent = rawTerminalInputIntent(parsed.data);
         inputState.sequence += 1;
         inputState.lastInputAt = Date.now();
-        logTerminalPerf("terminal.ws.input.received", {
+        logTerminalPerf("terminal.ws.input.received", () => ({
           terminalSessionId,
           clientId,
           seq: inputState.sequence,
           ...summarizeTerminalChunk(parsed.data),
-        });
+        }));
         outputBatcher.markNextChunkInteractive();
         const writeStartedAt = performance.now();
         const session = terminalSessionManager.getSession(terminalSessionId);
@@ -96,7 +96,7 @@ export function createTerminalInputHandler({
         if (/[\r\n]/.test(parsed.data)) {
           scheduleMetadataSync();
         }
-        logTerminalPerf("terminal.ws.input.written", {
+        logTerminalPerf("terminal.ws.input.written", () => ({
           terminalSessionId,
           clientId,
           seq: inputState.sequence,
@@ -104,7 +104,7 @@ export function createTerminalInputHandler({
             (performance.now() - writeStartedAt).toFixed(2),
           ),
           ...summarizeTerminalChunk(parsed.data),
-        });
+        }));
       } catch (error) {
         handleRuntimeActionError(socket, terminalSessionId, "input", error);
       }

@@ -15,7 +15,7 @@ export function summarizeTerminalChunk(data: string): { len: number; preview: st
 
 export function logTerminalPerf(
   event: string,
-  details: Record<string, unknown>,
+  details: Record<string, unknown> | (() => Record<string, unknown>),
 ): void {
   if (!isTerminalPerfLoggingEnabled()) {
     return;
@@ -25,6 +25,6 @@ export function logTerminalPerf(
     message: "Terminal performance event",
     perfEvent: event,
     at: new Date().toISOString(),
-    ...details,
+    ...(typeof details === "function" ? details() : details),
   });
 }
