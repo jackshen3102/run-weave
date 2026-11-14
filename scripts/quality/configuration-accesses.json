@@ -13615,5 +13615,13 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "保存用户 Browser 评论及相对截图链接，属于本地交接材料，不作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/website/scripts/build.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(astroPackage)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "Read the installed Astro package metadata to locate its official CLI entry; does not read instance configuration or credentials."
   }
 ]
