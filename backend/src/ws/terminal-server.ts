@@ -125,7 +125,7 @@ export function attachTerminalWebSocketServer(
       handleClientMessage(rawData, isBinary);
     });
 
-    let runtime = runtimeRegistry.getRuntime(runtimeId);
+    let runtime = session?.status === "exited" ? undefined : runtimeRegistry.getRuntime(runtimeId);
     if (
       runtime &&
       session &&

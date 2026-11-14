@@ -1,5 +1,5 @@
 import type { EnvironmentContext } from "../configuration";
-import type { TerminalOutputCursor, TerminalOutputRange } from "./runtime/websocket";
+import type { TerminalModeState, TerminalOutputCursor, TerminalOutputRange } from "./runtime/websocket";
 
 export const PTY_HOST_PROTOCOL_VERSION = 1;
 export interface PtyHostBinding {
@@ -62,6 +62,8 @@ export interface PtyHostCapabilities {
 }
 export interface PtyHostSnapshot {
   data: string;
+  /** Authoritative at the snapshot cursor; absent on older or degraded Hosts. */
+  modes?: TerminalModeState;
   cursor: TerminalOutputCursor;
   cols: number;
   rows: number;
@@ -69,6 +71,16 @@ export interface PtyHostSnapshot {
 export interface PtyHostTarget extends PtyHostBinding {
   terminalSessionId: string;
   generation: number;
+}
+export interface PtyHostAttachment {
+  session: PtyHostSession;
+  snapshot: PtyHostSnapshot;
+  frames: ReadonlyArray<{ data: string; range: TerminalOutputRange }>;
+  /** Opt-in raw prefix ending at snapshot.cursor, only for a new recording. */
+  history?: PtyHostAttachment["frames"];
+}
+export interface PtyHostAttachTarget extends PtyHostTarget {
+  includeHistory?: boolean;
 }
 export interface PtyHostUpstreams {
   backendUrl: string;

@@ -37,6 +37,8 @@ interface RuntimeEntry {
   terminalModeSequenceTail: string;
   subscribers: Set<RuntimeSubscriber>;
   recorderAttached: boolean;
+  recorderBacklog?: TerminalOutputRecoveryBuffer;
+  recorderExit?: { exitCode: number; signal?: number };
   outputRecovery?: TerminalOutputSource;
   outputScreen?: Pick<TerminalOutputScreen, "snapshot" | "dispose">;
   idleTimer?: NodeJS.Timeout;
@@ -66,6 +68,7 @@ export class TerminalRuntimeRegistry {
       terminalModeSequenceTail: "",
       subscribers: new Set<RuntimeSubscriber>(),
       recorderAttached: false,
+      recorderBacklog: runtimeId === terminalSessionId ? new TerminalOutputRecoveryBuffer() : undefined,
       cols: 80,
       rows: 24,
       outputRecovery: runtime.hosted?.output ?? (options.recoverableOutput
@@ -116,6 +119,7 @@ export class TerminalRuntimeRegistry {
 
     runtime.onData((data) => {
       if (this.runtimes.get(runtimeId) !== entry) return;
+      if (entry.recorderBacklog) Array.from(entry.recorderBacklog.append(data));
       const modeData = `${entry.terminalModeSequenceTail}${data}`;
       BRACKETED_PASTE_MODE_PATTERN.lastIndex = 0;
       let modeMatch = BRACKETED_PASTE_MODE_PATTERN.exec(modeData);
@@ -159,6 +163,7 @@ export class TerminalRuntimeRegistry {
 
     runtime.onExit((event) => {
       if (this.runtimes.get(runtimeId) !== entry) return;
+      if (entry.recorderBacklog) entry.recorderExit = event;
       for (const subscriber of entry.subscribers) {
         subscriber.onExit(event);
       }
@@ -173,6 +178,14 @@ export class TerminalRuntimeRegistry {
 
     entry.subscribers.add(recorder);
     entry.recorderAttached = true;
+    const backlog = entry.recorderBacklog;
+    entry.recorderBacklog = undefined;
+    for (const frame of backlog?.retainedFrames() ?? []) recorder.onData(frame.data);
+    if (entry.recorderExit) {
+      const event = entry.recorderExit;
+      entry.recorderExit = undefined;
+      recorder.onExit(event);
+    }
   }
 
   getRuntime(runtimeId: string): PtyRuntime | undefined {

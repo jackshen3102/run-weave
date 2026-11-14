@@ -9,7 +9,7 @@ export const RESUME_WINDOW_MS = 60_000;
 export const RESUME_MAX_BYTES = 512 * 1024;
 export const OUTPUT_FRAME_MAX_BYTES = 64 * 1024;
 // A byte limit alone does not bound metadata for many one-character writes.
-const RESUME_MAX_FRAMES = 8_192;
+export const RESUME_MAX_FRAMES = 8_192;
 
 export interface TerminalOutputFrame {
   readonly data: string;
@@ -123,6 +123,12 @@ export class TerminalOutputRecoveryBuffer {
   /** Only a complete stream prefix can seed a new renderer. Never return a tail. */
   readInitial(): TerminalOutputReplay {
     return this.read({ streamId: this.streamId, offset: 0 });
+  }
+
+  /** Raw retained history for recording, not a complete renderer bootstrap. */
+  retainedFrames(): TerminalOutputFrame[] {
+    this.prune(this.now());
+    return Array.from(this.frames.values(), ({ data, range }) => ({ data, range }));
   }
 
   private prune(now: number): void {

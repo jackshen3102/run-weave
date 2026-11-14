@@ -107,6 +107,8 @@ export function useTerminalWorkspaceEvents({
           latestCreatedSession.projectId,
           latestCreatedSession.terminalSessionId,
         );
+      }, () => {
+        // Query state reports refresh failures; do not navigate using stale session data.
       });
     },
     { wait: TERMINAL_LIST_REFRESH_DEBOUNCE_MS },
@@ -357,7 +359,9 @@ export function useTerminalWorkspaceEvents({
   });
 
   const resyncTerminalWorkspace = useMemoizedFn(() => {
-    void loadSessions();
+    void loadSessions().catch(() => {
+      // Query state keeps the refresh error visible; background work must not reject globally.
+    });
   });
 
   const terminalEventsConnection = useTerminalEventsConnection({

@@ -72,7 +72,11 @@ export function TerminalBrowserAssistance({
           sessionId,
           controller.signal,
         );
-        if (!controller.signal.aborted) setRequests(next);
+        if (!controller.signal.aborted) {
+          setRequests(next);
+          // A successful poll resolves its own error, without hiding a failed user action.
+          setError((current) => current?.requestId ? current : null);
+        }
       } catch (failure) {
         if (!controller.signal.aborted) handleError(failure);
       } finally {

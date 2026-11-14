@@ -4,7 +4,7 @@ import { chmodSync, closeSync, openSync, rmSync } from "node:fs";
 import { tryLock } from "fs-native-extensions";
 import { processStartIdentity, readPrivateFile } from "@runweave/config-node";
 import type { EnvironmentContext } from "@runweave/shared/configuration";
-import { PTY_HOST_PROTOCOL_VERSION, type PtyHostDescriptor, type PtyHostInput } from "@runweave/shared/terminal/pty-host";
+import { PTY_HOST_PROTOCOL_VERSION, type PtyHostDescriptor, type PtyHostInput, type PtyHostAttachment } from "@runweave/shared/terminal/pty-host";
 import { z } from "zod";
 import { hostPaths, prepareHostDirectory, writeHostJson } from "./discovery";
 import { HostGateway, isGatewayCredential } from "./gateway";
@@ -212,7 +212,22 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
           const snapshot = await session.snapshot();
           const tail = session.buffer.read(snapshot.cursor);
           if (!tail.ok) throw new Error("HOST_OUTPUT_GAP");
-          reply({ session: session.describe(), snapshot, frames: tail.frames });
+          const result: PtyHostAttachment = { session: session.describe(), snapshot, frames: tail.frames };
+          if (body.includeHistory === true) {
+            const history: Array<PtyHostAttachment["frames"][number]> = [];
+            result.history = history;
+            // Include JSON escaping and metadata; leave room below the 4 MiB wire limit.
+            let budget = 3 * 1024 * 1024 - Buffer.byteLength(JSON.stringify({ requestId: request.requestId, result }));
+            for (const frame of session.buffer.retainedFrames().reverse()) {
+              if (frame.range.toOffset > snapshot.cursor.offset) continue;
+              const size = Buffer.byteLength(JSON.stringify(frame)) + 1;
+              if (size > budget) break;
+              history.push(frame);
+              budget -= size;
+            }
+            history.reverse();
+          }
+          reply(result);
           ready = true;
           if (session.info.status === "exited") exited(session.info.exitCode ?? 0);
           return;

@@ -26,6 +26,7 @@ export class HostSession {
   private fallbackActivated = false;
   private closing = false;
   private nativeClosing = false;
+  private outputPaused = false;
   private processGeneration = 0;
   private startupDeadline = 0;
 
@@ -42,7 +43,7 @@ export class HostSession {
         terminalSessionId: options.terminalSessionId, ...failure });
     }, TERMINAL_CLIENT_SCROLLBACK_LINES, data => {
       if (!this.nativeClosing && this.info.status === "running") this.terminal?.write(data);
-    });
+    }, paused => this.setOutputPaused(paused));
     this.screen.resize(options.cols, options.rows);
     this.inputs = new InputOperations(data => this.terminal.write(data), () => this.info.status === "running", () => this.processGeneration);
     try { this.spawn(options); }
@@ -78,6 +79,7 @@ export class HostSession {
     this.startupDeadline = this.options.fallback && isInteractiveShellLaunch(this.options) ? Date.now() + 1000 : 0;
     this.processGeneration++;
     this.terminal = terminal;
+    if (this.outputPaused) terminal.pause();
     this.info.pid = terminal.pid;
     this.info.launch = { command: launch.command, args: [...launch.args], ...(fallbackReason ? { fallbackReason } : {}) };
     for (const listener of this.launchListeners) listener(this.info.launch);
@@ -117,7 +119,8 @@ export class HostSession {
     this.info.cols = cols;
     this.info.rows = rows;
     for (const listener of this.resizeListeners) listener(cols, rows);
-    this.terminal.resize(cols, rows);
+    // Keep the retained screen/grid usable after exit without touching a dead PTY.
+    if (this.info.status === "running") this.terminal.resize(cols, rows);
   }
 
   signal(signal: string): void {
@@ -125,14 +128,27 @@ export class HostSession {
     this.closing = true;
     if (process.platform === "win32") {
       if (signal === "SIGINT") this.terminal.write("\x03"); else this.close();
-    } else { this.nativeClosing = signal !== "SIGINT"; this.terminal.kill(signal); }
+    } else {
+      this.nativeClosing = signal !== "SIGINT";
+      if (this.nativeClosing) this.setOutputPaused(false);
+      this.terminal.kill(signal);
+    }
   }
 
   close(): void {
     if (this.info.status !== "running") return;
     this.closing = true;
     this.nativeClosing = true;
+    this.setOutputPaused(false);
     this.terminal.kill();
+  }
+
+  private setOutputPaused(paused: boolean): void {
+    const next = paused && !this.nativeClosing;
+    if (next === this.outputPaused) return;
+    this.outputPaused = next;
+    if (next) this.terminal?.pause();
+    else this.terminal?.resume();
   }
 
   snapshot() {
