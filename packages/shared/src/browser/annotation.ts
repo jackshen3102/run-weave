@@ -50,4 +50,8 @@ export interface TerminalBrowserAnnotationState {
 export interface TerminalBrowserAnnotationSubmission {
   annotations: TerminalBrowserAnnotationDraft[];
   screenshot: TerminalBrowserAnnotationScreenshot | null;
+  screenshots?: Array<{
+    annotationId: string;
+    screenshot: TerminalBrowserAnnotationScreenshot;
+  }>;
 }

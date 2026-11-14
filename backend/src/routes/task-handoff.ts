@@ -15,6 +15,22 @@ const editSchema = z
   .strict();
 export function createTaskHandoffRouter(service: TaskHandoffService): Router {
   const router = Router();
+  router.post("/:id/results/review", async (req, res) => {
+    const parsed = z.object({
+      panelId: z.string().min(1).max(200).nullable(),
+      threadId: z.string().min(1).max(200),
+      revision: z.number().int().positive(),
+      resultIndex: z.number().int().min(0).max(11),
+      confirmed: z.boolean(),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid request" }); return; }
+    try {
+      res.json(await service.reviewResult({ terminalSessionId: req.params.id, panelId: parsed.data.panelId, threadId: parsed.data.threadId },
+        parsed.data.revision, parsed.data.resultIndex, parsed.data.confirmed));
+    } catch (error) {
+      res.status(409).json({ message: error instanceof Error ? error.message : "确认失败" });
+    }
+  });
   router.get("/:id", async (req, res, next) => {
     const parsed = targetSchema.safeParse(req.query);
     if (!parsed.success) {

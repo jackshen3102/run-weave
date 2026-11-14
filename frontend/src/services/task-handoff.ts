@@ -4,6 +4,14 @@ import type {
 } from "@runweave/shared/task-handoff";
 import { requestJson } from "./http";
 
+export function reviewTaskHandoffResult(apiBase: string, token: string, card: TaskHandoffCard, resultIndex: number, confirmed: boolean): Promise<TaskHandoffCard> {
+  return requestJson(apiBase, `/api/task-handoff/${encodeURIComponent(card.target.terminalSessionId)}/results/review`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ panelId: card.target.panelId, threadId: card.target.threadId, revision: card.revision, resultIndex, confirmed }),
+  });
+}
+
 export function fetchTaskHandoff(
   apiBase: string,
   token: string,

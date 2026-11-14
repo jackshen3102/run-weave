@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { CreateTerminalClipboardImageRequest, CreateTerminalClipboardImageResponse } from "@runweave/shared/terminal/input";
 import { logger } from "../../../logging/index";
 import type { TerminalSessionManager } from "../../../terminal/manager/manager";
+import { saveBrowserCommentEvidence } from "../../../terminal/attachments/browser-comment-evidence";
 import {
   TERMINAL_CLIPBOARD_IMAGE_MAX_BYTES,
   TERMINAL_CLIPBOARD_IMAGE_MAX_MIB,
@@ -17,6 +18,19 @@ const terminalClipboardLogger = logger.child({ component: "terminal" });
 const createTerminalClipboardImageSchema = z.object({
   mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
   dataBase64: z.string().min(1),
+  browserComment: z.object({
+    id: z.string().min(1).max(200), index: z.number().int().min(1).max(50),
+    comment: z.string().trim().min(1).max(4000),
+    target: z.object({
+      elementId: z.string().max(200).optional(),
+      pageUrl: z.string().max(10000), frameLabel: z.string().max(1000),
+      targetText: z.string().max(10000), targetSelector: z.string().max(10000), targetPath: z.string().max(10000),
+      nodePosition: z.object({ x: z.number().finite(), y: z.number().finite() }),
+      viewport: z.object({ width: z.number().positive(), height: z.number().positive() }),
+      rect: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().nonnegative(), height: z.number().nonnegative() }),
+      devicePixelRatio: z.number().positive(),
+    }),
+  }).optional(),
 });
 
 function resolveClipboardImageExtension(mimeType: string): string {
@@ -85,6 +99,15 @@ export function registerTerminalClipboardImageRoutes(
         res.status(413).json({
           message: `Clipboard image exceeds ${TERMINAL_CLIPBOARD_IMAGE_MAX_MIB} MiB limit`,
         });
+        return;
+      }
+
+      if (parsed.data.browserComment) {
+        if (parsed.data.mimeType !== "image/png" || !imageBuffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+          res.status(400).json({ message: "Browser comment evidence requires a PNG screenshot" });
+          return;
+        }
+        res.status(201).json(await saveBrowserCommentEvidence(session.id, parsed.data.browserComment, imageBuffer));
         return;
       }
 

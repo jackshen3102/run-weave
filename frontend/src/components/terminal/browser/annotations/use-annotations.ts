@@ -79,41 +79,30 @@ export function useTerminalBrowserAnnotations({
         return;
       }
 
-      let screenshotPath: string | null = null;
-      let submitWarning: string | null = null;
-      if (submission.screenshot) {
-        try {
-          const savedScreenshot = await createTerminalSessionClipboardImage(
-            apiBase,
-            token,
-            terminalSessionId,
-            submission.screenshot,
-          );
-          screenshotPath = savedScreenshot.filePath;
-        } catch (caught) {
-          submitWarning =
-            caught instanceof Error
-              ? `Browser comments were submitted, but saving the marker screenshot failed: ${caught.message}`
-              : "Browser comments were submitted, but saving the marker screenshot failed.";
-        }
+      const evidence: Record<string, { screenshotPath: string; evidencePath: string }> = {};
+      for (const annotation of submission.annotations) {
+        const screenshot = submission.screenshots?.find((item) => item.annotationId === annotation.id)?.screenshot ?? submission.screenshot;
+        if (!screenshot) throw new Error("评论截图不可用，尚未发送。请检查页面后重试。");
+        const saved = await createTerminalSessionClipboardImage(apiBase, token, terminalSessionId, { ...screenshot, browserComment: annotation });
+        if (!saved.evidencePath) throw new Error("当前 Backend 不支持评论证据保存，尚未发送。请更新 Backend 后重试。");
+        evidence[annotation.id] = { screenshotPath: saved.filePath, evidencePath: saved.evidencePath };
       }
 
       const prompt = buildBrowserAnnotationPrompt(submission, {
-        screenshotPath,
+        evidence,
       });
-      await sendTerminalInput(apiBase, token, terminalSessionId, {
+      const receipt = await sendTerminalInput(apiBase, token, terminalSessionId, {
         data: prompt,
         mode: "prompt_paste",
         quickInputSource: "web_browser_annotation",
       });
+      if (!receipt.inputAccepted || !receipt.inputEnqueued)
+        throw new Error("发送结果未确认。评论已保留，请先检查终端，避免重复发送。");
       const next =
         await window.electronAPI?.terminalBrowserAnnotationStop?.(tabId);
       setState(next ?? EMPTY_ANNOTATION_STATE);
       setAnnotationTabId(null);
       setPanelOpen(false);
-      if (submitWarning) {
-        setError(submitWarning);
-      }
     } catch (caught) {
       try {
         const next =
