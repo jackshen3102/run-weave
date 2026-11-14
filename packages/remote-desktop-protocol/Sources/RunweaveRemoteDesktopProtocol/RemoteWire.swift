@@ -141,6 +141,14 @@ public struct RemoteControlMessage: Codable, Sendable {
     public var frames: UInt64?
     public var droppedFrames: UInt64?
     public var encodeMilliseconds: Double?
+    /// Offered on control authentication and echoed by ready. Absent means legacy video flow.
+    public var videoFeedback: Bool?
+    /// Separately negotiated because early feedback peers only support complete-frame ACKs.
+    public var videoProgress: Bool?
+    /// Control-channel RTT accompanying a received-video sequence acknowledgement (.stats/frames).
+    public var networkRoundTripMilliseconds: Double?
+    /// Cumulative framed video bytes, reported only while receiving a negotiated video stream.
+    public var videoReceivedBytes: UInt64?
     public init(kind: Kind, hostID: UUID? = nil, deviceID: UUID? = nil, deviceName: String? = nil, code: String? = nil, pairingWindowID: UUID? = nil, token: Data? = nil, channel: String? = nil, sessionID: UUID? = nil, displayID: UInt32? = nil, displayRevision: UInt64? = nil, display: RemoteDisplay? = nil, input: RemoteInput? = nil, controlAllowed: Bool? = nil, reason: String? = nil, errorCode: ErrorCode? = nil, nonce: UInt64? = nil) {
         self.kind = kind; self.hostID = hostID; self.deviceID = deviceID; self.deviceName = deviceName
         self.code = code; self.token = token; self.channel = channel; self.sessionID = sessionID
@@ -164,6 +172,10 @@ public struct RemoteVideoHeader: Codable, Sendable {
 }
 
 public struct RemoteVideoPacket: Sendable {
+    /// Bounds receive inactivity and feedback inactivity, never an idle static desktop.
+    public static let completionTimeout: TimeInterval = 6
+    public static let maximumCompletionTime: TimeInterval = 30
+    public static let maximumInFlight = 3
     public var header: RemoteVideoHeader
     /// Annex-B; each IDR contains SPS/PPS. Maximum access unit is 4 MiB.
     public var annexB: Data

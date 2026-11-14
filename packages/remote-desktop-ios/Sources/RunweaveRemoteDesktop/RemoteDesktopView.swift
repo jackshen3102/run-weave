@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The host owns navigation, privacy masking and presentation lifetime. This view
-/// never starts a connection or changes the host's navigation state.
+/// never starts a connection on appearance or changes the host's navigation state.
 public struct RemoteDesktopView: View {
     @ObservedObject private var session: RemoteDesktopSession
     @State private var showsKeyboard = false
@@ -55,7 +55,7 @@ public struct RemoteDesktopView: View {
         .onChange(of: session.inputMode) { preferredInputMode = $0.rawValue }
         .onChange(of: session.state) { state in
             // A keyframe recovery temporarily suspends input, not the user's text draft.
-            if state != .controllable && state != .waitingForFirstFrame && state != .recoveringVideo {
+            if state != .controllable && state != .waitingForFirstFrame && state != .recoveringVideo && state != .controlPaused {
                 modifiers = []; text = ""; showsKeyboard = false
             }
         }
@@ -103,9 +103,14 @@ public struct RemoteDesktopView: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                         .padding(12)
                         .accessibilityIdentifier("remote-desktop-status")
+                    if session.state == .controlPaused {
+                        Button("重新连接以恢复控制") { session.reconnectControl() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("remote-desktop-reconnect-control")
+                    }
                 }
             }
-            .allowsHitTesting(false)
+            .allowsHitTesting(session.state == .controlPaused)
         }
     }
 

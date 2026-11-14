@@ -34,12 +34,14 @@ public final class RemoteDesktopSession: ObservableObject {
     private var videoTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private var displayMonitorTask: Task<Void, Never>?
-    private var inputTask: Task<Void, Never>?
+    var inputTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var retryDelay: UInt64 = 500_000_000
     var inputQueue: [RemoteControlMessage] = []
     private var lastVideoSequence: UInt64?
     private var firstFrame = false
+    private var videoFeedbackEnabled = false
+    var videoProgressEnabled = false
     private var displaySubmittedAttempt: UUID?
     private var displayEpoch: UInt64 = 0
     private var displayBlockedSince: TimeInterval?
@@ -49,7 +51,8 @@ public final class RemoteDesktopSession: ObservableObject {
     private var displayFlushPending = false
     private var displayRecoveryUsed = false
     private var displayRecoveryPresentationID: UUID?
-    private var controlAllowed = false
+    var controlAllowed = false
+    var videoInputFreshness = RemoteVideoInputFreshness()
     private var lastRecoveryRequest: TimeInterval = 0
     private var lastPong: TimeInterval = 0
     private var pingNonce: UInt64 = 0
@@ -142,7 +145,6 @@ public final class RemoteDesktopSession: ObservableObject {
             self.stop(reason: "video surface detached")
         }
     }
-
     private func beginConnection() {
         guard active, let target, let context else { return }
         teardown()
@@ -163,8 +165,10 @@ public final class RemoteDesktopSession: ObservableObject {
                 let control = try await RemotePairedConnection.connect(target: target)
                 guard self.isCurrent(expected, context: context) else { control.close(); return }
                 self.control = control
-                try await control.send(.init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
-                    token: credential.token, channel: "control", sessionID: sessionID))
+                var authentication = RemoteControlMessage(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
+                    token: credential.token, channel: "control", sessionID: sessionID)
+                authentication.videoFeedback = true; authentication.videoProgress = true
+                try await control.send(authentication)
                 let ready = try await control.receiveMessage()
                 guard self.isCurrent(expected, context: context) else { return }
                 guard ready.kind == .ready, ready.hostID == target.id, ready.sessionID == sessionID else {
@@ -178,31 +182,23 @@ public final class RemoteDesktopSession: ObservableObject {
                 }
                 try self.applyDisplay(display)
                 self.controlAllowed = ready.controlAllowed == true
+                self.videoFeedbackEnabled = ready.videoFeedback == true
+                self.videoProgressEnabled = self.videoFeedbackEnabled && ready.videoProgress == true
                 self.state = .waitingForFirstFrame
                 self.installDecoder(attempt: expected, context: context)
                 self.receiveControl(control, attempt: expected, context: context)
                 self.startHeartbeat(control, attempt: expected)
                 try await control.send(.init(kind: .startViewing, sessionID: sessionID, displayID: display.displayID))
-                // Both channels use the endpoint of this authenticated control
-                // connection, even when the saved address is no longer current.
-                let video = try await RemoteTLSConnection.connect(target: target,
-                    endpoint: control.connection.currentPath?.remoteEndpoint ?? control.connection.endpoint,
-                    route: control.route)
+                let video = try await RemotePairedConnection.connectVideo(target: target, control: control,
+                    authentication: .init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
+                    token: credential.token, channel: "video", sessionID: sessionID))
                 guard self.isCurrent(expected, context: context) else { video.close(); return }
                 self.video = video
-                try await video.send(.init(kind: .authenticate, hostID: target.id, deviceID: credential.deviceID,
-                    token: credential.token, channel: "video", sessionID: sessionID))
-                let videoReady = try await video.receiveMessage()
-                guard videoReady.kind == .ready, videoReady.hostID == target.id, videoReady.sessionID == sessionID else {
-                    throw RemoteHostFailure(message: videoReady, fallback: "Mac 拒绝了视频订阅。")
-                }
-                guard self.isCurrent(expected, context: context) else { return }
                 self.receiveVideo(video, attempt: expected, context: context)
             } catch is CancellationError { }
             catch { self.handleDrop(error, attempt: expected) }
         }
     }
-
     private func receiveControl(_ channel: RemoteTLSConnection, attempt expected: UUID, context: RemoteSessionContext) {
         controlTask = Task { [weak self] in
             guard let self else { return }
@@ -216,7 +212,6 @@ public final class RemoteDesktopSession: ObservableObject {
             catch { self.handleDrop(error, attempt: expected) }
         }
     }
-
     private func installDecoder(attempt expected: UUID, context: RemoteSessionContext) {
         decoder = H264Decoder(output: { [weak self] output, complete in
             Task { @MainActor in
@@ -260,21 +255,24 @@ public final class RemoteDesktopSession: ObservableObject {
             }
         })
     }
-
     private func receiveVideo(_ channel: RemoteTLSConnection, attempt expected: UUID, context: RemoteSessionContext) {
         videoTask = Task { [weak self] in
             guard let self else { return }
+            let progress = self.makeVideoProgressReporter(isCurrent: { [weak self] in self?.video === channel })
             do {
                 while !Task.isCancelled, self.isCurrent(expected, context: context) {
-                    let data = try await channel.receiveData()
+                    let data = try await channel.receiveData(completionTimeout: RemoteVideoPacket.completionTimeout, onProgress: progress.received)
                     guard self.isCurrent(expected, context: context) else { return }
                     let packet = try RemoteVideoPacket.decode(data)
                     guard let geometry = self.geometry, packet.header.sessionID == self.wireSessionID,
                           packet.header.displayID == geometry.displayID,
                           packet.header.displayRevision == geometry.revision else {
-                        self.counters.droppedFrames &+= 1; continue
+                        self.finishReceivedVideoFrame(); self.counters.droppedFrames &+= 1; continue
                     }
                     self.counters.receivedFrames &+= 1
+                    if self.videoFeedbackEnabled {
+                        try self.acknowledgeVideo(packet, roundTripMilliseconds: self.counters.networkRoundTripMilliseconds)
+                    }
                     if let previous = self.lastVideoSequence, packet.header.sequence != previous &+ 1 {
                         self.counters.sequenceGaps &+= 1
                         if !packet.header.keyframe || !H264Decoder.isIndependentKeyframe(packet.annexB) {
@@ -284,6 +282,7 @@ public final class RemoteDesktopSession: ObservableObject {
                     self.lastVideoSequence = packet.header.sequence
                     let result = await self.decoder?.submit(annexB: packet.annexB, isKeyframe: packet.header.keyframe)
                     guard self.isCurrent(expected, context: context) else { return }
+                    self.finishReceivedVideoFrame()
                     if case .recovery(let reason) = result {
                         self.counters.decoderRecoveries &+= 1
                         if case .backlog = reason { self.counters.decoderOverflows &+= 1 }
@@ -296,7 +295,6 @@ public final class RemoteDesktopSession: ObservableObject {
             catch { self.handleDrop(error, attempt: expected) }
         }
     }
-
     private func recoverVideoDependency(reason: String) {
         releaseAllInputs(reason: reason)
         decoder?.reset()
@@ -307,7 +305,6 @@ public final class RemoteDesktopSession: ObservableObject {
         state = .recoveringVideo
         requestKeyframe()
     }
-
     private func handleControl(_ message: RemoteControlMessage) throws {
         guard message.sessionID == wireSessionID else { throw RemoteTransportError.invalidMessage }
         switch message.kind {
@@ -346,12 +343,10 @@ public final class RemoteDesktopSession: ObservableObject {
         default: break
         }
     }
-
     private func applyDisplay(_ display: RemoteDisplay) throws {
         geometry = try display.validatedGeometry()
         cursor = CGPoint(x: 0.5, y: 0.5)
     }
-
     private func publishStatistics() {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastStatisticsPublish >= 0.5 else { return }
@@ -359,8 +354,8 @@ public final class RemoteDesktopSession: ObservableObject {
         counters.updateTiming(queueDepth: decoder?.queueDepth ?? 0, decode: decodeSamples, decodeTotal: decodeSampleCount, network: networkSamples, networkTotal: networkSampleCount)
         statistics = counters
     }
-
     private func inspectDisplayLayer() {
+        pauseControlForStaleVideoIfNeeded()
         guard let layer = displayLayer else { return }
         counters.updateDisplay(layer)
         defer { publishStatistics() }
@@ -402,7 +397,7 @@ public final class RemoteDesktopSession: ObservableObject {
                 displayRecoveryID = nil; displayRecoveryDeadline = nil
                 firstFrame = true; retryDelay = 500_000_000
                 observation.visible(now: now, readOnly: !controlAllowed)
-                state = controlAllowed ? .controllable : .readOnly
+                state = !controlAllowed ? .readOnly : (videoInputFreshness.isSuspended ? .controlPaused : .controllable)
             }
         } else if firstFrame {
             firstFrame = false; state = .waitingForFirstFrame
@@ -523,6 +518,7 @@ public final class RemoteDesktopSession: ObservableObject {
         control?.close(); control = nil
         decoder?.stop(); decoder = nil
         lastVideoSequence = nil; firstFrame = false; displaySubmittedAttempt = nil; controlAllowed = false
+        videoFeedbackEnabled = false; videoProgressEnabled = false; videoInputFreshness = .init()
         displayRecoveryID = nil; displayRecoveryDeadline = nil; displayFlushPending = false
         counters.decoderQueueDepth = 0
         if publishStatistics { statistics = counters; connectionRoute = nil }
@@ -559,8 +555,10 @@ public final class RemoteDesktopSession: ObservableObject {
         }
     }
 
+    func markControlPaused() { state = .controlPaused }
     func sendInput(_ input: RemoteInput) {
-        guard state == .controllable, active, firstFrame, let geometry, input.isValid else { return }
+        pauseControlForStaleVideoIfNeeded()
+        guard state == .controllable, !videoInputFreshness.isSuspended, active, firstFrame, let geometry, input.isValid else { return }
         let message = RemoteControlMessage(kind: .input, sessionID: wireSessionID, displayID: geometry.displayID,
                                           displayRevision: geometry.revision, input: input)
         // Only unsent pointer moves coalesce. Button/key transitions never replay
@@ -586,6 +584,8 @@ public final class RemoteDesktopSession: ObservableObject {
             guard let self else { return }
             do {
                 while !Task.isCancelled, self.active, self.attempt == expected, !self.inputQueue.isEmpty {
+                    self.pauseControlForStaleVideoIfNeeded()
+                    guard self.state == .controllable, !self.videoInputFreshness.isSuspended else { break }
                     let message = self.inputQueue.removeFirst()
                     try await control.send(message)
                     guard self.active, self.attempt == expected else { return }

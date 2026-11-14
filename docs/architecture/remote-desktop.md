@@ -260,7 +260,7 @@ license_file: packages/remote-desktop-host/ThirdPartyLicenses/Mirador-MIT.txt
 third_party_dependencies:
   - Local RunweaveRemoteDesktopProtocol; Apple system frameworks only
 local_changes:
-  - Require hardware H.264 and record selected hardware property; share one in-flight reservation through encode and send completion
+  - Require hardware H.264 and record selected hardware property; bound encode/send reservations to three; separately gate capture on a negotiated RTT-aware metadata receipt window and byte waterline
   - Fix presentation timestamp timescale; retain format and IDR recovery
   - Adapt ScreenCaptureKit primitives for one explicit display; remove MJPEG and automatic permission requests
   - Reimplement protocol validation, control lease and per-session synthesized input release

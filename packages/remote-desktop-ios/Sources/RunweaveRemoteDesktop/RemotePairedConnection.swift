@@ -3,6 +3,20 @@ import Network
 import RunweaveRemoteDesktopProtocol
 
 enum RemotePairedConnection {
+    /// Reuse the authenticated control endpoint; cancellation also closes an unfinished video handshake.
+    static func connectVideo(target: RemoteTarget, control: RemoteTLSConnection, authentication: RemoteControlMessage) async throws -> RemoteTLSConnection {
+        let video = try await RemoteTLSConnection.connect(target: target,
+            endpoint: control.connection.currentPath?.remoteEndpoint ?? control.connection.endpoint, route: control.route)
+        do {
+            try await video.send(authentication)
+            let ready = try await video.receiveMessage()
+            guard ready.kind == .ready, ready.hostID == target.id, ready.sessionID == authentication.sessionID else {
+                throw RemoteHostFailure(message: ready, fallback: "Mac 拒绝了视频订阅。")
+            }
+            return video
+        } catch { video.close(); throw error }
+    }
+
     static func connect(target: RemoteTarget) async throws -> RemoteTLSConnection {
         var failures: [String] = []
         // Simulator-only loopback Hosts do not advertise a LAN service.

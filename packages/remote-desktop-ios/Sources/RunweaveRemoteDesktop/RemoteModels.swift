@@ -14,7 +14,7 @@ public struct RemoteSessionContext: Equatable, Sendable {
 
 public enum RemoteDesktopState: Equatable {
     case idle, connecting, waitingForAuthorization, waitingForFirstFrame
-    case recoveringVideo, controllable, readOnly, disconnected(String), permissionDenied(String), failed(String)
+    case recoveringVideo, controlPaused, controllable, readOnly, disconnected(String), permissionDenied(String), failed(String)
 
     public var label: String {
         switch self {
@@ -23,6 +23,7 @@ public enum RemoteDesktopState: Equatable {
         case .waitingForAuthorization: return "等待 Mac 本地授权"
         case .waitingForFirstFrame: return "等待桌面首帧"
         case .recoveringVideo: return "正在恢复桌面"
+        case .controlPaused: return "画面延迟，已暂停控制"
         case .controllable: return "可以控制"
         case .readOnly: return "只读"
         case .disconnected(let reason): return "连接已断开 · \(reason)"
