@@ -327,7 +327,9 @@ export function createHttpApp(options: {
     }
     const { provider }: AppServerConversationQuery = query.data;
     const thread = options.eventCenter.getStateStore().getThread(req.params.threadId);
-    if (thread && provider && thread.agent !== provider) {
+    const sameTraeReader = thread && provider && options.traeLifecycleReader.supports(thread.agent)
+      && options.traeLifecycleReader.supports(provider);
+    if (thread && provider && thread.agent !== provider && !sameTraeReader) {
       res.status(409).json({ code: "CONVERSATION_TARGET_CHANGED", message: "会话来源已变化" }); return;
     }
     const controller = new AbortController();
@@ -338,7 +340,8 @@ export function createHttpApp(options: {
       // Historical rollouts may outlive event retention or predate hook registration.
       // Reading their verified source must not create lifecycle events or ThreadRef state.
       const response = await options.conversations.read(
-        thread ?? { agent: provider ?? "codex", threadId: req.params.threadId }, controller.signal,
+        thread ? { ...thread, agent: provider ?? thread.agent }
+          : { agent: provider ?? "codex", threadId: req.params.threadId }, controller.signal,
       );
       if (controller.signal.aborted) return;
       if (!thread && response.availability === "source_missing") {
