@@ -48,6 +48,14 @@
     "reason": "读取本次采集在私有临时目录生成的模拟器截图，读取后删除临时目录；不读取任意用户配置文件。"
   },
   {
+    "file": "plugins/toolkit/skills/playwright-cli/scripts/remote-preflight.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(args[0] === \"-\" ? 0 : args[0])",
+    "count": 1,
+    "category": "tooling",
+    "reason": "只读用户显式指定的 browser doctor JSON 报告或标准输入，用于临时终端验收准备分类，不读取或替代业务配置。"
+  },
+  {
     "file": "scripts/ios-simulators/observation.py",
     "kind": "native-or-shell",
     "expression": "\"terminalSessionId\": (env or os.environ).get(\"RUNWEAVE_TERMINAL_SESSION_ID\"),",
