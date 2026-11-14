@@ -1,0 +1,12 @@
+{
+  "name": "@runweave/browser-annotation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./runtime": {
+      "types": "./runtime.d.ts",
+      "default": "./runtime.js"
+    }
+  }
+}

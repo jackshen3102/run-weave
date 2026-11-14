@@ -4,7 +4,7 @@ import { TerminalHandoffPanel } from "../../handoff/panel";
 import { TerminalTaskSupervisionPanel } from "../../task-supervision/panel";
 import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "./file-link";
 import { useMemoizedFn } from "ahooks";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import {
@@ -131,7 +131,7 @@ export function TerminalPreviewPanel({
     fileKind,
     isFileEditable,
     isDirty,
-    confirmDiscardDraft,
+    confirmDiscardDraft: confirmEditorDiscard,
     handleRequestError,
     loadFile,
     loadDiff,
@@ -151,6 +151,10 @@ export function TerminalPreviewPanel({
     widthPx,
     onAuthExpired,
   });
+
+  const reviewGuard = useRef<(() => boolean) | null>(null);
+  const registerReviewGuard = useMemoizedFn((guard: (() => boolean) | null) => { reviewGuard.current = guard; });
+  const confirmDiscardDraft = useMemoizedFn(() => confirmEditorDiscard() && (reviewGuard.current?.() ?? true));
 
   const branchUpdates = useBranchUpdates(projectId, activeProject?.path ?? null,
     activeTool === "preview" && mode === "branch-updates");
@@ -200,7 +204,7 @@ export function TerminalPreviewPanel({
     setMarkdownScrollRatio,
     confirmDiscardDraft,
   });
-  const markdownReference = useTerminalMarkdownReferenceActions({
+  const markdownReference = useTerminalMarkdownReferenceActions({ scope,
     activeSession,
     activePanelId,
     projectId,
@@ -344,6 +348,11 @@ export function TerminalPreviewPanel({
     previewBody = (
       <TerminalPreviewFileView
         activeProject={activeProject}
+        reviewContext={{ scope, projectId: activeProject.projectId,
+          terminalSessionId: activeSession?.terminalSessionId ?? null, panelId: markdownReference.targetPanelId,
+          available: markdownReference.canInsertCode }}
+        onInsertReview={markdownReference.insertReview}
+        registerReviewGuard={registerReviewGuard}
         fileTree={fileTree}
         navigation={{
           absoluteInput,

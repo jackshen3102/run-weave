@@ -1,3 +1,5 @@
+import type { ReviewContext } from "../../../../features/terminal/html-review/protocol";
+import type { InsertReviewFeedback } from "../../../../features/terminal/input/prompt-store";
 import { TerminalVideoPreview } from "../renderers/video";
 import {
   lazy,
@@ -120,6 +122,9 @@ interface PreviewFileDisplay {
 }
 
 interface TerminalPreviewFileViewProps {
+  reviewContext?: Omit<ReviewContext, "absolutePath">;
+  onInsertReview?: InsertReviewFeedback;
+  registerReviewGuard?: (guard: (() => boolean) | null) => void;
   activeProject: TerminalProjectListItem;
   display: PreviewFileDisplay;
   editor: PreviewFileEditor;
@@ -129,6 +134,7 @@ interface TerminalPreviewFileViewProps {
 }
 
 export function TerminalPreviewFileView({
+  reviewContext, onInsertReview, registerReviewGuard,
   activeProject,
   display,
   editor,
@@ -261,9 +267,9 @@ export function TerminalPreviewFileView({
         onAuthExpired={onAuthExpired}
       />
     ) : null;
-  } else if (fileLoading) {
+  } else if (fileLoading && !filePreview) {
     fileContent = renderPreviewEmpty("Loading preview...");
-  } else if (fileError) {
+  } else if (fileError && !filePreview) {
     fileContent = renderPreviewEmpty(fileError);
   } else if (filePreview && fileKind === "markdown") {
     fileContent = renderMarkdownContent({
@@ -316,6 +322,11 @@ export function TerminalPreviewFileView({
     fileContent = <Suspense fallback={renderPreviewEmpty("Loading HTML preview...")}>
       <TerminalHtmlPreview
         key={`${filePreview.absolutePath}:${revealPosition?.key ?? ""}`}
+        reviewContext={reviewContext ? { ...reviewContext, absolutePath: filePreview.absolutePath } : undefined}
+        onInsertReview={onInsertReview}
+        registerReviewGuard={registerReviewGuard}
+        onReload={onReloadFile}
+        onAuthExpired={onAuthExpired}
         apiBase={apiBase}
         token={token}
         projectId={projectId}
@@ -361,6 +372,7 @@ export function TerminalPreviewFileView({
         {sidebar}
       </aside>
       <div className="relative min-h-0">
+        {fileError && filePreview && !saveError && <div role="status" className="absolute left-2 right-2 top-2 z-10 rounded-md border border-rose-900/70 bg-rose-950/95 p-2 text-xs text-rose-100 shadow-lg">文件重新读取失败，保留上次内容：{fileError}</div>}
         {saveError ? (
           <div className="absolute left-2 right-2 top-2 z-10 rounded-md border border-rose-900/70 bg-rose-950/95 p-2 text-xs text-rose-100 shadow-lg">
             <div>{saveError}</div>

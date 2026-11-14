@@ -24,10 +24,11 @@ export function useDraftInsertion({
     if (!eligible || !draftMirrorSupported || floatingDraftSyncPendingRef.current) {
       setSendError("输入框暂不可用，未插入选区，请稍后重试。");
       setFloatingComposerOpen(true);
-      return;
+      return false;
     }
     const current = floatingDraftRef.current;
     handleDraftChange(`${current}${current && !current.endsWith("\n") ? "\n" : ""}${text}\n`);
     setFloatingComposerOpen(true);
+    return true;
   });
 }

@@ -112,6 +112,10 @@ export default defineConfig(({ command }) => {
           target: backendTarget,
           changeOrigin: true,
         },
+        "/html-preview": {
+          target: backendTarget,
+          changeOrigin: true,
+        },
         "/prototype-preview": {
           target: backendTarget,
           changeOrigin: true,

@@ -22,7 +22,8 @@
     "ws": "^8.18.1",
     "@runweave/agent-bridge": "workspace:*",
     "@runweave/config-node": "workspace:*",
-    "@runweave/browser-history": "workspace:*"
+    "@runweave/browser-history": "workspace:*",
+    "@runweave/browser-annotation": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

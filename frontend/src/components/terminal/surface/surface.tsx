@@ -76,7 +76,7 @@ export function TerminalSurface({
   onViewportResize,
   onOpenFileLink,
 }: TerminalSurfaceProps) {
-  const { apiBase, onAuthExpired, token } = useTerminalRuntime();
+  const { apiBase, onAuthExpired, token, scope } = useTerminalRuntime();
   const localBrowserSource = useLocalBrowserSource(terminalSessionId);
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -442,12 +442,15 @@ export function TerminalSurface({
   });
 
   const insertComposerDraft = floatingComposer.insertDraft;
+  const composerInsertionEligible = floatingComposer.diagnostics.eligible &&
+    floatingComposer.diagnostics.draftMirrorSupported;
   useEffect(() => {
     if (!active || !promptInsertionRequest) {
       return;
     }
     if (consumeComposerInsertion(promptInsertionRequest, paneWorkspace?.activePanelId ?? activePanelId,
-      insertComposerDraft, consumePromptInsertion)) return;
+      insertComposerDraft, consumePromptInsertion,
+      composerInsertionEligible, scope)) return;
     if (!isSupportedFloatingComposerAgent({ activeCommand, terminalState })) {
       consumePromptInsertion(promptInsertionRequest.id);
       return;
@@ -471,6 +474,8 @@ export function TerminalSurface({
     activeCommand,
     activePanelId,
     consumePromptInsertion,
+    composerInsertionEligible,
+    scope,
     insertComposerDraft,
     paneWorkspace?.activePanelId,
     promptInsertionRequest,

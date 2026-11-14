@@ -16,6 +16,7 @@ export interface TerminalBrowserAnnotationRect {
 }
 
 export interface TerminalBrowserAnnotationTarget {
+  elementId?: string;
   pageUrl: string;
   frameLabel: string;
   targetText: string;
