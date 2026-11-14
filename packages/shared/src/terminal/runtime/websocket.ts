@@ -45,7 +45,31 @@ export interface TerminalOutputRecovery {
   reason: TerminalRecoveryReason;
 }
 
+/** Application steps are wheel events, not a claim about application row movement. */
+export interface TerminalScrollInput {
+  type: "scroll";
+  gestureId: string;
+  sequence: number;
+  /** Positive steps move toward earlier content. */
+  deltaSteps: number;
+  phase: "direct" | "momentum";
+}
+
+export interface TerminalScrollState {
+  type: "scroll-state";
+  owner: "history" | "application";
+  copyMode: boolean;
+  offsetRows: number | null;
+  gestureId?: string;
+  sequence?: number;
+  status: "state" | "applied" | "cancelled";
+}
+
+export interface TerminalScrollStop { type: "scroll-stop"; gestureId: string }
+
 export type TerminalClientMessage =
+  | TerminalScrollInput
+  | TerminalScrollStop
   | {
       type: "input";
       data: string;
@@ -64,12 +88,14 @@ export type TerminalClientMessage =
     };
 
 export type TerminalServerMessage =
+  | TerminalScrollState
   | {
       type: "connected";
       terminalSessionId: string;
       runtimeKind?: "tmux" | "pty";
       /** Ctrl-wheel (SGR 80/81) moves one row; ordinary wheel remains five rows. */
       tmuxScrollMode?: "single-row";
+      scrollInput?: "normalized-v1";
       /** Opt-in grid changes are fenced by the display stream cursor. */
       resizeMode?: "ordered";
       recovery?: TerminalOutputRecovery;

@@ -1,9 +1,10 @@
+import { useTerminalScrollTransport } from "./use-scroll-transport";
 import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 import { useMemoizedFn } from "ahooks";
 import { useEffect, useRef, useState } from "react";
 import { isTerminalOutputRecoveryClose } from "@runweave/shared/terminal/websocket";
 import type {
-  TerminalModeState,
+  TerminalScrollState, TerminalModeState,
   TerminalServerMessage,
 } from "@runweave/shared/terminal/websocket";
 import { HttpError } from "../../../services/http";
@@ -38,6 +39,7 @@ export function useTerminalConnection(params: {
     delivery?: TerminalOutputDelivery,
   ) => void;
   onOutput?: (data: string, delivery?: TerminalOutputDelivery) => void;
+  onScrollState?: (state: TerminalScrollState) => void;
   includeSnapshot?: boolean;
 }) {
   const {
@@ -51,6 +53,7 @@ export function useTerminalConnection(params: {
   } = params;
   const socketRef = useRef<WebSocket | null>(null);
   const singleRowScrollRef = useRef(false);
+  const scroll = useTerminalScrollTransport(socketRef, params.onScrollState);
   const orderedResizeRef = useRef(false);
   const outputRecoveryRef = useRef<TerminalClientOutputRecovery | null>(null);
   const outputRecoveryScopeRef = useRef<string | null>(null);
@@ -151,7 +154,7 @@ export function useTerminalConnection(params: {
       }
 
       clearReconnectTimer();
-      singleRowScrollRef.current = false;
+      singleRowScrollRef.current = false; scroll.reset();
       setNextConnectionStatus("connecting");
       setError(null);
       logTerminalPerf("ws.connect.start", {
@@ -319,6 +322,7 @@ export function useTerminalConnection(params: {
             ) as TerminalServerMessage;
             inboundSequenceRef.current += 1;
             if (parsed.type === "connected") {
+              scroll.enabled.current = parsed.scrollInput === "normalized-v1";
               orderedResizeRef.current = parsed.resizeMode === "ordered";
               diagnostics.stage("confirmed");
               diagnostics.stage("state_updated");
@@ -332,6 +336,7 @@ export function useTerminalConnection(params: {
               setRuntimeKind(parsed.runtimeKind ?? null);
               return;
             }
+            if (parsed.type === "scroll-state") { scroll.receive(parsed); return; }
             if (parsed.type === "resize") {
               if (!orderedResizeRef.current || !hasTerminalDimensions(parsed))
                 throw new Error("Invalid terminal resize boundary");
@@ -500,7 +505,7 @@ export function useTerminalConnection(params: {
       singleRowScrollRef.current = false;
     };
   }, [
-    apiBase,
+    scroll, apiBase,
     includeSnapshot,
     manualReconnectNonce,
     onAuthExpired,
@@ -528,7 +533,7 @@ export function useTerminalConnection(params: {
     connectionStatus,
     terminalStatus,
     exitCode,
-    runtimeKind,
+    runtimeKind, ...scroll.connection,
     singleRowScrollRef,
     orderedResizeRef,
     reconnectAttempt,

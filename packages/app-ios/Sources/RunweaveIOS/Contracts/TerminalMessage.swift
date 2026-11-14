@@ -17,9 +17,19 @@ struct TerminalOutputRecovery: Decodable {
   let reason: String
 }
 
+struct TerminalScrollState: Decodable {
+  let owner: String
+  let copyMode: Bool
+  let offsetRows: Int?
+  let gestureId: String?
+  let sequence: Int?
+  let status: String
+}
+
 /// Mirrors packages/shared/src/terminal/runtime/websocket.ts. Unknown types are forward compatible.
 enum TerminalMessage: Decodable {
-  case connected(String, String?, TerminalOutputRecovery?)
+  case connected(String, String?, TerminalOutputRecovery?, Bool)
+  case scrollState(TerminalScrollState)
   case snapshot(String, Bool?, TerminalOutputCursor?, Int?, Int?)
   case output(String, TerminalOutputRange?)
   case metadata(String, String?)
@@ -31,7 +41,7 @@ enum TerminalMessage: Decodable {
 
   private enum Keys: String, CodingKey {
     case type, terminalSessionId, runtimeKind, data, modes, cwd, activeCommand, status, exitCode,
-      message, recovery, cursor, range, cols, rows
+      message, recovery, cursor, range, cols, rows, scrollInput
   }
   private struct Modes: Decodable { let bracketedPasteMode: Bool? }
 
@@ -43,7 +53,9 @@ enum TerminalMessage: Decodable {
       guard kind == nil || kind == "tmux" || kind == "pty" else { throw APIError.invalidResponse }
       self = .connected(
         try c.decode(String.self, forKey: .terminalSessionId), kind,
-        try c.decodeIfPresent(TerminalOutputRecovery.self, forKey: .recovery))
+        try c.decodeIfPresent(TerminalOutputRecovery.self, forKey: .recovery),
+        try c.decodeIfPresent(String.self, forKey: .scrollInput) == "normalized-v1")
+    case "scroll-state": self = .scrollState(try TerminalScrollState(from: decoder))
     case "snapshot":
       self = .snapshot(
         try c.decode(String.self, forKey: .data),

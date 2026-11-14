@@ -39,6 +39,11 @@ export interface CreateTerminalEventsWsTicketResponse {
 
 export type TerminalLastThreadStatus = "idle" | "running";
 
+export interface TerminalSessionStatusQuery {
+  /** Defaults to true. False returns metadata with empty scrollback, without reading live history. */
+  includeScrollback?: boolean;
+}
+
 export interface TerminalSessionStatusResponse {
   source?: ScheduledTaskSource;
   terminalSessionId: string;

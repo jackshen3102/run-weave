@@ -1,10 +1,9 @@
+import type { TerminalScrollInput, TerminalScrollStop, TerminalScrollState } from "@runweave/shared/terminal/websocket";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalFileLinkContext } from "@runweave/shared/terminal/file-link";
 import { createTerminalFileLinkProvider } from "../emulator/file-links";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import {
-  createTmuxScrollInput,
-  createTmuxScrollBatcher,
   type TerminalBottomState,
   isShiftEnterLineFeed,
   isTerminalAutoResponse,
@@ -20,7 +19,7 @@ import type { ClientMode } from "../../../features/client-mode";
 import { DEFAULT_TERMINAL_PREFERENCES } from "../../../features/terminal/state/preferences";
 import { createResizeScheduler } from "../../../features/terminal/viewport/resize-scheduler";
 import { canFitTerminalViewport } from "../../../features/terminal/viewport/refresh";
-import { shouldSuppressWheelInput } from "../../../features/terminal/viewport/wheel-input";
+import { createTerminalWheelHandler } from "./terminal-wheel";
 import {
   IME_COMMIT_WINDOW_MS,
   TERMINAL_RESIZE_DEBOUNCE_MS,
@@ -56,6 +55,9 @@ interface UseTerminalEmulatorArgs {
   runtimeKindRef: MutableRef<"tmux" | "pty" | null>;
   orderedResizeRef: MutableRef<boolean>;
   singleRowScrollRef: MutableRef<boolean>;
+  normalizedScrollRef: MutableRef<boolean>;
+  sendScroll: (input: TerminalScrollInput | TerminalScrollStop) => void;
+  scrollFeedbackRef: MutableRef<((state: TerminalScrollState) => void) | null>;
   resetScrollInputRef: MutableRef<(() => void) | null>;
   searchAddonRef: MutableRef<SearchAddon | null>;
   sendResize: (cols: number, rows: number) => void;
@@ -91,6 +93,9 @@ export function useTerminalEmulator({
   runtimeKindRef,
   orderedResizeRef,
   singleRowScrollRef,
+  normalizedScrollRef,
+  sendScroll,
+  scrollFeedbackRef,
   resetScrollInputRef,
   searchAddonRef,
   sendResize,
@@ -152,79 +157,9 @@ export function useTerminalEmulator({
     }, () => paneWorkspaceRef.current));
     terminal.open(container);
     terminal.unicode.activeVersion = "11";
-    const tmuxScroll = createTmuxScrollInput();
-    const singleRowScroll = createTmuxScrollInput(true);
-    const scrollBatcher = createTmuxScrollBatcher((input) => {
-      if (activeRef.current) sendTerminalInput(input);
-    });
-    resetScrollInputRef.current = () => {
-      scrollBatcher.reset();
-      tmuxScroll.reset();
-      singleRowScroll.reset();
-      viewportState.emitBottomState();
-    };
-    const screen = terminal.element?.querySelector(".xterm-screen");
-    terminal.attachCustomWheelEventHandler((event) => {
-      const { baseY, viewportY } = terminal.buffer.active;
-      const canScroll =
-        event.deltaY < 0
-          ? viewportY > 0
-          : event.deltaY > 0 && viewportY < baseY;
-      if (!shouldSuppressWheelInput(event, canScroll)) {
-        scrollBatcher.flush();
-        tmuxScroll.reset();
-        singleRowScroll.reset();
-        return true;
-      }
-
-      if (
-        runtimeKindRef.current === "tmux" &&
-        terminal.buffer.active.type === "alternate" &&
-        event.deltaY !== 0 &&
-        !event.shiftKey
-      ) {
-        if (event.deltaY > 0 && viewportState.isAtBottom()) {
-          scrollBatcher.reset();
-          tmuxScroll.reset();
-          singleRowScroll.reset();
-          onTmuxExitCopyModeRequest();
-          onTmuxScrollbackActiveChange(false);
-          event.preventDefault();
-          event.stopPropagation();
-          return false;
-        }
-
-        const fine = singleRowScrollRef.current && terminal.modes.mouseTrackingMode === "none";
-        const input = fine ? singleRowScroll : tmuxScroll;
-        (fine ? tmuxScroll : singleRowScroll).reset();
-        const scroll = input.consume(
-          event,
-          terminal.cols,
-          terminal.rows,
-          (screen?.getBoundingClientRect().height ?? 0) / terminal.rows,
-          terminal.options.scrollSensitivity ?? 1,
-        );
-        if (scroll) {
-          scrollBatcher.enqueue(scroll.input);
-          if (scroll.rows < 0) {
-            viewportState.markAwayFromBottom(-scroll.rows, fine ? 1 : 8);
-            onTmuxScrollbackActiveChange(true);
-          } else {
-            const nextBottomState = viewportState.markTowardBottom(scroll.rows, fine ? 0 : 2);
-            if (nextBottomState.isAtBottom) {
-              onTmuxScrollbackActiveChange(false);
-            }
-          }
-        }
-      } else {
-        scrollBatcher.flush();
-        tmuxScroll.reset();
-        singleRowScroll.reset();
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      return false;
+    const wheelInput = createTerminalWheelHandler(terminal, {
+      activeRef, runtimeKindRef, normalizedScrollRef, singleRowScrollRef, sendScroll, scrollFeedbackRef,
+      resetScrollInputRef, sendTerminalInput, onTmuxExitCopyModeRequest, onTmuxScrollbackActiveChange, viewportState,
     });
 
     const rendererAddon = installTerminalRenderer(
@@ -324,7 +259,7 @@ export function useTerminalEmulator({
       if (isTerminalAutoResponse(data)) {
         return;
       }
-      scrollBatcher.flush();
+      wheelInput.flush();
       xtermUserInputSequenceRef.current += 1;
       onUserInputData?.(data);
       sendTerminalInput(data);
@@ -556,7 +491,7 @@ export function useTerminalEmulator({
       selectionDisposable.dispose();
       resizeScheduler.dispose();
       rendererAddon?.dispose();
-      scrollBatcher.reset();
+      wheelInput.dispose();
       resetScrollInputRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
@@ -586,6 +521,9 @@ export function useTerminalEmulator({
     runtimeKindRef,
     orderedResizeRef,
     singleRowScrollRef,
+  normalizedScrollRef,
+  sendScroll,
+  scrollFeedbackRef,
     resetScrollInputRef,
     searchAddonRef,
     sendResize,

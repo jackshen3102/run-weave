@@ -3,13 +3,6 @@ import RunweaveBrowser
 import Foundation
 import SwiftUI
 
-/// Only diagnostic consumers observe transport accounting; it never invalidates session UI.
-@MainActor
-public final class TerminalOutputMetrics: ObservableObject {
-  @Published public fileprivate(set) var receivedBytes = 0
-  @Published public fileprivate(set) var queuedBytes = 0
-}
-
 /// Owns one client's socket. Closing it never deletes or interrupts the remote runtime.
 @MainActor
 public final class SessionController: ObservableObject {
@@ -31,6 +24,10 @@ public final class SessionController: ObservableObject {
     let activeCommand: String?
   }
   @Published private(set) var scrolledBack = false
+  @Published private(set) var scrollPositionKnown = true
+  private lazy var scrollTransport = TerminalScrollTransport(surface: surface,
+    canSend: { [weak self] in self?.canSend ?? false }, send: { [weak self] in self?.send($0) },
+    record: { [weak self] event, extra in self?.record(event, extra: extra) })
   private var tmuxScrollRows = 0
   private var localAtBottom = true
   public private(set) var events: [[String: Any]] = []
@@ -79,6 +76,7 @@ public final class SessionController: ObservableObject {
   private func updateCanSend() {
     let next = !readOnly && connected && hasSnapshot && !stopped && !inputBusy && runtimeStatus != "exited"
     if canSend != next { canSend = next }
+    if !next { surface.cancelScroll() }
   }
 
   public var openFileRequested: ((TerminalFileTap) -> Void)?
@@ -120,7 +118,8 @@ public final class SessionController: ObservableObject {
   }
 
   private func updateScrollState() {
-    let next = !localAtBottom || tmuxScrollRows >= 4
+    if scrollPositionKnown != scrollTransport.positionKnown { scrollPositionKnown = scrollTransport.positionKnown }
+    let next = scrollTransport.enabled ? (scrollTransport.state?.copyMode ?? false) : (!localAtBottom || tmuxScrollRows >= 4)
     if scrolledBack != next { scrolledBack = next }
   }
 
@@ -241,6 +240,8 @@ public final class SessionController: ObservableObject {
   }
 
   public func disconnect() {
+    surface.cancelScroll()
+    scrollTransport.reset()
     connectionDiagnostics?.stage(.cancelled)
     connectionDiagnostics = nil
     flushOutputLog()
@@ -293,6 +294,7 @@ public final class SessionController: ObservableObject {
           self.localAtBottom = true
           self.scrolledBack = false
           self.surface.terminalView.scroll(toPosition: 1)
+          if self.scrollTransport.enabled { self.send(["type": "request-status"]) }
           self.record("scroll.live")
         }
       } catch {
@@ -368,7 +370,10 @@ public final class SessionController: ObservableObject {
 
   private func consume(_ message: TerminalMessage, attemptID: String) throws {
     switch message {
-    case .connected(let id, let kind, let recovery):
+    case .connected(let id, let kind, let recovery, let supportsScroll):
+      scrollTransport.reset()
+      scrollTransport.enabled = kind == "tmux" && supportsScroll
+      updateScrollState()
       guard id == terminalID else { throw APIError.invalidResponse }
       connected = true
       connectionDiagnostics?.stage(.confirmed)
@@ -391,6 +396,8 @@ public final class SessionController: ObservableObject {
       connectionStatus = "已连接"
       record("connected", extra: ["attemptId": attemptID])
       sendSize()
+    case .scrollState(let state): scrollTransport.receive(state)
+      updateScrollState()
     case .snapshot(let text, let bracketed, let cursor, let cols, let rows):
       guard connected else { throw APIError.invalidResponse }
       clearQueue()
@@ -473,8 +480,8 @@ public final class SessionController: ObservableObject {
       halt("输出积压超过 1 MiB，需要重同步；连接已停止")
       return
     }
-    outputMetrics.receivedBytes += bytes.count
-    outputMetrics.queuedBytes += bytes.count
+    outputMetrics.addReceived(bytes.count)
+    outputMetrics.addQueued(bytes.count)
     // A range is fed atomically. Dropping an unconsumed frame on disconnect
     // cannot leave an already-rendered prefix that would be replayed twice.
     queue.append(OutputFrame(bytes: bytes, cursor: cursor, size: snapshotSize))
@@ -494,7 +501,7 @@ public final class SessionController: ObservableObject {
         self.surface.feed(next.bytes)
         if next.size != nil { terminal.resize(cols: localSize.0, rows: localSize.1) }
         self.committedCursor = self.cursorValid ? next.cursor : nil
-        self.outputMetrics.queuedBytes -= next.bytes.count
+        self.outputMetrics.addQueued(-next.bytes.count)
         self.record("consume", bytes: next.bytes.count)
         await Task.yield()
       }
@@ -507,7 +514,7 @@ public final class SessionController: ObservableObject {
     drainTask?.cancel()
     drainTask = nil
     queue.removeAll(keepingCapacity: false)
-    outputMetrics.queuedBytes = 0
+    outputMetrics.clearQueued()
     receivedCursor = committedCursor
   }
 

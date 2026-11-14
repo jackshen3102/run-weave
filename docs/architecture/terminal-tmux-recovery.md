@@ -103,6 +103,30 @@ Backend 重启仍会断开 WebSocket；只有原 tmux/pane/任务 PID 不变才�
 自动重试，网络稳定后由用户手动重连。镜像自身超限时释放该 attach，连接明确停止，tmux 任务仍保留。
 普通 PTY 不启用游标恢复，旧服务端的无恢复字段消息仍按原路径消费。
 
+### 滚动的归属与位置
+
+tmux 连接通过 `scrollInput: normalized-v1` 协商语义化滚动。Web 和原生 iOS 按行高归一化
+手势距离，保留小数余量，同方向合并；每客户端只保留一个未确认批次。一步在 tmux 历史中是
+一行，在应用中是一个普通滚轮事件，不能据此推断 Claude 等应用的实际行位移。
+原生 iOS 的历史拖动保留原有两倍距离增益；应用内部滚动按一倍行高换算，VoiceOver 的离散行数不乘增益。
+
+[滚动服务](../../backend/src/terminal/runtime/scroll-service.ts)按实际 pane 的状态路由：
+已有 copy mode 优先处理历史；应用请求鼠标报告时通过该显示流的 attach runtime 转交普通
+滚轮，由 tmux 完成应用协议编码；其余向上滚动进入历史，实时位置继续向下为无操作。
+不依据 renderer 的 alternate/mouse 模式或进程名猜测；tmux 外层本身也会启用鼠标报告。
+旧 raw input 和旧 wheel bindings 保留，未声明新能力的 Backend 仍使用原兼容路径。
+
+手势绑定实际 pane 和滚动归属。同一 pane 的批次有序执行，单批最多 128 步，待处理最多
+512 步；新触摸通过 `scroll-stop` 取消未执行位移。切 pane、应用模式变化、断线和退出会
+停止旧手势，不在重连后重放。Web 切走终端、旁聊遮挡、文档隐藏或窗口失焦时取消排队位移，
+不能因旧回执到达而继续滚动隐藏的终端。原生 iOS 的远端滚动惯性使用 CADisplayLink 与系统减速率，
+新触摸、选区或页面停用立即停止；本地历史继续使用 UIScrollView 自带滚动。
+
+`scroll-state` 返回真实 copy mode 和可用的历史偏移；应用内部位置为未知，客户端不再
+按已发送事件数估算其底部。全局回到底部入口只处理本地/tmux 历史，不把退出 tmux copy
+mode 声称为返回应用内部底部，未知位置也不作为完成通知的自动已读依据。
+滚动回执只确认输入处理，不代表应用已完成显示。
+
 如果原 tmux session 已消失，恢复不再等价于接回原进程。Launcher 会区分原 shell、可恢复的 Agent thread
 和不可恢复的执行状态；有可恢复 thread 时可按保存的身份启动 resume，并记录丢失提示。
 具体分支以 Launcher 为准，不能把重建后的 shell 宣称为原 TUI 未中断。
@@ -122,7 +146,7 @@ Windows hosted PTY 的同一入口与状态边界见 [PTY Host](./windows-pty-ho
 - tmux 连接通过可选 `connected.tmuxScrollMode = single-row` 声明细粒度回看能力。
   新 Web 在无应用鼠标追踪的备用屏幕中使用专用 Ctrl-wheel 绑定按一行发送，按动画帧合并输入，
   保持滚动距离与方向顺序；切回底部或销毁 surface 时取消未发送输入。普通 wheel 仍为五行，
-  旧 Backend、新旧 Web 混用及原生 iOS 继续沿用原有路径，不依赖一起升级。
+  未协商 `normalized-v1` 时沿用该兼容路径，不依赖 Backend 与客户端一起升级；未知协议版本也不启用新消息。
 - 已恢复运行时但原 tmux 会话丢失等非致命提示，通过 terminal WS 的 `notice` 消息展示；
   `error` 留给失败。Web 与原生 iOS 收到 `notice` 后继续处理连接、快照和输出。
 - Web 对建连早期的异常断线也执行有上限的退避重连；连接存活时间只决定重置重试预算。
@@ -144,6 +168,9 @@ Windows hosted PTY 的同一入口与状态边界见 [PTY Host](./windows-pty-ho
 - 释放 attach client 与用户显式删除 session 不同。删除 session 才走对应 tmux/panel 清理与记录删除，
   不能在普通网络断开时杀掉 tmux。
 - 初始 snapshot 的 capture 延迟会影响打开终端的体感；性能证据需要实际测量，文档中的历史目标不是当前性能通过证明。
+
+原生 iOS 的终端详情请求使用 `includeScrollback=false`，只取导航所需元数据，历史由 WebSocket 首屏传输。
+该参数保留 `scrollback: ""` 响应字段并跳过 live history 读取；省略参数仍保留完整详情，旧 Backend 忽略参数时也能解码。
 
 ## 孤儿 session 与维护操作
 

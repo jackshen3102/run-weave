@@ -19,6 +19,13 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   private var gestures: TerminalGestures?
   var isTmux: (() -> Bool)?
   var tmuxScroll: ((String, Int) -> Bool)?
+  var usesNormalizedScroll: (() -> Bool)?
+  var normalizedScrollUsesHistory: (() -> Bool)?
+  var normalizedScroll: ((String, Int, String) -> Bool)?
+  var stopNormalizedScroll: ((String) -> Void)?
+
+  func cancelScroll() { gestures?.cancelScroll() }
+  func applyScrollState(_ state: TerminalScrollState) { gestures?.applyScrollState(state) }
   private var lastSize: (Int, Int)?
   private var pendingSize: (Int, Int)?
   private var sizeScheduled = false
@@ -105,6 +112,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
       view.acceptsTerminalResponses = { [weak self] in self?.isTmux?() != true }
       let gestures = TerminalGestures(view: view)
       gestures.isTmux = { [weak self] in self?.isTmux?() ?? false }
+      gestures.usesNormalizedScroll = { [weak self] in self?.usesNormalizedScroll?() ?? false }
+      gestures.normalizedScrollUsesHistory = { [weak self] in self?.normalizedScrollUsesHistory?() ?? false }
+      gestures.sendNormalizedScroll = { [weak self] id, steps, phase in self?.normalizedScroll?(id, steps, phase) ?? false }
+      gestures.stopNormalizedScroll = { [weak self] id in self?.stopNormalizedScroll?(id) }
       gestures.sendScroll = { [weak self] input, rows in self?.tmuxScroll?(input, rows) ?? false }
       self.gestures = gestures
     }
@@ -150,6 +161,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     gestures = nil
     isTmux = nil
     tmuxScroll = nil
+    normalizedScroll = nil
+    usesNormalizedScroll = nil
+    normalizedScrollUsesHistory = nil
+    stopNormalizedScroll = nil
     terminalView.terminalDelegate = nil
     (terminalView as? NativeTerminalView)?.disposeSelectionMenu()
     terminalView.singleTapLinkHandler = nil
