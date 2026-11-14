@@ -1,7 +1,32 @@
+import Foundation
 import CoreGraphics
 import RunweaveRemoteDesktopProtocol
 
 extension RemoteDesktopSession {
+    func makeVideoProgressReporter(isCurrent: @escaping () -> Bool) -> VideoReceiveProgress {
+        VideoReceiveProgress(onReceive: { [weak self] in
+            guard isCurrent(), let self else { return }
+            self.videoInputFreshness.began(now: ProcessInfo.processInfo.systemUptime)
+        }) { [weak self] bytes in
+            guard isCurrent(), let self, self.videoProgressEnabled, let control = self.control,
+                  let geometry = self.geometry else { return }
+            var receipt = RemoteControlMessage(kind: .stats, sessionID: self.wireSessionID,
+                displayID: geometry.displayID, displayRevision: geometry.revision)
+            receipt.videoReceivedBytes = bytes
+            try control.sendBestEffort(receipt)
+        }
+    }
+
+    /// Receipt feedback is not a claim that decoding or display has succeeded.
+    func acknowledgeVideo(_ packet: RemoteVideoPacket, roundTripMilliseconds: Double) throws {
+        guard let control else { throw RemoteTransportError.closed }
+        var receipt = RemoteControlMessage(kind: .stats, sessionID: wireSessionID,
+            displayID: packet.header.displayID, displayRevision: packet.header.displayRevision)
+        receipt.frames = packet.header.sequence
+        receipt.networkRoundTripMilliseconds = roundTripMilliseconds
+        try control.sendBestEffort(receipt)
+    }
+
     public func releaseAllInputs(reason: String = "released") {
         inputQueue.removeAll()
         guard active, let control else { return }
@@ -52,4 +77,21 @@ extension RemoteDesktopSession {
         for (flag, key) in keys.reversed() where modifiers.contains(flag) { sendKey(down: false, code: key) }
     }
 
+}
+
+/// At most two progress receipts per second; full-frame ACKs remain independent.
+final class VideoReceiveProgress {
+    private var bytes: UInt64 = 0
+    private var lastReport: TimeInterval = 0
+    private let report: (UInt64) throws -> Void
+    private let onReceive: () -> Void
+    init(onReceive: @escaping () -> Void = {}, report: @escaping (UInt64) throws -> Void) {
+        self.onReceive = onReceive; self.report = report
+    }
+    func received(_ count: Int) throws {
+        onReceive()
+        bytes += UInt64(count)
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastReport >= 0.5 { try report(bytes); lastReport = now }
+    }
 }

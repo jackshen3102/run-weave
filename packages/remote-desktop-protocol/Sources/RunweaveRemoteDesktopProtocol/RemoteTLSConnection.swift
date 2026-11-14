@@ -223,11 +223,61 @@ public final class RemoteTLSConnection: @unchecked Sendable {
         var framed = withUnsafeBytes(of: &count) { Data($0) }; framed.append(data); return framed
     }
     private func completeSend(_ count: Int) { lock.lock(); pendingBytes -= count; lock.unlock() }
-    public func receiveData(maximumSize: Int = RemoteTLSConnection.maximumMessageSize) async throws -> Data {
-        let header = try await readExactly(4)
-        let count = header.reduce(0) { ($0 << 8) | Int($1) }
-        guard count > 0, count <= maximumSize, count <= Self.maximumMessageSize else { close(); throw RemoteTransportError.oversizedMessage }
-        return try await readExactly(count)
+    /// completionTimeout bounds inactivity once a frame starts; total completion is bounded too.
+    /// onProgress reports byte deltas on the caller's executor, never from a Network callback.
+    public func receiveData(maximumSize: Int = RemoteTLSConnection.maximumMessageSize, completionTimeout: TimeInterval? = nil,
+                            onProgress: ((Int) throws -> Void)? = nil) async throws -> Data {
+        if let seconds = completionTimeout, !seconds.isFinite || seconds <= 0 || seconds > 60 { throw RemoteTransportError.invalidMessage }
+        if completionTimeout == nil {
+            let header = try await readExactly(4)
+            let count = header.reduce(0) { ($0 << 8) | Int($1) }
+            guard count > 0, count <= maximumSize, count <= Self.maximumMessageSize else { close(); throw RemoteTransportError.oversizedMessage }
+            return try await readExactly(count)
+        }
+        // A static desktop may send nothing indefinitely; only a started frame has deadlines.
+        let first = try await readExactly(1)
+        let deadline = ReadDeadline(inactivity: completionTimeout!)
+        let timeout = Task {
+            while let remaining = deadline.remaining() {
+                if remaining == 0 {
+                    if deadline.expireIfDue() { self.close(); return }
+                } else {
+                    do { try await Task.sleep(nanoseconds: remaining) } catch { return }
+                }
+            }
+        }
+        defer { deadline.finish(); timeout.cancel() }
+        do {
+            try onProgress?(first.count)
+            var header = first
+            header.append(try await readProgressively(3, deadline: deadline, onProgress: onProgress))
+            let count = header.reduce(0) { ($0 << 8) | Int($1) }
+            guard count > 0, count <= maximumSize, count <= Self.maximumMessageSize else { close(); throw RemoteTransportError.oversizedMessage }
+            let data = try await readProgressively(count, deadline: deadline, onProgress: onProgress)
+            guard deadline.finish() else { throw RemoteTransportError.connectionTimedOut }
+            return data
+        } catch {
+            close()
+            if deadline.timedOut { throw RemoteTransportError.connectionTimedOut }
+            throw error
+        }
+    }
+    private func readProgressively(_ count: Int, deadline: ReadDeadline, onProgress: ((Int) throws -> Void)?) async throws -> Data {
+        var result = Data(); result.reserveCapacity(count)
+        while result.count < count {
+            let limit = min(64 * 1024, count - result.count)
+            let part: Data = try await withTaskCancellationHandler(operation: {
+                try await withCheckedThrowingContinuation { continuation in
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: limit) { data, _, _, error in
+                        if let error { continuation.resume(throwing: error) }
+                        else if let data, !data.isEmpty { continuation.resume(returning: data) }
+                        else { continuation.resume(throwing: RemoteTransportError.closed) }
+                    }
+                }
+            }, onCancel: { self.close() })
+            deadline.progress(); result.append(part); try onProgress?(part.count)
+        }
+        return result
     }
     private func readExactly(_ count: Int) async throws -> Data {
         try await withTaskCancellationHandler(operation: {
@@ -240,6 +290,38 @@ public final class RemoteTLSConnection: @unchecked Sendable {
             }
         }, onCancel: { self.close() })
     }
+}
+
+private final class ReadDeadline: @unchecked Sendable {
+    private let lock = NSLock()
+    private let inactivity: UInt64
+    private let started = DispatchTime.now().uptimeNanoseconds
+    private var lastProgress = DispatchTime.now().uptimeNanoseconds
+    private var finished = false
+    private var expired = false
+    init(inactivity: TimeInterval) { self.inactivity = UInt64(inactivity * 1_000_000_000) }
+    func progress() { lock.lock(); lastProgress = DispatchTime.now().uptimeNanoseconds; lock.unlock() }
+    func remaining() -> UInt64? {
+        lock.lock(); defer { lock.unlock() }
+        guard !finished else { return nil }
+        return waitTime()
+    }
+    private func waitTime() -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let limit = min(lastProgress + inactivity, started + UInt64(RemoteVideoPacket.maximumCompletionTime * 1_000_000_000))
+        return now >= limit ? 0 : limit - now
+    }
+    func expireIfDue() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !finished, waitTime() == 0 else { return false }
+        expired = true; finished = true; return true
+    }
+    @discardableResult func finish() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if !finished && waitTime() == 0 { expired = true }
+        finished = true; return !expired
+    }
+    var timedOut: Bool { lock.lock(); defer { lock.unlock() }; return expired }
 }
 
 private final class StartState: @unchecked Sendable {

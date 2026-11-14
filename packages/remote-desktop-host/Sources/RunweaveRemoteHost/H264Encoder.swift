@@ -8,7 +8,7 @@ import VideoToolbox
 #endif
 
 /// Hardware H.264 for the native client. No B-frames; IDR access units include SPS/PPS.
-/// One reservation covers encoding through completion of the network send. Session submission/invalidation use
+/// One reservation covers encoding through network send completion; receipt admission is checked separately. Session submission/invalidation use
 /// one serial queue; reservation counters and keyframe requests use `lock`.
 public final class H264Encoder: @unchecked Sendable {
     public struct Configuration: Sendable {
@@ -19,12 +19,14 @@ public final class H264Encoder: @unchecked Sendable {
         /// Quality floor: the encoder may not exceed this H.264 quantizer (1–51, lower = sharper),
         /// so text stays legible during motion instead of the rate controller softening it. 0 = unset.
         public var maxFrameQP: Int
-        public init(width: Int, height: Int, fps: Int = 30, bitrate: Int = 8_000_000, maxFrameQP: Int = 0) {
+        public var maximumInFlight: Int
+        public init(width: Int, height: Int, fps: Int = 30, bitrate: Int = 8_000_000, maxFrameQP: Int = 0, maximumInFlight: Int = 1) {
             self.width = width
             self.height = height
             self.fps = fps
             self.bitrate = bitrate
             self.maxFrameQP = maxFrameQP
+            self.maximumInFlight = min(3, max(1, maximumInFlight))
         }
     }
 
@@ -35,8 +37,9 @@ public final class H264Encoder: @unchecked Sendable {
     private var maximumInFlight = 0
     private var skippedFrames: UInt64 = 0
     private var forceKeyframe = false
-    private var frameIndex: Int64 = 0
+    private var firstFrameTime: UInt64?
     private var inFlight = 0
+    private let maximumFramesInFlight: Int
     public private(set) var hardwareAccelerated = false
     private let timescale: Int32
 
@@ -48,7 +51,8 @@ public final class H264Encoder: @unchecked Sendable {
     public init?(configuration: Configuration, onAccessUnit: @escaping (Data, Bool, Double, @escaping () -> Void) -> Void, onFailure: @escaping (OSStatus) -> Void = { _ in }) {
         self.onAccessUnit = onAccessUnit
         self.onFailure = onFailure
-        self.timescale = Int32(max(1, configuration.fps))
+        self.timescale = 1_000_000_000
+        self.maximumFramesInFlight = configuration.maximumInFlight
 
         #if canImport(VideoToolbox)
         var created: VTCompressionSession?
@@ -100,14 +104,28 @@ public final class H264Encoder: @unchecked Sendable {
         lock.unlock()
     }
 
+    public func setBitrate(_ bitrate: Int) {
+        #if canImport(VideoToolbox)
+        encoderQueue.async {
+            guard let session = self.session else { return }
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: NSNumber(value: bitrate))
+            // Average bitrate alone permits a very large startup IDR. Bound the one-second burst too.
+            VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits,
+                                 value: [NSNumber(value: max(1, bitrate / 8)), NSNumber(value: 1)] as CFArray)
+        }
+        #endif
+    }
+
     /// Reserve before queueing so capture cannot retain an unbounded pixel-buffer queue.
-    public func encode(_ pixelBuffer: CVPixelBuffer) {
+    public func encode(_ pixelBuffer: CVPixelBuffer, canSubmit: () -> Bool = { true }) {
         #if canImport(VideoToolbox)
         lock.lock()
-        guard inFlight < 1 else { skippedFrames += 1; lock.unlock(); return }
+        guard inFlight < maximumFramesInFlight, canSubmit() else { skippedFrames += 1; lock.unlock(); return }
         inFlight += 1; maximumInFlight = max(maximumInFlight, inFlight)
         let force = forceKeyframe; forceKeyframe = false
-        let pts = CMTime(value: frameIndex, timescale: timescale); frameIndex += 1
+        let now = DispatchTime.now().uptimeNanoseconds
+        if firstFrameTime == nil { firstFrameTime = now }
+        let pts = CMTime(value: Int64(now - firstFrameTime!), timescale: timescale)
         lock.unlock()
         let ticket = EncoderTicket()
         @Sendable func releaseReservation() {

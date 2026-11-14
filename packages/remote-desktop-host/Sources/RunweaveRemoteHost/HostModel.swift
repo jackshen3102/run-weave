@@ -312,11 +312,14 @@ final class HostModel: ObservableObject {
                 revision += 1
                 guard let selectedDisplay = lockedDisplayID else { throw HostError.noDisplay }
                 let geometry = try DesktopCapture.geometry(displayID: selectedDisplay, revision: revision)
-                let active = HostSession(id: sessionID, device: device, control: channel, display: geometry)
+                let active = HostSession(id: sessionID, device: device, control: channel, display: geometry, videoFeedback: hello.videoFeedback == true, videoProgress: hello.videoFeedback == true && hello.videoProgress == true)
                 session = active; activeDevice = device.name; refreshPermissions()
                 input.renewLease()
                 active.reportedControlAllowed = device.controlAllowed && accessibilityAllowed
-                try await channel.send(.init(kind: .ready, hostID: identity.hostID, sessionID: sessionID, display: screenAllowed ? geometry : nil, controlAllowed: active.reportedControlAllowed, reason: screenAllowed ? nil : HostError.screenPermission.localizedDescription, errorCode: screenAllowed ? nil : .permissionScreenRecording))
+                var ready = RemoteControlMessage(kind: .ready, hostID: identity.hostID, sessionID: sessionID, display: screenAllowed ? geometry : nil, controlAllowed: active.reportedControlAllowed, reason: screenAllowed ? nil : HostError.screenPermission.localizedDescription, errorCode: screenAllowed ? nil : .permissionScreenRecording)
+                ready.videoFeedback = active.videoFeedback ? true : nil
+                ready.videoProgress = active.videoProgress ? true : nil
+                try await channel.send(ready)
                 try await runControl(active)
             } else if hello.channel == "video" {
                 guard let active = session, active.id == sessionID, active.device.id == device.id,
@@ -412,6 +415,16 @@ final class HostModel: ObservableObject {
                 active.inputTimes.append(now); try input.dispatch(event, display: active.display); pressedInputs = input.pressedCount
             case .releaseAll: input.releaseAll(); pressedInputs = 0
             case .requestKeyframe: active.capture.requestKeyframe()
+            case .stats:
+                guard active.videoFeedback, message.displayID == active.display.displayID,
+                      message.displayRevision == active.display.revision,
+                      message.networkRoundTripMilliseconds.map({ $0.isFinite && (0...10_000).contains($0) }) ?? true
+                else { throw RemoteTransportError.invalidMessage }
+                if let sequence = message.frames {
+                    active.sender?.acknowledge(sequence: sequence, roundTripMilliseconds: message.networkRoundTripMilliseconds)
+                } else if active.videoProgress, let bytes = message.videoReceivedBytes {
+                    active.sender?.acknowledgeProgress(bytes: bytes)
+                } else { throw RemoteTransportError.invalidMessage }
             case .stop: await stopSession(reason: "iPhone 已退出桌面。"); return
             default: throw RemoteTransportError.invalidMessage
             }
@@ -422,10 +435,14 @@ final class HostModel: ObservableObject {
         guard session === active, active.wantsViewing, let video = active.video, !captureActive, !active.startingCapture else { return }
         active.startingCapture = true
         let sender = VideoSender(channel: video, sessionID: active.id, display: active.display,
+                                 feedbackEnabled: active.videoFeedback,
+                                 onBitrateChanged: { [weak self, weak active] bitrate in Task { @MainActor in
+                                     guard let active, self?.session === active else { return }; active.capture.setBitrate(bitrate)
+                                 } },
                                  requestKeyframe: { [weak active] in Task { @MainActor in active?.capture.requestKeyframe() } },
                                  onFailure: { [weak self, weak active] _ in Task { @MainActor in if let active, self?.session === active { await self?.stopSession(reason: "视频接收过慢或连接已中断。") } } })
         active.sender = sender
-        try await active.capture.start(display: active.display, onFrame: { sender.offer($0, keyframe: $1, milliseconds: $2, complete: $3) },
+        try await active.capture.start(display: active.display, videoFeedback: active.videoFeedback, canSubmit: { sender.canSubmit() }, onFrame: { sender.offer($0, keyframe: $1, milliseconds: $2, complete: $3) },
                                 onFailure: { [weak self, weak active] error in Task { @MainActor in if let active, self?.session === active {
                                     await self?.stopSession(reason: (error as? HostError)?.localizedDescription ?? "采集已中断，请在 Mac 检查显示器与权限。", errorCode: (error as? HostError)?.wireCode)
                                 } } })
@@ -519,6 +536,8 @@ private final class HostSession {
     let device: PairedDevice
     let control: RemoteTLSConnection
     let display: RemoteDisplay
+    let videoFeedback: Bool
+    let videoProgress: Bool
     var video: RemoteTLSConnection?
     var sender: VideoSender?
     var wantsViewing = false
@@ -527,5 +546,7 @@ private final class HostSession {
     var inputTimes: [TimeInterval] = []
     var reportedControlAllowed = false
     var stopAcknowledged = false
-    init(id: UUID, device: PairedDevice, control: RemoteTLSConnection, display: RemoteDisplay) { self.id = id; self.device = device; self.control = control; self.display = display }
+    init(id: UUID, device: PairedDevice, control: RemoteTLSConnection, display: RemoteDisplay, videoFeedback: Bool = false, videoProgress: Bool = false) {
+        self.id = id; self.device = device; self.control = control; self.display = display; self.videoFeedback = videoFeedback; self.videoProgress = videoProgress
+    }
 }
