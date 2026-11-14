@@ -44,8 +44,9 @@ function buildArgs(request: EvolutionProviderRequest): string[] {
     "--json",
     "--cd",
     request.workingDirectory,
-    "--output-schema",
-    request.outputSchemaPath,
+    ...(request.outputSchemaMode === "prompt"
+      ? []
+      : ["--output-schema", request.outputSchemaPath]),
     ...(request.model ? ["--model", request.model] : []),
   ];
 }
