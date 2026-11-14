@@ -9,6 +9,7 @@ import sys
 import urllib.parse
 sys.dont_write_bytecode = True
 from common import base_url, http, write_json
+from delivery_check import MAX_HTML_BYTES, check_gallery, require_ready
 
 
 def configure_parser(parser, default_kind='auto'):
@@ -25,7 +26,8 @@ def configure_parser(parser, default_kind='auto'):
 
 
 def preview(args):
-    file = args.file.resolve(strict=True)
+    requested = args.file.absolute()
+    file = requested.resolve(strict=True)
     if not file.is_file():
         raise ValueError('Preview input must be a regular file')
     kind = args.kind
@@ -38,6 +40,23 @@ def preview(args):
         raise FileExistsError('Use a new output path for each preview ticket')
     if not args.output.parent.is_dir():
         raise ValueError('Preview output parent must already exist')
+    local_check = None
+    if kind == 'html':
+        manifest = requested.parent / 'manifest.json'
+        if requested.name == 'index.html' and (manifest.exists() or manifest.is_symlink()):
+            local_check = check_gallery(requested.parent)
+            local_check['scope'] = 'gallery-fixed-files-and-manifest-assets'
+        else:
+            size = file.stat().st_size
+            issues = []
+            if size > MAX_HTML_BYTES:
+                issues.append({'path': str(requested), 'reason': 'HTML entry exceeds preview size limit',
+                               'bytes': size, 'limitBytes': MAX_HTML_BYTES})
+            local_check = {'target': 'runweave-html', 'ready': not issues, 'filesChecked': 1,
+                           'issues': issues, 'scope': 'html-entry-only',
+                           'resources': 'not-checked; arbitrary HTML resources are not inspected'}
+        # Fail locally before accessing credentials or contacting either Backend URL.
+        require_ready(local_check)
     if args.token_env:
         if not args.backend:
             raise ValueError('--token-env requires --backend')
@@ -89,7 +108,7 @@ def preview(args):
         status, _, content = http(url)
         if status != 200 or content != file.read_bytes():
             raise ValueError('Anonymous HTML GET did not match local bytes')
-        receipt.update(htmlStatus=200, htmlMatchesLocal=True,
+        receipt.update(htmlStatus=200, htmlMatchesLocal=True, localPreflight=local_check,
                        resources='not-verified; check styles/scripts/images in a real browser')
     write_json(args.output, receipt, private=True)
     print(json.dumps({k: v for k, v in receipt.items() if k != 'url'}, ensure_ascii=False))

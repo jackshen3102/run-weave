@@ -7,6 +7,7 @@
     <link rel="icon" href="data:," />
     <title>@@TITLE@@</title>
     <link rel="stylesheet" href="reader.css" />
+    <link rel="stylesheet" href="report.css" />
     <link rel="stylesheet" href="viewer.css" />
     <script id="gallery-data" type="application/json">
       @@DATA@@
@@ -25,13 +26,31 @@
         <button id="expand" type="button" aria-pressed="false">展开全部</button>
       </div>
       <p id="task-scope"></p>
-      <details id="task-limits" hidden>
-        <summary>本次材料的范围</summary>
-        <ul></ul>
-      </details>
     </header>
+    <section
+      id="report-overview"
+      class="report-overview"
+      aria-labelledby="report-heading"
+    >
+      <h2 id="report-heading" tabindex="-1">验收总览</h2>
+      <p id="report-summary" class="description"></p>
+      <section
+        id="task-limits"
+        class="limits"
+        aria-label="本次范围与限制"
+        hidden
+      >
+        <h3>本次范围与限制</h3>
+        <ul></ul>
+      </section>
+      <p class="report-note">
+        以下为报告作者记录的自检结果，不代表用户已确认验收。有观察材料不等于通过。
+      </p>
+      <ul id="report-checks" class="report-checks"></ul>
+    </section>
     <div class="workspace">
       <aside class="directory">
+        <button id="back-overview" type="button">返回验收总览</button>
         <details id="directory-details" open>
           <summary>阅读目录</summary>
           <nav aria-label="页面目录" id="directory"></nav>

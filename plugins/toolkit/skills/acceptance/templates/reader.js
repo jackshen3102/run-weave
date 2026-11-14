@@ -95,7 +95,11 @@
       );
       figure.append(caption);
       if (asset.kind === "text") {
-        figure.append(el("pre", asset.text, "text-evidence"));
+        figure.append(
+          item.summary
+            ? el("p", item.summary, "evidence-summary")
+            : el("pre", asset.text, "text-evidence"),
+        );
         return figure;
       }
       const stage = el("div", undefined, "image-stage");
@@ -193,8 +197,6 @@
         const asset = assets.get(id);
         const item = el("div", undefined, "source-item");
         item.append(link(asset.label, asset), el("p", origin(asset)));
-        if (asset.kind === "text")
-          item.append(el("pre", asset.text, "text-evidence"));
         details.append(item);
       });
       section.append(details);
@@ -216,7 +218,73 @@
       byId("directory").append(entry);
       directoryLinks.push(entry);
     });
+    const outcomes = {
+      pass: "自检通过",
+      fail: "自检失败",
+      blocked: "阻塞",
+      "not-run": "未执行",
+    };
+    const executions = {
+      real: "实际执行",
+      mock: "Mock / 模拟执行",
+      "not-run": "未执行",
+    };
+    byId("report-summary").textContent =
+      data.report?.summary ||
+      "此旧版材料未提供结构化验收项，请结合逐页说明和范围限制判断；不自动推导通过结论。";
+    const priority = { fail: 0, blocked: 1, "not-run": 2, pass: 3 };
+    const checks = [...(data.report?.checks || [])].sort(
+      (a, b) => priority[a.outcome] - priority[b.outcome],
+    );
+    checks.forEach((check) => {
+      const item = el("li");
+      const details = el("details", undefined, "report-check");
+      details.open = check.outcome !== "pass";
+      const summary = el("summary");
+      summary.append(
+        el("strong", check.title),
+        el(
+          "span",
+          `${outcomes[check.outcome]} · ${executions[check.execution]}`,
+          "check-outcome",
+        ),
+      );
+      const facts = el("dl", undefined, "check-facts");
+      facts.append(
+        el("dt", "预期"),
+        el("dd", check.expected),
+        el("dt", "实际"),
+        el("dd", check.actual),
+      );
+      const evidence = el("div", undefined, "check-evidence");
+      if (!check.pageIds.length)
+        evidence.append(el("p", "未关联证据页；不据此推定已验证。"));
+      check.pageIds.forEach((id) => {
+        const index = data.pages.findIndex((page) => page.id === id);
+        const page = data.pages[index];
+        const node = el("a", `查看证据：${page.title}`);
+        node.href = `#page=${id}`;
+        node.addEventListener("click", (event) => {
+          event.preventDefault();
+          select(index, true);
+        });
+        evidence.append(node);
+      });
+      details.append(summary, facts, evidence);
+      item.append(details);
+      byId("report-checks").append(item);
+    });
+    byId("back-overview").addEventListener("click", () => {
+      byId("report-heading").focus({ preventScroll: true });
+      byId("report-overview").scrollIntoView({ block: "start" });
+    });
     function render(focus = false) {
+      if (!data.pages.length) {
+        document.querySelector(".workspace").hidden = true;
+        byId("navigation").hidden = true;
+        byId("expand").hidden = true;
+        return;
+      }
       pageNodes.forEach((node, i) => {
         node.hidden = !expanded && i !== selected;
       });
@@ -243,6 +311,7 @@
       }
     }
     function select(index, focus) {
+      if (!data.pages.length) return;
       selected = Math.max(0, Math.min(data.pages.length - 1, index));
       const hash = `#page=${data.pages[selected].id}`;
       if (location.hash !== hash) location.hash = hash;
@@ -250,6 +319,10 @@
       render(focus);
     }
     function readHash(focus) {
+      if (!data.pages.length) {
+        render();
+        return;
+      }
       let id = "";
       try {
         id = decodeURIComponent(location.hash.replace(/^#page=/, ""));

@@ -16,7 +16,10 @@ import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
-TEMPLATE_VERSION = '1.1.0'
+sys.dont_write_bytecode = True
+from delivery_check import check_gallery, require_ready
+
+TEMPLATE_VERSION = '1.2.0'
 TEMPLATES = Path(__file__).resolve().parent.parent / 'templates'
 ID = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$')
 MAX_FILE = 32 * 1024 * 1024
@@ -136,8 +139,10 @@ def parse_json(data):
 def load_task(root, input_name):
     raw = read_file(local_file(root, input_name), MAX_TEXT)
     task = parse_json(raw)
-    fields(task, 'root', ['schemaVersion', 'task', 'assets', 'pages'])
-    require(type(task['schemaVersion']) is int and task['schemaVersion'] == 1, 'schemaVersion', '仅支持版本 1')
+    require(isinstance(task, dict), 'root', '需要对象')
+    version = task.get('schemaVersion')
+    require(type(version) is int and version in (1, 2), 'schemaVersion', '仅支持版本 1/2')
+    fields(task, 'root', ['schemaVersion', 'task', 'assets', 'pages'] + (['report'] if version == 2 else []))
     meta = task['task']
     fields(meta, 'task', ['id', 'title', 'scope', 'materialKind', 'limitations'])
     identifier(meta['id'], 'task.id')
@@ -170,7 +175,8 @@ def load_task(root, input_name):
                 parse_json(data)
         assets[asset['id']] = asset
         payloads[asset['id']] = (data, suffix)
-    require(isinstance(task['pages'], list) and len(task['pages']) > 0, 'pages', '至少需要一页')
+    require(isinstance(task['pages'], list), 'pages', '需要数组')
+    require(version == 2 or len(task['pages']) > 0, 'pages', '版本 1 至少需要一页')
     seen = set()
     for i, page in enumerate(task['pages']):
         where = f'pages[{i}]'
@@ -190,7 +196,7 @@ def load_task(root, input_name):
         require(low <= len(items) <= high, where, f'当前页型需要 {low}–{high} 个素材项')
         for j, item in enumerate(items):
             iw = where + f'.items[{j}]'
-            fields(item, iw, ['assetId', 'label'], ['alt', 'crop'])
+            fields(item, iw, ['assetId', 'label'], ['alt', 'crop'] + (['summary'] if version == 2 else []))
             string(item['assetId'], iw + '.assetId')
             string(item['label'], iw + '.label')
             require(item['assetId'] in assets, iw, '素材 ID 不存在')
@@ -201,6 +207,9 @@ def load_task(root, input_name):
                 string(item.get('alt'), iw + '.alt')
             else:
                 require('crop' not in item and 'alt' not in item, iw, '文字项不接受 crop/alt')
+            if 'summary' in item:
+                require(kind == 'text', iw, 'summary 仅用于文字素材摘要')
+                string(item['summary'], iw + '.summary')
             if 'crop' in item:
                 crop = item['crop']
                 fields(crop, iw + '.crop', ['x', 'y', 'width', 'height'])
@@ -213,14 +222,47 @@ def load_task(root, input_name):
         strings(page['sourceIds'], where + '.sourceIds')
         for source_id in page['sourceIds']:
             require(source_id in assets and assets[source_id]['kind'] == 'text', where, 'sourceIds 只能引用存在的文字素材')
+    if version == 2:
+        validate_report(task['report'], task['pages'])
     return task, payloads, image_sizes, hashlib.sha256(raw).hexdigest()
+
+
+def validate_report(report, pages):
+    fields(report, 'report', ['summary', 'checks'])
+    string(report['summary'], 'report.summary')
+    require(isinstance(report['checks'], list) and report['checks'], 'report.checks', '至少需要一项验收目标')
+    by_id = {page['id']: page for page in pages}
+    seen = set()
+    for i, check in enumerate(report['checks']):
+        where = f'report.checks[{i}]'
+        fields(check, where, ['id', 'title', 'expected', 'actual', 'execution', 'outcome', 'pageIds'])
+        identifier(check['id'], where + '.id')
+        require(check['id'] not in seen, where, '重复验收项 ID')
+        seen.add(check['id'])
+        for key in ('title', 'expected', 'actual'):
+            string(check[key], where + '.' + key)
+        execution, outcome = check['execution'], check['outcome']
+        require(execution in ('real', 'mock', 'not-run'), where, 'execution 需要 real/mock/not-run')
+        require(outcome in ('pass', 'fail', 'blocked', 'not-run'), where, 'outcome 需要 pass/fail/blocked/not-run')
+        strings(check['pageIds'], where + '.pageIds')
+        require(len(set(check['pageIds'])) == len(check['pageIds']), where, '重复证据页 ID')
+        require(all(id_ in by_id for id_ in check['pageIds']), where, '证据页 ID 不存在')
+        if outcome == 'not-run':
+            require(execution == 'not-run', where, '未执行结果不能声明已实际执行或 Mock 执行')
+        if execution == 'not-run':
+            require(outcome in ('not-run', 'blocked'), where, '未执行不能声明通过或失败')
+        if outcome in ('pass', 'fail'):
+            evidence = [by_id[id_]['evidenceState'] for id_ in check['pageIds']]
+            require('observed' in evidence, where, '通过或失败需要关联实际观察的证据页')
+            if outcome == 'pass':
+                require(all(state == 'observed' for state in evidence), where, '证据不足或未执行的页不能支持通过结论')
 
 
 def dump(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
-def build(loaded, output):
+def build(loaded, output, target='runweave'):
     task, payloads, sizes, input_hash = loaded
     output = output.absolute()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -257,10 +299,13 @@ def build(loaded, output):
         before, after = template.split('@@DATA@@')
         before = before.replace('@@TITLE@@', html.escape(task['task']['title']))
         (stage / 'index.html').write_text(before + embedded + after, encoding='utf-8')
-        for name in ('reader.css', 'reader.js', 'viewer.css'):
+        for name in ('reader.css', 'reader.js', 'viewer.css', 'report.css'):
             shutil.copyfile(TEMPLATES / name, stage / name)
         dump(stage / 'task.json', snapshot)
         dump(stage / 'manifest.json', manifest)
+        delivery = check_gallery(stage)
+        if target == 'runweave':
+            require_ready(delivery)
         require(not output.exists() and not output.is_symlink(), 'output', '目标已存在')
         stage.rename(output)
         stage = None
@@ -268,7 +313,8 @@ def build(loaded, output):
         if stage is not None:
             shutil.rmtree(stage)
         lock.unlink()
-    return {'output': str(output), 'index': str(output / 'index.html'), 'pages': len(task['pages'])}
+    return {'output': str(output), 'index': str(output / 'index.html'), 'pages': len(task['pages']),
+            'target': target, 'deliveryCheck': delivery}
 
 
 def serve(directory, port):
@@ -276,8 +322,10 @@ def serve(directory, port):
     manifest = parse_json(read_file(root / 'manifest.json', MAX_TEXT))
     require(manifest.get('schemaVersion') == 1 and isinstance(manifest.get('assets'), list), 'directory', '不是生成的成果目录')
     allowed = {'index.html', 'reader.css', 'reader.js', 'task.json', 'manifest.json'}
-    if manifest.get('templateVersion') == '1.1.0':
+    if manifest.get('templateVersion') in ('1.1.0', TEMPLATE_VERSION):
         allowed.add('viewer.css')
+    if manifest.get('templateVersion') == TEMPLATE_VERSION:
+        allowed.add('report.css')
     allowed.update(asset['path'] for asset in manifest['assets'])
     for relative in allowed:
         local_file(root, relative)
@@ -324,7 +372,7 @@ def serve(directory, port):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='本地图文验收阅读器：validate / build / serve')
+    parser = argparse.ArgumentParser(description='本地图文验收阅读器：validate / build / preflight / serve')
     sub = parser.add_subparsers(dest='command', required=True)
     for name in ('validate', 'build'):
         command = sub.add_parser(name)
@@ -332,6 +380,10 @@ def main():
         command.add_argument('--input', default='task.json')
         if name == 'build':
             command.add_argument('--output', type=Path, required=True)
+            command.add_argument('--target', choices=('runweave', 'portable'), default='runweave',
+                                 help='默认按 Runweave 预览限额预检；portable 只生成离线成果并报告限制')
+    command = sub.add_parser('preflight')
+    command.add_argument('--directory', type=Path, required=True)
     command = sub.add_parser('serve')
     command.add_argument('--directory', type=Path, required=True)
     command.add_argument('--port', type=int, default=0)
@@ -341,8 +393,12 @@ def main():
             require(0 <= args.port <= 65535, 'port', '端口范围 0–65535')
             serve(args.directory, args.port)
             return
+        if args.command == 'preflight':
+            result = check_gallery(args.directory)
+            print(json.dumps(result, ensure_ascii=False))
+            sys.exit(0 if result['ready'] else 1)
         loaded = load_task(args.input_root.resolve(strict=True), args.input)
-        result = build(loaded, args.output) if args.command == 'build' else {'valid': True, 'pages': len(loaded[0]['pages']), 'assets': len(loaded[0]['assets'])}
+        result = build(loaded, args.output, args.target) if args.command == 'build' else {'valid': True, 'pages': len(loaded[0]['pages']), 'assets': len(loaded[0]['assets'])}
         print(json.dumps(result, ensure_ascii=False))
     except (Invalid, OSError, ValueError, KeyError, TypeError) as error:
         print(f'gallery: {error}', file=sys.stderr)

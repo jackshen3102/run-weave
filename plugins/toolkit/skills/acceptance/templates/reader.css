@@ -128,14 +128,6 @@ ul {
   margin-top: 8px;
   max-width: 960px;
 }
-.masthead details {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 10px;
-}
-.masthead details ul {
-  margin: 6px 0;
-}
 .workspace {
   max-width: 1400px;
   margin: auto;
@@ -361,11 +353,6 @@ figcaption a {
 .source-item p {
   margin-top: 4px;
 }
-.source-item pre {
-  margin-top: 8px;
-  max-height: 32vh;
-  font-size: 12px;
-}
 .navigation {
   position: fixed;
   bottom: 0;
@@ -516,7 +503,7 @@ figcaption a {
   }
   .text-evidence {
     padding: 12px;
-    font-size: 12px;
+    font-size: 14px;
   }
   .notice {
     bottom: 82px;
