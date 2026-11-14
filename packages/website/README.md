@@ -56,6 +56,18 @@ WEBSITE_ENV=production pnpm --filter @runweave/website build
 
 不要把生产环境值硬编码到仓库。每次模式切换重新构建，产物为 `packages/website/dist/`。
 
+隔离源码构建也使用包的 `build` 入口，不直接运行 `exec astro build` 或从仓库根目录启动 Astro 的 Node 入口：
+
+```bash
+pnpm --filter @runweave/website build \
+  --root /tmp/runweave-website-source/packages/website \
+  --outDir /tmp/runweave-website-dist
+```
+
+源码快照须包含官网配置、源码、素材及可解析的依赖。`build` 的[薄包装](scripts/build.mjs)在进入官方 Astro CLI 前将显式 `--root`（也支持 `--root=...`）解析为真实目录，避免 macOS `/tmp` 别名造成 Astro 编译缓存与 Vite 虚拟模块路径不一致。缺值、空值、不存在、非目录或重复 root 会非零退出，不回退到包内源码。未指定 root 时保持 Astro 默认行为；相对 root 仍相对于包的工作目录，`--` 仍是选项终止符。`--outDir`、`--config`、`--mode` 等其他参数原样传递，预览/生产环境门禁不变。保持包工作目录也确保外部输出目录的 fallback 预渲染模块能解析 Sharp。
+
+构建验收合同见[官网静态构建计划](../../docs/testing/website/static-build.testplan.yaml)；构建成功不替代浏览器或部署验收。
+
 ## 静态托管
 
 将整个 dist 作为站点根目录托管，无需 Node 服务。域名和托管平台由部署时提供，本包不自动修改 DNS 或上线。

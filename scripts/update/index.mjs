@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { planCliUpdate, runCliUpdate } from "./cli.mjs";
 import { runResearchMcpUpdate } from "./runtime-updates.mjs";
+import { createUpdateSourceGuard } from "./source-identity.mjs";
 import {
   parseRunweaveUpdateArgs,
   resolveDefaultRuntimeHome,
@@ -19,11 +20,8 @@ import {
   isBetaTerminal,
 } from "./context.mjs";
 import {
-  createWorktreeSnapshot,
   fingerprintFrontendBuildEnv,
   getGitChangedFilesSinceState,
-  getGitHead,
-  getGitStatusDirty,
   getPathIdentity,
   readInstalledMacAppVersion,
   readJsonFile,
@@ -96,6 +94,8 @@ async function main() {
     statePath,
   });
   const state = readJsonFile(statePath);
+  const sourceGuard = await createUpdateSourceGuard(sourceRoot);
+  const { gitHead, gitDirty, worktreeSnapshot } = sourceGuard.identity;
   const sourceShellVersion = readPackageVersion(
     path.join(sourceRoot, "electron", "package.json"),
   );
@@ -130,9 +130,7 @@ async function main() {
     );
   }
   const cliPlan = await planCliUpdate({ sourceRoot, channel });
-  const gitHead = await getGitHead(sourceRoot);
-  const gitDirty = await getGitStatusDirty(sourceRoot);
-  const worktreeSnapshot = await createWorktreeSnapshot(sourceRoot);
+  await sourceGuard.check("after update planning");
   let codesignIdentity = await resolveCodesignIdentity(sourceRoot, {
     persistConfig: !args.dryRun,
   });
@@ -219,6 +217,7 @@ async function main() {
       installedAppVersion,
       runtimeHome,
       sourceRoot,
+      sourceGuard,
     });
     if (!args.noRestart && !deferDesktopRestartUntilAppServer) {
       desktopVerificationResult = await restartApp(appPath, {
@@ -237,11 +236,13 @@ async function main() {
         launchAfterInstall: !deferDesktopRestartUntilAppServer,
         desktopVerification,
         sourceRoot,
+        sourceGuard,
       });
     } catch (error) {
       if (!(error instanceof AppBuildError) || !codesignIdentity.identity) {
         throw error;
       }
+      await sourceGuard.check("before retrying Desktop build");
       console.warn(
         `[runweave-update] Electron app build failed while using codesign identity ${codesignIdentity.identity}; refreshing identity once`,
       );
@@ -261,9 +262,11 @@ async function main() {
         launchAfterInstall: !deferDesktopRestartUntilAppServer,
         desktopVerification,
         sourceRoot,
+        sourceGuard,
       });
     }
   }
+  await sourceGuard.check("after Desktop update");
   let appServerUpdateError = null;
   try {
     if (plan.appServer.action === "update") {
@@ -272,6 +275,7 @@ async function main() {
         controlCliPath: process.env.RUNWEAVE_CLI_BUNDLE_OUTFILE?.trim() || null,
         gitHead,
         sourceRoot,
+        sourceGuard,
       });
     }
   } catch (error) {
@@ -296,8 +300,8 @@ async function main() {
   if (appServerUpdateError) throw appServerUpdateError;
   const researchMcp = plan.mode === "runtime"
     ? { action: "runtime-payload", releaseId: configurationLibrary.readResearchMcpInstallation()?.releaseId ?? null }
-    : await runResearchMcpUpdate({ sourceRoot });
-  const cli = await runCliUpdate({ sourceRoot, plan: cliPlan });
+    : await runResearchMcpUpdate({ sourceRoot, sourceGuard });
+  const cli = await runCliUpdate({ sourceRoot, plan: cliPlan, sourceGuard });
   console.log(`[runweave-update] cli verification: ${JSON.stringify(cli)}`);
   const nextInstalledVersion = await readInstalledMacAppVersion(appPath);
   await writeUpdateState(statePath, {

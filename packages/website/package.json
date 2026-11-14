@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/build.mjs",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "lint": "eslint src/data src/pages/*.ts astro.config.mjs"
+    "lint": "eslint src/data src/pages/*.ts astro.config.mjs scripts/*.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.4",

@@ -90,6 +90,18 @@ http://127.0.0.1:5500/updates/mac/latest-mac.yml
 规则和发布记录持久化要求见 [版本递增规则](../architecture/runtime-status.md#版本递增规则)。
 dry-run 尚未构建产物，因此不承诺新 App 版本；安装后的桌面验证使用实际打包版本。
 
+更新计划开始前记录 Git revision、dirty 状态和未提交/未跟踪文件的内容快照，后续构建、安装阶段及
+成功 state 写入前复核。允许起始源码为 dirty，但更新期间不能继续编辑或提交；只有 dirty 标记相同
+不够，文件内容也必须相同。Desktop 和 CLI 安装前还核对新产物的 `sourceRevision/sourceDirty`，
+不使用旧 revision 环境变量覆盖产物的真实身份。无法读取 Git 状态也会停止，而非视为干净源码。
+
+检测到变化会报告 `UPDATE_SOURCE_CHANGED`（源码变化）或 `UPDATE_ARTIFACT_SOURCE_MISMATCH`
+（产物身份不符），保留上一次成功 state，不输出全部完成；停止并发编辑后重新运行更新。
+这是阶段边界复核，不是不可变源码副本或原子更新：忽略文件和两次采样间改动后又还原的内容不在保证内。
+App Server、Research MCP 的内部安装步骤以及更早完成的组件可能已经生效，不承诺自动回滚；需依据
+实际安装/运行身份检查后重试。runtime-only 更新也不要求未重建的 Desktop shell 与新 runtime 的 revision
+相同。隔离复现合同见[开发控制面计划](../testing/platform/development-control-plane.testplan.yaml)中的 DCP-019。
+
 dry-run 会同时输出桌面更新模式和 app-server 动作：
 
 ```bash

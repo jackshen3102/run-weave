@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { runCapture, runCaptureChecked, runChecked } from "./system.mjs";
+import { readJsonFile, runCapture, runCaptureChecked, runChecked } from "./system.mjs";
+import { createUpdateSourceGuard } from "./source-identity.mjs";
 import {
   installCliArtifact,
   withCliReleaseLock,
@@ -155,14 +156,16 @@ async function nativeRuntimeHash(entry) {
   }
 }
 
-export async function runCliUpdate({ sourceRoot, plan }) {
+export async function runCliUpdate({ sourceRoot, plan, sourceGuard }) {
   if (plan.action === "skip") return plan;
+  sourceGuard ??= await createUpdateSourceGuard(sourceRoot);
   return withCliReleaseLock(plan.prefix, () =>
-    updateLockedCli({ sourceRoot, plan }),
+    updateLockedCli({ sourceRoot, plan, sourceGuard }),
   );
 }
 
-async function updateLockedCli({ sourceRoot, plan }) {
+async function updateLockedCli({ sourceRoot, plan, sourceGuard }) {
+  await sourceGuard.check("before CLI build");
   const env = { ...process.env };
   delete env.RUNWEAVE_CLI_BUNDLE_OUTFILE;
   await runChecked("pnpm", ["cli:build"], { cwd: sourceRoot, env });
@@ -188,6 +191,10 @@ async function updateLockedCli({ sourceRoot, plan }) {
       "Global CLI target changed during the desktop update; rerun the plan.",
     );
   }
+  await sourceGuard.check(
+    "before CLI install",
+    readJsonFile(path.join(path.dirname(sourceEntry), "build-info.json")),
+  );
   const release = await installCliArtifact({ sourceRoot, plan });
   const commandPath = plan.commandPath;
   await checkCommand(commandPath, plan.entry);
@@ -205,6 +212,7 @@ async function updateLockedCli({ sourceRoot, plan }) {
   ).stdout.trim();
   if (version !== release.version)
     throw new Error("The rw version does not match the installed release.");
+  await sourceGuard.check("after CLI update");
   return {
     ...plan,
     ...release,

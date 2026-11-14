@@ -117,6 +117,11 @@ command 时不继承配置中的 args；只覆盖 args 时保留电脑默认 com
 非零退出时允许回退一次，同时替换 command 和 args。一次性命令（如 `sh -c`、PowerShell
 `-Command`）、脚本和未知程序不按交互 Shell 自动回退，保留原退出结果。
 
+tmux 的 prompt 集成与失败回退分开判定：bash 使用 `--rcfile <文件>` 或
+`--init-file <文件>` 启动交互 Shell 时仍注入命令和目录 hook，不把配置文件路径当成脚本入口。
+这不放宽自动回退资格；脚本、`-c` 命令及显式 stdin 模式继续保留原有判定。
+用户启动文件自行覆盖 `PROMPT_COMMAND` 的情形不由这一兼容处理接管。
+
 普通 PTY 收到输入后停止自动回退。Windows PTY Host 在交付可回退的新会话前等待启动窗口结束，
 发生进程替换时，已接受但未写完的输入失败为 `HOST_PROCESS_CHANGED`，不能继续写入新 Shell；
 新的输入操作仍可使用回退后的 Shell。tmux 新建和分屏在交付前检查启动结果，确认失败后才

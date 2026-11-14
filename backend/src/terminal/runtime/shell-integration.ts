@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { configuration } from "@runweave/config-node";
 import path from "node:path";
-import { terminalShellName } from "@runweave/shared/terminal/shell";
+import { isInteractiveShellLaunch, terminalShellName } from "@runweave/shared/terminal/shell";
 import { resolveTerminalExecutable } from "./default-shell";
 import { logger } from "../../logging/index";
 
@@ -226,6 +226,28 @@ function ensureZshHookDirectory(command: string, env: NodeJS.ProcessEnv): string
   writeFileSync(path.join(hookDir, ".zshrc"), zshrcScript, "utf8");
   cachedZshHookDirs.set(key, hookShellDir);
   return hookShellDir;
+}
+
+// Startup-file operands are safe for prompt integration, but must not relax
+// the shared classifier used to decide whether a failed launch can be replayed.
+export function isShellIntegrationLaunch(launch: {
+  command: string;
+  args: readonly string[];
+}): boolean {
+  if (terminalShellName(launch.command) !== "bash") {
+    return isInteractiveShellLaunch(launch);
+  }
+  const args: string[] = [];
+  for (let index = 0; index < launch.args.length; index += 1) {
+    const arg = launch.args[index]!;
+    if (arg === "--rcfile" || arg === "--init-file") {
+      if (index + 1 >= launch.args.length) return false;
+      index += 1;
+    } else {
+      args.push(arg);
+    }
+  }
+  return isInteractiveShellLaunch({ command: launch.command, args });
 }
 
 export function applyShellIntegration(
