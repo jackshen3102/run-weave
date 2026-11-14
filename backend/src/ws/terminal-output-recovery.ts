@@ -127,7 +127,7 @@ export function createTerminalOutputRecovery(options: {
             !sendEvent(socket, {
               type: "snapshot",
               ...snapshot,
-              modes: {
+              modes: snapshot.modes ?? {
                 bracketedPasteMode:
                   registry.getBracketedPasteMode(runtimeId),
               },

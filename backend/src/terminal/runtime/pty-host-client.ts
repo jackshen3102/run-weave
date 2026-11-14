@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { configuration } from "@runweave/config-node";
 import { PtyHostClient, hostErrorCode } from "@runweave/pty-host/client";
-import type { PtyHostBinding, PtyHostSession, PtyHostInputResult, PtyHostInputStep, PtyHostCreateSession, PtyHostUpstreams, PtyHostSnapshot } from "@runweave/shared/terminal/pty-host";
+import type { PtyHostBinding, PtyHostSession, PtyHostInputResult, PtyHostInputStep, PtyHostCreateSession, PtyHostUpstreams, PtyHostSnapshot, PtyHostAttachment, PtyHostAttachTarget } from "@runweave/shared/terminal/pty-host";
 import type { TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
 import { isTerminalQueryResponse } from "@runweave/shared/terminal/input";
-import type { TerminalOutputFrame, TerminalOutputReplay } from "./output-recovery";
+import { RESUME_MAX_BYTES, RESUME_MAX_FRAMES, TerminalOutputRecoveryBuffer, type TerminalOutputFrame, type TerminalOutputReplay } from "./output-recovery";
 import type { PtyRuntime, TerminalRecoveryFailure } from "./pty-service";
 import { logger } from "../../logging/index";
 
@@ -88,26 +88,52 @@ export async function createHostedPty(options: {
   const failureListeners = new Set<(failure: TerminalRecoveryFailure) => void>();
   const resizeListeners = new Set<(cols: number, rows: number) => void>();
   const pending: TerminalOutputFrame[] = [];
+  let pendingFrameBytes = 0;
+  let pendingData: TerminalOutputRecoveryBuffer | undefined = new TerminalOutputRecoveryBuffer();
   let exited: number | undefined;
   let cursor: TerminalOutputCursor = { streamId: "", offset: 0 };
   let grid = { cols: 80, rows: 24 };
   const emitFrame = (frame: TerminalOutputFrame) => {
     cursor = { streamId: frame.range.streamId, offset: frame.range.toOffset };
-    if (!frameListeners.size) pending.push(frame);
+    if (!frameListeners.size) {
+      pending.push(frame);
+      pendingFrameBytes += frame.range.toOffset - frame.range.fromOffset;
+      while (pendingFrameBytes > RESUME_MAX_BYTES || pending.length > RESUME_MAX_FRAMES) {
+        const removed = pending.shift()!;
+        pendingFrameBytes -= removed.range.toOffset - removed.range.fromOffset;
+      }
+    }
+    if (pendingData) Array.from(pendingData.append(frame.data));
     for (const listener of dataListeners) listener(frame.data);
     for (const listener of frameListeners) listener(frame);
   };
   let initializing = true;
   let disposed = false;
   let failed = false;
-  const early: import("@runweave/shared/terminal/pty-host").PtyHostEvent[] = [];
+  const early: Extract<import("@runweave/shared/terminal/pty-host").PtyHostEvent, { type: "output" }>[] = [];
+  let earlyBytes = 0, earlyDroppedOutput = false;
+  let earlyGrid: { cols: number; rows: number } | undefined;
+  let earlyLaunch: PtyHostSession["launch"];
   const receive: Parameters<typeof client.events.add>[0] = event => {
     if (event.terminalSessionId !== options.terminalSessionId) return;
-    if (initializing) { early.push(event); return; }
+    if (initializing) {
+      if (event.type === "exit") exited = event.exitCode;
+      if (event.type === "resize") earlyGrid = { cols: event.cols, rows: event.rows };
+      if (event.type === "launch") earlyLaunch = event.launch;
+      if (event.type === "output") {
+        early.push(event);
+        earlyBytes += Buffer.byteLength(event.data);
+        while (earlyBytes > RESUME_MAX_BYTES || early.length > RESUME_MAX_FRAMES) {
+          earlyBytes -= Buffer.byteLength(early.shift()!.data);
+          earlyDroppedOutput = true;
+        }
+      }
+      return;
+    }
     if (event.type === "launch" && options.onLaunch) void options.onLaunch(event.launch).catch(error => notifyFailure("launch", error));
     if (event.type === "output") emitFrame(event);
     if (event.type === "resize") { grid = { cols: event.cols, rows: event.rows }; for (const listener of resizeListeners) listener(event.cols, event.rows); }
-    if (event.type === "exit") { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
+    if (event.type === "exit" && exited === undefined) { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
   };
   const fail = (failure: TerminalRecoveryFailure) => {
     if (disposed || failed) return;
@@ -116,8 +142,10 @@ export async function createHostedPty(options: {
   };
   const disconnected = (error: Error) => fail({ kind: "host-disconnected", code: hostErrorCode(error) });
   client.events.add(receive); client.disconnected.add(disconnected);
-  let attached: { session: PtyHostSession; snapshot: PtyHostSnapshot; frames: TerminalOutputFrame[] };
-  try { attached = await client.request("attachSession", target); }
+  let attached: PtyHostAttachment;
+  // Reattaching an existing binding must not record its old prefix again.
+  const attachTarget: PtyHostAttachTarget = { ...target, includeHistory: Boolean(options.create) };
+  try { attached = await client.request("attachSession", attachTarget); }
   catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); throw error; }
   if (attached.session.launch && options.onLaunch) {
     try { await options.onLaunch(attached.session.launch); }
@@ -125,9 +153,23 @@ export async function createHostedPty(options: {
   }
   cursor = attached.snapshot.cursor;
   grid = { cols: attached.snapshot.cols, rows: attached.snapshot.rows };
-  for (const frame of attached.frames) emitFrame(frame);
+  if (attached.session.status === "exited") exited ??= attached.session.exitCode ?? 0;
+  if (!earlyDroppedOutput) {
+    if (options.create) for (const frame of attached.history ?? []) Array.from(pendingData.append(frame.data));
+    for (const frame of attached.frames) emitFrame(frame);
+  }
   initializing = false;
   for (const event of early) receive(event);
+  early.length = 0;
+  earlyBytes = 0;
+  if (earlyGrid) grid = earlyGrid;
+  earlyGrid = undefined;
+  const pendingLaunch = earlyLaunch;
+  earlyLaunch = undefined;
+  if (pendingLaunch && options.onLaunch) {
+    try { await options.onLaunch(pendingLaunch); }
+    catch (error) { client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); throw error; }
+  }
   let tail: Promise<unknown> = Promise.resolve();
   let pendingInputs = 0, pendingBytes = 0;
   const enqueueSteps = (steps: PtyHostInputStep[], operationId: string = randomUUID(), raw = false): Promise<void> => {
@@ -174,7 +216,12 @@ export async function createHostedPty(options: {
   };
   return {
     pid: attached.session.pid,
-    onData(listener) { dataListeners.add(listener); },
+    onData(listener) {
+      dataListeners.add(listener);
+      const buffered = pendingData;
+      pendingData = undefined;
+      for (const frame of buffered?.retainedFrames() ?? []) listener(frame.data);
+    },
     onExit(listener) { exitListeners.add(listener); if (exited !== undefined) listener({ exitCode: exited }); },
     write(data) {
       if (disposed || failed || !data) return;
@@ -197,12 +244,12 @@ export async function createHostedPty(options: {
     },
     resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(error => notifyFailure("resize", error)); },
     signal(signal) { void client.request("signal", { ...target, signal }).catch(error => notifyFailure("signal", error)); },
-    dispose() { disposed = true; rawInput = ""; rawInputBytes = 0; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
+    dispose() { disposed = true; pendingData = undefined; rawInput = ""; rawInputBytes = 0; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
     hosted: {
       get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },
       snapshot,
-      onFrame(listener) { frameListeners.add(listener); for (const frame of pending.splice(0)) listener(frame); },
+      onFrame(listener) { frameListeners.add(listener); for (const frame of pending.splice(0)) listener(frame); pendingFrameBytes = 0; },
       onFailure(listener) { failureListeners.add(listener); },
       onResize(listener) { resizeListeners.add(listener); },
       writeSteps,

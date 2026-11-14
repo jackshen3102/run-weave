@@ -2,7 +2,7 @@ import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
 import unicode11 from "@xterm/addon-unicode11";
 import type { Terminal } from "@xterm/headless";
-import type { TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
+import type { TerminalModeState, TerminalOutputCursor } from "@runweave/shared/terminal/websocket";
 import { RESUME_MAX_BYTES, type TerminalOutputFrame } from "./output-recovery";
 import {
   serializeOutputScreen,
@@ -11,6 +11,7 @@ import {
 
 export interface TerminalScreenSnapshot {
   data: string;
+  modes?: TerminalModeState;
   cursor: TerminalOutputCursor;
   cols: number;
   rows: number;
@@ -27,6 +28,8 @@ type Operation =
   | { frame: TerminalOutputFrame }
   | { cols: number; rows: number };
 
+const MAX_QUEUED_OPERATIONS = 8192;
+
 /** A mirror of the SAME output stream, never another tmux client. */
 export class TerminalOutputScreen {
   private static pendingSnapshots = 0;
@@ -37,6 +40,7 @@ export class TerminalOutputScreen {
   private writing = false;
   private partialControlBytes = 0;
   private disposed = false;
+  private backpressured = false;
   private cursor: TerminalOutputCursor;
   private snapshotFlight?: Promise<TerminalScreenSnapshot>;
   private completeSnapshot?: () => void;
@@ -47,6 +51,7 @@ export class TerminalOutputScreen {
     private readonly onFailure: (failure: TerminalMirrorFailure) => void,
     scrollback = 0,
     onResponse?: (data: string) => void,
+    private readonly onBackpressure?: (paused: boolean) => void,
   ) {
     this.cursor = cursor;
     this.terminal = new headless.Terminal({
@@ -65,7 +70,7 @@ export class TerminalOutputScreen {
   append(frame: TerminalOutputFrame): void {
     if (this.disposed) return;
     this.pendingBytes += frame.range.toOffset - frame.range.fromOffset;
-    if (this.pendingBytes > RESUME_MAX_BYTES || this.queue.length >= 8192) {
+    if (this.pendingBytes > RESUME_MAX_BYTES || this.queue.length >= MAX_QUEUED_OPERATIONS) {
       const failure: TerminalMirrorFailure = {
         code: this.pendingBytes > RESUME_MAX_BYTES ? "HOST_MIRROR_PENDING_LIMIT" : "HOST_MIRROR_QUEUE_LIMIT",
         bufferedBytes: this.pendingBytes, limitBytes: RESUME_MAX_BYTES, queuedOperations: this.queue.length,
@@ -75,6 +80,7 @@ export class TerminalOutputScreen {
       return;
     }
     this.queue.push({ frame });
+    this.updateBackpressure();
     this.drain();
   }
 
@@ -93,9 +99,10 @@ export class TerminalOutputScreen {
         "Terminal size must be within 2..500 columns and 1..200 rows",
       );
     }
-    if (this.queue.length >= 8192)
+    if (this.queue.length >= MAX_QUEUED_OPERATIONS)
       throw new Error("Terminal resize queue is full");
     this.queue.push({ cols, rows });
+    this.updateBackpressure();
     this.drain();
   }
 
@@ -131,6 +138,7 @@ export class TerminalOutputScreen {
             throw new Error("Terminal snapshot exceeds 512 KiB");
           resolve({
             data,
+            modes: { bracketedPasteMode: this.terminal.modes.bracketedPasteMode },
             cursor: { ...this.cursor },
             cols: this.terminal.cols,
             rows: this.terminal.rows,
@@ -172,7 +180,21 @@ export class TerminalOutputScreen {
     this.rejectSnapshot?.(new Error("Terminal mirror disposed"));
     this.queue = [];
     this.pendingBytes = 0;
+    this.updateBackpressure();
     this.terminal.dispose();
+  }
+
+  private updateBackpressure(): void {
+    // Pause the producer before reaching the hard limits, leaving room for the
+    // current native read. Resume below a lower watermark to avoid oscillation.
+    const divisor = this.backpressured ? 4 : 2;
+    const paused = !this.disposed && (
+      this.pendingBytes >= RESUME_MAX_BYTES / divisor ||
+      this.queue.length >= MAX_QUEUED_OPERATIONS / divisor
+    );
+    if (paused === this.backpressured) return;
+    this.backpressured = paused;
+    this.onBackpressure?.(paused);
   }
 
   private drain(): void {
@@ -188,6 +210,7 @@ export class TerminalOutputScreen {
       this.terminal.write(frame.data, () => {
         if (this.disposed) return;
         this.pendingBytes -= frame.range.toOffset - frame.range.fromOffset;
+        this.updateBackpressure();
         this.cursor = {
           streamId: frame.range.streamId,
           offset: frame.range.toOffset,
@@ -210,6 +233,7 @@ export class TerminalOutputScreen {
       });
       return;
     }
+    this.updateBackpressure();
     this.completeSnapshot?.();
   }
 }

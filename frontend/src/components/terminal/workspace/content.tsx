@@ -207,14 +207,24 @@ export function TerminalWorkspaceContent({
     }
   }, [projects, sessions, hasLoadedSessions, projectsQuery.error, sessionsQuery.error, reconcileProjectNavigationHistory]);
   useEffect(() => {
-    if (!requestError || loading) {
+    if (!requestError || loading || projectsQuery.isFetching || sessionsQuery.isFetching) {
       return;
     }
     const retryTimer = window.setTimeout(() => {
-      void loadSessions();
+      void loadSessions().catch(() => {
+        // Query state keeps the refresh error visible; background work must not reject globally.
+      });
     }, SESSION_RETRY_DELAY_MS);
     return () => window.clearTimeout(retryTimer);
-  }, [loadSessions, loading, requestError]);
+  }, [
+    loadSessions,
+    loading,
+    requestError,
+    projectsQuery.errorUpdatedAt,
+    projectsQuery.isFetching,
+    sessionsQuery.errorUpdatedAt,
+    sessionsQuery.isFetching,
+  ]);
   useEffect(() => {
     if (!initialTerminalSessionId) {
       return;

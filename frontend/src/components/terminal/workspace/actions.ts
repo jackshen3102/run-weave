@@ -309,7 +309,9 @@ export function useTerminalWorkspaceActions({
         }
         const orderedIds = reordered.map((p) => p.projectId);
         void reorderTerminalProjects(apiBase, token, orderedIds).catch(() => {
-          void loadSessions();
+          void loadSessions().catch(() => {
+            // Query state reports a failed rollback refresh without rejecting globally.
+          });
         });
         return reordered;
       });
@@ -337,7 +339,9 @@ export function useTerminalWorkspaceActions({
           activeProjectId,
           orderedIds,
         ).catch(() => {
-          void loadSessions();
+          void loadSessions().catch(() => {
+            // Query state reports a failed rollback refresh without rejecting globally.
+          });
         });
         let ri = 0;
         return current.map((s) =>
