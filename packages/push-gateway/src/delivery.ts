@@ -105,11 +105,24 @@ export async function deliver(
       429,
       "Rate limited",
     );
+    // Keep one of the shared slots available to another category. Legacy claims
+    // lack attribution, so they must not create a fresh per-category allowance.
+    requireValue(
+      recent.reduce(
+        (sum, d) => sum + (
+          d.category === undefined || d.category === event.category ? d.attempts : 0
+        ),
+        0,
+      ) < 3,
+      429,
+      "Rate limited",
+    );
     data.deliveries[expectedID] = {
       id: expectedID,
       hostId: sender.hostId,
       subscriptionId: subscription.id,
       fingerprint,
+      category: event.category,
       state: "sending",
       attempts: (previous?.attempts ?? 0) + 1,
       createdAt: previous?.createdAt ?? now,

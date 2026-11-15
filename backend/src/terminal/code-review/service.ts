@@ -192,9 +192,9 @@ export class CodeReviewService {
         await atomicJson(path.join(this.store.input(id), "snapshot.json"), snapshot);
         await chmod(path.join(this.store.input(id), "snapshot.json"), 0o400);
         record.snapshotId = snapshot.snapshotId; await this.touch(record);
-        await chmod(this.store.input(id), 0o500);
       }
-      // A persisted snapshotId does not prove validation completed before interruption.
+      // A persisted snapshotId does not prove sealing or validation completed before interruption.
+      await chmod(this.store.input(id), 0o500);
       if (snapshot.entries.every((entry) => entry.omission)) throw new CodeReviewError(422, "no_reviewable_changes", "全部变更均不可读取，覆盖缺口已保存");
       if (record.recovered && !this.tasks.list().some((task) => task.taskId === record.reviewerTaskId) && !run.reviewerTerminalId) {
         // The durable task ledger proves that no terminal/start intent existed.

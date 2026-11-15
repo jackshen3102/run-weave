@@ -21,6 +21,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   var tmuxScroll: ((String, Int) -> Bool)?
   var usesNormalizedScroll: (() -> Bool)?
   var normalizedScrollUsesHistory: (() -> Bool)?
+  var scrollSensitivity: (() -> CGFloat)?
   var normalizedScroll: ((String, Int, String) -> Bool)?
   var stopNormalizedScroll: ((String) -> Void)?
 
@@ -114,6 +115,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
       gestures.isTmux = { [weak self] in self?.isTmux?() ?? false }
       gestures.usesNormalizedScroll = { [weak self] in self?.usesNormalizedScroll?() ?? false }
       gestures.normalizedScrollUsesHistory = { [weak self] in self?.normalizedScrollUsesHistory?() ?? false }
+      gestures.scrollSensitivity = { [weak self] in self?.scrollSensitivity?() ?? 1 }
       gestures.sendNormalizedScroll = { [weak self] id, steps, phase in self?.normalizedScroll?(id, steps, phase) ?? false }
       gestures.stopNormalizedScroll = { [weak self] id in self?.stopNormalizedScroll?(id) }
       gestures.sendScroll = { [weak self] input, rows in self?.tmuxScroll?(input, rows) ?? false }
@@ -164,6 +166,7 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     normalizedScroll = nil
     usesNormalizedScroll = nil
     normalizedScrollUsesHistory = nil
+    scrollSensitivity = nil
     stopNormalizedScroll = nil
     terminalView.terminalDelegate = nil
     (terminalView as? NativeTerminalView)?.disposeSelectionMenu()

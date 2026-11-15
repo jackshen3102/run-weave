@@ -19,10 +19,6 @@ public final class SessionController: ObservableObject {
   @Published public private(set) var inputBusy = false { didSet { updateCanSend() } }
   @Published public private(set) var canSend = false
   @Published private(set) var metadata: Metadata?
-  struct Metadata: Equatable {
-    let cwd: String
-    let activeCommand: String?
-  }
   @Published private(set) var scrolledBack = false
   @Published private(set) var scrollPositionKnown = true
   private lazy var scrollTransport = TerminalScrollTransport(surface: surface,
@@ -93,6 +89,9 @@ public final class SessionController: ObservableObject {
       self?.sendRaw(text)
     }
     surface.isTmux = { [weak self] in self?.runtimeKind == "tmux" }
+    surface.scrollSensitivity = { [weak self] in
+      self?.metadata?.activeCommand == "claude" ? 0.75 : 1
+    }
     surface.tmuxScroll = { [weak self] input, rows in
       guard let self, self.canSend else { return false }
       self.sendRaw(input)
