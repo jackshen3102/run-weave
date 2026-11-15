@@ -10,6 +10,7 @@ import Combine
     private var readSocket: JournalReadSocketServer?
     @Published private(set) var readServiceError = ""
     private let displays = ActiveDisplayTracker()
+    private let interactions = CaptureInteractionMonitor()
     private let system = SystemStateObserver()
     private var timer: Timer?
     private var worker: Task<Void, Never>?
@@ -17,7 +18,6 @@ import Combine
     private var closing = false
     private var ready = false
     private var fatal = false
-    private var nextTick = ContinuousClock.now
     private var retryAt = ContinuousClock.now
     private var resumeAt = ContinuousClock.now
     private var failureSince: ContinuousClock.Instant?
@@ -28,6 +28,7 @@ import Combine
     private let permit = CapturePermit()
     private var events: [(String, String, Date)] = []
     private var sequence = 0
+    private var finalizedSamples = 0
     private var stoppedWaiters: [CheckedContinuation<Void, Never>] = []
     init(paths: StorePaths) {
         self.paths = paths
@@ -49,7 +50,7 @@ import Combine
             catch { readServiceError = (error as? JournalReadError)?.code ?? "READ_SERVICE_UNAVAILABLE" }
             systemPaused = system.paused
             system.onChange = { [weak self] in self?.systemChanged() }
-            ready = true; nextTick = .now; resumeAt = .now.advanced(by: .seconds(systemPaused ? 5 : 0))
+            ready = true; interactions.reset(); resumeAt = .now.advanced(by: .seconds(systemPaused ? 5 : 0))
             transition(settings.desiredRecording ? (systemPaused ? "pausedSystem" : "starting") : "stopped", "startup")
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tick() }
@@ -61,7 +62,7 @@ import Combine
         do {
             settings.desiredRecording = true; try paths.write(settings, to: "settings.json")
             status.desiredRecording = true; invalidate(); fatal = false
-            failureSince = nil; failureCount = 0; retryAt = .now; nextTick = .now
+            failureSince = nil; failureCount = 0; retryAt = .now; interactions.reset()
             transition(systemPaused ? "pausedSystem" : "starting", systemPaused ? "system_inactive" : "user_started"); tick()
         } catch { fail(error) }
     }
@@ -78,7 +79,7 @@ import Combine
         next.privacyRevision = settings.privacyRevision + 1
         try paths.write(next, to: "settings.json")
         invalidate(); settings = next; status.privacyRevision = next.privacyRevision
-        pendingFinalize = true; lastMaintenance = .now.advanced(by: .seconds(-60)); nextTick = .now
+        pendingFinalize = true; lastMaintenance = .now.advanced(by: .seconds(-60)); interactions.reset()
         transition(status.state, "settings_changed"); tick()
     }
     func shutdown() async -> Bool {
@@ -104,8 +105,7 @@ import Combine
         if paused { transition(settings.desiredRecording ? "pausedSystem" : "stopped", "system_inactive") }
         else {
             resumeAt = .now.advanced(by: .seconds(5))
-            // System-paused time and the recovery delay are not eligible sampling ticks.
-            nextTick = resumeAt
+            interactions.reset()
             transition(settings.desiredRecording ? "starting" : "stopped", "system_resuming")
         }
         tick()
@@ -114,47 +114,45 @@ import Combine
         guard ready, !closing, let engine else { return }
         displays.poll()
         if system.paused != systemPaused { systemChanged(); return }
+        interactions.observe(displayID: displays.selected)
         let now = ContinuousClock.now
         if lastSnapshot.duration(to: now) >= .seconds(5) { do { try snapshot() } catch { fail(error) }; lastSnapshot = now }
-        var sampleDue = false
-        var elapsedTicks = 0
-        if settings.desiredRecording && !systemPaused && now >= resumeAt && now >= nextTick {
-            // Preserve elapsed ticks even while capture/encoding is busy or retrying.
-            repeat { elapsedTicks += 1; status.expectedTicks += 1; nextTick = nextTick.advanced(by: .milliseconds(Int64(settings.interval * 1000))) } while nextTick <= now
-            sampleDue = true
-        }
-        if worker != nil {
-            if sampleDue { status.busySkipped += elapsedTicks }
-            return
+        if worker != nil { return }
+        if settings.desiredRecording, interactions.isQuiet(at: now), status.successfulSamples > finalizedSamples {
+            pendingFinalize = true
         }
         if pendingFinalize || lastMaintenance.duration(to: now) >= .seconds(60) {
             let mustFinalize = pendingFinalize
             pendingFinalize = false; lastMaintenance = now
-            if sampleDue { status.busySkipped += elapsedTicks }
             launch {
                 do {
-                    if mustFinalize { try await self.timed("finalize_timeout") { try await engine.finalize() } }
+                    if mustFinalize {
+                        try await self.timed("finalize_timeout") { try await engine.finalize() }
+                        self.finalizedSamples = self.status.successfulSamples
+                    }
                     self.status.diskBytes = try await self.timed("maintenance_timeout") { try await engine.maintain(settings: self.settings) }
                 } catch { self.fail(error, storage: true) }
             }
             return
         }
-        guard sampleDue else {
+        guard settings.desiredRecording, !systemPaused, now >= resumeAt,
+              let interactionRevision = interactions.due(at: now) else {
             if !events.isEmpty { launch {} }
             return
         }
-        status.busySkipped += max(0, elapsedTicks - 1)
         if let since = failureSince, since.duration(to: now) >= .seconds(600) { fatal = true; transition("failed", "capture_failed_for_10_minutes") }
-        guard !fatal, now >= retryAt else { status.failedSamples += 1; return }
+        guard !fatal, now >= retryAt else { return }
         if systemPaused { transition("pausedSystem", "system_inactive"); return }
         guard CGPreflightScreenCaptureAccess() else {
             status.failedSamples += 1; invalidate(); pendingFinalize = true; fatal = true
             transition("blockedPermission", "screen_permission_required"); return
         }
         guard let display = displays.selected else {
-            status.failedSamples += 1; transition("starting", "display_unavailable"); return
+            transition("starting", "display_unavailable"); return
         }
         let generation = status.generation; let currentSettings = settings
+        interactions.started(at: now, interval: settings.interval)
+        status.expectedTicks += 1
         launch {
             var captureCompleted = false
             do {
@@ -180,11 +178,13 @@ import Combine
                 self.sequence += 1
                 if try await self.timed("encoding_timeout", operation: { try await engine.append(frame, sequence: self.sequence, permit: self.permit, generation: generation) }) {
                     self.status.successfulSamples += 1; self.status.lastSuccess = frame.capturedAt.timeIntervalSince1970
+                    self.interactions.completed(interactionRevision)
                     if frame.placeholder { self.status.privacySamples += 1 }
                     self.failureCount = 0; self.failureSince = nil; self.retryAt = .now
                 } else { self.status.busySkipped += 1; try await engine.event("gap", "encoder_busy", affected: 1) }
                 if await engine.needsRotation() {
                     try await self.timed("finalize_timeout") { try await engine.finalize() }
+                    self.finalizedSamples = self.status.successfulSamples
                     self.status.diskBytes = try await engine.maintain(settings: self.settings)
                 }
             } catch {

@@ -17,9 +17,11 @@ struct SettingsView: View {
             Divider()
             Form {
                 Section("采集") {
-                    Picker("采样间隔", selection: $draft.interval) {
+                    Picker("最短采集间隔", selection: $draft.interval) {
                         ForEach([1.0, 5, 10, 20, 30, 60], id: \.self) { Text("\(Int($0)) 秒").tag($0) }
                     }
+                    Text("点击、滚动、键盘操作或应用／显示器切换后记录；静止及纯鼠标移动不截图。连续操作按最短间隔合并采集。")
+                        .font(.caption).foregroundStyle(.secondary)
                     Picker("图像高度", selection: $draft.height) {
                         Text("720").tag(720); Text("1080").tag(1080)
                     }
@@ -53,7 +55,7 @@ struct SettingsView: View {
                     if let time = recorder.status.lastSuccess {
                         Text("最近采样：\(Date(timeIntervalSince1970: time).formatted())")
                     }
-                    Text("已采样 \(recorder.status.successfulSamples) / 应有 \(recorder.status.expectedTicks) · 占位 \(recorder.status.privacySamples) · 跳过 \(recorder.status.busySkipped) · 失败 \(recorder.status.failedSamples)")
+                    Text("已采样 \(recorder.status.successfulSamples) / 触发 \(recorder.status.expectedTicks) · 占位 \(recorder.status.privacySamples) · 跳过 \(recorder.status.busySkipped) · 失败 \(recorder.status.failedSamples)")
                     Text("采样计数包含未封口的帧，最多每 10 分钟完成一次存储提交；异常退出可能损失当前未封口的记录。")
                     Text("\(recorder.status.state) · \(recorder.status.reason) · 代际 \(recorder.status.generation) · 在途 \(recorder.status.inFlight ? "是" : "否")")
                         .textSelection(.enabled)

@@ -11,5 +11,5 @@
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSUIElement</key><true/>
-<key>NSScreenCaptureUsageDescription</key><string>按您设置的间隔记录屏幕，仅存储在此 Mac。</string>
+<key>NSScreenCaptureUsageDescription</key><string>在交互或切换时按您设置的最短间隔记录屏幕，仅存储在此 Mac。</string>
 </dict></plist>
