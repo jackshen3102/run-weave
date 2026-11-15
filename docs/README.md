@@ -11,6 +11,7 @@
 | 修改官网、快速开始、静态托管与 SEO                    | [官网工程与部署指南](../packages/website/README.md)                                                                                                       |
 | 查看重要架构选择及其取舍背景                           | [adr/README.md](./adr/README.md)                                                                                                                           |
 | 管理定时任务、后台执行与终端恢复                       | [接入边界](../frontend/docs/scheduled-tasks.md)、[CLI、按需运行与后台续接](./cli/scheduled-task-cli.md)、[运行配置](./deployment/overview.md#定时任务运行) |
+| 查找 tmux / Windows 压力验收与取证预算 | [终端压力验收合同](./testing/README.md#终端压力验收合同) |
 | 查看 Claude Code 正文、生命周期、通知与验收边界        | [配置与能力](./cli/configuration.md#claude-code-原生引用与能力)、[验收入口](./testing/README.md#claude-code-集成验收)                                      |
 | 使用或修改 `rw` CLI、终端快照分享                      | [cli/README.md](./cli/README.md)                                                                                                                           |
 | 启动、部署、管理 Beta / Dev Session 或接入 ChatGPT MCP | [deployment/README.md](./deployment/README.md)                                                                                                             |

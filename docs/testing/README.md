@@ -135,3 +135,50 @@ SSH 或容器内是否能读取该路径需独立确认，现行边界见[文本
 YouTube 阅读稿的[验收计划](./skills/youtube-reading.testplan.yaml)要求区分脚本产物、
 字幕与画面对照、实际音频抽听；来源段映射完整不等于语义或听辨准确。未完成抽听的用例
 不得标为通过。技能的当前操作合同见 [youtube-reading](../../plugins/toolkit/skills/youtube-reading/SKILL.md)。
+
+## 终端压力验收合同
+
+压力计划是可执行的验收要求，不是性能通过记录。Windows ConPTY 与 macOS、Linux tmux
+分别执行、分别出 verdict；Backend 健康、协议回执或短时通过均不能替代真实页面、原进程保活或长时间稳定性。
+
+| 链路 | 传输与输入 | 生命周期与资源 | 真实页面 |
+| --- | --- | --- | --- |
+| tmux | [传输与后台采集](./terminal/runtime/tmux-transport-stress.testplan.yaml) | [生命周期](./terminal/runtime/tmux-lifecycle-stress.testplan.yaml) | [终端交互](./terminal/runtime/tmux-ui-stress.testplan.yaml) |
+| Windows ConPTY | [传输与恢复](./platform/windows-terminal-transport-stress.testplan.yaml) | [生命周期](./platform/windows-terminal-lifecycle-stress.testplan.yaml) | [桌面交互](./platform/windows-terminal-ui-stress.testplan.yaml) |
+
+每例独占配置、认证、端口、终端、驱动与合成数据；tmux 显式指定独立 socket，保活用例使用 preserve
+关闭策略，清理用例独立建 fixture。禁止使用默认 socket、用户终端或生产 Host 做故障注入。
+清理与信号操作前核对 PID 启动时间和归属，恢复暂停进程，结束后复核非测试资源基线。
+执行前记录源码、实际产物、平台、进程身份及运行中 tmux server 版本；旧常量不能当作当前边界。
+
+取证分为探测进程账本（输入序号、摘要与执行次数）、显示流（同 attach 的 streamId/cursor/range
+及静止屏幕 marker）、后台 pipe-pane 与持久历史（实际保留窗口、截断和末尾 marker）三条链。
+应用输出字节不等于 tmux 重绘字节；输入接收不等于执行或上屏，窗口外历史与停机期间不承诺无损。
+结果不确定的输入不重发。语义依据见 [tmux 恢复](../architecture/terminal-tmux-recovery.md)
+与 [Windows PTY Host](../architecture/windows-pty-host.md)。
+
+tmux 通用预算：60 秒无负载校准，各档预热 10 秒、采样 60 秒、重复 3 次；单 pane
+64 KiB/s、256 KiB/s、1 MiB/s、4 MiB/s，突发 512 KiB～64 MiB，并发 session 1/4/8/16/32，
+同 session 观看端 1/4/8/16，输入 1/10/50 次每秒及 8 KiB 分片边界、64 KiB 多字节文本。
+默认持续 20 分钟，全量 2 小时；重连 100 次、创建删除各并发档 200 次、正常/异常重启各 10 次。
+这些是验收预算，不是产品性能承诺；逐例步骤和预期仍以 YAML 为准。
+
+常用档（单 session 64/256 KiB/s、4 session 各 64 KiB/s）在本机回环每秒 10 次输入，
+p95 ≤250 毫秒、p99 ≤1 秒、5 秒超时为零；不能靠断开显示流满足指标。
+同流恢复至新输入可见 ≤5 秒，Backend 重启从 fresh health ready 起 ≤10 秒。
+每秒记录 CPU/RSS、FD、进程数、磁盘、实际吞吐与延迟分布；未采到指标不能写为零。
+每轮结束等 75 秒再取 30 秒稳态窗口；允许的有界缓存单列，专用资源回到空闲基线，
+预热后 Backend+tmux 稳态 RSS 中位数不得高于基线加 max(64 MiB, 20%)。
+磁盘不足 1 GiB、内存压力持续 10 秒、影响非测试资源或无法确认清理归属时停止升压。
+
+首个失败保留版本、最小负载、独立账本和原始回执；修复后按同一负载及判据复验。
+逐平台、逐 case、逐档报告 pass/fail/blocked/not_run、截断、容量停止与资源回落，不平均掩盖失败。
+20 分钟记录不能声称 24 小时或整机重启通过；协议通过不能替代页面验收，格式校验也不是行为通过。
+
+## HTML 方案阅读与评审验收
+
+当前功能与隔离边界见 [HTML 方案元素评审](../architecture/terminal-code-preview.md#html-方案元素评审)，
+用例见 [可视化方案评审](./terminal/visual-plan-review.testplan.yaml)。电脑圈选与手机阅读分别取证。
+原过程计划记录过 Web/Electron VPR-003～014 及旧 Browser 最小回归通过，但 iPhone 阅读、锚点、
+本地交互与更新重读 VPR-015～017 受真机自动化连接阻塞；没有新的真机证据前仍保留为验收缺口。
+本次文档维护不重跑这些用例，也不以删除过程计划代表全部交付。

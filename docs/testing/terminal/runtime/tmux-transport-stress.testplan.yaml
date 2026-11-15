@@ -3,7 +3,7 @@ name: tmux 传输与后台采集压力
 description: >
   在 macOS、Linux 独占实例分别执行。每例独立建立 profile、socket、终端、驱动和清理责任，
   明确 runtimeKind 为 tmux；禁止使用默认 socket 和用户终端。执行预算与取证规则见
-  docs/plans/2026-11-13-tmux-base-stress.md。显示流按同一 attach 的 cursor 与最终屏幕判定，
+  docs/testing/README.md 的“终端压力验收合同”。显示流按同一 attach 的 cursor 与最终屏幕判定，
   pipe-pane 按实际保留窗口判定，不将应用原始字节等同于 tmux 重绘字节。每例结束清理自有资源。
 cases:
   - id: TMTS-001

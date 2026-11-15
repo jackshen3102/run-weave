@@ -115,7 +115,9 @@ pnpm runtime:pack-and-install
 
 ## 定时任务运行
 
-定时任务由 Backend 持有，关闭页面不停止调度；未打开运行记录时不创建终端。
+定时任务由 Backend 持有，关闭页面不停止调度。普通 Codex `full-access` 任务（含立即运行）
+每轮在专用普通终端执行；其他策略与快捷后台运行仍使用后台适配器。终端生命周期与接管边界见
+[CLI 执行目录与终端](../cli/scheduled-task-cli.md#执行目录与协议版本)。
 管理与恢复合同见 [定时任务接入](../../frontend/docs/scheduled-tasks.md)，HTTP/DTO 分别以
 [路由](../../backend/src/routes/scheduled-tasks.ts)与 [共享合同](../../packages/shared/src/scheduled-tasks/index.ts)为准。
 任务、运行配置快照、幂等记录和输出存于独立 `scheduled-tasks.sqlite`，默认目录为
@@ -134,8 +136,10 @@ Backend 每 5 秒检查到期任务，最多同时执行一个后台任务；同
 重启后对旧 owner 的判断保持保守，无法确认退出时返回 `owner_unresolved`，不靠租约超时重放提示词。
 关闭 Backend 时先停止调度并排空执行，再关闭存储；存储初始化失败时接口报告调度不可用。
 
-当前只启用通过可用性检查的 Codex，TraeX/Pi 不可用；结构化权限等待和人工接管尚未实现。
-后台运行过滤父终端身份，以独立 run ID 记录，不应借用交互式终端的 Session/Panel 身份。
+当前只启用通过可用性检查的 Codex，TraeX/Pi 不可用；通用结构化权限等待协议尚未实现。
+后台适配器过滤父终端身份，以独立 run ID 记录；专用执行终端使用自身真实身份，
+两者均不得借用其他交互式终端的 Session/Panel 身份。用户在执行终端输入或切换 Agent/对话后，
+调度器保留该终端并停止自动管理，不再自动关闭或续接；这不等于已实现通用权限等待协议。
 普通终端恢复必须确认原 thread 与 cwd，命令已提交不等于 attachment ready；后续自由追问不改已完成运行结果。
 
 Electron 与 runtime 发布产物必须包含 `scheduled-tasks-sqlite-worker.cjs`；实际 worker 由
