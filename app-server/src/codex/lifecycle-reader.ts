@@ -29,6 +29,7 @@ export interface CodexRolloutLifecycle {
 
 export interface CodexRolloutLifecycleReaderLike {
   readLatestLifecycle(threadId: string): Promise<CodexRolloutLifecycle | null>;
+  findThreadPath?(threadId: string, refresh?: boolean): Promise<string | null>;
   shutdown(): void;
 }
 
@@ -76,13 +77,13 @@ export class CodexRolloutLifecycleReader implements CodexRolloutLifecycleReaderL
     this.snapshots.clear();
   }
 
-  async findThreadPath(threadId: string): Promise<string | null> {
+  async findThreadPath(threadId: string, refresh = false): Promise<string | null> {
     const cached = this.threadPaths.get(threadId);
     if (cached) {
       return cached;
     }
     // Coalesce cold/missing lookups: a homepage batch must not rescan the tree per thread.
-    if (!this.indexPromise && Date.now() - this.indexedAt >= 30_000) {
+    if (!this.indexPromise && (refresh || Date.now() - this.indexedAt >= 30_000)) {
       this.indexPromise = (async () => {
         for (const root of this.sessionsRoots) {
           for (const candidate of await listJsonlFiles(root)) {
@@ -138,7 +139,7 @@ async function readFileLifecycle(
   }
 }
 
-function parseLatestLifecycle(value: string): CodexRolloutLifecycle | null {
+export function parseLatestLifecycle(value: string): CodexRolloutLifecycle | null {
   let latest: CodexRolloutLifecycle | null = null;
   for (const line of value.split(/\r?\n/)) {
     if (!line.trim()) {

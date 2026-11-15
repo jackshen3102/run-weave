@@ -61,6 +61,16 @@ export class AppServerEventCenter {
     return result;
   }
 
+  /** Evaluate projection fences inside the same queue that commits events. */
+  recordIfCurrent(
+    input: CreateAppServerEventRequest,
+    isCurrent: () => boolean,
+  ): Promise<{ event: AppServerEventEnvelope; created: boolean } | null> {
+    const operation = this.recordQueue.then(() => isCurrent() ? this.recordSerial(input) : null);
+    this.recordQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
   listAfter(options: ListEventsOptions): AppServerEventEnvelope[] {
     return this.store.listAfter(options);
   }
