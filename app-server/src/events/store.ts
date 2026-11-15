@@ -174,6 +174,8 @@ export class AppServerEventStore {
         await file.close();
       }
       await rename(temporaryPath, this.eventLogPath);
+      // Windows supports syncing the file, but not its read-only directory handle.
+      if (process.platform === "win32") return;
       const directory = await open(path.dirname(this.eventLogPath), "r");
       try {
         await directory.sync();
