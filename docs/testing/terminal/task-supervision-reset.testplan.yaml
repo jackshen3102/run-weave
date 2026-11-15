@@ -35,3 +35,54 @@ cases:
     steps:
       - 初始化真实服务并核对 A 的发现结果为 null，旧监控、目标版本、目标采用记录和判断输入均已删除；确认 B 的开关、身份及历史保持。
       - 开启 A 并关闭，关闭本例服务后重新加载同一数据库；确认 A 仍无监控和档案，B 仍可读取；清理本例服务与数据目录。
+
+  - id: TSRST-004
+    name: 手动重置隔离同会话旧任务
+    required: true
+    description: 重置后保持监控开启，以最近一条真实用户请求为边界，旧任务原文、计划及判断不能进入新任务的目标整理和判断。
+    preconditions:
+      - 独立真实服务与 SQLite 中已有监控目标、判断与续接状态，同一会话含旧任务、新用户请求及可控的后续回复。
+    steps:
+      - 用当前 revision 请求 reset；确认返回新 watchId、enabled 为 true、额度为零，旧监控及其目标、判断输入已清理，原始会话、终端输出和草稿未改动。
+      - 交付新任务最终回复并读取目标整理输入、判断详情；确认从最近真实用户请求开始，旧任务原文、计划、判断及续接记录均不在输入中。
+      - 再追加用户范围调整并重新生成目标；确认初次重置的起点仍有效，调整前的新任务内容保留，边界之前的旧内容仍被排除，清理本例资源。
+
+  - id: TSRST-005
+    name: 重置失败保留当前监控
+    required: true
+    description: 无可读请求、过期 revision、读取期间输入变化或持久化失败不能部分清理当前监控。
+    preconditions:
+      - 独立服务与 SQLite 已保存监控和历史，可以控制历史读取、输入代次及 SQLite 删除失败。
+    steps:
+      - 分别建立无用户请求、过期 revision、读取期间输入代次变化与 SQLite 删除失败的状态，使用最新状态请求 reset；确认每个请求明确失败，原监控和历史仍完整。
+      - 解除故障并以最新 revision 重置；确认只生成一个新监控，旧异步分类、预览与投递回执不能写入新监控，清理本例资源。
+
+  - id: TSRST-006
+    name: 重启后保持重置边界并拒绝缺失起点
+    required: true
+    description: 手动重置的消息边界在 Backend 重启后保留；边界不可读时停止处理，不能静默使用旧上下文。
+    preconditions:
+      - 本例独立服务、SQLite 与可控来源含旧任务和新请求，可以重启同一服务及更改来源返回内容。
+    steps:
+      - 手动重置并记录新 watchId 与 contextStartMessageId，关闭服务后加载同一 SQLite；确认同一边界及开启状态保留，后续判定不包含旧任务。
+      - 让来源暂时缺少边界消息并交付回复；确认明确报错且没有分类、投递或边界前的输入，恢复来源后可继续，清理本例资源。
+
+  - id: TSRST-007
+    name: Web 从最新请求重置监控
+    required: true
+    description: Web 的重置入口提交 reset 动作，更新为新监控身份并清除旧目标和已加载历史。
+    preconditions:
+      - 当前源码 Dev Session 中存在带 Agent 的隔离终端，已开启长任务监控，会话含可辨识的最新用户请求。
+    steps:
+      - 使用 $toolkit:playwright-cli 在真实页面打开监控详情，点击从最新请求重置；确认新 watchId、开启状态、零额度及新请求起点，旧目标和已加载历史消失，Agent 对话保留。
+      - 刷新页面并重新进入监控；确认仍为新监控状态，清理本例终端与 Session。
+
+  - id: TSRST-008
+    name: iOS 从最新请求重置监控
+    required: true
+    description: 原生 iOS 操作同一 reset 合同，成功后显示新监控且保留 Agent 对话。
+    preconditions:
+      - 共享池中已安装当前源码 Runweave App 并连接隔离 Backend，隔离终端有已开启的监控和最新用户请求。
+    steps:
+      - 使用 $toolkit:agent-device 打开长任务监控并点击从最新请求重置；确认后端产生新 watchId、零额度和新请求边界，原生界面显示更新后的状态与目标，Agent 对话保留。
+      - 离开并重新打开监控，确认旧历史未重新出现；清理本例设备会话、终端及 Backend。

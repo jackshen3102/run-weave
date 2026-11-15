@@ -81,7 +81,17 @@ export async function processSupervisionReply(
       () => operations.readContext(id, target.threadId),
       event,
       controller.signal,
+      !!operations.find(id).contextStartMessageId,
     );
+    if (!native) {
+      await operations.transaction(() => {
+        if (controller.signal.aborted) return;
+        const watch = operations.find(id);
+        if (watch.pendingReply?.eventId === event.eventId) delete watch.pendingReply;
+      });
+      skip("reply_not_in_reset_context");
+      return ALLOW;
+    }
     const finalKey = `${target.threadId}:${native.id}`;
     stage = "prepare_context";
     let snapshot = await operations.transaction(async () => {

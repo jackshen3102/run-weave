@@ -31,6 +31,12 @@ struct TaskSupervisionService {
       retryUnauthorized: false, decodeError: Self.failure)
   }
 
+  func reset(watch: TaskWatch) async throws -> TaskWatch {
+    try await api.authorized("/api/task-supervision/\(APIClient.pathComponent(watch.watchId))",
+      method: "PATCH", body: ["action": "reset", "expectedRevision": watch.revision],
+      retryUnauthorized: false, decodeError: Self.failure)
+  }
+
   func decisions(watchID: String, cursor: String?) async throws -> SupervisionDecisionPage {
     var query = URLComponents()
     if let cursor { query.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }

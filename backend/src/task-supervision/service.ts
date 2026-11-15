@@ -3,6 +3,7 @@ import { discoverSupervision } from "./discovery";
 import { SupervisionGoalEditor } from "./goal-editor";
 import type { SupervisionConversationResponse } from "@runweave/shared/terminal/conversation";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { configuration, setting, settingText } from "@runweave/config-node";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
@@ -104,7 +105,7 @@ export class TaskSupervisionService {
     this.goalEditor = new SupervisionGoalEditor({
       get: (id) => this.get(id), find: (id) => this.find(id),
       read: (id, thread, signal) => this.readContext(id, thread, signal), current: (target) => this.current(target),
-      readRecent: (thread, signal) => this.history.getSupervisionContext(thread, [], signal),
+      readRecent: (id, thread, signal) => this.readContext(id, thread, signal, true),
       timeoutMs: () => this.modelOptions().timeoutMs,
       root: (target) => this.resolve(target.terminalSessionId, target.panelId).root,
       inputRevision: (target) => terminalInputAdmission(this.manager.getSession(target.terminalSessionId)!).revision,
@@ -207,8 +208,8 @@ export class TaskSupervisionService {
       });
     return [];
   }
-  private readContext(id: string, threadId: string, signal?: AbortSignal) {
-    return readWatchContext(this.find(id), threadId, (thread, ids) => this.history.getSupervisionContext(thread, ids, signal));
+  private readContext(id: string, threadId: string, signal?: AbortSignal, recentOnly = false) {
+    return readWatchContext(this.find(id), threadId, (thread, ids) => this.history.getSupervisionContext(thread, ids, signal), recentOnly);
   }
   async discover(terminalSessionId: string, panelId?: string | null, _expectedThreadId?: string): Promise<SupervisionDiscovery> {
     void _expectedThreadId;
@@ -277,7 +278,38 @@ export class TaskSupervisionService {
   }
   async change(id: string, request: ChangeSupervisionRequest) {
     if (request.action === "retry-continuation") return retryContinuation(request, this.continuationOperations(id));
+    if (request.action === "reset") return this.reset(id, request.expectedRevision);
     return this.transaction(() => changeWatch(id, request, this.watchControls()));
+  }
+
+  private async reset(id: string, expectedRevision: number) {
+    const before = await this.get(id);
+    if (before.revision !== expectedRevision || !this.current(before.target))
+      throw new SupervisionError("监控状态或会话已变化，请刷新后重置。");
+    const session = this.manager.getSession(before.target.terminalSessionId)!;
+    const inputRevision = terminalInputAdmission(session).inputWriteRevision;
+    // Read without old task/goal references: an obsolete or missing source must not block reset.
+    const source = await this.history.getSupervisionContext(before.target.threadId, []);
+    const task = taskCandidates(source).at(-1);
+    if (!task) throw new SupervisionError("当前会话还没有可读的用户请求，未重置监控。", 422);
+    return this.transaction(() => {
+      if (!this.current(before.target) || terminalInputAdmission(session).inputWriteRevision !== inputRevision)
+        throw new SupervisionError("读取期间会话或输入已变化，请核对最新请求后重置。");
+      const controls = this.watchControls();
+      // Close and start in one commit so stale jobs and archives cannot cross the reset.
+      changeWatch(id, { action: "pause", expectedRevision }, controls);
+      const watch = startWatch(this.journal, {
+        target: before.target, requestId: randomUUID(), taskStartMessageId: "", goal: "", planPaths: [],
+      }, controls);
+      watch.contextStartMessageId = task.id;
+      watch.taskStartMessageId = task.id;
+      watch.lastUserMessageId = task.id;
+      watch.task = task;
+      watch.goal = task.text;
+      watch.goalState = "checking";
+      watch.sourceVersion = source.sourceVersion;
+      return watch;
+    });
   }
 
   private continuationOperations(id: string) {

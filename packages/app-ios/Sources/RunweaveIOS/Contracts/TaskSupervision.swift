@@ -177,6 +177,7 @@ struct TaskWatch: Decodable {
   let enabledAt: String
   let target: SupervisionTarget
   let taskStartMessageId: String
+  let contextStartMessageId: String?
   let task: SupervisionMessage
   let goal: String
   let goalOverride: String?
