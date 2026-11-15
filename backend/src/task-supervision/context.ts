@@ -27,16 +27,22 @@ export async function readWatchContext(
     threadId: string,
     ids: string[],
   ) => Promise<SupervisionConversationResponse>,
+  recentOnly = false,
 ) {
   const current = watch.target.threadId === threadId;
   const ids = current
     ? [
         ...new Set([
-          watch.taskStartMessageId,
-          ...(watch.evidenceMessageIds ?? []),
-          ...(watch.completedReplyIds ?? []),
-          ...(watch.goalDefinition?.sourceMessageIds ?? []),
-          ...(watch.goalDefinition?.plans.flatMap((p) => [p.sourceMessageId, p.authorizationMessageId]) ?? []),
+          ...(watch.contextStartMessageId ? [watch.contextStartMessageId] : []),
+          ...(recentOnly
+            ? []
+            : [
+                watch.taskStartMessageId,
+                ...(watch.evidenceMessageIds ?? []),
+                ...(watch.completedReplyIds ?? []),
+                ...(watch.goalDefinition?.sourceMessageIds ?? []),
+                ...(watch.goalDefinition?.plans.flatMap((p) => [p.sourceMessageId, p.authorizationMessageId]) ?? []),
+              ]),
         ]),
       ].filter((id) => !id.startsWith("pending:") && !id.startsWith("goal-manual:"))
     : [];
@@ -54,7 +60,29 @@ export async function readWatchContext(
     throw new Error(
       "CONTEXT_SOURCE_CHANGED: 原始会话已替换，旧来源不可复用；请在新会话继续任务。",
     );
-  return source;
+  return scopeWatchContext(current ? watch.contextStartMessageId : undefined, source);
+}
+/** Apply the same reset boundary to every reader, including goal regeneration. */
+export function scopeWatchContext(
+  startMessageId: string | undefined,
+  source: SupervisionConversationResponse,
+): SupervisionConversationResponse {
+  if (!startMessageId) return source;
+  const messages = messagesFrom(source);
+  if (!messages.some((message) => message.id === startMessageId && message.role === "user"))
+    throw new Error("监控重置起点不可读，未使用旧上下文；请从最新请求重新重置。");
+  let started = false;
+  const turns = source.turns.map((turn) => ({
+    ...turn,
+    messages: turn.messages.filter((message) => {
+      if (message.id === startMessageId) started = true;
+      return started;
+    }),
+  })).filter((turn) => turn.messages.length);
+  const runtimeError = source.runtimeError && turns.some((turn) =>
+    turn.messages.some((message) => message.rawTurnId === source.runtimeError?.turnId))
+    ? source.runtimeError : undefined;
+  return { ...source, turns, runtimeError };
 }
 export function messagesFrom(
   content: ConversationContent,

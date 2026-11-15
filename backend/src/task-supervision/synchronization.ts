@@ -24,6 +24,7 @@ export function synchronizeTarget(
     const pendingId = `pending:${randomUUID()}`;
     watch.taskStartMessageId = pendingId;
     delete watch.sourceVersion;
+    delete watch.contextStartMessageId;
     watch.task = { id: pendingId, role: "user", text: "" };
     watch.goal = "";
     watch.plans = [];

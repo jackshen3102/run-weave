@@ -28,7 +28,7 @@ interface GoalEditorOperations {
     thread: string,
     signal: AbortSignal,
   ) => Promise<SupervisionConversationResponse>;
-  readRecent: (thread: string, signal: AbortSignal) => Promise<SupervisionConversationResponse>;
+  readRecent: (id: string, thread: string, signal: AbortSignal) => Promise<SupervisionConversationResponse>;
   timeoutMs: () => number;
   current: (target: SupervisionTarget) => boolean;
   root: (target: SupervisionTarget) => string;
@@ -114,7 +114,7 @@ export class SupervisionGoalEditor {
         signal.throwIfAborted();
         try {
           const source = await (recent
-            ? ops.readRecent(watch.target.threadId, signal)
+            ? ops.readRecent(id, watch.target.threadId, signal)
             : ops.read(id, watch.target.threadId, signal));
           signal.throwIfAborted();
           return source;
@@ -203,7 +203,7 @@ export class SupervisionGoalEditor {
     if (preview.needsClarification)
       throw new SupervisionError("必要来源不足，请明确目标后再采用。", 422);
     const signal = AbortSignal.timeout(ops.timeoutMs());
-    const source = await (entry.recent ? ops.readRecent(preview.target.threadId, signal) : ops.read(id, preview.target.threadId, signal));
+    const source = await (entry.recent ? ops.readRecent(id, preview.target.threadId, signal) : ops.read(id, preview.target.threadId, signal));
     let adopted = false;
     const updated = await ops.transaction(() => {
       const watch = ops.find(id);

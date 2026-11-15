@@ -104,7 +104,7 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
       if (mounted.current) setBusy(false);
     }
   });
-  const change = useMemoizedFn(async (action: "pause" | "resume") => {
+  const change = useMemoizedFn(async (action: "pause" | "resume" | "reset") => {
     if (!watch || submitting.current) return;
     submitting.current = true;
     setBusy(true);
@@ -197,6 +197,14 @@ function SupervisionContent({ sessionId }: { sessionId: string }) {
               {taskSupervisionStatus(watch)}
             </p>
             <SupervisionGoalCard watch={watch} disabled={busy || query.isError || watch.taskStartMessageId.startsWith("pending:")} open={setGoalView} />
+            <div className="space-y-2">
+              <Button size="sm" variant="outline" disabled={busy || query.isError || !discovery?.capability.supported} onClick={() => void change("reset")}>
+                从最新请求重置
+              </Button>
+              <p className="text-[11px] leading-5 text-slate-400">
+                清空此终端的监控历史、目标与续接状态，从最近一条用户请求开始判断。Agent 对话保留。
+              </p>
+            </div>
             <div className="rounded border border-slate-800 bg-slate-900 p-3">
               <p className="text-xs">
                 已使用续接额度 <strong>{watch.continuationCount}/3</strong>

@@ -54,6 +54,7 @@ export async function readFinalReply(
   read: () => Promise<SupervisionConversationResponse>,
   event: ReplyEvent,
   signal: AbortSignal,
+  afterReset = false,
 ) {
   let source = await read();
   const readError = () => runtimeErrorReply(source, event);
@@ -73,8 +74,11 @@ export async function readFinalReply(
             )),
       );
   const failure = readError();
-  if (event.error && !failure)
+  if (event.error && !failure) {
+    if (afterReset && event.turnId && !messages.some((message) => message.rawTurnId === event.turnId))
+      return { source, messages, native: undefined };
     throw new Error(`${event.error.code}: ${event.error.message}`);
+  }
   let native: ConversationMessage | SupervisionInput["currentReply"] | undefined =
     failure ?? locate();
   for (let attempt = 0; !native && attempt < 3 && !signal.aborted; attempt++) {
@@ -83,6 +87,8 @@ export async function readFinalReply(
     messages = messagesFrom(source);
     native = readError() ?? locate();
   }
+  // After the normal flush wait, an excluded final must not fail the new monitor.
+  if (!native && afterReset) return { source, messages, native: undefined };
   if (!native)
     throw new Error("最终回复事件已收到，但完整会话尚不可读；等待下一条回复。");
   return { source, messages, native };

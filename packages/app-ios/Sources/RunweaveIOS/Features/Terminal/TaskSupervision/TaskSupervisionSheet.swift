@@ -94,6 +94,13 @@ struct TaskSupervisionSheet: View {
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(watch.statusColor.opacity(0.15)))
 
     SupervisionGoalCard(watch: watch, model: model)
+    VStack(alignment: .leading, spacing: 8) {
+      Button("从最新请求重置") { model.reset() }
+        .buttonStyle(.bordered).disabled(!model.canToggle || model.discovery?.capability.supported != true)
+        .accessibilityIdentifier("task-supervision-reset")
+      Text("清空此终端的监控历史、目标与续接状态，从最近一条用户请求开始判断。Agent 对话保留。")
+        .font(.caption2).foregroundColor(.secondary)
+    }
     VStack(alignment: .leading, spacing: 9) {
       HStack {
         Text("本任务自动续接").font(.caption).foregroundColor(.secondary)

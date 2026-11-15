@@ -28,7 +28,7 @@ const start = z
   .strict();
 const change = z
   .object({
-    action: z.enum(["pause", "resume", "update-context", "retry-continuation"]),
+    action: z.enum(["pause", "resume", "reset", "update-context", "retry-continuation"]),
     expectedRevision: z.number().int().positive(),
     goal: z.string().trim().min(1).max(8000).optional(),
     decisionId: z.string().uuid().optional(),

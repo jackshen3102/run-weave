@@ -190,6 +190,8 @@ export interface TaskWatch {
   enabledAt: string;
   target: SupervisionTarget;
   taskStartMessageId: string;
+  /** Inclusive, stable source boundary set by manual reset; independent of later user updates. */
+  contextStartMessageId?: string;
   /** Identity of the native source; offsets must never be reused across replacements. */
   sourceVersion?: string;
   task: ConversationMessage;
@@ -279,7 +281,7 @@ export interface StartSupervisionRequest {
 }
 export interface ChangeSupervisionRequest {
   /** pause ends monitoring and deletes this terminal's supervision data. Start again with POST. */
-  action: "pause" | "resume" | "update-context" | "retry-continuation";
+  action: "pause" | "resume" | "reset" | "update-context" | "retry-continuation";
   expectedRevision: number;
   goal?: string;
   decisionId?: string;
