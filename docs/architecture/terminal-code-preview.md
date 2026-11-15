@@ -102,8 +102,9 @@ Codex 从受控 rollout 目录定位源文件，只投影 `response_item` 中的
 和 thread ID 定位并核对 Codex、Trae 或 Claude 源身份；未传 provider 的旧调用保留 Codex 默认值。
 已登记来源与传入 provider 冲突时返回 409。读取不补写事件或登记状态，源不存在或身份不匹配时仍返回 404。
 独立的 `<skill>…</skill>` 注入消息整条过滤；用户输入的 `$技能名`、普通引用与讨论保持原文。
-TraeX（含 trae/traecli）从受控会话目录读取 `history_mutation` 的用户与助手可见正文，
-核对 session 身份并按消息 ID 去重。上下文压缩保留原始 append 问答，跳过压缩生成的
+TraeX（含 trae/traecli）从受控会话目录读取 `history_mutation` 的用户与助手可见正文；
+源 `session_meta` 声明 `history_format=canonical_v1` 时，也读取 `response_item`。恢复后的日志可混合两种格式，
+核对 session 身份后分别命名消息 ID，避免新版重用数字 ID 时误删正文。上下文压缩保留原始 append 问答，跳过压缩生成的
 替代摘要与重复消息；普通 replace 则重新建立当前历史。工具、思考和注入上下文不进入正文。
 Pi 从已注册文件核对 session header，沿当前 leaf 的祖先链只取 user/assistant text，
 不拼接 sibling branch 或摘要。既有首页短摘要、detail 和终端 History 保持独立语义。
