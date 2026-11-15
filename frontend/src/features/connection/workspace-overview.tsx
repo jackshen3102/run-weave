@@ -69,10 +69,12 @@ function AuthenticatedObserver({
   connection,
   token,
   onAuthExpired,
+  onActivateTerminal,
 }: {
   connection: ConnectionConfig;
   token: string;
   onAuthExpired: () => void;
+  onActivateTerminal?: (session: TerminalSessionListItem) => void;
 }) {
   const update = useConnectionWorkspaceOverview((state) => state.update);
   const attention = useAttentionSnapshot({ apiBase: connection.url, token, connectionId: connection.id });
@@ -85,7 +87,14 @@ function AuthenticatedObserver({
     setCursor: (value) => { cursor.current = value; },
     onAuthExpired,
     onResyncRequired: () => setRevision((current) => current + 1),
-    onTerminalEvents: () => setRevision((current) => current + 1),
+    onTerminalEvents: (events, delivery) => {
+      setRevision((current) => current + 1);
+      if (delivery !== "live") return;
+      const created = events.filter(event => event.kind === "terminal_session_created" && event.payload.activate).at(-1);
+      if (created?.kind === "terminal_session_created" && !events.some(event =>
+        event.kind === "terminal_session_deleted" && event.terminalSessionId === created.terminalSessionId))
+        onActivateTerminal?.(created.payload.session);
+    },
   });
 
   useEffect(() => {
@@ -121,11 +130,12 @@ function AuthenticatedObserver({
 
 type ScopedAuthState = ReturnType<typeof useScopedAuth>;
 
-function ConnectionObserverState({ connection, token, status, onAuthExpired }: {
+function ConnectionObserverState({ connection, token, status, onAuthExpired, onActivateTerminal }: {
   connection: ConnectionConfig;
   token: string | null;
   status: ScopedAuthState["status"];
   onAuthExpired: () => void;
+  onActivateTerminal?: (session: TerminalSessionListItem) => void;
 }) {
   useObserveConnectionCompletions(connection, status === "authenticated" ? token : null);
   const update = useConnectionWorkspaceOverview((state) => state.update);
@@ -140,7 +150,7 @@ function ConnectionObserverState({ connection, token, status, onAuthExpired }: {
   }, [connection.available, connection.id, connection.url, status, token, update]);
   // Never send an expired access token while its refresh is still in flight.
   if (!connection.url || status !== "authenticated" || !token || connection.available === false) return null;
-  return <AuthenticatedObserver key={`${connection.id}:${connection.generation ?? 0}`} connection={connection} token={token} onAuthExpired={onAuthExpired} />;
+  return <AuthenticatedObserver key={`${connection.id}:${connection.generation ?? 0}`} connection={connection} token={token} onAuthExpired={onAuthExpired} onActivateTerminal={onActivateTerminal} />;
 }
 
 function ConnectionObserver({ connection }: { connection: ConnectionConfig }) {
@@ -178,6 +188,7 @@ export function ConnectionWorkspaceObservers({
   activeAuthStatus,
   onActiveAuthExpired,
   observeActive,
+  onActivateTerminal,
 }: {
   connections: ConnectionConfig[];
   activeConnectionId: string | null;
@@ -185,13 +196,14 @@ export function ConnectionWorkspaceObservers({
   activeAuthStatus: ScopedAuthState["status"];
   onActiveAuthExpired: () => void;
   observeActive: boolean;
+  onActivateTerminal?: (session: TerminalSessionListItem) => void;
 }) {
   return <>
     {connections.filter((connection) => connection.id !== activeConnectionId).map((connection) => (
       <ConnectionObserver key={connection.id} connection={connection} />
     ))}
     {observeActive && connections.filter((connection) => connection.id === activeConnectionId).map((connection) => (
-      <ConnectionObserverState key={`active:${connection.id}`} connection={connection} token={activeToken} status={activeAuthStatus} onAuthExpired={onActiveAuthExpired} />
+      <ConnectionObserverState key={`active:${connection.id}`} connection={connection} token={activeToken} status={activeAuthStatus} onAuthExpired={onActiveAuthExpired} onActivateTerminal={onActivateTerminal} />
     ))}
     {!observeActive && connections.filter((connection) => connection.id === activeConnectionId).map((connection) => (
       <ActiveAttentionObserver key={`attention:${connection.id}`} connection={connection} token={activeAuthStatus === "authenticated" ? activeToken : null} />

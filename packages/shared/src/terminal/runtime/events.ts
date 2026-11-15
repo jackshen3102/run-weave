@@ -49,6 +49,8 @@ export interface TerminalProjectCreatedEventPayload {
 
 export interface TerminalSessionCreatedEventPayload {
   session: TerminalSessionListItem;
+  /** Open this terminal on live delivery; reconnect catch-up must not steal focus. */
+  activate?: boolean;
 }
 
 export interface TerminalProjectDeletedEventPayload {

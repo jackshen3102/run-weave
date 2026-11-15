@@ -2,11 +2,13 @@ import { useDebounceFn, useMemoizedFn } from "ahooks";
 import { useEffect, useMemo, useRef } from "react";
 import type { RuntimeStatusItem } from "@runweave/shared/runtime-status";
 import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
+import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { createTerminalBellPlayer } from "../../../features/terminal/feedback/bell";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { useTerminalEventsConnection } from "../../../features/terminal/connection/use-events";
+import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
 import { useRuntimeStatusItem } from "../../../features/runtime-status/use-runtime-status";
 import {
   EMPTY_TERMINAL_SESSIONS,
@@ -80,6 +82,7 @@ export function useTerminalWorkspaceEvents({
     TerminalEventEnvelope,
     { kind: "terminal_session_created" }
   > | null>(null);
+  const pendingActivationRef = useRef(false);
   const completionBellPlayerRef = useRef<ReturnType<
     typeof createTerminalBellPlayer
   > | null>(null);
@@ -94,14 +97,18 @@ export function useTerminalWorkspaceEvents({
   } = useDebounceFn(
     () => {
       const latestCreatedSession = pendingCreatedSessionRef.current;
+      const activate = pendingActivationRef.current;
       pendingCreatedSessionRef.current = null;
+      pendingActivationRef.current = false;
       void loadSessions().then(() => {
         if (
           !latestCreatedSession ||
-          useTerminalWorkspaceStore.getState().activeSessionId
+          (!activate && useTerminalWorkspaceStore.getState().activeSessionId)
         ) {
           return;
         }
+        if (activate && !queryClient.getQueryData<TerminalSessionListItem[]>(terminalQueryKeys.sessions(scope))
+          ?.some(session => session.terminalSessionId === latestCreatedSession.terminalSessionId)) return;
         selectProjectContext(
           resolveTerminalParentProjectId(latestCreatedSession.projectId),
           latestCreatedSession.projectId,
@@ -264,6 +271,7 @@ export function useTerminalWorkspaceEvents({
         const latestCreatedSession = getLatestCreatedSessionEvent(events);
         if (latestCreatedSession) {
           pendingCreatedSessionRef.current = latestCreatedSession;
+          pendingActivationRef.current = delivery === "live" && latestCreatedSession.payload.activate === true;
         }
         scheduleTerminalListRefresh();
       }

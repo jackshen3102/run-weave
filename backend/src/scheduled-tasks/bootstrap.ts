@@ -9,6 +9,7 @@ import { ScheduledTaskService } from "./service";
 import { ScheduledTaskStore } from "./storage/store";
 import { ScheduledTerminalAttachment } from "./terminal-attachment";
 import type { TerminalSessionCreationOptions } from "../terminal/application/create-session";
+import { CodexTerminalScheduledTaskProvider } from "./providers/codex-terminal";
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 16 * 1_024 * 1_024;
@@ -83,6 +84,7 @@ export async function createScheduledTaskSubsystem(params: {
       providerProbe.adapters,
       enabled,
       { maxConcurrentRuns, timeoutMs, maxOutputBytes },
+      new CodexTerminalScheduledTaskProvider(params.terminalSessionManager, params.terminalOptions),
     );
     await runtime.initialize();
     const service = new ScheduledTaskService(

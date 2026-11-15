@@ -32,6 +32,7 @@ export interface TerminalSessionCreationOptions {
   terminalStateService?: TerminalStateService;
   activity?: TerminalActivityDependencies;
   strictDefaultPanel?: boolean;
+  activate?: boolean;
   /** Persist an external task binding before launching the runtime. */
   onSessionCreated?: (sessionId: string) => Promise<void>;
 }
@@ -84,7 +85,7 @@ export async function createTerminalSession(
     }
     options.terminalEventService?.record({
       kind: "terminal_session_created", terminalSessionId: created.id, projectId: created.projectId,
-      payload: { session: toSessionListItem(created, resolveEffectiveTerminalState(manager, options.terminalStateService, created), toPanelWorkspacePayload(manager, created.id)) },
+      payload: { session: toSessionListItem(created, resolveEffectiveTerminalState(manager, options.terminalStateService, created), toPanelWorkspacePayload(manager, created.id)), ...(options.activate ? { activate: true } : {}) },
     });
     recordTerminalSessionCreated(options.activity, created);
     return created;
