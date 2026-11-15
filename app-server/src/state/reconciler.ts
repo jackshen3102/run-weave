@@ -7,6 +7,7 @@ import type {
 } from "@runweave/shared/app-server-events";
 import type { CodexThreadStatusReader } from "../codex/client.js";
 import type { CodexRolloutLifecycleReaderLike } from "../codex/lifecycle-reader.js";
+import { CodexLifecycleMonitor, type CodexLifecycleHint } from "../codex/lifecycle-monitor.js";
 import type { AppServerEventCenter } from "../events/center.js";
 import type { TraeThreadLifecycleReader } from "../trae/lifecycle-reader.js";
 
@@ -57,6 +58,9 @@ export class AgentThreadStatusReconciler {
   private lastCompletedAt: number | null = null;
   private lastFailedAt: number | null = null;
   private consecutiveFailures = 0;
+  private monitor: CodexLifecycleMonitor | null = null;
+  private unsubscribe: (() => void) | null = null;
+  private round: Promise<void> | null = null;
 
   constructor(private readonly options: AgentThreadStatusReconcilerOptions) {
     this.startDelayMs = options.startDelayMs ?? DEFAULT_START_DELAY_MS;
@@ -68,14 +72,32 @@ export class AgentThreadStatusReconciler {
       return;
     }
     this.stopped = false;
+    if (this.options.codexRolloutLifecycleReader.findThreadPath) {
+      this.monitor = new CodexLifecycleMonitor(this.options.codexRolloutLifecycleReader,
+        (hint) => this.reconcileNativeHint(hint));
+      this.unsubscribe = this.options.eventCenter.subscribe((event) => {
+        const id = event.correlationId;
+        if (!id || this.stopped) return;
+        const thread = this.options.eventCenter.getStateStore().getThread(id);
+        if (!thread || thread.agent !== "codex") return;
+        const payload = event.payload as Record<string, unknown> | null;
+        const hook = event.kind === "agent.hook"
+          ? String(payload?.stateHookEvent ?? payload?.normalizedEvent ?? payload?.rawHookEvent ?? "").replaceAll("_", "").toLowerCase()
+          : "";
+        if (event.kind === "thread.state.changed" || hook === "sessionstart" || hook === "userpromptsubmit")
+          this.monitor?.track(thread, hook === "userpromptsubmit" || hook === "sessionstart");
+        if (hook === "interrupt") this.monitor?.request(id);
+      });
+      this.monitor.sync(this.collectCandidates());
+    }
     this.startTimer = setTimeout(() => {
       this.startTimer = null;
       if (this.stopped) {
         return;
       }
-      void this.tick();
+      this.scheduleTick();
       this.intervalTimer = setInterval(() => {
-        void this.tick();
+        this.scheduleTick();
       }, this.intervalMs);
       this.intervalTimer.unref?.();
     }, this.startDelayMs);
@@ -88,7 +110,7 @@ export class AgentThreadStatusReconciler {
     });
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopped = true;
     if (this.startTimer) {
       clearTimeout(this.startTimer);
@@ -98,6 +120,11 @@ export class AgentThreadStatusReconciler {
       clearInterval(this.intervalTimer);
       this.intervalTimer = null;
     }
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    await this.monitor?.stop();
+    await this.round;
+    this.monitor = null;
     this.options.codexStatusReader.shutdown();
     this.options.codexRolloutLifecycleReader.shutdown();
     this.options.traeLifecycleReader.shutdown();
@@ -113,7 +140,30 @@ export class AgentThreadStatusReconciler {
       lastCompletedAt: this.lastCompletedAt,
       lastFailedAt: this.lastFailedAt,
       consecutiveFailures: this.consecutiveFailures,
+      nativeMonitor: this.monitor?.getStatusSnapshot() ?? null,
     };
+  }
+
+  private scheduleTick(): void {
+    if (this.stopped || this.round) return;
+    this.round = this.tick().finally(() => { this.round = null; });
+  }
+
+  private async reconcileNativeHint(hint: CodexLifecycleHint): Promise<void> {
+    const monitor = this.monitor;
+    if (!monitor?.isCurrent(hint)) return;
+    const thread = this.options.eventCenter.getStateStore().getThread(hint.threadId);
+    if (!thread || thread.agent !== "codex" || !["running", "starting"].includes(thread.status)) return;
+    const lifecycle = await this.options.codexRolloutLifecycleReader.readLatestLifecycle(hint.threadId);
+    if (!lifecycle || lifecycle.status !== "idle" || lifecycle.cursor !== hint.lifecycle.cursor ||
+      lifecycle.turnId !== hint.lifecycle.turnId || isOlderThanThreadProjection(lifecycle.timestamp, thread)) return;
+    const observed: ObservedThreadState = {
+      status: "idle", lifecycleType: `rollout:${lifecycle.type}`, lifecycleCursor: lifecycle.cursor,
+      detailStatus: null, preview: null, turnId: lifecycle.turnId, error: lifecycle.error,
+    };
+    if (this.isAlreadyProjected(thread, observed)) return;
+    await this.recordObservation(thread, observed, () => !this.stopped && monitor.isCurrent(hint) &&
+      this.options.eventCenter.getStateStore().getThread(thread.threadId)?.lastEventId === thread.lastEventId);
   }
 
   private async tick(): Promise<void> {
@@ -139,7 +189,9 @@ export class AgentThreadStatusReconciler {
   }
 
   private async reconcileOnce(): Promise<void> {
-    for (const thread of this.collectCandidates()) {
+    const candidates = this.collectCandidates();
+    this.monitor?.sync(candidates);
+    for (const thread of candidates) {
       let observed: ObservedThreadState | null = null;
       try {
         observed = await this.readObservedState(thread);
@@ -156,6 +208,7 @@ export class AgentThreadStatusReconciler {
       if (!observed) {
         continue;
       }
+      if (this.stopped) return;
       const currentThread = this.options.eventCenter
         .getStateStore()
         .getThread(thread.threadId);
@@ -206,6 +259,16 @@ export class AgentThreadStatusReconciler {
         detailStatus: result!.summary.status, preview: result!.summary.preview, turnId: fact.runId };
     }
     if (thread.agent === "codex") {
+      const lifecycle =
+        await this.options.codexRolloutLifecycleReader.readLatestLifecycle(thread.threadId);
+      // Local running facts need no auxiliary executor round trip.
+      if (lifecycle?.status === "running" &&
+          (thread.status === "running" || !isOlderThanThreadProjection(lifecycle.timestamp, thread))) {
+        return {
+          status: "running", lifecycleType: `rollout:${lifecycle.type}`, lifecycleCursor: lifecycle.cursor,
+          detailStatus: null, preview: null, turnId: lifecycle.turnId,
+        };
+      }
       let status: Awaited<
         ReturnType<CodexThreadStatusReader["readThreadStatus"]>
       > = null;
@@ -216,24 +279,6 @@ export class AgentThreadStatusReconciler {
         );
       } catch (error) {
         statusReadError = error;
-      }
-      const lifecycle =
-        await this.options.codexRolloutLifecycleReader.readLatestLifecycle(
-          thread.threadId,
-        );
-      // Reassert an already-running projection from its native turn. Backend
-      // state may have been overwritten by an unrelated hidden thread's Stop.
-      // An older start never resurrects a thread whose projection has stopped.
-      if (lifecycle?.status === "running" &&
-          (thread.status === "running" || !isOlderThanThreadProjection(lifecycle.timestamp, thread))) {
-        return {
-          status: "running",
-          lifecycleType: `rollout:${lifecycle.type}`,
-          lifecycleCursor: lifecycle.cursor,
-          detailStatus: null,
-          preview: null,
-          turnId: lifecycle.turnId,
-        };
       }
       const sameObservedFailure = lifecycle?.error && thread.status === "idle" &&
         thread.lastLifecycleType === `rollout:${lifecycle.type}` &&
@@ -331,12 +376,13 @@ export class AgentThreadStatusReconciler {
   private async recordObservation(
     thread: AppServerThreadRef,
     observed: ObservedThreadState,
+    isCurrent?: () => boolean,
   ): Promise<void> {
     const compensation = observed.status !== thread.status;
-    const result = await this.options.eventCenter.record({
+    const input = {
       kind: "agent.lifecycle.observed",
       source: {
-        app: "app-server",
+        app: "app-server" as const,
         instanceId: this.options.sourceInstanceId,
         pid: process.pid,
       },
@@ -378,8 +424,11 @@ export class AgentThreadStatusReconciler {
         previousAppServerStatus: thread.status,
         lastProjectedEventId: thread.lastEventId,
       },
-    });
-    if (!result.created) {
+    };
+    const result = isCurrent
+      ? await this.options.eventCenter.recordIfCurrent(input, isCurrent)
+      : await this.options.eventCenter.record(input);
+    if (!result?.created) {
       return;
     }
     logInfo("agent-thread-status-reconciler.observed", {

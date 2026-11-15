@@ -127,6 +127,18 @@ Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent
 
 另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`；同一原生 rollout 的开始记录也可按下文规则确认运行态。Backend 消费补偿时必须匹配当前会话；当前绑定已清空时，仍不得覆盖另一个最近会话。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection、或比本轮已观察开始记录更新的 `task_complete` / `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
+Codex 的 Hook 仍是主路径；[原记录监听器](../../app-server/src/codex/lifecycle-monitor.ts)
+只订阅已绑定终端且处于 starting/running 的 thread 对应 rollout 文件。文件变化合并后增量读取，
+只有同一轮 `task_started` 与完整 `task_complete` / `turn_aborted` 才触发定点核对；首次接入的
+历史结束记录只建立基线。该路径不发送 Agent 输入，不生成业务完成结论；取消仍沿用既有
+interrupted 暂停语义，不自动续接。
+
+提交补偿前重新读取原记录，并在 Event Center 串行提交队列内核对当前投影、订阅代际、轮次
+和文件版本。新输入、thread 切换或服务关闭会使旧回调失效。文件不可读、替换或监听失效时，
+保留每 30 秒的周期核对；独立 RPC 的 idle 仍不能证明原 TUI 已停止。监听最多 100 个活动
+thread，合并窗口 100 毫秒、最多 4 个并发增量读取，不按普通输出逐条调用 RPC。验收入口见
+[原记录恢复用例](../testing/terminal/runtime/native-lifecycle-recovery.testplan.yaml)。
+
 Backend 还对停留在 `agent_starting` 的 Panel 做受限补偿，入口见
 [StartingPanelStateReconciler](../../backend/src/app-server/starting-panel-reconciler.ts)。仅当 Session/Panel
 仍在运行、当前命令与 provider/thread 一致、活动租约为 active，且没有 preparation 或 operation

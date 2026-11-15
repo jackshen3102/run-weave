@@ -252,7 +252,7 @@ function attachShutdownHandlers(
       return;
     }
     shuttingDown = true;
-    agentThreadStatusReconciler.stop();
+    await agentThreadStatusReconciler.stop();
     await threadPreviews.stop();
     await closeEventStreamServer(eventStreamServer);
     await closeServer(server);

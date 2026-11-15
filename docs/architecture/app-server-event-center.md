@@ -41,6 +41,10 @@ app-server 是否可用，不安装、启动或重启它。
 `append -> projection -> sync -> notify` 事务，EventStore 另外串行保护 id 分配、dedupe
 检查和 JSONL 追加。主日志与本地 cloud sync mirror 因此共享同一条单调事件序列。
 
+异步观测可通过 `recordIfCurrent` 在上述串行队列内重新核对有效性；检查不通过时不追加事件、
+不更新投影。Codex 原记录补偿使用这一边界拒绝迟到回调，具体合同见
+[终端状态](terminal-state.md)。
+
 `app-server-thread-state.json` 保存从事件投影出来的 latest ThreadRef 视图。它不是新的
 事实源；文件损坏或丢失时，app-server 会从 event log 重建。
 

@@ -63,13 +63,9 @@ struct ConversationReaderView: View {
                           fileLink = FileLink(reference: reference, panelID: model.data?.target?.panelId)
                           return .handled
                         }
-                        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-                          let source = session.browserSource else { return .discarded }
+                        guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return .discarded }
                         anchor.capture(); anchor.persist()
-                        browser.open(BrowserOpenIntent(target: url.absoluteString, origin: .host, action: .internalOpen),
-                          source: source, presentationAvailable: browser.hostPresentationAvailable(
-                            source: source, registrationID: browserPresentationID))
-                        return .handled
+                        return .systemAction
                       })
                   }
                   .frame(maxWidth: .infinity, alignment: .leading)

@@ -1,0 +1,96 @@
+version: 1
+name: Codex 原记录驱动状态恢复
+description: >
+  验证文件变化驱动的定点核对及时恢复状态，并保留原轮次身份、周期降级和关闭边界。
+  格式校验不替代运行时验收。每条使用独立专属实例或会话，并区分真实 CLI 与受控 I/O 验证层。
+cases:
+  - id: NLR-001
+    name: 丢 Stop 后由原记录在两秒内恢复
+    required: true
+    description: >
+      有效文件订阅下丢失 Stop 回传，完整本轮 task_complete 能及时恢复终端，不直接确认业务目标完成。
+    preconditions:
+      - 使用隔离 Dev Session，真实 Codex 为 never 和 danger-full-access，原始文件已定位且订阅有效。
+      - 专属代理可丢弃本会话 Stop 的全部回传；有原记录、事件、Backend 状态的统一时间线。
+    steps:
+      - 连续三轮执行只回复唯一标记的任务并丢弃 Stop；确认每轮完整 task_complete 后两秒内 Backend 为空闲。
+      - 对照补偿事件和监控判定；确认补偿来自本轮原记录，原生结束不直接把业务目标设为完成。
+
+  - id: NLR-002
+    name: 丢 Interrupt 后终端和任务监控及时收敛
+    required: true
+    description: >
+      取消运行后丢失 Interrupt，原记录 turn_aborted 能在两秒内恢复终端并暂停本任务监控，不能自动续接。
+    preconditions:
+      - 使用独立隔离 Dev Session 和真实 Full Access Codex，文件订阅已建立，任务监控开启。
+      - 专属代理可以丢弃本会话 Interrupt 回传，可运行无副作用的短时等待命令并记录真实工具调用。
+    steps:
+      - 连续三轮开始等待任务、确认实际执行后按 Esc 取消并丢弃 Interrupt；每轮自行恢复测试监控，不依赖其它用例状态。
+      - 确认每轮 turn_aborted 写出后两秒内终端空闲且监控为 interrupted 暂停；原 pane 没有收到自动续接。
+
+  - id: NLR-003
+    name: 正常 Hook 和原记录通知不会重复处理
+    required: true
+    description: >
+      Hook 正常送达时文件通知仍可到达，但同一轮结果不产生重复补偿或重复监控决策。
+    preconditions:
+      - 独立 Full Access Codex 会话连接源码实例，所有 Hook 正常回传，文件监听有效。
+    steps:
+      - 执行三轮正常结束及三轮取消，记录 Hook、原记录和消费者时间线；确认每轮正确收敛且不超过两秒。
+      - 对照同一 turnId 的完成修订、补偿事件及监控记录；确认重复文件通知没有造成重复完成、分类或投递。
+
+  - id: NLR-004
+    name: 旧候选不能覆盖新一轮运行
+    required: true
+    description: >
+      同一线程开始新一轮后，旧结束候选即使迟到也不能把新运行覆盖为空闲或中断新任务。
+    preconditions:
+      - 独立会话可在文件候选读取后、发布前暂停该核对，源记录包含可核对的 turnId 和 cursor。
+    steps:
+      - 完成旧轮并暂缓候选发布，然后在同一线程提交新任务、确认新的 task_started 和运行状态。
+      - 释放旧候选及重复通知；确认旧投影版本被拒绝，新任务持续运行，未增加旧完成修订或暂停新任务。
+
+  - id: NLR-005
+    name: 监听失效仍有周期补偿
+    required: true
+    description: >
+      文件通知不可用时仍依靠原周期核对恢复，不把监听失败或无输出当作完成。
+    preconditions:
+      - 独立会话的文件路径可读、周期配置为三十秒，辅助读取可用且单次在两秒内完成。
+      - 本 fixture 可以断开文件通知并丢弃 Stop，不影响实际原记录写入。
+    steps:
+      - 断开本会话文件通知并执行结束；确认没有依据监听故障提前标记空闲，且在结束后六十四秒内由周期核对恢复。
+      - 检查补偿依据；确认来自匹配的原记录，周期任务在快速路径失效期间继续运行。
+
+  - id: NLR-006
+    name: 首次订阅旧文件不冒充新结束
+    required: true
+    description: >
+      对已有历史完成记录建立首次订阅时，不把旧文件末尾当成当前运行轮次的结束通知。
+    preconditions:
+      - 独立恢复 fixture 使用已有真实历史文件，包含旧任务结束记录与可区分的新用户输入上下文。
+    steps:
+      - 在新输入上下文下建立原文件订阅并触发不改变内容的文件通知；确认旧记录不能通过快速采用把新任务标为空闲。
+      - 产生并完成可确认的新轮次；确认其新鲜完整记录可以正常进入快速核对。
+
+  - id: NLR-007
+    name: 普通输出不产生逐 token 核对
+    required: true
+    description: >
+      同一受控输出负载中，文件通知被合并，普通 token 不触发 RPC，重复生命周期不导致队列无界增长。
+    preconditions:
+      - 独立会话可观测快速路径读取、辅助 RPC、在途任务和队列峰值，记录对应原实现的相同负载基线。
+    steps:
+      - 让同一会话产生连续普通文本和重复文件通知；确认没有逐 token RPC 或状态广播，每线程最多一个核对任务在途。
+      - 产生真实结束记录；确认持续通知没有饿死核对，两秒内收敛且仅采用一次，并保存相同负载的开销比较。
+
+  - id: NLR-008
+    name: 服务关闭后旧监听不能追加事件
+    required: true
+    description: >
+      关闭拥有监听器的服务时正确回收句柄和队列，关闭后迟到回调不能再向事件中心提交状态。
+    preconditions:
+      - 独立 Dev Session 拥有至少两个已定位的 Codex 文件订阅，能暂停其中一个待处理回调并观察资源关闭。
+    steps:
+      - 按 toolkit:runweave-dev-session 停止本 fixture 的 Session，再释放被延迟的回调；确认监听关闭且队列结束。
+      - 对比关闭前后的事件尾部；确认关闭后没有旧回调追加状态事件，也没有本 fixture 的残余监听进程。
