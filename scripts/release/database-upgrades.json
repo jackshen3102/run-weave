@@ -149,5 +149,78 @@
       "c246c6b948f4c48ac9b48fb0a761bfc637d157c8"
     ],
     "reason": "Server 0.1.16 to additive Claude native lifecycle context in JSON thread projections. Existing records omit the optional context and remain readable; no database schema or task migration behavior changes. Preserve the previously reviewed upgrade sources and explicit v4 task preview/apply requirement. Target binds this exact CRLF storage tree."
+  },
+  {
+    "platform": "linux",
+    "target": "cac3eed2a1f19c2674c1baf0591b0038cb4830c4854f451183c346b828f74362",
+    "from": [
+      "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+      "83d0999909b1e5a50f6f5e56ed81693a960a709965e17822b5ad198a096a46f7",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "ae3f24916e986d7aebf049c050245937c4f6904c9bf38d359ade397f7ea06f73",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f7d655784ccebe28cd3d33276cf395bbd812452466c1c3f12c9691fa5acbba14"
+    ],
+    "sourceRevisions": [
+      "40755ba790534201ad805db1dd99aac96e266c40",
+      "40307293314929f8b22b9798398c65bde96f4bab"
+    ],
+    "reason": "Server 0.1.28 preserves persisted database schemas, event envelopes and thread projections. Reviewed storage-source changes since Server 0.1.27 only fence native reconciliation and skip unsupported Windows directory fsync after file sync and atomic replacement. Carry forward the previously reviewed storage sources and explicit populated v4 scheduled-task preview/apply requirement; bind permission to this exact source fingerprint."
+  },
+  {
+    "platform": "darwin",
+    "target": "cac3eed2a1f19c2674c1baf0591b0038cb4830c4854f451183c346b828f74362",
+    "from": [
+      "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "ae3f24916e986d7aebf049c050245937c4f6904c9bf38d359ade397f7ea06f73",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f7d655784ccebe28cd3d33276cf395bbd812452466c1c3f12c9691fa5acbba14"
+    ],
+    "sourceRevisions": [
+      "40755ba790534201ad805db1dd99aac96e266c40",
+      "40307293314929f8b22b9798398c65bde96f4bab"
+    ],
+    "reason": "Server 0.1.28 preserves persisted database schemas, event envelopes and thread projections. Reviewed storage-source changes since Server 0.1.27 only fence native reconciliation and skip unsupported Windows directory fsync after file sync and atomic replacement. Carry forward the previously reviewed storage sources and explicit populated v4 scheduled-task preview/apply requirement; bind permission to this exact source fingerprint."
+  },
+  {
+    "platform": "win32",
+    "target": "cac3eed2a1f19c2674c1baf0591b0038cb4830c4854f451183c346b828f74362",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "a2587197ffe98093d8d57f40a686b5de2efef5c2e767dafa155e938da94ae5e5",
+      "ae3f24916e986d7aebf049c050245937c4f6904c9bf38d359ade397f7ea06f73",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f05970e8ce6fdb4a399b57c4f81345bb61256a3d7672733bdd3b1919ed9aafdd",
+      "f7d655784ccebe28cd3d33276cf395bbd812452466c1c3f12c9691fa5acbba14",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "40755ba790534201ad805db1dd99aac96e266c40",
+      "40307293314929f8b22b9798398c65bde96f4bab"
+    ],
+    "reason": "Server 0.1.28 preserves persisted database schemas, event envelopes and thread projections. Reviewed storage-source changes since Server 0.1.27 only fence native reconciliation and skip unsupported Windows directory fsync after file sync and atomic replacement. Carry forward the previously reviewed storage sources and explicit populated v4 scheduled-task preview/apply requirement; bind permission to this exact source fingerprint."
+  },
+  {
+    "platform": "win32",
+    "target": "c8a363edc1edfcdd1b2391dc87f4edec3d49f2514b4c31e304d013c38432247c",
+    "from": [
+      "394f073cb4bf3a05cfece55e92fbd68b0013e0ce2581c350fabb2f2c228ffd26",
+      "646ee3c0462fa9868ea31ac1f2b868c661cd3a10aac91148442416955486af7c",
+      "8aeaae967bd2bfd446c5270f444e4562ad0160a017b3a3c0bcfa349a89625003",
+      "a2587197ffe98093d8d57f40a686b5de2efef5c2e767dafa155e938da94ae5e5",
+      "ae3f24916e986d7aebf049c050245937c4f6904c9bf38d359ade397f7ea06f73",
+      "b09432e6f338f5158a47a20abfacaf5b06d02a4cdeed292c1c68ed0933abdfd6",
+      "f05970e8ce6fdb4a399b57c4f81345bb61256a3d7672733bdd3b1919ed9aafdd",
+      "f7d655784ccebe28cd3d33276cf395bbd812452466c1c3f12c9691fa5acbba14",
+      "f95c08b4e7f06fbedccf7eb5cdef8e2bb71d54e5947f49fb082ea98821cc6877"
+    ],
+    "sourceRevisions": [
+      "40755ba790534201ad805db1dd99aac96e266c40",
+      "40307293314929f8b22b9798398c65bde96f4bab"
+    ],
+    "reason": "Server 0.1.28 preserves persisted database schemas, event envelopes and thread projections. Reviewed storage-source changes since Server 0.1.27 only fence native reconciliation and skip unsupported Windows directory fsync after file sync and atomic replacement. Carry forward the previously reviewed storage sources and explicit populated v4 scheduled-task preview/apply requirement; bind permission to this exact source fingerprint."
   }
 ]
