@@ -3,10 +3,14 @@ import type {
   ScheduledExecutionPolicy,
   ScheduledTaskOutcome,
   ScheduledRecovery,
+  ScheduledTaskSource,
+  ScheduledTerminalBinding,
 } from "@runweave/shared/scheduled-tasks";
 
 export interface ScheduledProviderRequest {
   runId: string;
+  source?: ScheduledTaskSource;
+  name?: string;
   projectId?: string;
   prompt: string;
   workingDirectory: string;
@@ -20,6 +24,7 @@ export interface ScheduledProviderRequest {
   onOutput: (text: string) => Promise<boolean>;
   onSpawn: (pid: number) => Promise<void>;
   onThread: (threadId: string) => Promise<void>;
+  onTerminalRetained?: (binding: ScheduledTerminalBinding) => Promise<void>;
 }
 
 export interface ScheduledProviderResult {

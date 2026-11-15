@@ -45,7 +45,7 @@ export interface PrepareTerminalAgentInternalOptions {
   validateSupervisorTarget?: () => void;
   resetPanelBeforeResume?: boolean;
   skipInitialPrompt?: boolean;
-  /** Scheduled resumes can exceed the PTY line limit before shell initialization. */
+  /** Scheduled launches can exceed the PTY line limit before shell initialization. */
   stageResumeCommand?: boolean;
 }
 
@@ -306,7 +306,7 @@ export async function prepareTerminalAgent(
         operationId,
         paneTarget,
       );
-      if (resetPanelBeforeResume && internalOptions?.stageResumeCommand) {
+      if (internalOptions?.stageResumeCommand) {
         await withStagedAgentLaunch(launchCommand, submit);
       } else {
         await submit(launchCommand);

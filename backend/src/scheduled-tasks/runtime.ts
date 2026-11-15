@@ -39,6 +39,7 @@ export class ScheduledTaskRuntime {
     private readonly providers: Map<string, ScheduledProviderAdapter>,
     private readonly enabled: boolean,
     private readonly limits: ScheduledTaskRuntimeLimits,
+    private readonly terminalProvider?: ScheduledProviderAdapter,
   ) {}
 
   async initialize(): Promise<void> {
@@ -238,8 +239,10 @@ export class ScheduledTaskRuntime {
     const executionStarted = Date.now();
     try {
       const cwd = await validateExecutionContext(initial, this.terminalSessionManager, !initial.threadRef);
-      const provider = this.providers.get(initial.snapshot.provider);
+      let provider = this.providers.get(initial.snapshot.provider);
       if (!provider) throw new Error("provider_unavailable");
+      if (initial.snapshot.provider === "codex" && initial.snapshot.executionPolicy === "full-access" &&
+          !initial.snapshot.origin && this.terminalProvider) provider = this.terminalProvider;
       const budget = initial.executionBudget ?? this.limits;
       const remainingMs =
         budget.timeoutMs - (initial.continuation?.activeMs ?? 0);
@@ -253,6 +256,8 @@ export class ScheduledTaskRuntime {
         initial.snapshot.schedule.kind !== "once" ? await this.store.previousFinishedRun(initial.id) : null;
       const result = await provider.run({
         runId: initial.id,
+        source: { type: "scheduled-task", taskId: initial.taskId, runId: initial.id },
+        name: initial.snapshot.name,
         projectId: initial.executionContext.kind === "project" ? initial.executionContext.projectId : undefined,
         prompt: resuming
           ? continuationPrompt(initial)
@@ -272,6 +277,9 @@ export class ScheduledTaskRuntime {
           this.store.appendOutput(initial.id, text, budget.maxOutputBytes),
         onThread: async (threadId) => {
           await this.store.setRunThread(initial.id, this.ownerId, threadId);
+        },
+        onTerminalRetained: async (binding) => {
+          await this.store.putBinding(initial.id, binding);
         },
       });
       if (resuming && result.threadId !== initial.threadRef!.threadId)
@@ -294,6 +302,15 @@ export class ScheduledTaskRuntime {
               },
       });
     } catch (error) {
+      if (error instanceof Error && error.message === "provider_stop_unconfirmed") {
+        // The original terminal still owns live work. Keep this task busy and
+        // stopping; neither report cancellation nor admit another execution.
+        await this.store.requestRunStop(initial.id, new Date().toISOString());
+        logger.warn("scheduled-tasks.execution.stop-unconfirmed", {
+          component: "scheduled-tasks", runId: initial.id, error,
+        });
+        return;
+      }
       const code = controller.signal.aborted
         ? "cancelled"
         : error instanceof Error
@@ -330,6 +347,12 @@ function providerErrorMessage(code: string): string {
       return "The provider did not return a persistent thread identity";
     case "provider_completion_missing":
       return "The provider exited without a confirmed completion event";
+    case "provider_terminal_taken_over":
+      return "用户已接管执行终端，已停止自动管理并保留终端。";
+    case "provider_terminal_changed":
+      return "执行终端或对话已变化，无法确认本次任务结果。";
+    case "provider_history_unavailable":
+      return "无法读取执行终端的原生对话记录，未确认任务成功。";
     case "provider_result_invalid":
       return "Agent 未返回有效的任务结果，无法确认成功。请查看输出或打开对话。";
     case "provider_output_persist_failed":

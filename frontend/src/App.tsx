@@ -1,7 +1,7 @@
 import { useObserverTerminalNavigation } from "./features/terminal/automation-sources";
 import { AgentObserverPage } from "./pages/agent-observer-page";
 import { useScreenConversationLink } from "./features/screen-recording/use-conversation-link";
-import { SettingsEditProvider, useManagementExit } from "./features/settings/edit-session";
+import { SettingsEditProvider, useManagementExit, useSettingsCanLeave } from "./features/settings/edit-session";
 import { SettingsPage } from "./pages/settings-page";
 import { isManagementPath, settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
 import { DevResourcesPage } from "./pages/dev-resources-page";
@@ -13,6 +13,7 @@ import { CodexQuotaProvider } from "./features/codex-quota/provider";
 import { MobileLoginProvider } from "./features/mobile-login/provider";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { TunnelDrawer } from "./features/tunnels/drawer";
 import { StatusNoticeProvider, StatusNotice } from "./components/status-notice";
 import { useTunnelStore } from "./features/tunnels/store";
@@ -81,6 +82,7 @@ function RunweaveApp() {
   const openSettings = useSettingsNavigation();
   const settingsOpen = isManagementPath(location.pathname);
   const managementExit = useManagementExit();
+  const canLeaveManagement = useSettingsCanLeave();
   const workspaceLocation = useRef(settingsBackground(location));
   useEffect(() => {
     if (/^\/terminal(?:\/|$)/u.test(location.pathname)) workspaceLocation.current = location;
@@ -547,7 +549,19 @@ function RunweaveApp() {
       <span className="text-xs">{quickInputNotice.body}</span>
       </button>
     </StatusNotice> : null}
-    {isElectron && <ConnectionWorkspaceObservers connections={connections} activeConnectionId={activeConnectionId} activeToken={token} activeAuthStatus={authStatus} onActiveAuthExpired={clearToken} observeActive={location.pathname === "/connections"} />}
+    {isElectron && <ConnectionWorkspaceObservers connections={connections} activeConnectionId={activeConnectionId} activeToken={token} activeAuthStatus={authStatus} onActiveAuthExpired={clearToken} observeActive={!location.pathname.startsWith("/terminal")}
+      onActivateTerminal={(session) => {
+        const enter = () => {
+          setTerminalNavigation(queryScope, {
+            parentProjectId: resolveTerminalParentProjectId(session.projectId), projectId: session.projectId,
+            terminalSessionId: session.terminalSessionId,
+          });
+          navigate(`/terminal/${encodeURIComponent(session.terminalSessionId)}`);
+        };
+        if (managementExit?.active && canLeaveManagement) managementExit.exit(enter);
+        else if (managementExit?.active) managementExit.prepare(enter, "打开定时任务执行终端");
+        else enter();
+      }} />}
     {isElectron && activeConnection && token && sessionId && authStatus !== "unauthenticated"
       ? <MobileLoginProvider key={`${activeConnection.id}:${apiBase}:${sessionId}`} connection={activeConnection} token={token}>{content}</MobileLoginProvider>
       : content}
