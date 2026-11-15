@@ -93,6 +93,9 @@ public final class SessionController: ObservableObject {
       self?.sendRaw(text)
     }
     surface.isTmux = { [weak self] in self?.runtimeKind == "tmux" }
+    surface.scrollSensitivity = { [weak self] in
+      self?.metadata?.activeCommand == "claude" ? 0.75 : 1
+    }
     surface.tmuxScroll = { [weak self] input, rows in
       guard let self, self.canSend else { return false }
       self.sendRaw(input)

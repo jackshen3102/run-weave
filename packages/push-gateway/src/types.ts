@@ -38,6 +38,8 @@ export interface Delivery {
   hostId: string;
   subscriptionId: string;
   fingerprint: string;
+  /** Older claims have no category; count them conservatively against each category. */
+  category?: string;
   state: PushDeliveryResult["state"] | "sending";
   attempts: number;
   createdAt: number;

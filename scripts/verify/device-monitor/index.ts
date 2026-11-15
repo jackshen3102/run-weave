@@ -218,12 +218,11 @@ async function thresholds() {
       "DELETE",
     );
     assert.equal(removed.status, 204);
-    assert.equal(
-      Object.values(f.gatewayStore.snapshot().subscriptions).filter(
-        (s) => !s.revoked,
-      ).length,
-      1,
-    );
+    assert.equal(Object.values(f.gatewayStore.snapshot().subscriptions).filter((s) => !s.revoked).length, 1);
+    // A later discharge cycle gets a fresh window; age only this private fixture's ledger.
+    f.gatewayStore.update((data) => {
+      for (const delivery of Object.values(data.deliveries)) delivery.updatedAt -= 61_000;
+    });
     await observe(25);
     await observe(20);
     await eventually(() => sent.length === 4);

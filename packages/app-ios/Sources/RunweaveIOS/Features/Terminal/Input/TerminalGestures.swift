@@ -227,6 +227,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   private var lastMomentumTime: CFTimeInterval = 0
   var usesNormalizedScroll: () -> Bool = { false }
   var normalizedScrollUsesHistory: () -> Bool = { false }
+  var scrollSensitivity: () -> CGFloat = { 1 }
   var sendNormalizedScroll: ((String, Int, String) -> Bool)?
   var stopNormalizedScroll: ((String) -> Void)?
   // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
@@ -295,7 +296,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     if points.sign != accumulated.sign { accumulated = 0 }
     // Preserve the existing history drag gain; application wheels use their own distance.
     let distanceScale: CGFloat = !usesNormalizedScroll() || normalizedScrollUsesHistory() ? 2 : 1
-    accumulated += points * distanceScale
+    accumulated += points * distanceScale * scrollSensitivity()
     let unit = lineHeight * CGFloat(usesNormalizedScroll() ? 1 : tmuxRowsPerWheel)
     let steps = Int(accumulated / unit)
     guard steps != 0 else { return }

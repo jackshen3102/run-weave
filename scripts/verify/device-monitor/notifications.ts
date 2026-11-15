@@ -14,6 +14,7 @@ import { close, eventually, fixture, listen, pause } from "./fixture";
 /** Real HTTPS API, durable SQLite and an observable provider boundary. */
 export async function verifyNotifications() {
   await verifySubscriptionOwnership();
+  await verifyCategoryRateLimits();
   let calls = 0;
   let outcome: APNsResult = { state: "accepted" };
   let block = false;
@@ -218,8 +219,11 @@ export async function verifyNotifications() {
       recovered.close();
     }
 
+    // Retry timing uses its own target, independent of earlier delivery outcomes.
+    const retrySubscriptionId = randomUUID();
+    assert.equal((await put(retrySubscriptionId, { ...registration, installationId: randomUUID() })).status, 200);
     outcome = { state: "retry", retryAfterMs: 1 };
-    const retry = make(subscriptionId);
+    const retry = make(retrySubscriptionId);
     const retryResult = await (await send(retry)).json();
     assert.equal(retryResult.retryAfterMs, 5000);
     assert.equal((await (await send(retry)).json()).state, "retry");
@@ -228,10 +232,12 @@ export async function verifyNotifications() {
     outcome = { state: "accepted" };
     assert.equal((await (await send(retry)).json()).state, "accepted");
     assert.equal(calls, 4);
+    assert.equal((await send(make(alias))).status, 200);
+    assert.equal(calls, 5);
     assert.equal(
       (await send(make(alias))).status,
       429,
-      "aliases cannot evade target rate limit",
+      "aliases cannot evade category rate limit",
     );
     const binding = f.gatewayStore.snapshot().subscriptions[subscriptionId]!;
     assert.equal(
@@ -250,12 +256,123 @@ export async function verifyNotifications() {
       (await put(subscriptionId, { ...registration, version: 3 })).status,
       409,
     );
-    assert.equal(calls, 4);
+    assert.equal(calls, 5);
     process.stdout.write(
       "PASS generic HTTPS notifications: explicit required categories, scoped consent, identity/env/host auth, UTF-8 limits, freshness, durable concurrent/alias dedupe, content conflict, restart, retry, rate limit and revocation\n",
     );
   } finally {
     release?.();
+    await f.dispose();
+  }
+}
+
+async function verifyCategoryRateLimits() {
+  const calls: Array<{ category: string; installationId: string }> = [];
+  let outcome: APNsResult = { state: "accepted" };
+  const f = await fixture(async () => null, async (subscription, message) => {
+    calls.push({ category: message.category, installationId: subscription.installationId });
+    return outcome;
+  });
+  try {
+    const register = async (installationId: string, category: string) => {
+      const id = randomUUID();
+      assert.equal((await f.gatewayRequest(`/v1/subscriptions/${id}`, {
+        installationId, categories: [category], environment: "sandbox",
+        deviceToken: "ab".repeat(48), displayName: "Category fixture", version: 1,
+      }, "PUT")).status, 200);
+      return id;
+    };
+    const make = (subscriptionId: string, category: string) => ({
+      subscriptionId, category, eventId: randomUUID(), title: "Fixture", body: "Local only",
+      occurredAt: new Date().toISOString(),
+    });
+    const send = (event: ReturnType<typeof make>) => f.gatewayRequest("/v1/notifications", event);
+    for (let round = 0; round < 2; round++) {
+      const installation = randomUUID(), before = calls.length;
+      const replies = await register(installation, "terminal.reply");
+      const battery = await register(installation, "battery.low");
+      const alias = await register(installation, "terminal.reply");
+      const task = await register(installation, "task.completed");
+      const first = make(replies, "terminal.reply");
+      for (const event of [first, make(replies, "terminal.reply"), make(replies, "terminal.reply")])
+        assert.equal((await send(event)).status, 200);
+      assert.equal(calls.length, before + 3);
+      assert.equal((await send(make(replies, "terminal.reply"))).status, 429);
+      assert.equal((await send(make(alias, "terminal.reply"))).status, 429);
+      assert.equal((await send({ ...first, subscriptionId: alias })).status, 200);
+      assert.equal(calls.length, before + 3, "category rejection and duplicate returns do not submit");
+
+      // A separate real SQLite reopen must retain attribution, not reopen the quota.
+      const directory = path.join(f.directory, `category-recovery-${round}`);
+      let recovered = new GatewayStore(directory), recoveredCalls = 0;
+      recovered.update((data) => {
+        Object.assign(data, f.gatewayStore.snapshot());
+        data.senders[hash("category-recovery")] = { hostId: f.monitor.snapshot().hostId, environments: ["sandbox"] };
+      });
+      recovered.close();
+      recovered = new GatewayStore(directory);
+      const server = createGateway(recovered, async () => { recoveredCalls++; return { state: "accepted" }; });
+      const port = await listen(server);
+      try {
+        const replay = (event: ReturnType<typeof make>) => fetch(`http://localhost:${port}/v1/notifications`, {
+          method: "POST", headers: { Authorization: "Bearer category-recovery", "Content-Type": "application/json" },
+          body: JSON.stringify(event),
+        });
+        assert.equal((await replay(first)).status, 200);
+        assert.equal((await replay(make(alias, "terminal.reply"))).status, 429);
+        assert.equal(recoveredCalls, 0);
+        assert.equal((await replay(make(battery, "battery.low"))).status, 200);
+        assert.equal(recoveredCalls, 1);
+        assert.equal((await replay(make(task, "task.completed"))).status, 429);
+      } finally {
+        await server.disposeBadges();
+        await close(server);
+        recovered.close();
+      }
+      assert.equal((await send(make(battery, "battery.low"))).status, 200);
+      assert.equal(calls.length, before + 4, "another category retains the fourth shared slot");
+      assert.equal((await send(make(task, "task.completed"))).status, 429, "the total limit is still four");
+      assert.equal((await send(first)).status, 200);
+      assert.equal(calls.length, before + 4);
+      const otherPhone = await register(randomUUID(), "battery.low");
+      assert.equal((await send(make(otherPhone, "battery.low"))).status, 200);
+      assert.equal(calls.length, before + 5, "another installation has an independent budget");
+    }
+
+    const legacyInstallation = randomUUID();
+    const legacyReplies = await register(legacyInstallation, "terminal.reply");
+    const legacyBattery = await register(legacyInstallation, "battery.low");
+    for (let i = 0; i < 3; i++) assert.equal((await send(make(legacyReplies, "terminal.reply"))).status, 200);
+    f.gatewayStore.update((data) => {
+      for (const delivery of Object.values(data.deliveries))
+        if (delivery.subscriptionId === legacyReplies) delete delivery.category;
+    });
+    const beforeLegacy = calls.length;
+    assert.equal((await send(make(legacyBattery, "battery.low"))).status, 429, "legacy claims cannot bypass category accounting");
+    assert.equal(calls.length, beforeLegacy);
+    // Age only this private fixture's ledger; exercise window expiry without a minute-long wait.
+    f.gatewayStore.update((data) => {
+      for (const delivery of Object.values(data.deliveries)) if (delivery.subscriptionId === legacyReplies) {
+        delivery.createdAt -= 61_000; delivery.updatedAt -= 61_000;
+      }
+    });
+    assert.equal((await send(make(legacyBattery, "battery.low"))).status, 200);
+
+    const retryInstallation = randomUUID();
+    const retryReplies = await register(retryInstallation, "terminal.reply");
+    const retryBattery = await register(retryInstallation, "battery.low");
+    const retry = make(retryReplies, "terminal.reply");
+    outcome = { state: "retry", retryAfterMs: 1 };
+    assert.equal((await (await send(retry)).json()).state, "retry");
+    outcome = { state: "accepted" };
+    for (let i = 0; i < 2; i++) assert.equal((await send(make(retryReplies, "terminal.reply"))).status, 200);
+    const beforeRetry = calls.length;
+    await pause(5050);
+    assert.equal((await send(retry)).status, 429, "a retry cannot bypass the category ceiling");
+    assert.equal(calls.length, beforeRetry);
+    assert.equal((await send(make(retryBattery, "battery.low"))).status, 200);
+    process.stdout.write("PASS category quota: three same-category attempts reserve one shared slot; total four, aliases, dedupe, independent phone, SQLite restart, legacy window expiry and retries remain bounded\n");
+  } finally {
     await f.dispose();
   }
 }
