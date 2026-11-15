@@ -206,18 +206,18 @@ actor AnalysisCoordinator {
             }
             let generation = (Int(row["generation"] ?? "0") ?? 0) + 1
             let attempt = (Int(row["attempts"] ?? "0") ?? 0) + 1
-            // Queued inputs may predate another commit. Refresh context once,
-            // before the first lease; retries keep their exact frozen input.
-            if attempt == 1 {
-                let captureIDs = Set(manifest.captures.map(\.id))
-                let ownEvidence = manifest.evidence.filter {
-                    $0.source == "screen" ? captureIDs.contains($0.captureID ?? "") :
-                        $0.occurredAtMs >= manifest.startMs && $0.occurredAtMs <= manifest.endMs
-                }
-                manifest.context = try cards().filter { $0.spans.contains { $0.endMs >= manifest.startMs-2700000 && $0.startMs <= manifest.startMs } }
-                manifest.evidence = ownEvidence + (try contextEvidence(manifest.context))
-                manifest.inputHash = analysisHash(try analysisJSON(manifest.captures) + analysisJSON(ownEvidence) + analysisJSON(manifest.context) + "\(manifest.startMs):\(manifest.endMs):" + manifest.promptVersion)
+            // Another batch may commit during retry backoff. Freeze current context
+            // for every lease and rehash its dependencies, retaining the retry budget.
+            let captureIDs = Set(manifest.captures.map(\.id))
+            let agentIDs = Set(try store.rows("SELECT id FROM agent_events WHERE batch_id=?", [id]).compactMap { $0["id"] })
+            var included = Set<String>()
+            let ownEvidence = manifest.evidence.filter {
+                let owned = $0.source == "screen" ? captureIDs.contains($0.captureID ?? "") : agentIDs.contains($0.id)
+                return owned && included.insert($0.id).inserted
             }
+            manifest.context = try cards().filter { $0.spans.contains { $0.endMs >= manifest.startMs-2700000 && $0.startMs <= manifest.startMs } }
+            manifest.evidence = ownEvidence + (try contextEvidence(manifest.context)).filter { !included.contains($0.id) }
+            manifest.inputHash = analysisHash(try analysisJSON(manifest.captures) + analysisJSON(manifest.evidence) + analysisJSON(manifest.context) + "\(manifest.startMs):\(manifest.endMs):" + manifest.promptVersion)
             try store.transaction {
                 try store.execute("UPDATE batches SET input_hash=?,manifest=? WHERE id=?", [manifest.inputHash,try analysisJSON(manifest),id])
                 try store.execute("UPDATE batches SET state='running',worker=?,generation=?,attempts=?,expires=?,updated=? WHERE id=?", [workerID,generation,attempt,now+300000,now,id])
