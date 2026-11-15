@@ -19,10 +19,6 @@ public final class SessionController: ObservableObject {
   @Published public private(set) var inputBusy = false { didSet { updateCanSend() } }
   @Published public private(set) var canSend = false
   @Published private(set) var metadata: Metadata?
-  struct Metadata: Equatable {
-    let cwd: String
-    let activeCommand: String?
-  }
   @Published private(set) var scrolledBack = false
   @Published private(set) var scrollPositionKnown = true
   private lazy var scrollTransport = TerminalScrollTransport(surface: surface,
