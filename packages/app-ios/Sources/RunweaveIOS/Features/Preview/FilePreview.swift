@@ -27,6 +27,8 @@ struct FilePreview: View {
   @State private var loadedMode: String?
   @State private var loadRevision = 0
   @State private var mutation: PreviewMutation?
+  @State private var loadedAPI: APIClient?
+  @State private var editor: FileEditTarget?
 
   init(
     session: AppSession, projectID: String, file: SelectedFile, model: ProjectChangesModel,
@@ -51,6 +53,12 @@ struct FilePreview: View {
     diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
   }
   private var isVideo: Bool { file.changeKind == nil && isPreviewVideo(file.path) }
+  private var canEdit: Bool {
+    file.changeKind == nil && !file.readonly && !isImage && !isVideo
+      && !loading && failure == nil && payload?.base == "project"
+      && payload?.readonly == false && payload?.mtimeMs != nil
+      && loadedAPI != nil && loadedAPI === session.api
+  }
   private var canSwitch: Bool {
     ["md", "markdown", "svg", "html", "htm"].contains(suffix) && !isImage && diff?.problem == nil
   }
@@ -125,6 +133,15 @@ struct FilePreview: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
+        if canEdit {
+          Button("编辑") {
+            if let payload, let loadedAPI {
+              editor = FileEditTarget(file: payload, api: loadedAPI, generation: session.generation)
+            }
+          }.disabled(model.mutating).accessibilityIdentifier("preview-file-edit")
+        }
+      }
+      ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
           Button(copied ? "已复制" : "复制路径") {
             UIPasteboard.general.string = file.path
@@ -150,8 +167,20 @@ struct FilePreview: View {
         .accessibilityLabel("预览操作")
       }
     }
+    .fullScreenCover(item: $editor) { target in
+      FileEditor(session: session, projectID: projectID, target: target) { saved in
+        payload = saved
+        // Return to the saved source; HTML gets a fresh ticket when Preview is selected.
+        mode = "source"
+        loadedMode = "source"
+        Task { await model.refresh(force: true) }
+      }
+    }
     .onChange(of: session.api?.connectionID) { _ in
-      if isVideo { videoURL = nil; loadedMode = nil; loadRevision += 1 }
+      loadedAPI = nil; videoURL = nil; loadedMode = nil; loadRevision += 1
+    }
+    .onChange(of: session.generation) { _ in
+      loadedAPI = nil; loadedMode = nil; loadRevision += 1
     }
     .modifier(PreviewMutationConfirmation(model: model, target: $mutation))
     // Each presented level dismisses through its own native navigation binding.
@@ -184,6 +213,7 @@ struct FilePreview: View {
     }
   }
   private func load(mode: String) async {
+    loadedAPI = nil
     loading = true
     failure = nil
     image = nil
@@ -279,11 +309,12 @@ struct FilePreview: View {
       } else if isPreviewImage(file.path) {
         await loadImage()
       } else {
-        let value = try await session.withConnection {
-          try await $0.file(projectID: projectID, path: file.path)
+        let (value, api) = try await session.withConnection { api in
+          (try await api.file(projectID: projectID, path: file.path), api)
         }
         guard !Task.isCancelled else { return }
         payload = value
+        loadedAPI = api
         if mode == "preview", ["html", "htm"].contains(suffix) {
           let ticket = try await session.withConnection {
             try await $0.htmlPreviewTicket(projectID: projectID, path: file.path)
