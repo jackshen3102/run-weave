@@ -6,10 +6,23 @@ import type { CreateTerminalPanelRequest, TerminalPanelWorkspace } from "@runwea
 import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 import type { AuthContext } from "./auth-context.js";
+import type { CodeReviewDetail, CodeReviewPage, CodeReviewRun, CreateCodeReviewRequest } from "@runweave/shared/terminal/code-review";
 import type { CreateTerminalTaskRequest, StartTerminalTaskRequest, SendTerminalTaskRequest, ControlTerminalTaskRequest, ReviewTerminalTaskRequest, InterruptTerminalTaskRequest, TerminalTask, TerminalTaskObservation } from "@runweave/shared/terminal/task";
 
 export class TerminalHttpClient {
   constructor(private readonly auth: AuthContext) {}
+
+  createCodeReview(terminalId: string, payload: CreateCodeReviewRequest): Promise<CodeReviewRun> {
+    return this.auth.requestJson(`/api/terminal/session/${encodeURIComponent(terminalId)}/code-reviews`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+  }
+  listCodeReviews(terminalId: string, before?: string): Promise<CodeReviewPage> {
+    return this.auth.requestJson(`/api/terminal/session/${encodeURIComponent(terminalId)}/code-reviews${before ? `?before=${encodeURIComponent(before)}` : ""}`);
+  }
+  getCodeReview(reviewId: string): Promise<CodeReviewDetail> {
+    return this.auth.requestJson(`/api/terminal/code-reviews/${encodeURIComponent(reviewId)}`);
+  }
 
   listTasks(): Promise<{ tasks: TerminalTask[] }> { return this.auth.requestJson("/api/terminal/tasks"); }
   createTask(payload: CreateTerminalTaskRequest): Promise<TerminalTask> { return this.taskRequest("", payload); }

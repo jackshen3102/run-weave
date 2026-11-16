@@ -57,10 +57,13 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
       report.coverageComplete = false;
     }
   }
+  // Reproduction, source provenance and version checks may supply separate
+  // evidence. Every reference must be covered, but not by the same check.
+  const executedEvidence = new Set(report.checks.filter((check) => check.status !== "not_run" &&
+    check.beforeFingerprint === snapshot.fingerprint && check.afterFingerprint === snapshot.fingerprint)
+    .flatMap((check) => check.evidenceRefs));
   for (const finding of report.findings) {
-    if (!report.checks.some((check) => check.status !== "not_run" &&
-        check.beforeFingerprint === snapshot.fingerprint && check.afterFingerprint === snapshot.fingerprint &&
-        finding.evidenceRefs.every((id) => check.evidenceRefs.includes(id))))
+    if (!finding.evidenceRefs.every((id) => executedEvidence.has(id)))
       invalid("运行时问题缺少关联的同版已执行检查");
   }
   report.scope = requirements?.availability === "available" ? report.scope ?? "code_and_goals" : "code";

@@ -40,6 +40,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - [`product-exploration`](./skills/product-exploration/SKILL.md)：显式调用的产品探索，默认 30 分钟；只取证报告，不生成测试代码或自动修复。
 - `react-best-practices`
 - [`review-only`](./skills/review-only/SKILL.md)：统一计划、代码与交付目标核验；自然语言 Review 与专门入口沿用同一职责，不再叠加独立核验技能。
+- [`review-agent`](./skills/review-agent/SKILL.md)：原生 CLI 的 `@review` 独立审查代发入口，复用 Backend Review 生命周期并读取真实报告；与 Reviewer 的 review-only 职责分开。
 - `runweave-change-validation`
 - `runweave-dev-session`
 - [`quality-workflow`](./skills/quality-workflow/SKILL.md)：读取指定 Backend 的增量质量证据、持久化待处理页并更新同一归因台账；每日启用需确认配置。
