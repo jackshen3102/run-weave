@@ -42,7 +42,9 @@ struct TerminalScreen: View {
   @State private var actionFailure: String?
   @State private var tab = "Chat"
   @StateObject private var changes: ProjectChangesModel
-  @ObservedObject private var attachmentDrafts: TerminalAttachmentDrafts
+  @StateObject private var hasAttachments: StateProjection<Bool>
+  @StateObject private var presentation: StateProjection<TerminalPresentationSnapshot>
+  private let connectionScope: String?
   @AppStorage(DevicePreferences.themeKey, store: DevicePreferences.store) private var theme = "dark"
 
   init(session: AppSession, controller: SessionController, details: TerminalDetails, sourceIsParent: Bool = false) {
@@ -56,7 +58,12 @@ struct TerminalScreen: View {
     _codeReview = StateObject(wrappedValue: TerminalCodeReviewModel(session: session, controller: controller, terminalID: details.id))
     self.sourceIsParent = sourceIsParent
     _changes = StateObject(wrappedValue: ProjectChangesModel(session: session, terminal: details))
-    self.attachmentDrafts = session.attachmentDrafts
+    let attachments = session.attachmentDrafts.record(details.id)
+    _hasAttachments = StateObject(wrappedValue: StateProjection(changes: attachments.objectWillChange.eraseToAnyPublisher()) {
+      !attachments.attachments.isEmpty
+    })
+    connectionScope = session.connection?.scope
+    _presentation = StateObject(wrappedValue: terminalPresentationState(session: session, terminalID: details.id))
   }
 
   private var canReadChanges: Bool {
@@ -64,9 +71,20 @@ struct TerminalScreen: View {
   }
 
   private var currentTerminal: HomeTerminal? {
-    session.overview?.sessions.first { $0.id == details.id }
+    guard session.connection?.scope == connectionScope else { return nil }
+    return session.home.terminal(details.id)
   }
-  private var projectID: String { currentTerminal?.projectId ?? details.projectId }
+  private var presentationCovered: Bool {
+    showingConversation || showingComposer || browser.state == .presented || fileTap != nil
+      || sideChat.visible || showingBranchUpdates || showingHistory || codeReview.showingReport
+      || showingInfo || showingSupervision || showingDiagnostics || replyContext != nil || snapshotShare != nil
+  }
+  private func resumePresentation() {
+    let active = !presentationCovered && session.foreground
+      && session.terminalController === controller && session.terminal?.id == details.id
+    presentation.setActive(active); hasAttachments.setActive(active)
+  }
+  private var projectID: String { presentation.value.projectID ?? details.projectId }
   private var canReportCompletionViewed: Bool {
     session.foreground && session.canWrite && session.terminal?.id == details.id
       && controller.canSend && controller.scrollPositionKnown && !controller.scrolledBack && tab == "Chat"
@@ -75,11 +93,11 @@ struct TerminalScreen: View {
       && replyContext == nil && snapshotShare == nil && !deleting
   }
   private var completionViewKey: String {
-    "\(details.id):\(currentTerminal?.completionRevision ?? 0):\(canReportCompletionViewed)"
+    "\(details.id):\(presentation.value.completionRevision ?? 0):\(canReportCompletionViewed)"
   }
 
   private var title: String {
-    if let currentTerminal { return currentTerminal.title }
+    if let title = presentation.value.title { return title }
     if let alias = details.alias, !alias.isEmpty { return alias }
     let command: String?
     if let metadata = controller.metadata {
@@ -89,7 +107,7 @@ struct TerminalScreen: View {
     }
     return command ?? (details.command as NSString).lastPathComponent
   }
-  private var cwd: String { controller.metadata?.cwd ?? currentTerminal?.cwd ?? details.cwd }
+  private var cwd: String { controller.metadata?.cwd ?? presentation.value.cwd ?? details.cwd }
   private var status: String {
     if session.health.status == .offline { return "电脑离线" }
     if controller.runtimeStatus == "exited" { return "已退出" }
@@ -97,9 +115,7 @@ struct TerminalScreen: View {
   }
 
   private var projectName: String {
-    session.overview?.projects.first {
-      $0.id == HomeOverview.parentProjectID(projectID)
-    }?.name ?? (cwd as NSString).lastPathComponent
+    presentation.value.projectName ?? (cwd as NSString).lastPathComponent
   }
 
   var body: some View {
@@ -151,6 +167,7 @@ struct TerminalScreen: View {
       expectedConversation = target; session.requestedConversation = nil; showingConversation = true
     }
     .onAppear {
+      resumePresentation()
       if let target = session.requestedConversation, target.terminalSessionId == details.id {
         expectedConversation = target; session.requestedConversation = nil; showingConversation = true
       }
@@ -171,6 +188,8 @@ struct TerminalScreen: View {
       } catch { /* A missing view receipt must not suppress the reminder. */ }
     }
     .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
+    .onChange(of: presentationCovered) { _ in resumePresentation() }
+    .onChange(of: session.foreground) { _ in resumePresentation() }
     .task(id: "\(canReadChanges):\(projectID)") {
       changes.selectProject(projectID)
       if canReadChanges { await changes.refresh() }
@@ -180,6 +199,8 @@ struct TerminalScreen: View {
       if status == "已连接" { Task { await changes.refresh() } }
     }
     .onDisappear {
+      presentation.setActive(false)
+      hasAttachments.setActive(false)
       if !sideChat.visible { sideChat.suspend() }
       supervision.suspend()
       shareOperation?.cancel()
@@ -202,7 +223,7 @@ struct TerminalScreen: View {
     .task(id: "side-chat:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status)") {
       if sideChat.canRead { sideChat.startPolling() } else { sideChat.suspend() }
     }
-    .fullScreenCover(isPresented: $sideChat.visible) {
+    .fullScreenCover(isPresented: $sideChat.visible, onDismiss: resumePresentation) {
       SideChatView(model: sideChat, session: session, title: title, terminalID: details.id)
         .mobileAnalyticsScreen(.sideChat)
     }
@@ -230,22 +251,22 @@ struct TerminalScreen: View {
     .fullScreenCover(isPresented: Binding(
       get: { browser.state == .presented && !showingConversation },
       set: { if !$0 && !showingConversation { browser.collapse() } }
-    )) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
+    ), onDismiss: resumePresentation) { BrowserScreen(browser: browser).clarityMask().mobileAnalyticsScreen(.browser) }
     .modifier(BrowserPromptPresenter(browser: browser, active: browser.state != .presented && !showingConversation))
-    .sheet(item: $fileTap) { tap in
+    .sheet(item: $fileTap, onDismiss: resumePresentation) { tap in
       TerminalFilePreview(session: session, terminalID: details.id, projectID: projectID,
         source: .terminal(tap), close: { fileTap = nil }, model: changes)
         .clarityMask().mobileAnalyticsScreen(.filePreview)
     }
-    .sheet(isPresented: $showingHistory) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
+    .sheet(isPresented: $showingHistory, onDismiss: resumePresentation) { HistoryView(session: session, terminalID: details.id).mobileAnalyticsScreen(.history) }
     .background {
       ConversationReaderPresentation(
         session: session, controller: controller, terminalID: details.id, projectID: projectID,
         changes: changes, title: title,
         expectedTarget: expectedConversation, isPresented: $showingConversation,
-        onDismiss: connectBrowserIntents)
+        onDismiss: { resumePresentation(); connectBrowserIntents() })
     }
-    .sheet(item: $replyContext) { context in
+    .sheet(item: $replyContext, onDismiss: resumePresentation) { context in
       CodexReplyAssistant(session: session, controller: controller, questions: session.terminalQuestions,
         terminalID: details.id,
         context: context, returnToTerminal: {
@@ -260,12 +281,12 @@ struct TerminalScreen: View {
           controller.returnToBottom()
         }).clarityMask()
     }
-    .sheet(isPresented: $showingSupervision) {
+    .sheet(isPresented: $showingSupervision, onDismiss: resumePresentation) {
       TaskSupervisionSheet(session: session, model: supervision, terminalTitle: title)
     }
-    .sheet(isPresented: $showingInfo) { TerminalInfoView(terminalID: details.id).mobileAnalyticsScreen(.terminalInfo) }
-    .sheet(isPresented: $showingDiagnostics) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
-    .sheet(item: $snapshotShare) { TerminalSnapshotShareSheet(url: $0.url).mobileAnalyticsScreen(.share) }
+    .sheet(isPresented: $showingInfo, onDismiss: resumePresentation) { TerminalInfoView(terminalID: details.id).mobileAnalyticsScreen(.terminalInfo) }
+    .sheet(isPresented: $showingDiagnostics, onDismiss: resumePresentation) { DiagnosticsView(session: session).mobileAnalyticsScreen(.diagnostics) }
+    .sheet(item: $snapshotShare, onDismiss: resumePresentation) { TerminalSnapshotShareSheet(url: $0.url).mobileAnalyticsScreen(.share) }
     .onChange(of: session.generation) { _ in
       shareOperation?.cancel()
       snapshotShare = nil
@@ -296,6 +317,7 @@ struct TerminalScreen: View {
         sideChat: sideChat,
         onSideChat: { Task { await sideChat.open() } },
         onDismiss: {
+          resumePresentation()
           composerViewportCovered = false
           composerTriggerFocused = true
         })
@@ -418,9 +440,9 @@ struct TerminalScreen: View {
   }
 
   private var hasComposerDraft: Bool {
-    let text = session.terminalDrafts[details.id] ?? ""
+    let text = presentation.value.draft.text
     return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      || !(attachmentDrafts.attachments[details.id] ?? []).isEmpty
+      || hasAttachments.value
   }
 
   private var terminalDock: some View {
@@ -431,11 +453,11 @@ struct TerminalScreen: View {
       }
       HStack(spacing: 0) {
         TerminalReadingButtons(sideChat: sideChat, expectedTarget: $expectedConversation, isPresented: $showingConversation)
-        if session.isCommandActive(details.id) {
+        if presentation.value.state?.state == "agent_running" {
           TerminalStopButton(stopping: stoppingCommand, canWrite: session.canWrite, stop: stopActiveCommand)
         }
         TerminalComposerButton(hasDraft: hasComposerDraft,
-          unconfirmedInput: session.unconfirmedInputDrafts.contains(details.id), open: openComposer)
+          unconfirmedInput: presentation.value.draft.unconfirmedInput, open: openComposer)
           .accessibilityFocused($composerTriggerFocused)
         TerminalNextCompletionButton(session: session)
         if !quickActionsVisible {
@@ -564,7 +586,7 @@ struct TerminalScreen: View {
         .accessibilityIdentifier("terminal-browser-resume")
         .disabled(browser.clearing)
       }
-      if currentTerminal?.hasUnreadCompletion == true {
+      if (presentation.value.completionRevision ?? 0) > (presentation.value.acknowledgedRevision ?? 0) {
         Button {
           Task { await session.acknowledgeTerminal(details.id) }
         } label: {
@@ -572,7 +594,7 @@ struct TerminalScreen: View {
             .padding(8)
         }
         .accessibilityLabel("有新的接管提醒，标记已读")
-        .disabled(!session.canWrite || session.acknowledgementWrites.contains(details.id))
+        .disabled(!session.canWrite || presentation.value.acknowledging)
       }
       TerminalActionsMenu(
         session: session, controller: controller, terminalID: details.id,

@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -8,9 +9,12 @@ private struct HomeBranchBadgeBounds: PreferenceKey {
   }
 }
 
-struct HomeTerminalRow: View {
+struct HomeTerminalRow: View, Equatable {
   @ObservedObject var session: AppSession
-  let terminal: HomeTerminal
+  private let initialTerminal: HomeTerminal
+  private let record: HomeState.TerminalRecord
+  private let connectionScope: String?
+  @StateObject private var state: StateProjection<HomeState.TerminalSnapshot>
   let projectName: String?
   var branchStatus: HomeBranchStatus? = nil
   let showBranchUpdates: () -> Void
@@ -19,6 +23,34 @@ struct HomeTerminalRow: View {
   let delete: () -> Void
   @State private var showingCopied = false
   @State private var forkFailure: String?
+  private var terminal: HomeTerminal { state.value.terminal ?? initialTerminal }
+
+  init(session: AppSession, terminal: HomeTerminal, projectName: String?, branchStatus: HomeBranchStatus? = nil,
+    showBranchUpdates: @escaping () -> Void, rename: @escaping () -> Void,
+    move: @escaping () -> Void, delete: @escaping () -> Void) {
+    self.session = session; initialTerminal = terminal; self.projectName = projectName
+    self.branchStatus = branchStatus; self.showBranchUpdates = showBranchUpdates
+    self.rename = rename; self.move = move; self.delete = delete
+    connectionScope = session.connection?.scope
+    let record = session.home.record(terminal.id)
+    self.record = record
+    _state = StateObject(wrappedValue: StateProjection(
+      changes: Publishers.Merge(record.objectWillChange, session.objectWillChange).eraseToAnyPublisher(),
+      isVisible: {
+        session.authenticated && session.foreground && session.terminal == nil
+          && !session.showingScheduledTasks && !session.showingEnergyMonitor && !session.showingDevelopmentResources
+      }) {
+      record.snapshot
+    })
+  }
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    // HomeView's actions target this stable record and its State bindings; they
+    // read the latest terminal on invocation instead of capturing a row snapshot.
+    lhs.session === rhs.session && lhs.record === rhs.record
+      && lhs.projectName == rhs.projectName && lhs.branchStatus == rhs.branchStatus
+      && lhs.connectionScope == rhs.connectionScope
+  }
   private var pinned: Bool { terminal.pinnedAt != nil }
   private var pinLabel: String { pinned ? "取消置顶" : "置顶" }
   private var hasConversation: Bool { terminal.conversationKey != nil || terminal.terminalState.agent != nil }
@@ -36,27 +68,33 @@ struct HomeTerminalRow: View {
   }
 
   private func setPinned() {
-    Task { try? await session.updateTerminal(terminal.id, change: .pinned(!pinned)) }
+    Task {
+      guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
+      try? await session.updateTerminal(current.id, change: .pinned(current.pinnedAt == nil))
+    }
   }
 
   var body: some View {
     ZStack {
       Button {
-        Task { await session.openTerminal(terminal.id) }
+        Task {
+          guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
+          await session.openTerminal(current.id)
+        }
       } label: {
         VStack(alignment: .leading, spacing: 4) {
           HStack {
             Text(terminal.title).font(.headline).foregroundColor(.primary).lineLimit(1)
               .layoutPriority(1)
             TerminalAttentionBadge(
-              unread: terminal.hasUnreadCompletion, bell: session.bellMarkers.contains(terminal.id),
+              unread: terminal.hasUnreadCompletion, bell: state.value.bell,
               showLabel: false)
             if pinned {
               Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)
                 .accessibilityLabel("已置顶")
             }
             Spacer()
-            if session.metadataWrites.contains(terminal.id) { ProgressView() }
+            if state.value.metadataWriting { ProgressView() }
             TerminalStatusBadge(terminal: terminal).fixedSize()
           }
           if let projectName {
@@ -110,7 +148,8 @@ struct HomeTerminalRow: View {
     .contextMenu {
       Button {
         Task {
-          do { try await session.forkTerminal(terminal.id) }
+          guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
+          do { try await session.forkTerminal(current.id) }
           catch { if !(error is CancellationError) { forkFailure = displayError(error) } }
         }
       } label: { Label("Fork Thread", systemImage: "arrow.triangle.branch") }
@@ -124,7 +163,12 @@ struct HomeTerminalRow: View {
         Label("复制终端 ID", systemImage: "doc.on.doc")
       }
       if terminal.hasUnreadCompletion {
-        Button("标记已读") { Task { await session.acknowledgeTerminal(terminal.id) } }
+        Button("标记已读") {
+          Task {
+            guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
+            await session.acknowledgeTerminal(current.id)
+          }
+        }
           .disabled(!session.canWrite || session.acknowledgementWrites.contains(terminal.id))
       }
       Button(action: setPinned) { Label(pinLabel, systemImage: pinned ? "pin.slash" : "pin") }
@@ -132,7 +176,7 @@ struct HomeTerminalRow: View {
       Button("重命名", action: rename).disabled(!session.canEditTerminal(terminal.id))
       Button(action: move) { Label("移动到项目", systemImage: "folder") }
         .disabled(!session.canEditTerminal(terminal.id)
-          || !(session.overview?.projects.contains { $0.id != terminal.projectId } ?? false))
+          || !state.value.canMove)
         .accessibilityIdentifier("terminal-move-project")
       Button("删除终端", role: .destructive, action: delete)
         .disabled(!session.canEditTerminal(terminal.id))
@@ -145,5 +189,8 @@ struct HomeTerminalRow: View {
     .alert("Fork 未确认", isPresented: Binding(get: { forkFailure != nil }, set: { if !$0 { forkFailure = nil } })) {
       Button("好", role: .cancel) { forkFailure = nil }
     } message: { Text(forkFailure ?? "") }
+    .onAppear { state.setActive(true) }
+    .onDisappear { state.setActive(false) }
+    .disabled(session.connection?.scope != connectionScope || state.value.terminal == nil)
   }
 }

@@ -62,12 +62,17 @@ struct ConversationReaderPresentation: UIViewControllerRepresentable {
       if let presented {
         guard !presented.isBeingPresented, !presented.isBeingDismissed else { return }
         if requested {
+          let inputs = Inputs(parent)
+          // The reader observes session data itself. Replacing its hosting root
+          // for unrelated terminal events also relayouts covered file previews.
+          guard presented.inputs != inputs else { return }
+          presented.inputs = inputs
           presented.host.rootView = content()
         } else {
           presented.dismiss(animated: true)
         }
       } else if requested, anchor.presentedViewController == nil {
-        let host = ReaderHost(rootView: content())
+        let host = ReaderHost(inputs: Inputs(parent), rootView: content())
         host.transitionEnded = { [weak self] completed in
           guard let self else { return }
           if completed {
@@ -100,12 +105,41 @@ struct ConversationReaderPresentation: UIViewControllerRepresentable {
     }
   }
 
+  /// Only identity and forwarded environment changes require a new hosting root.
+  struct Inputs: Equatable {
+    let session: ObjectIdentifier
+    let controller: ObjectIdentifier
+    let terminalID: String
+    let projectID: String
+    let changes: ObjectIdentifier
+    let title: String
+    let expectedTarget: TerminalConversation.Target?
+    let scenePhase: ScenePhase
+    let colorScheme: ColorScheme
+    let analyticsDepth: Int
+
+    init(_ presentation: ConversationReaderPresentation) {
+      session = ObjectIdentifier(presentation.session)
+      controller = ObjectIdentifier(presentation.controller)
+      terminalID = presentation.terminalID
+      projectID = presentation.projectID
+      changes = ObjectIdentifier(presentation.changes)
+      title = presentation.title
+      expectedTarget = presentation.expectedTarget
+      scenePhase = presentation.scenePhase
+      colorScheme = presentation.colorScheme
+      analyticsDepth = presentation.analyticsDepth
+    }
+  }
+
   final class ReaderHost: UIViewController, UIViewControllerTransitioningDelegate, UIGestureRecognizerDelegate {
     let host: UIHostingController<AnyView>
+    var inputs: Inputs
     var transitionEnded: ((Bool) -> Void)?
     private var interaction: UIPercentDrivenInteractiveTransition?
 
-    init(rootView: AnyView) {
+    init(inputs: Inputs, rootView: AnyView) {
+      self.inputs = inputs
       host = UIHostingController(rootView: rootView)
       super.init(nibName: nil, bundle: nil)
       // Unlike fullScreen, overFullScreen retains the presenting terminal's view hierarchy.

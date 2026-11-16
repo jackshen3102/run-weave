@@ -4,6 +4,8 @@ import SwiftUI
 struct RenameTerminalView: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var session: AppSession
+  @StateObject private var state: StateProjection<TerminalPresentationSnapshot>
+  private let connectionScope: String?
   let terminal: HomeTerminal
   @State private var name: String
   @State private var failure: String?
@@ -12,6 +14,8 @@ struct RenameTerminalView: View {
   init(session: AppSession, terminal: HomeTerminal) {
     self.session = session
     self.terminal = terminal
+    connectionScope = session.connection?.scope
+    _state = StateObject(wrappedValue: terminalPresentationState(session: session, terminalID: terminal.id))
     _name = State(initialValue: terminal.alias ?? "")
   }
 
@@ -33,6 +37,8 @@ struct RenameTerminalView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button(busy ? "保存中…" : "保存") {
+            guard session.connection?.scope == connectionScope,
+              session.home.terminal(terminal.id) != nil else { return }
             let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard value.utf16.count <= 80 else {
               failure = "名称过长，请缩短后重试（最多 80 个字符，部分符号占两个字符）。"
@@ -46,7 +52,7 @@ struct RenameTerminalView: View {
               } catch { failure = displayError(error) }
               busy = false
             }
-          }.disabled(busy || !session.canEditTerminal(terminal.id))
+          }.disabled(busy || (!session.canWrite || session.connection?.scope != connectionScope || state.value.metadataWriting || state.value.projectID == nil))
         }
       }
     }.navigationViewStyle(.stack).interactiveDismissDisabled(busy)

@@ -17,19 +17,37 @@ ios/RunweaveNative → RootView → AppSession
 
 ## 归属与生命周期
 
-| 入口                                                        | 职责                                                     |
-| ----------------------------------------------------------- | -------------------------------------------------------- |
-| `App/RootView.swift`、`Features/Connections`                | 导航、连接管理和主题                                     |
-| `State/ConnectionStore.swift`                               | 本地连接列表与当前连接，不保存明文凭据                   |
-| `State/AppSession.swift`                                    | 当前连接、认证、Home、草稿和 generation；丢弃过期响应    |
-| `Services/APIClient.swift`                                  | 规范化 endpoint、认证、HTTP 错误分类与请求               |
-| `Features/Terminal/SessionController.swift`                 | 终端连接、输入确认、事件与资源释放                       |
-| `Features/Terminal/EventStream.swift`、`Rendering`、`Input` | 传输、解析显示和用户输入分别归属                         |
-| `Features/Preview`、`Features/Media`                        | 文件审阅与单文件操作、上传与转写，业务错误由所属区域展示 |
-| `State/DiagnosticStore.swift`、`ios/Diagnostics`            | 日常脱敏日志与内部验证入口，二者分开                     |
+| 入口                                                        | 职责                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `App/RootView.swift`、`Features/Connections`                | 导航、连接管理和主题                                           |
+| `State/ConnectionStore.swift`                               | 本地连接列表与当前连接，不保存明文凭据                         |
+| `State/AppSession.swift`                                    | 连接、认证、导航与命令协调；按 generation 丢弃过期响应         |
+| `State/HomeState.swift`、`State/TerminalDraftStore.swift`   | 首页记录、结构与完成队列、按终端的草稿通知；不转发到全局上下文 |
+| `State/StateProjection.swift`                               | 只发布消费值的变化；覆盖时暂停呈现，返回时同步最新值           |
+| `Services/APIClient.swift`                                  | 规范化 endpoint、认证、HTTP 错误分类与请求                     |
+| `Features/Terminal/SessionController.swift`                 | 终端连接、输入确认、事件与资源释放                             |
+| `Features/Terminal/EventStream.swift`、`Rendering`、`Input` | 传输、解析显示和用户输入分别归属                               |
+| `Features/Preview`、`Features/Media`                        | 文件审阅与单文件操作、上传与转写，业务错误由所属区域展示       |
+| `State/DiagnosticStore.swift`、`ios/Diagnostics`            | 日常脱敏日志与内部验证入口，二者分开                           |
 
 源码路径相对于 `Sources/RunweaveIOS`，host 及内部验证目录除外。
 终端关闭释放本客户端资源，不结束远端 tmux；连接切换使旧请求、socket 和缓存失效。
+
+首页摘要、执行状态、元数据写入标记、响铃和草稿更新由各自的数据 owner 保存，
+不通过 `AppSession.objectWillChange` 广播。首页的列表成员、搜索结果及聚合状态与单行文本分别观察；
+当前终端只订阅自己的展示值，其他终端的未读完成由独立队列按钮消费。重复值不产生界面通知。
+记录以电脑 scope 和 terminal ID 隔离；切换电脑先使旧记录失效，再创建新记录，不能按相同 ID
+将新电脑数据灌入仍被旧视图持有的记录。展示投影不能代替执行命令时的实时权限、身份和 revision 校验。
+
+文字草稿与附件分别按 terminal ID 通知。归档仍由连接 scope 管理，原发送 revision、迟到确认和
+未确认输入规则保持；清空当前草稿保留该 scope 的订阅身份，跨电脑切换才废弃旧记录。
+被阅读、输入或其他模态页面覆盖的终端暂停无关展示更新，owner 继续接收数据，返回时读取最新值。
+列表行的暂停条件包含实际路由，不能只依赖 List 子项的 `onDisappear`。被覆盖页面的标题等呈现输入
+也读取冻结投影，不能因其他局部模型刷新而通过实时 getter 绕过暂停。命令动作仍读取实时 owner。
+原始输出仍直接进入 `SwiftTermSurface`，不经过上述列表或草稿发布链。
+
+UIKit 阅读呈现桥只在对象身份、目标、标题或转发环境变化时替换 hosting root；
+相同输入保留原 root 和滚动位置。被浏览器覆盖的 Markdown 不应因其他终端摘要重新布局。
 
 终端 WS 的 `notice` 是可继续使用的恢复提示，不进入失败或停止重连状态；`error` 仍表示失败。
 手动重连独立于写入权限：已登录的前台客户端可在离线时立即检查 Backend 并重新连接，
@@ -64,7 +82,9 @@ Backend 协议及持久身份边界见 [移动端架构](../../../docs/architect
 
 同电脑切路关闭旧 APIClient，使旧业务响应失效，等待已发 refresh 收敛后替换传输；
 保留终端 controller、SwiftTerm surface、terminal ID 和未发送草稿，不重放写入。
-原生终端页面按电脑和终端身份保持，不因 transport generation 重建。
+原生终端页面按电脑、终端和 controller 身份保持，不因 transport generation 重建；
+真正替换 controller 时重新建立绑定它的页面状态。首页行以所属记录对象区分身份，
+避免不同电脑复用同一 terminal ID 时继续使用旧 scope 的 StateObject。
 跨电脑切换仍清理原会话状态。RemoteDesk 使用独立 Host 连接，不参与 Backend 选路。
 
 配置独立保存在 `native.connections.v2`。首次使用由用户重新录入电脑与登录，
@@ -257,7 +277,8 @@ iOS 不保存第二套队列；Claude 和普通 Shell 不显示入口。排队�
 另检查导航 revision。关闭/清除不检查 revision，网站不能靠持续改变地址使用户确认失效。过期 URL 操作
 显示明确状态，不重放操作；旧来源已离开则直接丢弃，避免在新来源弹旧错误。
 返回首页、切换终端/连接、注销和删除来源走 `closeTerminal` 同步使页面失效；事件流收到匹配当前 ID
-的权威 `terminal_session_deleted` 同样立即关闭，不等待 overview 刷新。网络断开和普通后台
+的权威 `terminal_session_deleted`，或 `project_deleted.payload.terminalSessionIds` 明确包含当前 ID，
+同样立即关闭，不等待 overview 刷新；不能从 overview 缺项推断删除。网络断开和普通后台
 往返不主动销毁网页，不改变既有终端 socket 策略。网页运行时不落盘，冷启动不恢复地址、历史或表单。
 
 终端链接沿 `SwiftTermSurface → SessionController → TerminalScreen` 只传递意图，不传入认证或输入。

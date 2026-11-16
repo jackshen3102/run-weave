@@ -2,13 +2,19 @@ import Clarity
 import SwiftUI
 
 struct ComposerAttachments: View {
-  @ObservedObject var drafts: TerminalAttachmentDrafts
+  let drafts: TerminalAttachmentDrafts
+  @ObservedObject private var record: TerminalAttachmentDrafts.Record
   @ObservedObject var session: AppSession
   let terminalID: String
   @State private var preview: TerminalDraftAttachment?
 
+  init(drafts: TerminalAttachmentDrafts, session: AppSession, terminalID: String) {
+    self.drafts = drafts; self.session = session; self.terminalID = terminalID
+    record = drafts.record(terminalID)
+  }
+
   var body: some View {
-    let attachments = drafts.attachments[terminalID] ?? []
+    let attachments = record.attachments
     if !attachments.isEmpty {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(alignment: .top, spacing: 8) {

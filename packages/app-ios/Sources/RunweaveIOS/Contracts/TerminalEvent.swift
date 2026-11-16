@@ -17,6 +17,8 @@ struct TerminalEvent: Decodable {
     let previous: Change?
     let completionRevision: Int?
     let acknowledgedCompletionRevision: Int?
+    // project_deleted carries the exact deleted children, including worktree sessions.
+    let terminalSessionIds: [String]?
   }
 }
 

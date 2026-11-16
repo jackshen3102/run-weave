@@ -6,6 +6,7 @@ struct HomeView: View {
   @ObservedObject private var attentionRetention: AttentionRetentionStore
   @EnvironmentObject private var remoteDesktop: RemoteDesktopCoordinator
   @StateObject private var branchStatuses = HomeBranchStatusModel()
+  @StateObject private var state: HomeViewState
   private struct BranchUpdatesTarget: Identifiable {
     let id: String
     let cwd: String
@@ -29,6 +30,7 @@ struct HomeView: View {
   init(session: AppSession) {
     self.session = session
     self.attentionRetention = session.attentionRetention
+    _state = StateObject(wrappedValue: HomeViewState(session: session))
   }
 
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
@@ -51,12 +53,17 @@ struct HomeView: View {
   }
 
   private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
-    HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
+    let record = session.home.record(terminal.id)
+    return HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
       showBranchUpdates: {
-        branchUpdatesTarget = BranchUpdatesTarget(id: terminal.id, cwd: terminal.cwd, title: terminal.title)
+        guard let value = record.snapshot.terminal else { return }
+        branchUpdatesTarget = BranchUpdatesTarget(id: value.id, cwd: value.cwd, title: value.title)
       },
-      rename: { renaming = terminal }, move: { moving = terminal }, delete: { deleting = terminal })
+      rename: { renaming = record.snapshot.terminal }, move: { moving = record.snapshot.terminal },
+      delete: { deleting = record.snapshot.terminal })
+      .equatable()
+      .id(ObjectIdentifier(record))
       .onAppear { visibleConversationCounts[terminal.id, default: 0] += 1 }
       .onDisappear {
         let count = visibleConversationCounts[terminal.id, default: 0] - 1
@@ -188,7 +195,9 @@ struct HomeView: View {
       deleting = nil
       initializeExpansion()
     }
-    .onAppear { initializeExpansion() }
+    .onChange(of: query) { state.setQuery($0) }
+    .onAppear { state.setActive(true); state.setQuery(query); initializeExpansion() }
+    .onDisappear { state.setActive(false) }
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {

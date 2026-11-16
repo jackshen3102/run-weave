@@ -1,12 +1,12 @@
 import Foundation
 
 // Source: packages/shared/src/terminal/{runtime/session,project,project-context}.ts
-struct HomeOverview: Codable {
+struct HomeOverview: Codable, Equatable {
   var projects: [TerminalProject]
   var sessions: [HomeTerminal]
 }
 
-struct TerminalProject: Codable, Identifiable {
+struct TerminalProject: Codable, Identifiable, Equatable {
   let projectId: String
   var name: String
   let path: String?
@@ -31,12 +31,12 @@ struct TerminalProjectContext: Decodable, Identifiable {
   }
 }
 
-struct TerminalState: Codable {
+struct TerminalState: Codable, Equatable {
   var state: String
   var agent: String?
 }
 
-struct HomeTerminal: Codable, Identifiable {
+struct HomeTerminal: Codable, Identifiable, Equatable {
   let terminalSessionId: String
   var projectId: String
   var alias: String?
@@ -83,7 +83,7 @@ struct HomeTerminal: Codable, Identifiable {
   }
 }
 
-struct HomeConversationPreview: Codable {
+struct HomeConversationPreview: Codable, Equatable {
   let threadId: String
   let provider: String
   let available: Bool
@@ -165,13 +165,17 @@ struct HomeGroup: Identifiable {
 extension HomeOverview {
   func groups(matching query: String) -> [HomeGroup] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    var sessionsByProject: [String: [HomeTerminal]] = [:]
+    for terminal in sessions {
+      sessionsByProject[Self.parentProjectID(terminal.projectId), default: []].append(terminal)
+    }
     func matches(_ values: [String?]) -> Bool {
       values.contains {
         $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().contains(query) == true
       }
     }
     return projects.compactMap { project in
-      let all = sessions.filter { Self.parentProjectID($0.projectId) == project.id }
+      let all = sessionsByProject[project.id] ?? []
       let projectMatches = query.isEmpty || matches([project.name, project.path])
       let visible =
         projectMatches

@@ -102,7 +102,7 @@ struct FilePreview: View {
         } else if mode == "preview", ["html", "htm"].contains(suffix), let htmlURL {
           HtmlPreview(url: htmlURL)
         } else if mode == "preview", ["md", "markdown"].contains(suffix) {
-          MarkdownPreview(content: content)
+          MarkdownPreview(session: session, projectID: projectID, path: file.path, content: content)
         } else {
           if let targetLine {
             FileSourceLocation(content: content, line: targetLine, column: targetColumn ?? 1)

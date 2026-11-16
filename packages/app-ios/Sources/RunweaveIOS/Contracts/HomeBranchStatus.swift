@@ -5,7 +5,7 @@ struct HomeBranchStatusResponse: Decodable {
 }
 
 /// Mirrors AppHomeBranchStatus in @runweave/shared/terminal/session.
-struct HomeBranchStatus: Decodable {
+struct HomeBranchStatus: Decodable, Equatable {
   let terminalSessionId: String
   let cwd: String
   var state: String
