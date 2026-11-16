@@ -13700,9 +13700,9 @@
     "file": "packages/runweave-cli/src/commands/quality.ts",
     "kind": "file-io",
     "expression": "readFile(requireStringOption(parsed.options, \"file\"))",
-    "count": 1,
+    "count": 2,
     "category": "runtime-state",
-    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+    "reason": "读取用户指定的质量台账提交与只读操作上下文请求文件，经已认证 CLI 转发；不直接读取在线数据库或实例配置。"
   },
   {
     "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
