@@ -14,19 +14,19 @@ Stable 的质量 capabilities 实读为404；未更新 Stable、未安装到真�
 
 ## 实际证据
 
-本机完整材料在 [artifacts/quality-workflow/2026-11-16](../../artifacts/quality-workflow/2026-11-16/)。
+本机完整材料在 artifacts/quality-workflow/2026-11-16（本机路径：`artifacts/quality-workflow/2026-11-16/`）。
 材料不含凭据或业务输入正文；原始 Backend 日志、App 数据和设备任务目录不作为公开报告。
 
-- [HTTP验证](../../artifacts/quality-workflow/2026-11-16/http-probe.json)：20项真实接口检查。
-- [存储验证](../../artifacts/quality-workflow/2026-11-16/storage-probe.json)：13项真实 worker、SQLite 重启、分页、日志轮转检查。
-- [保留与满容量](../../artifacts/quality-workflow/2026-11-16/retention-probe.json)：7项，固定未结问题的8条证据，确认503不推进ack。
-- [关闭确认](../../artifacts/quality-workflow/2026-11-16/confirmation-probe.json)：3项；自动 analysis 禁止closed，独立确认仅接受已有修复与复验记录的问题。
-- [浏览器队列](../../artifacts/quality-workflow/2026-11-16/browser-queue-probe.txt)：实际队列模块在隔离桌面 localStorage 执行，容量边界fixture入队后丢弃范围、恢复、并发序号与非法ack均通过；不是一万次真实用户操作。
-- [阶段分类](../../artifacts/quality-workflow/2026-11-16/classification-probe.json)：建立前失败、建立后失效、建立后取消、缺started，取消未反写失败；缺started不报建立耗时。
-- [真实事件](../../artifacts/quality-workflow/2026-11-16/events-after-restart.json)：桌面发送 receiveId=33–37，iOS模拟器发送=10–14，均为同一操作的五阶段；仅证明输入接受与客户端状态/界面阶段。
-- [重启后HTTP重传](../../artifacts/quality-workflow/2026-11-16/http-replay-after-restart.json)：同Backend，acceptedCount=0、duplicateCount=2、ackThrough=2。
-- [无变化轮次](../../artifacts/quality-workflow/2026-11-16/daily-no-changes.json)：直接运行归因准备脚本，groups=0、due=0、noChanges=true；不是调度器触发证据。
-- [最终台账](../../artifacts/quality-workflow/2026-11-16/final-ledger.json)：已有6条假设线索保持原ID；后续41条待处理材料在读取水位后持久保存，分析水位仍停在18，租约已释放。
+- HTTP验证（本机路径：`artifacts/quality-workflow/2026-11-16/http-probe.json`）：20项真实接口检查。
+- 存储验证（本机路径：`artifacts/quality-workflow/2026-11-16/storage-probe.json`）：13项真实 worker、SQLite 重启、分页、日志轮转检查。
+- 保留与满容量（本机路径：`artifacts/quality-workflow/2026-11-16/retention-probe.json`）：7项，固定未结问题的8条证据，确认503不推进ack。
+- 关闭确认（本机路径：`artifacts/quality-workflow/2026-11-16/confirmation-probe.json`）：3项；自动 analysis 禁止closed，独立确认仅接受已有修复与复验记录的问题。
+- 浏览器队列（本机路径：`artifacts/quality-workflow/2026-11-16/browser-queue-probe.txt`）：实际队列模块在隔离桌面 localStorage 执行，容量边界fixture入队后丢弃范围、恢复、并发序号与非法ack均通过；不是一万次真实用户操作。
+- 阶段分类（本机路径：`artifacts/quality-workflow/2026-11-16/classification-probe.json`）：建立前失败、建立后失效、建立后取消、缺started，取消未反写失败；缺started不报建立耗时。
+- 真实事件（本机路径：`artifacts/quality-workflow/2026-11-16/events-after-restart.json`）：桌面发送 receiveId=33–37，iOS模拟器发送=10–14，均为同一操作的五阶段；仅证明输入接受与客户端状态/界面阶段。
+- 重启后HTTP重传（本机路径：`artifacts/quality-workflow/2026-11-16/http-replay-after-restart.json`）：同Backend，acceptedCount=0、duplicateCount=2、ackThrough=2。
+- 无变化轮次（本机路径：`artifacts/quality-workflow/2026-11-16/daily-no-changes.json`）：直接运行归因准备脚本，groups=0、due=0、noChanges=true；不是调度器触发证据。
+- 最终台账（本机路径：`artifacts/quality-workflow/2026-11-16/final-ledger.json`）：已有6条假设线索保持原ID；后续41条待处理材料在读取水位后持久保存，分析水位仍停在18，租约已释放。
 
 本轮创建的两个Dev Session均已停止，两个自有模拟器租约均已finish；没有停止其他worktree的环境。
 
@@ -38,7 +38,7 @@ Stable 的质量 capabilities 实读为404；未更新 Stable、未安装到真�
 iOS 使用池中 `0986DF97-0644-4138-847E-5BC690CFEF7E` 模拟器；Runweave与随记宿主均构建、安装和启动成功。
 Runweave执行真实输入发送并查询Backend确认收录；随记只执行启动、构建信息展示与本机分享呈现，
 没有登录正式账户或发送消息。随记原有操作诊断导出的完整回归没有执行，不能据构建成功替代。
-截图：[iOS发送后](../../artifacts/quality-workflow/2026-11-16/ios-after-send.png)。桌面截图采集超时，没有交付桌面图片；真实操作与上传以事件和HTTP证据核对。
+截图：iOS发送后（本机路径：`artifacts/quality-workflow/2026-11-16/ios-after-send.png`）。桌面截图采集超时，没有交付桌面图片；真实操作与上传以事件和HTTP证据核对。
 
 ## 18条验收合同的覆盖
 
@@ -76,14 +76,14 @@ Backend现有生命周期验证通过。定时任务现有运行验证清除继�
 ## 可靠性修复复验（2026-11-16）
 
 针对后续复核发现的两个P1问题，已修复并使用相同真实SQLite worker / service场景复验。
-材料位于 [reliability-fix](../../artifacts/quality-workflow/2026-11-16/reliability-fix/)，未新增单元测试。
+材料位于 reliability-fix（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/`），未新增单元测试。
 
-- [修复前基线](../../artifacts/quality-workflow/2026-11-16/reliability-fix/baseline.json)保存源码摘要与原始结果：
+- 修复前基线（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/baseline.json`）保存源码摘要与原始结果：
   确认丢失后上报重叠丢弃区间返回409；10,000字节预算的台账提交后占用10,702字节，事件读取503。
-- [同场景复验](../../artifacts/quality-workflow/2026-11-16/reliability-fix/after.json)：下一批正常接受，ack推进到2，
+- 同场景复验（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/after.json`）：下一批正常接受，ack推进到2，
   原事件保留且未虚报缺口；超预算台账提交503并整体回滚，占用仍为4,119字节，revision仍为2，
   4条待处理材料和空分析水位保留，4条原事件可读。
-- [10项组合边界](../../artifacts/quality-workflow/2026-11-16/reliability-fix/edges.json)通过：混合已接收/缺失区间
+- 10项组合边界（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/edges.json`）通过：混合已接收/缺失区间
   只记录真实缺口，溢出批次重传幂等，内容冲突和同批次矛盾仍拒绝；提交回执也计入精确预算，
   旧版本已超预算的固定证据和写满后的固定证据仍可读取。
 - 重跑13项存储/恢复检查、7项清理与容量检查和3项关闭确认检查。容量回归的填充fixture按实际预算
@@ -115,8 +115,8 @@ Backend现有生命周期验证通过。定时任务现有运行验证清除继�
 
 ## 启用前
 
-[完整任务草稿](../../artifacts/quality-workflow/2026-11-16/scheduled-task-draft.json) 与
-[只读validate响应](../../artifacts/quality-workflow/2026-11-16/scheduled-task-validation.json) 已保存。
+完整任务草稿（本机路径：`artifacts/quality-workflow/2026-11-16/scheduled-task-draft.json`） 与
+只读validate响应（本机路径：`artifacts/quality-workflow/2026-11-16/scheduled-task-validation.json`） 已保存。
 目标是Stable、profile=local；建议每天09:00 Asia/Shanghai、Codex默认模型、补最近一次且有效期24小时。
 当前草稿enabled=false，executionPolicy=full-access：**无沙箱、无交互审批**，允许访问任务工作目录外的仓库、
 只读Git、认证CLI与可选Browser；这只是待确认提案，不是已授权扩大权限。
