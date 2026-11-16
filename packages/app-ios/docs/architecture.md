@@ -105,7 +105,8 @@ Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS �
 正文仅存于打开页面，关闭即取消请求并释放；不接入 History 或首页摘要缓存。
 `AppSession.generation`、terminal/controller 身份、请求序号与已绑定 target 共同隔离迟到响应。
 单一纵向 ScrollView 使用 MarkdownUI，代码/表格内部横向阅读；长消息刷新锚点保留消息内偏移。
-Mermaid 首期显示代码，链接只允许 HTTP(S)。完整跨端合同见
+Mermaid 代码块使用固定版本 MermaidKit 的离线引擎与 strict 模式渲染，支持全屏缩放与查看源码，
+渲染失败保留原文；普通代码不转换为图。会话和文件预览共用该组件。链接只允许 HTTP(S)。完整跨端合同见
 [Agent 会话阅读](../../../docs/architecture/terminal-code-preview.md#agent-会话阅读)。
 
 ## 终端长任务监控
