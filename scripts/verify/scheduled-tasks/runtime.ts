@@ -66,6 +66,7 @@ async function main(): Promise<void> {
 
 async function verifyFullAccess(): Promise<void> {
   assert.deepEqual(codexScheduledArgs({}), [
+    "--dangerously-bypass-hook-trust",
     "--sandbox",
     "workspace-write",
     "--config",
@@ -74,11 +75,13 @@ async function verifyFullAccess(): Promise<void> {
     "sandbox_workspace_write.network_access=false",
   ]);
   assert.deepEqual(codexScheduledArgs({ executionPolicy: "auto-review" }), [
+    "--dangerously-bypass-hook-trust",
     "--approve-for-me",
     "--config",
     "sandbox_workspace_write.network_access=false",
   ]);
   assert.deepEqual(codexScheduledArgs({ executionPolicy: "full-access" }), [
+    "--dangerously-bypass-hook-trust",
     "--sandbox",
     "danger-full-access",
     "--config",

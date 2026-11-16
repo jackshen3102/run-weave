@@ -40,6 +40,10 @@ validate 不创建目录。`ScheduledRun.executionContext` 保存实际执行位
 软删除和归档不清理运行工作目录；当前没有自动 TTL。普通任务的 Browser 使用默认 Profile 和独立 run group，
 不继承前台项目 Profile。快捷后台运行仍冻结项目／Worktree 来源，使用 project 上下文。
 
+定时任务启动 Codex 时显式传入 `--dangerously-bypass-hook-trust`，包括后台执行、专用终端、续跑和恢复终端。
+所有已启用的 Hooks 均可运行，无需逐次信任当前内容哈希；该参数不启用被停用的 Hooks，也不改变任务的沙箱与审批策略。
+普通终端自行启动 Codex 不受此参数约定影响。
+
 普通 Codex `full-access` 任务（含立即运行）每轮创建新的专用 tmux 普通终端，
 在线桌面自动打开；未保存编辑的离开保护仍有效，重连补发的历史事件不抢焦点。
 调度器同时确认原生业务轮次完成、执行侧空闲与有效结构化结果后回收终端，不以进程仍在或退出码代替业务结果。
