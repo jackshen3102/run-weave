@@ -104,7 +104,34 @@ Dots 可通过现有 MCP run_command 调用这些命令并有界等待。command
 - [Backend 服务](../../backend/src/terminal/tasks/service.ts)
 - [CLI 命令](../../packages/runweave-cli/src/commands/terminal-task.ts)
 
-## 终端页面独立代码 Review
+## 原生 CLI 与终端页面独立代码 Review
+
+原生 CLI 的 `review-agent` Skill 将 `@review` 或明确的独立代码审查请求代发到同一 Backend
+Review 服务。当前 Agent 只发起和读取结果；独立 Reviewer 仍执行 `review-only` 职责。
+这是提交后的 Skill 调用，不增加原生 CLI 的 @ 自动补全，也不要求打开 Runweave 图形界面。
+
+```sh
+rw terminal review start [terminalSessionId] --request-id <uuid> --json
+rw terminal review list [terminalSessionId] [--before <reviewId>] --json
+rw terminal review show <reviewId> --json
+rw terminal review wait <reviewId> --wait-ms 30000 --json
+```
+
+start/list 的来源默认取 `RUNWEAVE_TERMINAL_SESSION_ID`；在外部终端调用时须明确指定来源
+及 Backend 连接。范围是来源终端所属项目的当前改动，不是 shell 当前目录，也不支持任意
+PR/分支或文件过滤。请求编号由调用 Agent 生成并保存；未知结果保留原编号查询/恢复，明确
+复审才使用新编号。同来源运行中的请求合并到当前轮次，不追加新提示到已冻结输入。
+
+start 返回共享 `CodeReviewRun`；list 返回 `CodeReviewPage`；show/wait 返回
+`CodeReviewDetail`（状态、快照摘要、完整结构化报告），并附 CLI connection 信息。
+wait 仅查询，默认 30 秒，允许 0–60000 毫秒；0 表示单次查询，不轮询。正数期限包含 HTTP
+查询及轮询等待，到期取消正在进行的查询，不再发出新查询。阶段在期限内离开 preparing/starting/reviewing 即返回，
+不等待自动回传完成。到期返回 `waitTimedOut: true` 与最后取得的状态，不取消任务；若首个响应
+尚未取得，返回 reviewId 和 null 的 run/snapshot/report，不能推断审查失败。查询成功的退出码
+不表示审查通过。后续使用原 reviewId 继续 wait/show，结合 phase、scope、stale、coverageComplete、
+checks、limitations 和 delivery 判断。Skill 不重复向来源投递报告，也不自动关闭事项。
+
+CLI `terminal review` 是发起独立审查，和 `terminal task review` 给任务提交验收结论是不同操作。
 
 桌面 / Web 与原生 iOS 的终端「更多 → 代码 Review」直接请求 Backend 创建独立的可见
 Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执行能力，但**不调用
@@ -182,3 +209,7 @@ Hooks 查询和 Reviewer 启动，避免预检与实际启动使用不同版本�
 对应行为验收见 [Reviewer Hooks 启动计划](../testing/terminal/independent-code-review-hooks.testplan.yaml)。
 
 Review 反馈使用 `[runweave-code-review-feedback:<reviewId>]` 标记，后续 Review 需求冻结和任务监督目标提取都排除该自动反馈，避免把反馈当成用户新增要求。超过48000字节的反馈仅投递明确标记的摘要与完整报告路径，不声称已传递全部条目。written 仍不表示原 Agent 已消费。
+
+报告中每条问题的全部 evidenceRefs 均须由前后指纹匹配冻结快照的已执行检查覆盖；允许
+复现、版本和来源检查共同提供证据，不要求单条检查包含全部引用。仅由 not_run、错误指纹
+或未登记产物支撑的证据仍被拒绝，不自动补写证据或把问题降为通过。

@@ -9,6 +9,7 @@ import { resolveAuthContext } from "../client/auth-context.js";
 import { TerminalHttpClient } from "../client/terminal-http-client.js";
 import { CliError } from "../errors.js";
 import { runTerminalTaskCommand } from "./terminal-task.js";
+import { runTerminalReviewCommand } from "./terminal-review.js";
 import {
   buildOperationId,
   commandName,
@@ -38,7 +39,7 @@ export async function runTerminalCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete|panel|task>",
+      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete|panel|task|review>",
       2,
     );
   }
@@ -58,6 +59,12 @@ export async function runTerminalCommand(
     env: io.env,
   });
   const client = new TerminalHttpClient(auth);
+
+  if (subcommand === "review") {
+    const result = await runTerminalReviewCommand(client, parsed, io.env);
+    writeOutput(io.stdout, mode, { connection: { profile: auth.profileName, baseUrl: auth.baseUrl }, ...result as object });
+    return;
+  }
 
   if (subcommand === "task") {
     const result = await runTerminalTaskCommand(client, parsed, () => resolveInputText(parsed.options, io.stdin));

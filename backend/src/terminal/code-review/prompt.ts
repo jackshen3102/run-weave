@@ -42,5 +42,6 @@ findings 只列已复现的 Bug，合并重复根因；title 简短，impact 说
 reviewedChanges 列出所有已审的非 omission 项；不可读项和实际覆盖缺口放 limitations，如实填写 coverageComplete。
 checks 只记录当前仍必要的复现过程与目标检查；资料核对通过也需保存原始来源证据并填写对应冻结范围的 beforeFingerprint/afterFingerprint。无法执行或无法证明同版时记 not_run，并将未验证的疑点简记在 limitations，不进入 findings。没有需要运行的疑点时 checks 可为空。每条 finding 必须关联已执行的同版检查和证据，检查中记录复现步骤、预期与实际结果、辅助代码版本及执行前后范围指纹。
 范围指纹算法为 SHA256(JSON.stringify({head:snapshot.head,rootPath:snapshot.rootPath,entries:snapshot.entries}))，UTF-8、小写十六进制，保留字段顺序。
+finding.evidenceRefs 的每个引用必须出现在至少一条已执行（passed 或 failed）且前后指纹匹配本轮快照的 check.evidenceRefs 中；允许多条检查共同覆盖，不可仅由 not_run 检查支撑。不要把未核验的补充资料放入问题证据。
 evidenceRefs 引用 artifacts 中的 artifactId，文件保存在专属输出目录。`;
 }
