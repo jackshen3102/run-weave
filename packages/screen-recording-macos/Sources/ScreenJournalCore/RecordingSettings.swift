@@ -6,6 +6,7 @@ struct RecordingSettings: Codable, Equatable {
     var retentionDays: Int = 7
     var maxGiB: Int = 10
     var excludedApplications: [String] = []
+    var accessibilityTextEnabled: Bool? = nil
     var desiredRecording = false
     var privacyRevision = 1
     func validated() throws -> Self {

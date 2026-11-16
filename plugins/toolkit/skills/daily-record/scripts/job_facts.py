@@ -23,11 +23,12 @@ def native_rows(bundle, c, day=None):
     raw = (bundle / "materials.jsonl").read_bytes()
     import hashlib
     require(hashlib.sha256(raw).hexdigest() == manifest["materialsSha256"], "NATIVE_MATERIALS_CHANGED")
-    result = []
+    result, normalized = [], []
     for line in raw.decode().splitlines():
         m = json.loads(line)
         require(m["day"] == manifest["from"], "NATIVE_DAY_MISMATCH")
         require(hashlib.sha256(m["text"].encode()).hexdigest() == m["textSha256"], "NATIVE_TEXT_CHANGED")
+        normalized.append({k: v for k, v in m.items() if k != "text"})
         scope = "agent:" + c["producerId"] + ":" + m["provider"]
         project = m.get("project", {})
         result.append({"id": "agent:" + m["id"], "day": m["day"], "role": m["role"], "text": m["text"],
@@ -38,7 +39,7 @@ def native_rows(bundle, c, day=None):
                        "ref": {"channel": "local-agent", "sourceScope": scope, "nativeId": m["threadId"], "hash": m["textSha256"]}})
     receipts = [{"sourceScope": "agent:" + c["producerId"] + ":" + r["provider"], "status": r["status"],
                  "collectedAt": manifest["collectedAt"], **window(manifest["from"])} for r in manifest["sources"]]
-    return result, receipts
+    return result, receipts, digest(sorted(normalized, key=lambda item: item["id"]))
 
 
 def feishu_rows(bundle, day, c):

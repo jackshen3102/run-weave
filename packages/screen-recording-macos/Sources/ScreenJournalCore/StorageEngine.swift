@@ -54,7 +54,7 @@ actor StorageEngine {
             FROM captures c JOIN segments s ON s.id=c.segment_id
             WHERE c.rowid>? AND c.captured_ms>=? AND c.captured_ms<=? AND s.state='ready' AND s.started>=? ORDER BY c.rowid LIMIT 900
             """, [after, effectiveFrom, throughMs, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
-        return (try JournalReadCatalog.indexed(rows, settings: settings), Int64(rows.last?["row_id"] ?? "0") ?? 0)
+        return (try JournalReadCatalog.indexed(rows, settings: settings, database: database), Int64(rows.last?["row_id"] ?? "0") ?? 0)
     }
     func analysisDayCaptures(_ day: String, settings: RecordingSettings) throws -> [(String, Int64)] {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "Asia/Shanghai"); f.dateFormat = "yyyy-MM-dd"; f.isLenient = false
@@ -72,7 +72,7 @@ actor StorageEngine {
             SELECT c.*,s.width,s.height,s.path,s.started AS segment_started FROM captures c JOIN segments s ON s.id=c.segment_id
             WHERE c.id=? AND s.state='ready' AND s.started>=?
             """, [id, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400])
-        guard let value = try JournalReadCatalog.indexed(rows, settings: settings).first else { throw JournalReadError("FRAME_GONE") }
+        guard let value = try JournalReadCatalog.indexed(rows, settings: settings, database: database).first else { throw JournalReadError("FRAME_GONE") }
         return value
     }
     func permit(_ frame: JournalIndexedCapture, settings: RecordingSettings) throws -> JournalFramePermit {
@@ -131,7 +131,7 @@ actor StorageEngine {
         let metadata = CaptureMetadata(id: UUID().uuidString, sessionID: sessionID, sequence: sequence,
             capturedAt: frame.capturedAt, timezoneOffset: TimeZone.current.secondsFromGMT(for: frame.capturedAt),
             displayID: frame.displayID, applicationID: frame.placeholder ? nil : frame.applicationID,
-            idleSeconds: frame.idleSeconds, privacyPlaceholder: frame.placeholder)
+            idleSeconds: frame.idleSeconds, privacyPlaceholder: frame.placeholder, context: frame.placeholder ? nil : frame.context, accessibility: frame.placeholder ? nil : frame.accessibility)
         return try permit.withCurrent(generation) { try frames.append(frame.image, metadata: metadata) != nil }
     }
     func finalize() async throws { try await frames.finalize() }

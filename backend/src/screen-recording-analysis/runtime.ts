@@ -9,6 +9,7 @@ import type { AnalysisClaim, AnalysisReceipt, AnalysisResult, AnalysisStatus } f
 import { readConfigurationPath } from '@runweave/shared/configuration';
 import { AnalysisCollector } from './collector';
 import { AnalysisProvider } from './provider';
+import { AnalysisResultCache } from './result-cache';
 import { representativeFrames, idleObservation } from './batching';
 import { logger } from '../logging';
 
@@ -90,7 +91,7 @@ export class ScreenRecordingAnalysisRuntime {
     const expiry = Math.min(...claim.manifest.captures.map(frame => frame.availableUntilMs));
     const expiryTimer = setTimeout(abort,Math.max(0,Math.min(120000,expiry-Date.now())));
     let directory: string | undefined;
-    const started = Date.now(); let imageBytes = 0; let frameCount = 0;
+    const started = Date.now(); let imageBytes = 0; let frameCount = 0; let resultReused = false;
     try {
       const idle = idleObservation(claim.manifest);
       const skipModel = idle !== undefined;
@@ -101,15 +102,21 @@ export class ScreenRecordingAnalysisRuntime {
         await mkdir(root,{ recursive: true,mode: 0o700 });
         directory = await mkdtemp(path.join(root,`job-${this.workerID}-`));
         await markJobOwner(directory,process.pid);
-        const images: string[] = [];
-        for (const frame of representativeFrames(claim.manifest)) {
-          if (signal.aborted || frame.availableUntilMs <= Date.now()) throw new Error('SOURCE_EXPIRED');
-          const bytes = await this.collector.image(claim,frame.id,signal); imageBytes += bytes.length;
-          if (imageBytes > 128*1024*1024) throw new Error("IMAGE_BUDGET");
-          const file = path.join(directory,`${images.length}.jpg`); await writeFile(file,bytes,{ mode: 0o600 }); images.push(file);
+        const cache = await AnalysisResultCache.prepare(root,provider.config,claim.manifest);
+        const cached = await cache?.read();
+        if (cached) { result = cached; resultReused = true; }
+        else {
+          const images: string[] = [];
+          for (const frame of representativeFrames(claim.manifest)) {
+            if (signal.aborted || frame.availableUntilMs <= Date.now()) throw new Error('SOURCE_EXPIRED');
+            const bytes = await this.collector.image(claim,frame.id,signal); imageBytes += bytes.length;
+            if (imageBytes > 128*1024*1024) throw new Error("IMAGE_BUDGET");
+            const file = path.join(directory,`${images.length}.jpg`); await writeFile(file,bytes,{ mode: 0o600 }); images.push(file);
+          }
+          frameCount = images.length;
+          result = await provider.run(claim.manifest,images,directory,signal);
+          await cache?.write(result);
         }
-        frameCount = images.length;
-        result = await provider.run(claim.manifest,images,directory,signal);
       }
       if (signal.aborted) throw new Error('CANCELLED');
       const operationID = `${identity.batchID}:${identity.generation}`;
@@ -120,7 +127,7 @@ export class ScreenRecordingAnalysisRuntime {
         const receipt = await this.collector.request<AnalysisReceipt | null>('analysisReceipt',{ operationID },signal);
         if (!receipt) throw error;
       }
-      logger.info('screen-analysis.batch.completed',{ frames: frameCount,imageBytes,textBytes: Buffer.byteLength(JSON.stringify(claim.manifest.evidence)),usage: skipModel ? null : provider.usage ?? null,elapsedMs: Date.now()-started,attempt: claim.attempt });
+      logger.info('screen-analysis.batch.completed',{ frames: frameCount,imageBytes,textBytes: Buffer.byteLength(JSON.stringify(claim.manifest)),modelCalls: skipModel || resultReused ? 0 : 1,resultReused,usage: skipModel || resultReused ? null : provider.usage ?? null,elapsedMs: Date.now()-started,attempt: claim.attempt });
     } catch (error) {
       const code = error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message) ? error.message : 'ANALYSIS_FAILED';
       await this.collector.request('failAnalysis',{ ...identity,code }).catch(() => {});

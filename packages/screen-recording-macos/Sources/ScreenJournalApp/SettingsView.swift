@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ApplicationServices
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -21,6 +22,11 @@ struct SettingsView: View {
                         ForEach([1.0, 5, 10, 20, 30, 60], id: \.self) { Text("\(Int($0)) 秒").tag($0) }
                     }
                     Text("点击、滚动、键盘操作或应用／显示器切换后记录；静止及纯鼠标移动不截图。连续操作按最短间隔合并采集。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("采样同时保存前台窗口标题；已有辅助功能权限时尝试读取文档网址，移除查询参数和片段。排除应用的占位帧不保存这些信息。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("记录可访问的控件文本", isOn: Binding(get: { draft.accessibilityTextEnabled == true }, set: { draft.accessibilityTextEnabled = $0 }))
+                    Text(AXIsProcessTrusted() ? "已有辅助功能权限；文本按变化保存，跳过密码控件并限制读取范围。" : "尚无辅助功能权限；开启后仍无法读取控件文本，需在系统设置中为此 App 授权。不会自动弹出权限请求。")
                         .font(.caption).foregroundStyle(.secondary)
                     Picker("图像高度", selection: $draft.height) {
                         Text("720").tag(720); Text("1080").tag(1080)
@@ -80,7 +86,7 @@ struct SettingsView: View {
             let current = recorder.settings
             // Saving an unchanged form must not rotate recording segments or invalidate playback.
             if next.interval != current.interval || next.height != current.height || next.retentionDays != current.retentionDays
-                || next.maxGiB != current.maxGiB || next.excludedApplications != current.excludedApplications {
+                || next.accessibilityTextEnabled != current.accessibilityTextEnabled || next.maxGiB != current.maxGiB || next.excludedApplications != current.excludedApplications {
                 try recorder.apply(next)
             }
             dismiss()

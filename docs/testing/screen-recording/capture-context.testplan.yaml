@@ -1,0 +1,120 @@
+version: 1
+name: 采样窗口上下文验收
+description: >
+  在 Debug 独立目录验证真实窗口上下文、隐私占位、读取合同和存储升级；不操作正式采集状态。
+cases:
+  - id: CTX-001
+    name: 真实采样与窗口上下文共同保存
+    required: true
+    description: >
+      原生控件开启记录后，稳定的前台窗口身份和标题关联相同 captureID，在线读取与已保存值一致。
+    preconditions:
+      - 稳定签名的 Debug App 使用新的 validation-data-dir，已有屏幕录制权限且该前台应用未被排除。
+      - 正式 App 的采集状态与数据身份已记录。
+    steps:
+      - 用 CUA 原生控件恢复记录，保持窗口稳定并触发采样，然后原生控件暂停封口。
+      - 核对 capture_context 的窗口 ID 和标题属于采集时窗口；通过 owner 的 openView 读取相同 captureID，确认可选 context 一致。
+      - 退出隔离 App，运行 Inspect verify 确认全部媒体可解码；确认正式 App 状态与身份保持。
+  - id: CTX-002
+    name: 隐私占位帧不保存窗口上下文
+    required: true
+    description: >
+      被排除应用在前台时只产生隐私占位，数据库与读取合同中均无窗口标题、URL 或 AX 文本。
+    preconditions:
+      - Debug 隔离目录已配置一个明确的排除应用，已有屏幕录制权限。
+      - CUA 可激活该应用，原生记录当前开启。
+    steps:
+      - 通过 CUA 激活排除应用，待前台切换采样后回到记录器并暂停封口。
+      - 核对占位帧没有 capture_context 行，openView 中对应 capture 的 context 和 frontmostApplication 缺省。
+  - id: CTX-003
+    name: 文档 URL 仅在已有权限与属性可用时采集
+    required: false
+    description: >
+      有权限且暴露 AXDocument 的 HTTP(S) 文档保留清理后的 URL；缺权限或应用不支持时缺省且不弹授权。
+    preconditions:
+      - 使用 Debug 隔离目录；有一个已获辅助功能权限且暴露 AXDocument 的应用，打开专用公开测试 URL。
+      - URL 含可丢弃的查询参数和片段，不包含私人正文或真实凭据。
+    steps:
+      - 稳定显示该文档并触发采样；核对 URL 去除了用户名、密码、查询参数及片段，仍保留 scheme、host 和 path。
+      - 在无该权限或不暴露属性的应用中重复采集；确认 URL 缺省，记录器没有请求新权限且截图仍成功。
+  - id: CTX-004
+    name: 存储升级保留旧采样
+    required: true
+    description: >
+      schema 2／3 升至 4 不改旧采样或媒体，也不为旧记录补造上下文。
+    preconditions:
+      - 有一份可丢弃的 schema 2 隔离存储和原 captureID、媒体摘要；不使用正式目录。
+      - 本用例独占该隔离 writer 生命周期，具备停止、重新打开和备份副本。
+    steps:
+      - 用新版打开后停止，确认 schema 4、旧 captureID 与媒体摘要相同，schema 2 旧采样 context 缺省，schema 3 的已有上下文保持。
+  - id: CTX-005
+    name: 删除采样级联清理其窗口上下文
+    required: true
+    description: >
+      删除已记录采样时，对应派生 context 行随同清理，避免残留私人窗口标题。
+    preconditions:
+      - 使用停止 writer 后的可丢弃 schema 4 副本，含一个非空 capture_context 行。
+      - 本用例独占该副本，连接已开启 foreign_keys，不触碰正式存储。
+    steps:
+      - 删除对应采样；确认其 capture_context 行消失，foreign_key_check 为空。
+  - id: CTX-006
+    name: 未知存储版本拒绝写入
+    required: true
+    description: >
+      新版仍拒绝 schema 5，失败不能改变采样或媒体。
+    preconditions:
+      - 使用新版 fixture 的 newer-schema 场景生成可丢弃 schema 5 目录，已记录采样和媒体摘要。
+    steps:
+      - 用新版 writer 打开该目录；确认报告 schema_too_new，退出后原始采样和媒体摘要不变。
+  - id: CTX-007
+    name: 同一窗口 AX 文本按基线及差量连续保存
+    required: true
+    description: >
+      初次保存 baseline，改字保存 changed，重复采样保存无正文的 unchanged，基线身份和哈希连续可对照。
+    preconditions:
+      - 使用已有辅助功能权限、开启控件文本的 Debug 隔离 App，正式采集状态不变。
+      - 一个支持 AX 的专用原生窗口提供可改动文本，窗口身份与标题在用例内保持稳定。
+    steps:
+      - 用 CUA 原生控件开始记录，激活专用窗口并采集初始文字，再修改文字采样，再触发一次不改文字的操作。
+      - 暂停并封口，核对 baseline、changed、unchanged 的文本、基线 captureID、baseHash 和 contentHash；未变化样本没有重复正文。
+  - id: CTX-008
+    name: AX 敏感控件不输出文本
+    required: true
+    description: >
+      密码控件和标记为密钥的控件子树不输出值，普通控件仍可读取。
+    preconditions:
+      - 使用开启控件文本且已有辅助功能权限的 Debug 隔离 App，专用窗口含普通文本、密码和密钥控件。
+    steps:
+      - 采集未排除的专用窗口，确认普通文字可见，密码及密钥值不在持久化上下文中。
+  - id: CTX-009
+    name: AX 读取截断不产生虚假的文本删除
+    required: true
+    description: >
+      有界读取超时或截断时保存部分基线；相同已读子集可复用，但不能把未读到的控件输出为 removed。
+    preconditions:
+      - 新的 accessibility fixture 可生成带 truncated 的快照，或已授权的专用应用可以稳定制造预算截断。
+      - 用例只操作可丢弃隔离目录。
+    steps:
+      - 生成并读取完整、截断、再次截断的快照；确认截断样本标记 truncated，变化时为 baseline，相同已读子集可为无正文的 unchanged，均没有删除推断。
+  - id: CTX-010
+    name: 视频封段后复用 AX 文本版本
+    required: true
+    description: >
+      相同窗口文字跨独立 ready 视频段仍按 changed／unchanged 保存，只为不同内容保存一个文本版本。
+    preconditions:
+      - 独占可丢弃 schema 4 目录，原生 fixture 可回放实际已读取的两份 AX 控件文本。
+      - 每次采样都封成独立 ready 段，回放包括变化、无变化、隐私、不可用和截断边界。
+    steps:
+      - 回放并核对原始 capture_context，确认封段本身不重新生成 baseline，变化后无变化样本正文为空。
+      - 核对两份不同控件文字只对应两个 ax_snapshots 版本；单采样或新分析批次读取时能得到完整首帧基线，truncated 标记仍按各次采样保留。
+  - id: CTX-011
+    name: 删除旧媒体后文本读取与回收不依赖旧基线
+    required: true
+    description: >
+      删除最早基线媒体不破坏后续采样；旧正文的最后一个当前引用删除后解除存储引用。
+    preconditions:
+      - 独占含跨段文本差量的 schema 4 fixture，已记录后续采样 ID、完整文本和当前文本版本数。
+      - 用例仅删除该可丢弃 fixture 的段索引，真实存储不参与。
+    steps:
+      - 删除第一份文本的全部当前采样引用，确认该文本版本回收；单独读取后续差量帧，确认补齐基线与删除前完整文字一致，foreign_key_check 为空。
+      - 删除剩余采样，确认 capture_ax 与 ax_snapshots 均为空，没有仅被旧基线哈希保留的正文。

@@ -79,3 +79,45 @@ cases:
       - 完整采集并阅读每日会话清单与消息；核对覆盖状态、来源类型和日期，记录无活动的来源而不杜撰。
       - 整理 facts，校验后渲染；逐条回读所有被引用材料并验证源行，确认讨论、Agent 自述和实际验证范围分别表述。
       - 回读七份每日文件及 weekly.md；确认没有绩效评价或次日建议、没有杜撰的完成或发布，空日按实际覆盖显示。
+  - id: LOCAL-008
+    name: 未变化来源复用索引且结果等于全量采集
+    required: true
+    description: >
+      在同一份完整来源上首次构建和二次复用均保持材料、来源覆盖及 collectionId 一致，二次原始读取为零。
+    preconditions:
+      - 使用独立 HOME 和独立索引目录，四种原生格式各有完整记录；来源在用例内保持静止。
+      - CLI 已构建，所有输出使用不同的新目录。
+    steps:
+      - 依次执行 no-index、首次索引和二次索引采集；比较 materials.jsonl、manifest.sources 和 collectionId，确认一致。
+      - 核对第二次 index.hits 等于来源文件数且 sourceBytesRead 为零；原始来源摘要不变。
+  - id: LOCAL-009
+    name: 追加时保留工具关联并等待完整行
+    required: true
+    description: >
+      完整行检查点保留工具调用状态，追加结果仍关联原参数，半行只在补齐换行后进入材料。
+    preconditions:
+      - 独立来源含工具调用但尚无回执，已建立索引，后续追加仅在该来源进行。
+      - 每次比较均另做 no-index 采集，输出到新目录。
+    steps:
+      - 追加工具结果；确认索引路径与全量材料及来源覆盖一致，结果包含原工具名和参数。
+      - 追加半条消息并采集，再补齐余下字节和换行采集；确认前者记录 incompleteTail，后者仅收录一次完整消息且清除该计数。
+  - id: LOCAL-010
+    name: 来源变更会失效重建派生索引
+    required: true
+    description: >
+      历史内容重写、截断、替换文件和删除来源后，索引不能保留失效材料或旧来源定位。
+    preconditions:
+      - 独立来源和索引已建立，用例内仅修改可丢弃的该来源，真实记录不参与。
+      - 每次变更后使用新输出目录，另做 no-index 对照。
+    steps:
+      - 分别制造同长度重写、重写并追加、截断和原子换文件；每次确认索引与全量材料、来源覆盖及 collectionId 一致。
+      - 删除该来源并采集；确认旧材料不再输出，对应派生索引被清理。
+  - id: LOCAL-011
+    name: 损坏的索引可从原始来源恢复
+    required: true
+    description: >
+      缓存损坏只增加缓存失败计数，不伪造来源缺失，不改变材料和来源覆盖。
+    preconditions:
+      - 独立来源完整可读，已建立可丢弃索引，具备未损坏的全量采集对照。
+    steps:
+      - 破坏索引文件后采集；确认 cacheFailures 增加且 rebuilt 大于零，材料、来源覆盖和 collectionId 与全量对照一致。

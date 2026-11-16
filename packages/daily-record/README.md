@@ -17,7 +17,24 @@ pnpm daily-record read --bundle /private/tmp/agent-week-materials --id <材料ID
 日期两端均包含。默认使用本机账号的来源目录；Codex、Pi、Claude 分别沿用
 CODEX_HOME、PI_CODING_AGENT_DIR、CLAUDE_CONFIG_DIR。`--home` 可明确指定另一个本地
 HOME 树，此时忽略这些变量，便于在独立目录进行行为验收。Trae 默认读取 HOME 下
-`.trae/cli/sessions`。不按文件名或 mtime 过滤日期，每次完整扫描来源，增量索引留到以后。
+`.trae/cli/sessions`。日期始终按消息时间筛选。默认索引保存在来源 HOME 下
+`.cache/runweave/daily-record`，可用 `--index-dir <目录>` 指定，或用 `--no-index` 全量读取。
+索引不能放进任一来源目录，不影响原始 JSONL、材料 ID、源行摘要或材料包格式。
+
+索引按 provider、规范来源路径、时区和解析版本隔离，保存完整行检查点、脱敏材料及工具关联状态，
+不保存 reasoning 或图片。未变化文件通过身份、大小和纳秒修改／状态时间复用；变化文件先校验
+已消费前缀的 SHA-256，再只解析新增完整行。截断、换文件或前缀变化会重建；成功枚举后，
+已删除来源文件对应的派生索引会被清理。末尾未完成行留到下一次。首次构建有额外写入成本；
+追加文件仍需读取旧前缀，不能声称所有变化文件只读尾部。修改规范化语义时必须提升 `src/native-index.ts` 的解析版本。
+
+索引目录 0700、文件 0600，原子替换；损坏、不可用或单文件超过 64 MiB 时回退到来源读取，
+缓存写入失败不降低真实来源覆盖。索引可整体删除后重建，含私人材料，请按原始记录同等保护。
+日期和排除会话筛选在复用后执行；项目归属仍在输出时解析。CLI 额外输出 `index` 读取／解析字节
+及命中、追加、重建、缓存失败计数，这些性能指标不参与材料包 collectionId。
+
+`fingerprint --from ... --to ...` 使用同样的来源、日期与排除规则，只返回各日各 provider 的
+稳定输入指纹和覆盖状态，不输出正文或创建材料包。指纹包含材料身份、来源行定位和项目归属，
+不包含采集时间及性能计数；原生日志重放不会因排除计数变化而触发重新整理。
 
 collect 输出 manifest.json、materials.jsonl、sessions.json 和 facts.template.json。
 新输出目录不得已存在。文件大小在打开时冻结，只读取范围内完整行；末尾未完成行不纳入该快照。

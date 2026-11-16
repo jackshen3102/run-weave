@@ -24,8 +24,9 @@ struct AnalysisResult: Codable {
     let cards: [AnalysisResultCard]; let observation: String
     var rewriteSpan: AnalysisRewriteSpan? = nil; var replacements: [AnalysisReplacement]? = nil
 }
+let analysisPromptVersion = "screen-timeline-v5-ax-versions"
 struct AnalysisManifest: Codable {
-    let batchID: String; let deviceID: String; let day: String; var inputHash: String; let promptVersion: String
+    let batchID: String; let deviceID: String; let day: String; var inputHash: String; var promptVersion: String
     let startMs: Int64; let endMs: Int64; let captures: [JournalCapture]; let intervals: [JournalInterval]
     var context: [AnalysisCard]; var evidence: [AnalysisEvidence]; let agentCoverage: String
 }

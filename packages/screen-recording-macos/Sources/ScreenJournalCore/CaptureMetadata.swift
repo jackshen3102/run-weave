@@ -10,6 +10,8 @@ struct CaptureMetadata {
     let applicationID: String?
     let idleSeconds: Double?
     let privacyPlaceholder: Bool
+    var context: CaptureWindowContext? = nil
+    var accessibility: CaptureAXSnapshot? = nil
 }
 struct SegmentRecord {
     let id: String

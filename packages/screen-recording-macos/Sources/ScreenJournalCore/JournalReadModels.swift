@@ -34,6 +34,7 @@ struct JournalCapture: Codable, Identifiable, Equatable {
     let availableUntilMs: Int64
     var idleSeconds: Double? = nil
     var visualChanged: Bool? = nil
+    var context: CaptureWindowContext? = nil
 }
 struct JournalInterval: Codable, Equatable {
     let startMs: Int64
@@ -116,6 +117,7 @@ func journalNowMs() -> Int64 { Int64((Date().timeIntervalSince1970 * 1000).round
 // Internal locations are deliberately not serialized into the HTTP contract.
 struct JournalIndexedCapture {
     let capture: JournalCapture
+    var accessibilitySnapshot: CaptureAXSnapshot? = nil
     let segmentID: String
     let frameIndex: Int
     let width: Int

@@ -157,11 +157,21 @@ struct JournalReadCatalog {
             WHERE c.session_id=? AND c.sequence>=? AND c.sequence<=? AND s.state='ready' AND s.started>=?
             ORDER BY c.sequence LIMIT 900 OFFSET ?
             """, [bounds.sessionID, bounds.firstSequence, bounds.lastSequence, Date().timeIntervalSince1970 - Double(settings.retentionDays) * 86400, offset])
-        return try indexed(rows, settings: settings)
+        return try indexed(rows, settings: settings, database: db)
     }
-    static func indexed(_ rows: [[String: String]], settings: RecordingSettings) throws -> [JournalIndexedCapture] {
+    static func indexed(_ rows: [[String: String]], settings: RecordingSettings, database db: RecordStore) throws -> [JournalIndexedCapture] {
         var names: [String: String] = [:]
-        return try rows.map { row in
+        var contexts: [String: CaptureWindowContext] = [:]
+        let ids = rows.compactMap { $0["id"] }
+        if db.supportsCaptureContext, !ids.isEmpty {
+            let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+            for row in try db.rows("SELECT capture_id,body FROM capture_context WHERE capture_id IN (\(placeholders))", ids) {
+                if let id = row["capture_id"], let body = row["body"],
+                   let value = try? JSONDecoder().decode(CaptureWindowContext.self, from: Data(body.utf8)) { contexts[id] = value }
+            }
+        }
+        let snapshots = try CaptureAXStorage.snapshots(ids, contexts: contexts, database: db)
+        let indexed = try rows.map { row in
             guard let id = row["id"], let sequence = Int(row["sequence"] ?? ""), let ms = Int64(row["captured_ms"] ?? ""),
                   let display = UInt32(row["display_id"] ?? ""), let segment = row["segment_id"], let path = row["path"],
                   let index = Int(row["frame_index"] ?? ""), let started = Double(row["segment_started"] ?? "") else { throw JournalReadError("MEDIA_UNAVAILABLE") }
@@ -176,10 +186,16 @@ struct JournalReadCatalog {
                 timezoneOffsetSeconds: Int(row["timezone_offset"] ?? "") ?? 0, displayID: display,
                 frontmostApplication: privateFrame ? nil : JournalApplication(id: appID, name: appID.flatMap { names[$0] } ?? "未知应用"),
                 privacyPlaceholder: privateFrame, availableUntilMs: Int64((started + Double(settings.retentionDays) * 86400) * 1000))
+            capture.context = privateFrame ? nil : contexts[id]
             capture.idleSeconds = row["idle_seconds"].flatMap(Double.init)
             capture.visualChanged = row["visual_changed"].map { $0 == "1" }
-            return JournalIndexedCapture(capture: capture, segmentID: segment, frameIndex: index,
+            return JournalIndexedCapture(capture: capture, accessibilitySnapshot: snapshots[id], segmentID: segment, frameIndex: index,
                 width: Int(row["width"] ?? "") ?? 0, height: Int(row["height"] ?? "") ?? 0, path: path)
+        }
+        let rebased = CaptureAXStorage.rebase(indexed.map(\.capture), snapshots: snapshots)
+        return zip(indexed, rebased).map { original, capture in
+            JournalIndexedCapture(capture: capture, accessibilitySnapshot: original.accessibilitySnapshot,
+                segmentID: original.segmentID, frameIndex: original.frameIndex, width: original.width, height: original.height, path: original.path)
         }
     }
     static func intervals(for captures: [JournalCapture], events: [JournalInterval]) -> [JournalInterval] {
