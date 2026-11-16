@@ -9,6 +9,7 @@ export interface StoragePaths {
   terminalQuickInputStoreFile: string;
   agentModelCatalogStoreFile: string;
   backendLogDir: string;
+  qualityWorkflowDir: string;
 }
 export interface ActivityStoragePaths { activityHomeDir: string; activityDatabaseFile: string }
 export interface EvolutionStoragePaths { evolutionHomeDir: string; learningDatabaseFile: string; temporaryDir: string }
@@ -34,6 +35,7 @@ export function resolveStoragePaths(): StoragePaths {
     browserProfileDir, authStoreFile, terminalSessionStoreFile,
     terminalQuickInputStoreFile: settingText("storage.terminalQuickInputStoreFile") ?? path.join(path.dirname(terminalSessionStoreFile), "terminal-quick-inputs.json"),
     agentModelCatalogStoreFile: path.join(browserProfileDir, "agent-provider-catalogs.json"),
+    qualityWorkflowDir: path.join(browserProfileDir, "quality-workflow"),
     backendLogDir: settingText("logging.backendDirectory") ?? path.join(browserProfileDir, "logs", "backend"),
   };
 }

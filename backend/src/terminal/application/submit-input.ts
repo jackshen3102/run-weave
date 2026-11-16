@@ -63,6 +63,7 @@ export async function submitTerminalInput(
     );
   }
   beforeDispatch?.();
+  if (input.operationId) terminalLogger.info("terminal.input.requested", { operationId: input.operationId, terminalSessionId: session.id });
   const payload = await sendInputToSession(
     terminalSessionManager,
     { ...options, codexInputContext: input.codexInputContext },
@@ -75,6 +76,7 @@ export async function submitTerminalInput(
     input.submitKey,
     input.expectedThreadId,
   );
+  if (input.operationId && payload.inputAccepted) terminalLogger.info("terminal.input.accepted", { operationId: input.operationId, terminalSessionId: session.id });
   if (
     options.quickInputService &&
     payload.inputAccepted &&

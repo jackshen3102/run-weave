@@ -17,6 +17,7 @@
 | 按天整理本机 Agent 对话与事实记录、配置多机器定时上报   | [每日事实记录](../../packages/daily-record/README.md)、[定时上报配置与恢复](../../plugins/toolkit/skills/daily-record/references/scheduled-reporting.md) |
 | Agent Self-Evolution 操作                               | [evolution-cli.md](./evolution-cli.md)                                                                                                                   |
 | 成果引用与 Agent 复查                                   | [knowledge-cli.md](./knowledge-cli.md)                                                                                                                   |
+| 自动质量证据、覆盖回执与每日归因台账                    | [quality-workflow.md](./quality-workflow.md)                                                                                                             |
 | 定时任务创建与编辑、按需运行、输出及快捷指令执行        | [scheduled-task-cli.md](./scheduled-task-cli.md)                                                                                                         |
 | Browser Profile、网页工具、人工协助、下载取回与代理控制 | [browser-profile.md](./browser-profile.md)                                                                                                               |
 | 个人调查 MCP 常驻安装、停用与运行状态                   | [Research MCP 部署](../deployment/runweave-research-mcp.md)                                                                                              |

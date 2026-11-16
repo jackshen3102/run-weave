@@ -58,7 +58,7 @@ export function useTerminalFloatingDraftController({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const requestScopeRef = useRef<object | null>(null);
-  const beginSendDiagnostics = useSendDiagnostics(floatingDraft, sending, requestScopeRef);
+  const beginSendDiagnostics = useSendDiagnostics(floatingDraft, sending, requestScopeRef, { apiBase, terminalSessionId });
   const sendErrorRef = useRef(sendError);
   sendErrorRef.current = sendError;
   const draftsByTargetRef = useRef(new Map<string, FloatingDraftState>());

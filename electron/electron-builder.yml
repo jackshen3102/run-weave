@@ -43,6 +43,7 @@ extraResources:
       - "activity-sqlite-worker.cjs"
       - "evolution-sqlite-worker.cjs"
       - "scheduled-tasks-sqlite-worker.cjs"
+      - "quality-workflow-sqlite-worker.cjs"
       - "activity-sqlite-runtime-manifest.json"
       - "node_modules/**/*"
   - from: .whistle-runtime

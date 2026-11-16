@@ -158,6 +158,14 @@ await build({
   format: "cjs",
   external: ["better-sqlite3", "fs-native-extensions"],
 });
+await build({
+  ...shared,
+  ...importMetaUrlShim,
+  entryPoints: ["../backend/src/quality-workflow/sqlite-worker.ts"],
+  outfile: path.resolve(outputDir, "backend", "quality-workflow-sqlite-worker.cjs"),
+  format: "cjs",
+  external: ["better-sqlite3", "fs-native-extensions"],
+});
 finalizeActivitySqliteRuntime(
   activityWorkerEntry,
   evolutionWorkerEntry,

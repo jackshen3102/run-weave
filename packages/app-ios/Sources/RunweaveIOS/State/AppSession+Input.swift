@@ -63,7 +63,7 @@ extension AppSession {
 
   @discardableResult
   func sendCommand(terminalID: String, queue: Bool = false) async throws -> ClientDiagnosticOperation? {
-    let action = ClientDiagnosticOperation(.terminalSend)
+    let action = ClientDiagnosticOperation(.terminalSend, observer: api.flatMap { QualityDiagnosticsUploader.shared.observer(api: $0, terminalID: terminalID) })
     var reachedTransport = false
     defer { if !reachedTransport { action.stage(.rejected) } }
     guard canWrite, terminal?.id == terminalID, let controller = terminalController else {

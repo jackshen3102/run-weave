@@ -13663,5 +13663,101 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "Atomically write redacted derived materials and complete-line parser checkpoints in private storage; this is not a user configuration source."
+  },
+  {
+    "file": "frontend/src/features/diagnostic-logs/quality-queue.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.getItem(this.key)",
+    "count": 3,
+    "category": "device-adapter",
+    "reason": "持久化按目标 Backend 隔离的诊断队列和损坏备份，不保存业务正文、端点或凭据，不作为实例配置。"
+  },
+  {
+    "file": "frontend/src/features/diagnostic-logs/quality-queue.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(`${this.key}.corrupt.${crypto.randomUUID()}`, raw)",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "持久化按目标 Backend 隔离的诊断队列和损坏备份，不保存业务正文、端点或凭据，不作为实例配置。"
+  },
+  {
+    "file": "frontend/src/features/diagnostic-logs/quality-queue.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(this.key, JSON.stringify(next))",
+    "count": 2,
+    "category": "device-adapter",
+    "reason": "持久化按目标 Backend 隔离的诊断队列和损坏备份，不保存业务正文、端点或凭据，不作为实例配置。"
+  },
+  {
+    "file": "frontend/src/features/diagnostic-logs/quality-queue.ts",
+    "kind": "device-or-env-loader",
+    "expression": "localStorage.setItem(this.key, JSON.stringify(this.state))",
+    "count": 1,
+    "category": "device-adapter",
+    "reason": "持久化按目标 Backend 隔离的诊断队列和损坏备份，不保存业务正文、端点或凭据，不作为实例配置。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/quality.ts",
+    "kind": "file-io",
+    "expression": "readFile(requireStringOption(parsed.options, \"file\"))",
+    "count": 2,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交与只读操作上下文请求文件，经已认证 CLI 转发；不直接读取在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "readFile(options.file ?? path.join(options.out,'assessments.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "readFile(path.join(options.out,'input.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "readFile(sessionFile)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(options.out,'input.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(sessionFile)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取用户指定的质量台账提交或本工作流私有运行材料，通过已认证 CLI 提交，不直接操作在线数据库或实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/skills/quality-workflow/scripts/daily.mjs",
+    "kind": "file-io",
+    "expression": "writeFile(path.join(options.out,'phase-outcomes.json'))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Write the deterministic phase-outcome receipt in this quality run private directory; no online database or instance configuration access."
   }
 ]

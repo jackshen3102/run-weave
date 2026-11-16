@@ -3,7 +3,7 @@ import { useMemoizedFn } from "ahooks";
 import { beginDiagnosticAction } from "../../../lib/action-diagnostics";
 
 /** Keep render evidence separate from transport acknowledgement and target changes. */
-export function useSendDiagnostics(draft: string, sending: boolean, scope: RefObject<object | null>) {
+export function useSendDiagnostics(draft: string, sending: boolean, scope: RefObject<object | null>, target: { apiBase: string; terminalSessionId: string }) {
   const pending = useRef<{ operation: ReturnType<typeof beginDiagnosticAction>; scope: object | null } | null>(null);
   useEffect(() => {
     if (!draft && !sending && pending.current) {
@@ -12,7 +12,7 @@ export function useSendDiagnostics(draft: string, sending: boolean, scope: RefOb
     }
   }, [draft, sending, scope]);
   return useMemoizedFn(() => {
-    const operation = beginDiagnosticAction("terminal_send");
+    const operation = beginDiagnosticAction("terminal_send", undefined, target);
     return {
       ...operation,
       reject: () => { operation.stage("rejected"); return false; },

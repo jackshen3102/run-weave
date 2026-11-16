@@ -32,6 +32,7 @@
     "./desktop-bridge": "./src/desktop/bridge.ts",
     "./tunnels": "./src/tunnels/index.ts",
     "./remote": "./src/remote/index.ts",
+    "./quality-workflow": "./src/monitoring/quality-workflow.ts",
     "./diagnostic-logs": "./src/monitoring/diagnostic-logs.ts",
     "./evolution": "./src/evolution/index.ts",
     "./protocol": "./src/protocol.ts",
