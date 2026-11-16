@@ -26,6 +26,7 @@ export function codexScheduledArgs(
             "sandbox_workspace_write.network_access=false",
           ];
   return [
+    "--dangerously-bypass-hook-trust",
     ...permissionArgs,
     ...(config.model ? ["--model", config.model] : []),
     ...(config.effort
