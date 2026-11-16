@@ -37,7 +37,7 @@ Server 平台包携带构建好的 Toolkit 技能、Hooks 和 Pi 集成资源，
 ```bash
 rw server toolkit install --dry-run --json
 rw server toolkit install --json
-# 激活新版 Server 后，将其携带的 Toolkit 同步到 Agent
+# 手动重试或单独同步 active Server 携带的 Toolkit
 rw server toolkit update --json
 ```
 
@@ -48,7 +48,11 @@ rw server toolkit update --json
 同步后需新建 Agent 会话加载技能。该命令不负责 Agent 登录，不更新系统级托管 Hook 快照。
 `--dry-run` 只校验发行资源并展示携带版本，不运行插件安装器，也不修改 Agent 配置。
 旧 Server 缺少资源时返回 `TOOLKIT_NOT_PACKAGED`，须先升级 Server。
-服务启动、npm 安装和 `rw server update` 不自动修改 Agent 插件；升级后显式执行 `toolkit update`。
+`rw server update` 在激活新版并完成服务检查后，自动运行同一同步器：内容有变更时更新，
+相同内容跳过重复安装；停止态更新也会同步。同步结果保存在更新回执的 `toolkit` 字段，
+各 Agent 的跳过原因见 stderr。`--dry-run` 不同步，服务启动和单独 npm 安装也不触发同步。
+若同步失败，命令报错且回执记录 `failedPhase: syncing-toolkit`；已激活的 Server 保持原状，
+修复 Agent 安装问题后可单独执行 `rw server toolkit update` 重试，无需再次升级 Server。
 
 ## Windows 轻量模式
 
