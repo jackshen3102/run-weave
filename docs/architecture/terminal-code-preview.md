@@ -142,7 +142,9 @@ Web 远程项目另含 endpoint 身份。关闭重开、切换会话或客户端
 Desktop 会话正文的 HTTP(S) 链接复用内置 Browser，按工作区绑定、全局默认选择 Profile，
 在其当前工作组中新建标签并切到 Browser；该 Profile 没有活动标签时新建工作组。
 打开失败时在正文显示错误。Web 形态沿用新窗口打开。
-iOS 用 MarkdownUI，Mermaid 首期保留可读代码，链接仅允许 HTTP(S)，复用终端的内置浏览器会话；
+iOS 用 MarkdownUI，Mermaid 代码块由 MermaidKit 离线引擎以 strict 模式渲染，支持放大、拖动缩放和查看源码，
+渲染失败自动显示原文；普通箭头文字不推断为 Mermaid。会话与 Markdown 文件预览共用渲染组件。
+链接仅允许 HTTP(S)，复用终端的内置浏览器会话；
 收起浏览器后返回原阅读页及位置，已有网页的替换确认沿用浏览器规则。
 验收合同见[会话阅读](../testing/terminal/conversation-reader.testplan.yaml)。
 跨阅读页生命周期的恢复见[阅读位置](../testing/terminal/conversation-reading-position.testplan.yaml)。

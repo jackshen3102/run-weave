@@ -11,6 +11,15 @@
       }
     },
     {
+      "identity" : "mermaidkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/braddschick/MermaidKit.git",
+      "state" : {
+        "revision" : "a6a5c15f3c91ff4061780c235a44716a988dc475",
+        "version" : "26.0.1"
+      }
+    },
+    {
       "identity" : "networkimage",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/gonzalezreal/NetworkImage",

@@ -8,6 +8,27 @@ struct MarkdownContent: View {
   var body: some View {
     Markdown(content)
       .textSelection(.enabled)
+      .markdownBlockStyle(\.codeBlock) { configuration in
+        if configuration.language?.split(whereSeparator: { $0.isWhitespace }).first?.lowercased() == "mermaid" {
+          MermaidCodeBlock(source: configuration.content)
+            .id(configuration.content)
+            .markdownMargin(top: 0, bottom: 16)
+        } else {
+          ScrollView(.horizontal) {
+            configuration.label
+              .fixedSize(horizontal: false, vertical: true)
+              .relativeLineSpacing(.em(0.225))
+              .markdownTextStyle {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.85))
+              }
+              .padding(16)
+          }
+          .background(Color(uiColor: .secondarySystemBackground))
+          .clipShape(RoundedRectangle(cornerRadius: 6))
+          .markdownMargin(top: 0, bottom: 16)
+        }
+      }
       .markdownBlockStyle(\.table) { configuration in
         ScrollView(.horizontal) {
           configuration.label
