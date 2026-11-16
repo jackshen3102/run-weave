@@ -10,6 +10,8 @@
 
 ## 当前参考入口
 
+- [quality-workflow](./quality-workflow/index.html)：当前项目质量巡检、问题跟踪与复验闭环的待评审方案；交互场景为模拟，不代表工作流已实现。
+
 - `terminal-quick-commands/`：终端快捷指令 Tab、全局后台任务看板和当前项目执行的冻结历史原型。
 
 - `activity-action-center-live-references/`：基于当前 Activity、Agent Team 门禁和 pane-scoped outbox 的 Action Center + Live Reference 待评审原型。
