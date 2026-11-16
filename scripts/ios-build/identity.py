@@ -32,7 +32,7 @@ def roots(root, app):
     package = root / "packages" / APPS[app][0]
     paths = [package / "Package.swift", package / "Package.resolved", package / "Sources", package / "ios",
              root / "scripts/ios-build"]
-    for name in ["browser-ios", "ios-build-identity"]:
+    for name in ["browser-ios", "ios-build-identity", "ios-diagnostics"]:
         paths += [root / "packages" / name / "Package.swift", root / "packages" / name / "Sources"]
     if app == "runweave":
         paths.append(package / "Vendor")

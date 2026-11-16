@@ -14,12 +14,12 @@ final class AppSession: ObservableObject {
     }
   }
   @Published var checking = false
-  @Published var loading = false
+  let home = HomeState()
+  let drafts = TerminalDraftStore()
+
   @Published var writing = false
-  @Published var overview: HomeOverview? {
-    didSet { attentionRetention.observe(from: oldValue, to: overview) }
-  }
-  let attentionRetention = AttentionRetentionStore()
+
+  var attentionRetention: AttentionRetentionStore { home.attentionRetention }
   @Published var health = DeviceHealthSnapshot()
   @Published var error: String?
   @Published var showingEnergyMonitor = false
@@ -29,9 +29,18 @@ final class AppSession: ObservableObject {
   @Published var terminal: TerminalDetails?
   @Published private(set) var terminalController: SessionController?
   // Retained when expired authentication dismisses the terminal, scoped to the active connection.
-  @Published private(set) var terminalDrafts: [String: String] = [:] { didSet { scheduleDraftSave() } }
-  @Published private(set) var suppressedQuickInputDrafts = Set<String>()
-  @Published private(set) var unconfirmedInputDrafts = Set<String>()
+  private(set) var terminalDrafts: [String: String] {
+    get { drafts.text }
+    set { drafts.replaceText(newValue); scheduleDraftSave() }
+  }
+  private(set) var suppressedQuickInputDrafts: Set<String> {
+    get { drafts.suppressed }
+    set { drafts.replaceSuppressed(newValue) }
+  }
+  private(set) var unconfirmedInputDrafts: Set<String> {
+    get { drafts.unconfirmed }
+    set { drafts.replaceUnconfirmed(newValue) }
+  }
   private(set) var draftRevisions: [String: UUID] = [:]
   let browser = BrowserSession(configuration: BrowserPresentationConfiguration(
     applicationName: "Runweave", returnLabel: "回终端",
@@ -68,11 +77,11 @@ final class AppSession: ObservableObject {
   var routeLoginRequired = false
   var routeResolver: ConnectionRouteResolver? { connection.map { ConnectionRouteResolver.forComputer($0) } }
   @Published var generation = 0 { didSet { terminalQuestions.reset() } }
-  @Published var metadataWrites = Set<String>()
+
   // Mutated by the attention extension; scoped to this connection generation.
-  @Published var acknowledgementWrites = Set<String>()
+
   @Published var openingNextCompletion = false
-  @Published var bellMarkers = Set<String>()
+
   var bellTasks: [String: Task<Void, Never>] = [:]
   private(set) var overviewRevision = 0
   var pendingOverviewEvents: [TerminalEvent] = []
@@ -86,13 +95,13 @@ final class AppSession: ObservableObject {
   private var loadingRequest = 0
   var canWrite: Bool { !replacingTransport && authenticated && health.status == .online && foreground && !writing }
   @Published var reconnectingTerminal = false
-  var canReconnect: Bool { authenticated && foreground && !loading && !writing && !reconnectingTerminal }
+  // A Home read does not own the current terminal's reconnect operation.
+  var canReconnect: Bool { authenticated && foreground && !writing && !reconnectingTerminal }
 
   func discardDraftContents(_ value: BackendConnection) {
     guard connection?.scope == value.scope else { return }
     changingDraftScope = true
-    suppressedQuickInputDrafts.removeAll()
-    unconfirmedInputDrafts.removeAll()
+    drafts.clearContents()
     draftRevisions.removeAll()
     terminalDrafts.removeAll()
     attachmentDrafts.clear()
@@ -116,6 +125,8 @@ final class AppSession: ObservableObject {
     saveDraftsNow()
     changingDraftScope = true
     error = nil
+    home.resetScope()
+    drafts.resetScope()
     let drafts = archivedDrafts(connection)
     terminalDrafts = drafts.text
     suppressedQuickInputDrafts = drafts.suppressedQuickInputs
@@ -241,11 +252,12 @@ final class AppSession: ObservableObject {
       pendingOverviewEvents.removeAll(keepingCapacity: true)
       HomeOverviewEventPatcher.preserveConversationPreviews(from: overview, into: &value)
       overview = value
-      if let id = terminal?.id, let updated = value.sessions.first(where: { $0.id == id }) {
+      if let id = terminal?.id, let updated = value.sessions.first(where: { $0.id == id }),
+        terminal?.projectId != updated.projectId {
         terminal?.projectId = updated.projectId
       }
-      health.status = .online
-      error = nil
+      if health.status != .online { health.status = .online }
+      if error != nil { error = nil }
       startEvents()
       loading = false
       return true
@@ -405,20 +417,13 @@ final class AppSession: ObservableObject {
   }
 
   func setDraft(_ text: String, terminalID: String, suppressQuickInputHistory: Bool = false) {
-    if (terminalDrafts[terminalID] ?? "") != text { unconfirmedInputDrafts.remove(terminalID) }
     draftRevisions[terminalID] = UUID()
-    if text.isEmpty {
-      suppressedQuickInputDrafts.remove(terminalID)
-      terminalDrafts.removeValue(forKey: terminalID)
-    } else {
-      if suppressQuickInputHistory { suppressedQuickInputDrafts.insert(terminalID) }
-      terminalDrafts[terminalID] = text
-    }
+    drafts.edit(text, id: terminalID, suppressQuickInput: suppressQuickInputHistory)
+    scheduleDraftSave()
   }
 
   func setDraftSendUnconfirmed(_ value: Bool, terminalID: String) {
-    if value { unconfirmedInputDrafts.insert(terminalID) }
-    else { unconfirmedInputDrafts.remove(terminalID) }
+    drafts.setUnconfirmed(value, id: terminalID)
     // Persist before dispatch and after acknowledgement, including a cold start during the request.
     saveDraftsNow()
   }
@@ -521,7 +526,10 @@ final class AppSession: ObservableObject {
   private func apply(_ batch: [TerminalEvent]) {
     // Only the authoritative deletion event ends this route; offline/exit are not deletion.
     if let id = terminal?.id,
-      batch.contains(where: { $0.kind == "terminal_session_deleted" && $0.terminalSessionId == id }) {
+      batch.contains(where: {
+        ($0.kind == "terminal_session_deleted" && $0.terminalSessionId == id)
+          || ($0.kind == "project_deleted" && $0.payload.terminalSessionIds?.contains(id) == true)
+      }) {
       closeTerminal()
     }
     let structural = TerminalOverviewEvents.structural

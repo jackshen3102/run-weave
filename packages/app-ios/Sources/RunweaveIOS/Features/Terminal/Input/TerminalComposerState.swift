@@ -14,19 +14,17 @@ final class TerminalComposerState: ObservableObject {
     let commandActive: Bool
     let queueKey: TerminalPromptSubmitKey?
 
-    @MainActor init(session: AppSession, controller: SessionController, terminalID: String) {
-      draft = session.terminalDrafts[terminalID] ?? ""
-      let terminal = session.overview?.sessions.first { $0.id == terminalID }
-      let project = session.overview?.projects.first {
-        $0.id == HomeOverview.parentProjectID(session.terminal?.projectId ?? "")
-      }
+    @MainActor init(session: AppSession, controller: SessionController, terminalID: String, record: HomeState.TerminalRecord, draftRecord: TerminalDraftStore.Record) {
+      draft = draftRecord.snapshot.text
+      let terminal = record.snapshot.terminal
+      let project = record.snapshot.project
       targetLabel = [session.connection?.name, project?.name, terminal?.title ?? terminalID]
         .compactMap { $0 }.joined(separator: " · ")
       canWrite = session.canWrite
       canSend = controller.canSend
       inputBusy = controller.inputBusy
-      unconfirmedInput = session.unconfirmedInputDrafts.contains(terminalID)
-      commandActive = session.isCommandActive(terminalID)
+      unconfirmedInput = draftRecord.snapshot.unconfirmedInput
+      commandActive = terminal?.terminalState.state == "agent_running"
       queueKey = session.composerQueueKey(terminalID: terminalID)
     }
   }
@@ -35,13 +33,15 @@ final class TerminalComposerState: ObservableObject {
   private var subscription: AnyCancellable?
 
   init(session: AppSession, controller: SessionController, terminalID: String) {
-    snapshot = Snapshot(session: session, controller: controller, terminalID: terminalID)
-    subscription = Publishers.Merge(session.objectWillChange, controller.objectWillChange)
+    let record = session.home.record(terminalID)
+    let draftRecord = session.drafts.record(terminalID)
+    snapshot = Snapshot(session: session, controller: controller, terminalID: terminalID, record: record, draftRecord: draftRecord)
+    subscription = Publishers.MergeMany(session.objectWillChange, controller.objectWillChange, record.objectWillChange, draftRecord.objectWillChange)
       // objectWillChange precedes the mutation. Read the completed state on the main queue.
       .receive(on: DispatchQueue.main)
       .sink { [weak self] in
         guard let self else { return }
-        let next = Snapshot(session: session, controller: controller, terminalID: terminalID)
+        let next = Snapshot(session: session, controller: controller, terminalID: terminalID, record: record, draftRecord: draftRecord)
         if self.snapshot != next { self.snapshot = next }
       }
   }

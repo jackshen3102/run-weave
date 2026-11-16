@@ -15,13 +15,20 @@ struct CodexReplyAssistant: View {
   @ObservedObject var session: AppSession
   @ObservedObject var controller: SessionController
   @ObservedObject var questions: TerminalQuestionsModel
+  @StateObject private var presentation: StateProjection<TerminalPresentationSnapshot>
   let terminalID: String
   let context: CodexReplyContext
   let returnToTerminal: () -> Void
 
-  private var terminal: HomeTerminal? {
-    session.overview?.sessions.first { $0.id == terminalID }
+  init(session: AppSession, controller: SessionController, questions: TerminalQuestionsModel, terminalID: String, context: CodexReplyContext, returnToTerminal: @escaping () -> Void) {
+    self.session = session; self.controller = controller; self.questions = questions
+    self.terminalID = terminalID; self.context = context; self.returnToTerminal = returnToTerminal
+    _presentation = StateObject(wrappedValue: terminalPresentationState(session: session, terminalID: terminalID))
   }
+
+  // The projection only invalidates presentation. Commands recheck live source
+  // facts so a queued UI refresh cannot authorize an expired conversation.
+  private var terminal: HomeTerminal? { session.home.terminal(terminalID) }
   private var contextMatches: Bool {
     session.generation == context.generation && session.terminal?.id == terminalID
       && session.terminalController === controller && terminal?.status != "exited"

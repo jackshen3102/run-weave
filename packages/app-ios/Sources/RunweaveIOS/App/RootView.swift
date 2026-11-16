@@ -42,7 +42,7 @@ public struct RootView: View {
             ResourceMonitorView(session: session).id(session.generation)
           } else if let details = session.terminal, let controller = session.terminalController {
             TerminalScreen(session: session, controller: controller, details: details)
-              .id("\(session.connection?.scope ?? ""):\(details.id):\(details.projectId)")
+              .id("\(session.connection?.scope ?? ""):\(details.id):\(details.projectId):\(ObjectIdentifier(controller))")
           }
         } label: { EmptyView() }.hidden()
       }

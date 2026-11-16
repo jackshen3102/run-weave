@@ -2,8 +2,13 @@ import SwiftUI
 
 struct TerminalNextCompletionButton: View {
   @ObservedObject var session: AppSession
+  @ObservedObject private var queue: HomeState.CompletionQueue
 
-  private var count: Int { session.nextCompletionTerminals.count }
+  init(session: AppSession) {
+    self.session = session; queue = session.home.completionQueue
+  }
+
+  private var count: Int { queue.ids.filter { $0 != session.terminal?.id }.count }
 
   var body: some View {
     if count > 0 {

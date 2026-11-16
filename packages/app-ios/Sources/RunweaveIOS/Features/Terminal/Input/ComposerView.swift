@@ -42,7 +42,8 @@ struct ComposerView: View {
   @StateObject private var state: TerminalComposerState
   @StateObject private var modelSettings = TerminalAgentSettingsModel()
   private let textEditor: CommandTextEditor
-  @ObservedObject private var attachmentDrafts: TerminalAttachmentDrafts
+  private let attachmentDrafts: TerminalAttachmentDrafts
+  @ObservedObject private var attachmentRecord: TerminalAttachmentDrafts.Record
   let terminalID: String
   var active = true
   let availableHeight: CGFloat
@@ -89,6 +90,7 @@ struct ComposerView: View {
     self.onClose = onClose
     self.closeDisabled = closeDisabled
     self.attachmentDrafts = session.attachmentDrafts
+    attachmentRecord = session.attachmentDrafts.record(terminalID)
     _state = StateObject(wrappedValue: TerminalComposerState(
       session: session, controller: controller, terminalID: terminalID))
     _preventsDismissal = preventsDismissal
@@ -100,7 +102,7 @@ struct ComposerView: View {
     self.textEditor = textEditor
   }
 
-  private var attachments: [TerminalDraftAttachment] { attachmentDrafts.attachments[terminalID] ?? [] }
+  private var attachments: [TerminalDraftAttachment] { attachmentRecord.attachments }
   private var hasContent: Bool { hasText || !attachments.isEmpty }
   private var sendDisabled: Bool {
     !state.snapshot.canWrite || !state.snapshot.canSend || stopping || submitting
@@ -268,8 +270,11 @@ struct ComposerView: View {
   private var editor: some View {
     CommandTextView(
       text: Binding(
-        get: { session.terminalDrafts[terminalID] ?? "" },
-        set: { session.setDraft($0, terminalID: terminalID) }),
+        get: { state.snapshot.draft },
+        set: {
+          guard session.terminal?.id == terminalID, session.terminalController === controller else { return }
+          session.setDraft($0, terminalID: terminalID)
+        }),
       isFocused: $editing, collapsesWhenUnfocused: false,
       maximumHeight: maximumInputHeight, onHeightChange: { inputHeight = $0 }, editor: textEditor
     )

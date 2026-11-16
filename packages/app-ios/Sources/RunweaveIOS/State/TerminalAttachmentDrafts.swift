@@ -3,7 +3,7 @@ import SwiftUI
 
 enum TerminalAttachmentLimits { static let maxBytes = 100 * 1024 * 1024 }
 
-struct TerminalDraftAttachment: Identifiable {
+struct TerminalDraftAttachment: Identifiable, Equatable {
   let id = UUID()
   let preview: UIImage?
   var fileName: String? = nil
@@ -11,13 +11,36 @@ struct TerminalDraftAttachment: Identifiable {
   var data: Data?
   var path: String?
   var failure: String?
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.id == rhs.id && lhs.preview === rhs.preview && lhs.fileName == rhs.fileName
+      && lhs.mimeType == rhs.mimeType && lhs.data == rhs.data
+      && lhs.path == rhs.path && lhs.failure == rhs.failure
+  }
 }
 
 /// Attachments belong to a connection's terminal drafts, not to the lifetime of a picker or screen.
 @MainActor
-final class TerminalAttachmentDrafts: ObservableObject {
+final class TerminalAttachmentDrafts {
+  final class Record: ObservableObject {
+    @Published private(set) var attachments: [TerminalDraftAttachment] = []
+    fileprivate func replace(_ next: [TerminalDraftAttachment]) {
+      if attachments != next { attachments = next }
+    }
+  }
+  private var records: [String: Record] = [:]
+  func record(_ id: String) -> Record {
+    if let record = records[id] { return record }
+    let record = Record(); record.replace(attachments[id] ?? []); records[id] = record
+    return record
+  }
   var onChange: (() -> Void)?
-  @Published private(set) var attachments: [String: [TerminalDraftAttachment]] = [:] { didSet { onChange?() } }
+  private(set) var attachments: [String: [TerminalDraftAttachment]] = [:] {
+    didSet {
+      for (id, record) in records { record.replace(attachments[id] ?? []) }
+      onChange?()
+    }
+  }
   private var uploads: [UUID: Task<Void, Never>] = [:]
 
   func add(data: Data, mimeType: String, terminalID: String, session: AppSession) throws {
@@ -85,7 +108,7 @@ final class TerminalAttachmentDrafts: ObservableObject {
   }
 
   func restore(_ value: [String: [TerminalDraftAttachment]]) {
-    clear()
+    clear(resetScope: true)
     attachments = value.mapValues { images in
       images.map { image in
         var restored = image
@@ -95,10 +118,11 @@ final class TerminalAttachmentDrafts: ObservableObject {
     }
   }
 
-  func clear() {
+  func clear(resetScope: Bool = false) {
     for upload in uploads.values { upload.cancel() }
     uploads.removeAll()
     attachments.removeAll()
+    if resetScope { records.removeAll() }
   }
 
   private func update(_ id: UUID, terminalID: String, change: (inout TerminalDraftAttachment) -> Void) {

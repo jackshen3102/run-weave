@@ -13,11 +13,13 @@ struct BranchUpdatesView: View {
   @Environment(\.scenePhase) private var scenePhase
   @ObservedObject var session: AppSession
   @StateObject private var model: BranchUpdatesModel
+  @StateObject private var presentation: StateProjection<TerminalPresentationSnapshot>
   @State private var restored = false
   let title: String
 
   init(session: AppSession, terminalID: String, cwd: String, title: String) {
     self.session = session; self.title = title
+    _presentation = StateObject(wrappedValue: terminalPresentationState(session: session, terminalID: terminalID))
     _model = StateObject(wrappedValue: BranchUpdatesModel(session: session, terminalID: terminalID, cwd: cwd))
   }
   var body: some View {
@@ -118,10 +120,7 @@ struct BranchUpdatesView: View {
     }.frame(maxWidth: .infinity, alignment: .leading)
   }
   private var projectLabel: String {
-    let terminal = session.overview?.sessions.first { $0.id == model.terminalID }
-    let parentID = terminal.map { HomeOverview.parentProjectID($0.projectId) }
-    let project = session.overview?.projects.first { $0.id == parentID }
-    return "\(project?.name ?? "当前项目") / \((model.cwd as NSString).lastPathComponent)"
+    "\(presentation.value.projectName ?? "当前项目") / \((model.cwd as NSString).lastPathComponent)"
   }
   private func commit(_ item: BranchUpdateCommit) -> some View {
     HStack(alignment: .top, spacing: 10) {
