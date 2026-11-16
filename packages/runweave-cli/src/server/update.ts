@@ -18,6 +18,7 @@ import {
   type ServerContext,
 } from "./context.js";
 import { foregroundControl } from "./control.js";
+import { runServerToolkit } from "./toolkit.js";
 import { registered, serviceStart, serviceStop } from "./services.js";
 import {
   activateServer,
@@ -299,9 +300,13 @@ export async function updateServer(
           throw new Error("CONFIG_UPGRADE_NOT_APPLIED: Backend core consumers have not adopted the saved configuration");
         backendConfigurationVerified = true;
       }
+      lastPhase = "syncing-toolkit";
+      record(lastPhase, { targetVersion: manifest.version, backendConfigurationVerified });
+      const toolkit = await runServerToolkit(nextContext, ["update"], false, process.stderr);
       record(wasRunning ? "healthy" : "activated", {
         targetVersion: manifest.version,
         backendConfigurationVerified,
+        toolkit,
       });
     }, true);
   } catch (error) {
