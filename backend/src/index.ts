@@ -1,3 +1,4 @@
+import { createQualityWorkflowRouter, installQualityWorkflowBodyParsers } from "./routes/diagnostics/quality-workflow";
 import { createScreenRecordingAnalysisRouter } from "./routes/screen-recording-analysis";
 import { createScreenRecordingRouter } from "./routes/screen-recording";
 import { createServerManagementRouter } from "./routes/server-management";
@@ -138,6 +139,7 @@ function createHttpApp(
   app.use(createWorkspaceServiceHttpProxy(services.workspaceServiceManager));
   app.use("/api/device/notifications", express.json({ limit: "8kb" }));
   app.use("/api/connection", express.json({ limit: "1kb" }));
+  installQualityWorkflowBodyParsers(app, requireTunnelAuth, requireAuth);
   app.use(express.json({ limit: TERMINAL_CLIPBOARD_IMAGE_JSON_LIMIT }));
   app.use(
     createCorsMiddleware(parseConfiguredOrigins(settingText("backend.server.frontendOrigin"))),
@@ -246,6 +248,7 @@ function createHttpApp(
     requireAuth,
     createDiagnosticLogsRouter(diagnosticLogRecorder),
   );
+  app.use("/api/quality-workflow", requireTunnelAuth, requireAuth, createQualityWorkflowRouter(services.qualityWorkflow));
   registerMonitoringRoutes(app, requireAuth, services);
   app.use("/api/browser/local", requireAuth, createLocalBrowserCapabilitiesRouter(services.authService, services.localBrowserService));
   app.use("/api/browser/local/desktop", requireAuth, createDesktopLocalBrowserRouter(services.authService, services.localBrowserService));

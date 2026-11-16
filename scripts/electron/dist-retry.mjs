@@ -257,6 +257,7 @@ async function prepareIsolatedBuild(buildRoot, baseBuilderConfig, env) {
               "activity-sqlite-worker.cjs",
               "evolution-sqlite-worker.cjs",
               "scheduled-tasks-sqlite-worker.cjs",
+              "quality-workflow-sqlite-worker.cjs",
               "activity-sqlite-runtime-manifest.json",
               "node_modules/**/*",
             ],

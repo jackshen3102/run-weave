@@ -154,6 +154,7 @@ if (
 ) {
   throw new Error("Scheduled tasks SQLite Electron runtime is missing");
 }
+if (!existsSync(path.join(resourcesBackendDir, "quality-workflow-sqlite-worker.cjs"))) throw new Error("Quality SQLite runtime is missing");
 const activityRuntimeManifest = JSON.parse(
   readFileSync(
     path.join(resourcesBackendDir, "activity-sqlite-runtime-manifest.json"),

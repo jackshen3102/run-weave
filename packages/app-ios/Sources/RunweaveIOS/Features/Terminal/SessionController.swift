@@ -32,7 +32,7 @@ public final class SessionController: ObservableObject {
 
   func recordScenePhase(_ phase: ScenePhase) {
     switch phase {
-    case .active: record("scene.active")
+    case .active: record("scene.active"); Task { await QualityDiagnosticsUploader.shared.register(api) }
     case .inactive: record("scene.inactive")
     case .background: record("scene.background")
     @unknown default: record("scene.unknown")
@@ -82,6 +82,7 @@ public final class SessionController: ObservableObject {
     self.api = api
     self.terminalID = terminalID
     self.readOnly = readOnly
+    Task { await QualityDiagnosticsUploader.shared.register(api) }
     surface.openFileRequested = { [weak self] tap in self?.openFileRequested?(tap) }
     surface.openLinkRequested = { [weak self] intent in self?.openLinkRequested?(intent) }
     surface.rawInput = { [weak self] bytes in
@@ -157,9 +158,9 @@ public final class SessionController: ObservableObject {
       var retries = 0
       var recoveryRetries = 0
       while !Task.isCancelled && !self.stopped && self.generation == epoch {
-        let action = ClientDiagnosticOperation(.connectionRecover)
-        self.connectionDiagnostics = action
         let attemptID = UUID().uuidString
+        let action = ClientDiagnosticOperation(.connectionRecover, observer: QualityDiagnosticsUploader.shared.observer(api: self.api, terminalID: self.terminalID, attemptID: attemptID))
+        self.connectionDiagnostics = action
         var connectedAt: TimeInterval?
         self.record("socket.connecting", extra: ["attemptId": attemptID, "retry": retries])
         do {
@@ -304,7 +305,7 @@ public final class SessionController: ObservableObject {
 
   func sendCommand(_ text: String, mode: String, recordQuickInput: Bool? = nil,
     submitKey: TerminalPromptSubmitKey? = nil, diagnostics: ClientDiagnosticOperation? = nil) async throws {
-    let action = diagnostics ?? ClientDiagnosticOperation(.terminalSend)
+    let action = diagnostics ?? ClientDiagnosticOperation(.terminalSend, observer: QualityDiagnosticsUploader.shared.observer(api: api, terminalID: terminalID))
     guard canSend else { action.stage(.rejected); throw APIError.offline }
     let epoch = generation
     inputBusy = true

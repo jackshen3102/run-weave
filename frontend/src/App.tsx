@@ -1,3 +1,4 @@
+import { useQualityUploader } from "./features/diagnostic-logs/quality-uploader";
 import { useObserverTerminalNavigation } from "./features/terminal/automation-sources";
 import { AgentObserverPage } from "./pages/agent-observer-page";
 import { useScreenConversationLink } from "./features/screen-recording/use-conversation-link";
@@ -151,6 +152,7 @@ function RunweaveApp() {
     connectionId: activeConnectionId,
     generation: activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined,
   });
+  useQualityUploader(apiBase, token);
   const screenConversation = useScreenConversationLink({ scope: queryScope, apiBase, token }, navigate);
   const [pendingScheduledRunOpen, setPendingScheduledRunOpen] = useState<{ connectionId: string; runId: string } | null>(null);
   const [scheduledRunOpenError, setScheduledRunOpenError] = useState<string | null>(null);

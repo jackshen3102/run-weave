@@ -437,7 +437,7 @@ async function assembleRuntimeServices(
     terminalCompletionEventService,
     terminalStateService,
   );
-
+  const qualityRuntime = await (await import("../quality-workflow/runtime")).createQualityRuntime(resources, storagePaths, connectionIdentity, terminalSessionManager);
   const devResources = new DevResourcesService();
   resources.defer("dev-resources", () => devResources.dispose());
   const runtimeStatus = new BackendRuntimeStatusService(
@@ -520,7 +520,7 @@ async function assembleRuntimeServices(
   screenRecordingAnalysis.start();
   let disposed = false;
   const services: RuntimeServices = {
-    screenRecording,
+    qualityWorkflow: qualityRuntime.service, screenRecording,
     screenRecordingAnalysis,
     ...deviceMonitoring,
     terminalBadges,
@@ -530,7 +530,7 @@ async function assembleRuntimeServices(
       if (disposed) return;
       feishuConnector?.start();
       textAttachmentFiles?.start();
-      activity.start();
+      activity.start(); qualityRuntime.start();
       evolutionRuntime.start(controlPlaneBaseUrl);
       for (const owner of [experienceLearning, terminalTaskServices.codeReviewService]) owner.start();
       scheduledTasks.runtime?.start();

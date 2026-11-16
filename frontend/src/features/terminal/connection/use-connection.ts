@@ -148,7 +148,7 @@ export function useTerminalConnection(params: {
     };
 
     const connect = async (): Promise<void> => {
-      const diagnostics = beginDiagnosticAction("connection_recover");
+      const diagnostics = beginDiagnosticAction("connection_recover", undefined, { apiBase, terminalSessionId });
       if (cancelled) {
         return;
       }

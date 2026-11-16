@@ -11,6 +11,9 @@ let loaded = false;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceFailed = false;
 let emit: ((event: string) => void) | undefined;
+export interface DiagnosticTarget { apiBase: string; terminalSessionId?: string }
+let observe: ((action: DiagnosticAction, target: DiagnosticTarget | undefined, operationId: string) => ((record: DiagnosticLogRecord) => void) | undefined) | undefined;
+export function setActionDiagnosticObserver(next: NonNullable<typeof observe>): void { observe = next; }
 export const diagnosticLaunchId = crypto.randomUUID();
 
 export function setActionDiagnosticEmitter(next: (event: string) => void): void { emit = next; }
@@ -54,14 +57,17 @@ export function actionDiagnosticPersistenceFailed(): boolean { return persistenc
 
 // Only fixed action names, generated IDs, numeric status and build metadata enter this ring.
 // Never pass text, URLs, request bodies, server error messages or attachment names.
-export function beginDiagnosticAction(action: DiagnosticAction, operationId?: string) {
+export function beginDiagnosticAction(action: DiagnosticAction, operationId?: string, target?: DiagnosticTarget) {
   const id = operationId && /^[a-f0-9-]{36}$/i.test(operationId) ? operationId : crypto.randomUUID();
+  let onRecord: ((record: DiagnosticLogRecord) => void) | undefined;
+  try { onRecord = observe?.(action, target, id); } catch { /* Business behavior never depends on collection. */ }
   const started = performance.now();
   const info = runtimeBuildInfo();
   const context = {
     operationId: id, launchId: diagnosticLaunchId,
     client: window.electronAPI?.isElectron ? "desktop" : "web",
     environment: import.meta.env.DEV ? "development" : import.meta.env.VITE_RUNWEAVE_CHANNEL === "beta" ? "beta" : "production",
+    source_state: info.sourceDirty === undefined ? "unknown" : info.sourceDirty ? "modified" : "clean",
     app_version: info.version, build_id: info.buildId ?? "unknown", source_revision: info.sourceRevision ?? "unknown",
   };
   function stage(stage: DiagnosticStage, error?: unknown, relatedOperationId?: string): void {
@@ -75,6 +81,7 @@ export function beginDiagnosticAction(action: DiagnosticAction, operationId?: st
       const related = relatedOperationId && /^[a-f0-9-]{36}$/i.test(relatedOperationId) ? relatedOperationId : undefined;
       records.push({ at: new Date().toISOString(), source: "frontend:action", message: action,
         details: { ...context, stage, elapsedMs: Math.round(performance.now() - started), ...(status === undefined ? {} : { status }), ...(code ? { failureCode: code } : {}), ...(related ? { relatedOperationId: related } : {}) } });
+      try { onRecord?.(records[records.length - 1]!); } catch { /* Preserve existing recording behavior. */ }
       if (records.length > limit) records.splice(0, records.length - limit);
       if (saveTimer === undefined) saveTimer = setTimeout(persist, 500);
       if (action !== "analytics") emit?.(`action_${action}_${stage}`);

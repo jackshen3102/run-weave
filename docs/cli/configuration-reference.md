@@ -237,6 +237,20 @@ Experience 存储根
 | 约束              | 绝对路径，必须属于所选实例 |
 | 显式迁移来源      | RUNWEAVE_FEISHU_STATE_DIR  |
 
+### storage.qualityDesktopLogDirectory
+
+本机桌面事故 events.jsonl 所在目录；缺省不读取桌面文件
+
+| 属性              | 合同                                   |
+| ----------------- | -------------------------------------- |
+| 类型              | string；允许 null 恢复默认             |
+| 默认              | 未配置；不得将本机桌面日志归为远端来源 |
+| 所属模块          | backend/quality-workflow               |
+| 生效              | 所属进程重启                           |
+| 敏感 / 远端可修改 | 否 / 否                                |
+| 约束              | 绝对路径，必须属于所选实例             |
+| 显式迁移来源      | explicit-settings                      |
+
 ### storage.terminalQuickInputStoreFile
 
 旧配置/内容文件定位；模型迁移后其旧路径仅作来源记录

@@ -42,6 +42,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - [`review-only`](./skills/review-only/SKILL.md)：统一计划、代码与交付目标核验；自然语言 Review 与专门入口沿用同一职责，不再叠加独立核验技能。
 - `runweave-change-validation`
 - `runweave-dev-session`
+- [`quality-workflow`](./skills/quality-workflow/SKILL.md)：读取指定 Backend 的增量质量证据、持久化待处理页并更新同一归因台账；每日启用需确认配置。
 - `run-test-cases`
 - `shadcn`
 - `sync-branch-hard-reset`

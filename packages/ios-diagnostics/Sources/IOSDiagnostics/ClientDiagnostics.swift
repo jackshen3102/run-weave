@@ -33,8 +33,10 @@ extension DiagnosticStage: Codable {}
   private let action: DiagnosticAction
   private let started = ProcessInfo.processInfo.systemUptime
   private let context: [String: String]
+  private let observer: ((ClientDiagnosticRecord) -> Void)?
 
-  public init(_ action: DiagnosticAction) {
+  public init(_ action: DiagnosticAction, observer: ((ClientDiagnosticRecord) -> Void)? = nil) {
+    self.observer = observer
     self.action = action
     context = ClientDiagnostics.context()
     stage(.started)
@@ -49,10 +51,12 @@ extension DiagnosticStage: Codable {}
     let safeCode = failureCode.flatMap { $0.range(of: "^[A-Z0-9_]{1,64}$", options: .regularExpression) != nil ? $0 : nil }
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    ClientDiagnostics.store.append(ClientDiagnosticRecord(
+    let record = ClientDiagnosticRecord(
       at: formatter.string(from: Date()), action: action, operationID: id,
       stage: stage, elapsedMs: Int((ProcessInfo.processInfo.systemUptime - started) * 1000),
-      context: action == .analytics ? ClientDiagnostics.context() : context, errorDomain: safeDomain, errorCode: value?.code, failureCode: safeCode, relatedOperationID: relatedOperationID.flatMap { UUID(uuidString: $0) == nil ? nil : $0 }))
+      context: action == .analytics ? ClientDiagnostics.context() : context, errorDomain: safeDomain, errorCode: value?.code, failureCode: safeCode, relatedOperationID: relatedOperationID.flatMap { UUID(uuidString: $0) == nil ? nil : $0 })
+    ClientDiagnostics.store.append(record)
+    observer?(record)
     // Events contain only fixed vocabulary. Replay correlation uses the separate launch tag.
     if action != .analytics { ClientDiagnostics.onEvent?("action_\(action.rawValue)_\(stage.rawValue)") }
   }

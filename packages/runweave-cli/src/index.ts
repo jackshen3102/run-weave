@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runQualityCommand } from "./commands/quality.js";
 import { runScreenRecordingCommand } from "./commands/screen-recording.js";
 import { withConfigurationArguments } from "@runweave/config-node";
 import { stdin, stdout, stderr } from "node:process";
@@ -45,6 +46,10 @@ export async function runCli(
     }
     const [group, subcommand, ...tail] = commandArgs;
     const args = [...tail, ...contextArgs];
+    if (group === "quality") {
+      await runQualityCommand(subcommand, args, io);
+      return 0;
+    }
     if (group === "screen-recording") {
       await runScreenRecordingCommand(subcommand, args, io);
       return 0;
@@ -140,7 +145,7 @@ export async function runCli(
       return 0;
     }
     io.stderr.write(
-      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <server|config|activity|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|quick-input|scheduled-task|screen-recording|terminal> <command> [options]\n",
+      "Usage: rw [--version|version] | rw health [options] | rw status [options] | rw <server|config|quality|activity|app|app-server|research-mcp|auth|browser|evolution|experience|knowledge|feishu|project|quick-input|scheduled-task|screen-recording|terminal> <command> [options]\n",
     );
     return 2;
   } catch (error) {

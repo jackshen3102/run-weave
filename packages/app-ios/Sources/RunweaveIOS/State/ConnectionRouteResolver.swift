@@ -131,6 +131,7 @@ final class ConnectionRouteResolver: ObservableObject {
           }
           try check(epoch)
           latency = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+          await QualityDiagnosticsUploader.shared.register(api)
           client = api; activeRouteID = route.id; checkingRouteID = nil; needsValidation = false
           statuses[route.id] = "当前使用"
           return api
