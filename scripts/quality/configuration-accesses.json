@@ -13623,5 +13623,45 @@
     "count": 1,
     "category": "tooling",
     "reason": "Read the installed Astro package metadata to locate its official CLI entry; does not read instance configuration or credentials."
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/result-cache.ts",
+    "kind": "environment",
+    "expression": "process.env.PATH",
+    "count": 1,
+    "category": "system",
+    "reason": "Resolve the configured provider executable through the system PATH solely to bind disposable results to its file identity; not instance configuration."
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/result-cache.ts",
+    "kind": "file-io",
+    "expression": "handle.readFile('utf8')",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Read a bounded private derived result cache, verify its key, digest and expiry, then validate the result against current native-owner inputs."
+  },
+  {
+    "file": "backend/src/screen-recording-analysis/result-cache.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(json)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically persist a validated derived analysis result in private bounded storage; cache failure does not alter source or commit semantics."
+  },
+  {
+    "file": "packages/daily-record/src/native-index.ts",
+    "kind": "file-io",
+    "expression": "handle.readFile(\"utf8\")",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Read a bounded disposable per-source material checkpoint with digest verification; corrupt or unavailable cache falls back to native source parsing."
+  },
+  {
+    "file": "packages/daily-record/src/native-index.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(hash(json) + \"\\n\" + json)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically write redacted derived materials and complete-line parser checkpoints in private storage; this is not a user configuration source."
   }
 ]
