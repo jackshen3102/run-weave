@@ -13,9 +13,11 @@ import {
 } from "./data.js";
 import { readFacts, render } from "./facts.js";
 import { assignProjects } from "./projects.js";
+import { dailyFingerprints } from "./fingerprints.js";
 
 const help = `本地 Agent 每日事实记录（只读本机来源）
-collect --from YYYY-MM-DD --to YYYY-MM-DD --timezone Asia/Shanghai --out <新目录> [--home <来源HOME>] [--providers codex,pi] [--machine-id <固定ID>] [--exclude-thread <ID>]
+collect --from YYYY-MM-DD --to YYYY-MM-DD --timezone Asia/Shanghai --out <新目录> [--home <来源HOME>] [--providers codex,pi] [--machine-id <固定ID>] [--exclude-thread <ID>] [--index-dir <目录> | --no-index]
+fingerprint --from YYYY-MM-DD --to YYYY-MM-DD [--providers codex,pi] [--home <来源HOME>]
 review --bundle <材料目录> [--date YYYY-MM-DD] [--thread <ID>] [--max-chars 1200] [--role user|assistant|tool]
 read --bundle <材料目录> --id <材料ID> [--verify-source]
 validate --bundle <材料目录> --facts <facts.json>
@@ -36,6 +38,8 @@ async function main() {
       timezone: { type: "string", default: "Asia/Shanghai" },
       out: { type: "string" },
       home: { type: "string" },
+      "index-dir": { type: "string" },
+      "no-index": { type: "boolean", default: false },
       providers: { type: "string" },
       "machine-id": { type: "string" },
       "exclude-thread": { type: "string", multiple: true },
@@ -60,7 +64,7 @@ async function main() {
   };
   const output = (value: unknown) =>
     process.stdout.write(JSON.stringify(value, null, 2) + "\n");
-  if (command === "collect") {
+  if (command === "collect" || command === "fingerprint") {
     const from = required("from"),
       to = required("to"),
       days = dates(from, to),
@@ -70,15 +74,23 @@ async function main() {
     if (providers && (!providers.length || new Set(providers).size !== providers.length ||
       providers.some((v) => !["codex", "pi", "claude", "trae"].includes(v))))
       throw new Error("providers 须为不重复的 codex,pi,claude,trae 列表");
-    const { materials, sources } = await collectNative({
+    const { materials, sources, index } = await collectNative({
       from,
       to,
       timeZone,
       home: values.home,
+      indexDir: values["index-dir"],
+      noIndex: values["no-index"],
       providers,
       excludeThreads: values["exclude-thread"],
     });
     await assignProjects(materials);
+    if (command === "fingerprint") {
+      output({ schemaVersion: 1,machineId: values["machine-id"] ?? os.hostname(),from,to,timeZone,
+        days: dailyFingerprints(materials,sources,days),index });
+      if (sources.some(source => source.status !== "complete")) process.exitCode = 2;
+      return;
+    }
     const jsonl =
       materials.map((material) => JSON.stringify(material)).join("\n") +
       (materials.length ? "\n" : "");
@@ -149,6 +161,7 @@ async function main() {
       materials: materials.length,
       sessions: sessions.size,
       sources,
+      index,
     });
     if (sources.some((source) => source.status !== "complete"))
       process.exitCode = 2;

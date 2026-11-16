@@ -1,0 +1,35 @@
+version: 1
+name: 分析结果重试缓存验收
+description: >
+  使用真实原生隔离 owner、Backend worker、本地可计数提供器及提交故障代理，验证成功结果复用；不调用真实模型服务。
+cases:
+  - id: CACHE-001
+    name: 新进程重试复用相同输入的成功结果
+    required: true
+    description: >
+      提供器成功后提交失败，后续新 Backend 进程领取相同批次输入时，模型和图片请求次数均为零，提交仍走 owner 校验。
+    preconditions:
+      - 独占隔离原生 owner、Backend 配置、代理及可计数本地提供器，已有可解码 ready 记录。
+      - 代理只丢弃首次 commitAnalysis，其它租约、失败和回执请求透传，缓存目录私有且初始为空。
+    steps:
+      - 首次执行得到成功提供器结果但提交失败；确认 owner 回到待处理状态，成功结果缓存已原子保存。
+      - 停止原 worker 执行并启动新的独立 Backend 验证进程，保留缓存及源 owner；按 owner 许可重试同批次，确认 inputHash 一致、提供器调用零次、图片读取零次，最终提交成功。
+  - id: CACHE-002
+    name: 模型配置变化使成功结果失效
+    required: true
+    description: >
+      相同 manifest 改变模型 effort 后不能复用旧结果；新配置必须实际执行提供器。
+    preconditions:
+      - 隔离 owner 同批次已有成功结果缓存但尚未提交，提供器可计数，支持显式隔离重试。
+    steps:
+      - 保持输入相同，改 effort 后领取重试；确认提供器调用一次，生成不同缓存身份，inputHash 仍由 owner 校验。
+  - id: CACHE-003
+    name: 损坏或过期缓存回退正常执行
+    required: true
+    description: >
+      缓存内容损坏和到期均不被当作可用结果，不影响原始来源；正常执行后可恢复复用。
+    preconditions:
+      - 独占隔离成功结果缓存、源 owner 和提供器计数器，不触碰正式目录。
+    steps:
+      - 在未完成提交的同一批次中分别制造缓存损坏及过期；每次重试确认调用提供器一次且重新下载必要图片。
+      - 核对源 captureID 和媒体摘要保持，缓存重建后相同输入再次重试可正常复用。

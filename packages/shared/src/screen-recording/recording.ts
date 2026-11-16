@@ -24,6 +24,26 @@ export interface ScreenRecordingRange {
   activityKind?: 'active' | 'quiet' | 'privacy' | 'passive' | 'unknown' | null;
   transientChangeCount?: number | null;
 }
+/** Best-effort capture-time context; absent for old/private/ambiguous frames.
+ * URL is an HTTP(S) AX document URL with credentials, query and fragment removed.
+ */
+export interface ScreenRecordingAXText { key: string; role: string; text: string }
+export interface ScreenRecordingAXDelta {
+  kind: 'baseline' | 'changed' | 'unchanged';
+  baseCaptureID?: string | null;
+  baseHash?: string | null;
+  contentHash: string;
+  texts: ScreenRecordingAXText[];
+  removed: string[];
+  truncated: boolean;
+}
+export interface ScreenRecordingCaptureContext {
+  windowID: number;
+  accessibility?: ScreenRecordingAXDelta | null;
+  accessibilityUnavailableReason?: string | null;
+  windowTitle?: string | null;
+  url?: string | null;
+}
 export interface ScreenRecordingCapture {
   id: string;
   sessionID: string;
@@ -37,6 +57,7 @@ export interface ScreenRecordingCapture {
   /** Absent on older captures; unknown must not be treated as unchanged. */
   visualChanged?: boolean | null;
   availableUntilMs: number;
+  context?: ScreenRecordingCaptureContext | null;
 }
 export interface ScreenRecordingInterval {
   startMs: number;

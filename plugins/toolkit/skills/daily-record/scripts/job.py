@@ -17,6 +17,7 @@ from job_state import Failure, State, config, date, digest, directory, process_i
 import job_isolation
 import job_facts
 import job_screen
+import job_local
 
 
 def suiji_module():
@@ -64,7 +65,7 @@ def adapter_receipts(c, day, rows, receipts, errors):
 def collect(state, path, meta):
     c = state.c
     rows, meta["receipts"], meta["sourceDirs"] = [], {}, {}
-    meta["sourceErrors"], meta["adapterReceipts"] = {}, {}
+    meta["sourceErrors"], meta["adapterReceipts"], meta["localFingerprints"] = {}, {}, {}
     for day in meta["days"]:
         day_root = directory(path / (day + "-g" + str(meta["generation"])))
         meta["sourceDirs"][day] = str(day_root)
@@ -80,10 +81,12 @@ def collect(state, path, meta):
                 argv += ["--exclude-thread", thread]
             try:
                 command(argv, (0, 2))
-                material, actual = job_facts.native_rows(bundle, c, day)
+                material, actual, input_hash = job_facts.native_rows(bundle, c, day)
                 require(len(actual) == 1 and actual[0]["sourceScope"] == scope and all(m["ref"]["sourceScope"] == scope for m in material), "AGENT_SOURCE_IDENTITY_CHANGED")
                 rows.extend(material)
                 receipts.extend(actual)
+                if actual[0]["status"] == "complete":
+                    meta["localFingerprints"].setdefault(day, {})[scope] = input_hash
             except (Failure, OSError, ValueError, KeyError, TypeError) as error:
                 errors[scope] = [str(error) if isinstance(error, Failure) else "INVALID_SOURCE_DATA"]
                 receipts.append({"sourceScope": scope, "status": "unavailable", "collectedAt": stamp(), **window(day)})
@@ -154,11 +157,16 @@ def prepare(state, args):
             if "evidenceHash" in meta:
                 template(path, meta)
     else:
+        # Even a no-new-work run must exclude its own thread before lookback.
+        if args.thread_id not in state.data["excludedThreads"]:
+            state.data["excludedThreads"].append(args.thread_id)
+        job_local.reconcile(state)
         job_screen.reconcile_revisions(state)
         days = state.missing()[:state.c["maxDaysPerRun"]]
         if days:
             days = [d for d in days if (date(d) - date(days[0])).days < 366]
         if not days:
+            write(state.file, state.data)
             return {"complete": True, "remainingDays": []}
         batch = str(uuid.uuid4())
         path = directory(directory(state.root / "batches") / batch)
@@ -221,7 +229,11 @@ def confirm(state, path, meta, suiji):
     require(result.get("importId"), "INVALID_IMPORT_RECEIPT")
     # run_intent persisted this receipt only after its independent readback.
     for day in pending["days"]:
+        fingerprints = {**state.data["days"].get(day, {}).get("localFingerprints", {}),
+                        **meta.get("localFingerprints", {}).get(day, {})}
         state.data["days"][day] = {"complete": all(r["status"] == "complete" for r in meta["receipts"][day]), "receipts": meta["receipts"][day], "importId": result["importId"]}
+        if fingerprints:
+            state.data["days"][day]["localFingerprints"] = fingerprints
         if day in meta.get("screenRevisions", {}):
             state.data["days"][day]["screenRevision"] = meta["screenRevisions"][day]
         meta.setdefault("confirmations", {})[day] = state.data["days"][day]

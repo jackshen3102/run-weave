@@ -12,8 +12,8 @@ import CoreText
             umask(0o077)
             let args = Array(CommandLine.arguments.dropFirst())
             guard args.count == 4, args[0] == "--data-dir", args[2] == "--scenario",
-                  ["retention", "quota", "recovery", "deleting", "availability", "newer-schema", "playback"].contains(args[3]) else {
-                throw journalError("usage: ScreenJournalFixture --data-dir NEW_EMPTY_DIRECTORY --scenario retention|quota|recovery|deleting|availability|newer-schema|playback")
+                  ["retention", "quota", "recovery", "deleting", "availability", "newer-schema", "playback", "accessibility"].contains(args[3]) else {
+                throw journalError("usage: ScreenJournalFixture --data-dir NEW_EMPTY_DIRECTORY --scenario retention|quota|recovery|deleting|availability|newer-schema|playback|accessibility")
             }
             let paths = try StorePaths(root: URL(fileURLWithPath: args[1]), validation: true)
             if FileManager.default.fileExists(atPath: paths.root.path) {
@@ -43,9 +43,15 @@ import CoreText
                     context.fill(CGRect(x: 0, y: 0, width: 320, height: 180))
                     context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 20 + frame * 50, y: 20, width: 25, height: 100))
                     let id = UUID().uuidString
-                    let metadata = CaptureMetadata(id: id, sessionID: session, sequence: number * 3 + frame,
+                    let privateFrame = args[3] == "accessibility" && number == 1
+                    var metadata = CaptureMetadata(id: id, sessionID: session, sequence: number * 3 + frame,
                         capturedAt: start.addingTimeInterval(Double(frame * 10)), timezoneOffset: 0, displayID: 999,
-                        applicationID: "com.runweave.synthetic-fixture", idleSeconds: Double(frame * 10), privacyPlaceholder: false)
+                        applicationID: "com.runweave.synthetic-fixture", idleSeconds: Double(frame * 10), privacyPlaceholder: privateFrame)
+                    if args[3] == "accessibility" {
+                        metadata.context = CaptureWindowContext(windowID: 123, windowTitle: "Synthetic AX fixture", url: "https://example.com/ax")
+                        let text = frame == 0 ? "Initial control text" : "Changed control text"
+                        metadata.accessibility = CaptureAXSnapshot(texts: [CaptureAXText(key: "control", role: "AXStaticText", text: text)], truncated: number == 3)
+                    }
                     var accepted = false
                     for _ in 0..<100 {
                         if try store.append(context.makeImage()!, metadata: metadata) != nil { accepted = true; break }
@@ -71,7 +77,7 @@ import CoreText
                 resources.append(["segmentID": segment.id, "captureIDs": captureIDs, "started": start.timeIntervalSince1970,
                     "sha256BeforeFault": digest, "synthetic": true, "frameDescription": "RGB background, moving white bar; three frames"])
             }
-            if args[3] == "newer-schema" { try db.execute("PRAGMA user_version=3") }
+            if args[3] == "newer-schema" { try db.execute("PRAGMA user_version=5") }
             try db.checkpoint()
             let manifest: [String: Any] = ["scenario": args[3], "synthetic": true, "resources": resources]
             let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])

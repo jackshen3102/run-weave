@@ -76,7 +76,12 @@ Mac 飞书另登记 `feishu:<accountScope>:messages`，producerId/sourceNamespac
 由现有后台 Agent 执行以下操作。脚本本身不调用模型；Agent 负责阅读和事实语义核对。任务已启用 autoPublish 时，自动导入已获授权，无需每天重新确认。
 
 1. 取得本次真实 run ID、thread ID 和 **Agent 进程 PID**。thread ID 可来自当前 Agent 上下文或明确环境身份，不能伪造；owner-pid 不是即将退出的临时 shell PID，也不是其他终端进程。不能取得这些身份时报告 blocked。
-2. 运行 `python3 scripts/job.py prepare --config <配置> --run-id <真实ID> --thread-id <真实ID> --owner-pid <Agent PID>`。首次从 startDate 到昨天选择最早未完成日，最多 maxDaysPerRun 天。返回 batch 路径、generation、材料模板、旧事项映射和剩余日期。
+2. 没有待恢复的 active 批次时，prepare 会先按本机增量索引复核最近 7 天已经完成的本机日志输入。
+   输入未变的日期保持完成，不创建新整理批次；补写、修订或删除导致指纹变化时重新排入。
+   来源失败不推进成功指纹，也不能把当日当作完整空日。指纹只在原发布回执独立读回确认后保存。
+   升级前没有指纹的最近 7 天会重新核对一次；超过 7 天不自动回看，需显式安排历史回查。
+   飞书发现流程沿用原配置；此索引回溯仅覆盖本机原生日志。屏幕来源继续使用原有日期修订复核。
+   运行 `python3 scripts/job.py prepare --config <配置> --run-id <真实ID> --thread-id <真实ID> --owner-pid <Agent PID>`。首次从 startDate 到昨天选择最早未完成日，最多 maxDaysPerRun 天。返回 batch 路径、generation、材料模板、旧事项映射和剩余日期。
 3. 后续命令均传 `--config`、`--batch`、`--run-id`、`--generation`。若 next 为 reconcile，先恢复原 pending 导入，禁止重新整理或新建请求。
 4. `job.py review` 按 `--offset`/`--limit` 分页列出材料和预览。对消息逐条 `job.py read --id <材料ID>`；长正文用返回的 nextOffset 续读。read 记录连续读取位置，预览不算阅读全文；validate 要求全部用户/助手消息及被引用工具证据已读。
 5. Mac 对实质飞书事项按需 `job.py context --date YYYY-MM-DD --message-id <已发现的本人消息ID> [--minutes 30]` 补回复，随后读取新增材料。上下文失败将该来源记 partial；消息快照变化时重新采集，不能混合两个版本。此命令仍只读聊天。

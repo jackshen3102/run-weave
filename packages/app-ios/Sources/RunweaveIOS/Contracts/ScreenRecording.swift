@@ -22,6 +22,23 @@ struct ScreenRecordingReadError: Error, LocalizedError, Codable {
     }
 }
 struct ScreenRecordingApplication: Codable, Equatable { let id: String?; let name: String? }
+struct ScreenRecordingAXText: Codable, Equatable { let key: String; let role: String; let text: String }
+struct ScreenRecordingAXDelta: Codable, Equatable {
+    let kind: String
+    let baseCaptureID: String?
+    let baseHash: String?
+    let contentHash: String
+    let texts: [ScreenRecordingAXText]
+    let removed: [String]
+    let truncated: Bool
+}
+struct ScreenRecordingCaptureContext: Codable, Equatable {
+    let windowID: UInt32
+    var accessibility: ScreenRecordingAXDelta? = nil
+    var accessibilityUnavailableReason: String? = nil
+    let windowTitle: String?
+    let url: String?
+}
 struct ScreenRecordingCapture: Codable, Identifiable, Equatable {
     let id: String
     let sessionID: String
@@ -34,6 +51,7 @@ struct ScreenRecordingCapture: Codable, Identifiable, Equatable {
     let availableUntilMs: Int64
     var idleSeconds: Double? = nil
     var visualChanged: Bool? = nil
+    var context: ScreenRecordingCaptureContext? = nil
 }
 struct ScreenRecordingInterval: Codable, Equatable {
     let startMs: Int64

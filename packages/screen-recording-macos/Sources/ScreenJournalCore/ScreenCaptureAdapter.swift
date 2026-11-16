@@ -8,6 +8,8 @@ struct CapturedFrame {
     let applicationID: String?
     let idleSeconds: Double?
     let placeholder: Bool
+    var context: CaptureWindowContext? = nil
+    var accessibility: CaptureAXSnapshot? = nil
 }
 
 @MainActor struct ScreenCaptureAdapter {
@@ -22,7 +24,8 @@ struct CapturedFrame {
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else { throw journalError("display_unavailable") }
         let height = settings.height
         let width = max(2, Int((Double(display.width) / Double(display.height) * Double(height)).rounded()) / 2 * 2)
-        let foreground = PrivacyFilter.frontmostID()
+        let foregroundApp = NSWorkspace.shared.frontmostApplication
+        let foreground = foregroundApp?.bundleIdentifier
         let capturedAt = Date()
         let idle = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: CGEventType(rawValue: UInt32.max)!)
         let validIdle = idle.isFinite && idle >= 0 ? idle : nil
@@ -39,9 +42,17 @@ struct CapturedFrame {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         let excludedPIDs = Set(excluded.map(\.processID))
         guard Self.excludedPIDs(settings).isSubset(of: excludedPIDs) else { throw journalError("privacy_application_list_changed") }
+        let context = foregroundApp.flatMap { CaptureWindowContextReader.read(pid: $0.processIdentifier, displayID: displayID, settings: settings, includeText: false) }
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
         guard Self.excludedPIDs(settings).isSubset(of: excludedPIDs) else { throw journalError("privacy_application_list_changed") }
+        guard !PrivacyFilter.blocked(PrivacyFilter.frontmostID(), settings: settings) else { throw journalError("privacy_foreground_changed") }
+        let stableForeground = NSWorkspace.shared.frontmostApplication?.processIdentifier == foregroundApp?.processIdentifier
+        let after = stableForeground ? foregroundApp.flatMap { CaptureWindowContextReader.read(pid: $0.processIdentifier, displayID: displayID, settings: settings, includeText: true) } : nil
+        let matchingWindow = context?.context.windowID == after?.context.windowID &&
+            context?.context.windowTitle == after?.context.windowTitle && context?.context.url == after?.context.url
         return CapturedFrame(image: image, capturedAt: capturedAt, displayID: displayID,
-            applicationID: foreground, idleSeconds: validIdle, placeholder: false)
+            applicationID: stableForeground ? foreground : nil, idleSeconds: validIdle, placeholder: false,
+            context: stableForeground && matchingWindow ? after?.context : nil,
+            accessibility: stableForeground && matchingWindow ? after?.accessibility : nil)
     }
 }

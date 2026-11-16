@@ -49,6 +49,7 @@ export function idleObservation(manifest: AnalysisManifest): string | undefined 
   // Input idleness alone also includes reading, videos and running Agents.
   // Older captures have no visual signal and must take the normal analysis path.
   // Empty means handled without adding another timeline observation.
-  if (manifest.captures.length && manifest.captures.every(frame => frame.visualChanged === false)) return '';
+  if (manifest.captures.length && manifest.captures.every(frame => frame.visualChanged === false &&
+      !frame.context?.accessibility?.texts.length && !frame.context?.accessibility?.removed.length)) return '';
   return undefined;
 }

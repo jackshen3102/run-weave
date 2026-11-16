@@ -5,6 +5,7 @@ import CoreGraphics
 final class FrameStore {
     let database: RecordStore
     private(set) var writer: SegmentWriter?
+    private var accessibility: CaptureAXCheckpoint?
     private var activity = CaptureActivityDetector()
     init(database: RecordStore) { self.database = database }
     var needsRotation: Bool { guard let writer else { return false }; return writer.count >= 600 || writer.started.duration(to: .now) >= .seconds(600) }
@@ -24,12 +25,29 @@ final class FrameStore {
         }
         guard let writer, let index = try writer.append(image) else { return nil }
         let visualChanged = activity.changed(image, metadata: metadata)
+        var context = metadata.privacyPlaceholder ? nil : metadata.context
+        var checkpoint: CaptureAXCheckpoint?
+        if var value = context, let snapshot = metadata.accessibility {
+            let identity = "\(metadata.sessionID):\(metadata.applicationID ?? ""):\(metadata.displayID):\(value.windowID):\(value.windowTitle ?? ""):\(value.url ?? "")"
+            value.accessibility = CaptureAXCheckpoint.delta(snapshot, identity: identity, previous: accessibility)
+            context = value
+            checkpoint = CaptureAXCheckpoint(identity: identity, captureID: metadata.id, snapshot: snapshot)
+        }
         try database.transaction {
             try database.execute("INSERT INTO captures VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [metadata.id, metadata.sessionID, metadata.sequence,
                 writer.id, index, Int64(metadata.capturedAt.timeIntervalSince1970 * 1000), metadata.timezoneOffset, metadata.displayID,
-                metadata.applicationID, metadata.idleSeconds, metadata.privacyPlaceholder ? 1 : 0, visualChanged.map { $0 ? 1 : 0 }])
+                metadata.privacyPlaceholder ? nil : metadata.applicationID, metadata.idleSeconds, metadata.privacyPlaceholder ? 1 : 0, visualChanged.map { $0 ? 1 : 0 }])
+            if let checkpoint {
+                try CaptureAXStorage.save(checkpoint.snapshot, captureID: metadata.id, database: database)
+            }
+            if let context {
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                let body = String(decoding: try encoder.encode(context), as: UTF8.self)
+                try database.execute("INSERT INTO capture_context(capture_id,body) VALUES (?,?)", [metadata.id, body])
+            }
             try database.execute("UPDATE segments SET frames=?, started=MIN(started,?), ended=MAX(ended,?) WHERE id=?", [index + 1, metadata.capturedAt.timeIntervalSince1970, metadata.capturedAt.timeIntervalSince1970, writer.id])
         }
+        accessibility = checkpoint
         return metadata.id
     }
     func finalize() async throws {

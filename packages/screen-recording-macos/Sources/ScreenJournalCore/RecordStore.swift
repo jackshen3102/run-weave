@@ -6,6 +6,8 @@ final class RecordStore {
     let paths: StorePaths
     let reads = SegmentReadCoordinator()
     let readOnly: Bool
+    private(set) var supportsCaptureContext = false
+    private(set) var supportsAXSnapshots = false
     init(paths: StorePaths, readOnly: Bool = false) throws {
         self.paths = paths; self.readOnly = readOnly
         let file = try paths.file("records.sqlite")
@@ -15,7 +17,7 @@ final class RecordStore {
         sqlite3_busy_timeout(db, 5000)
         do {
             let version = Int(try scalar("PRAGMA user_version") ?? "0") ?? -1
-            guard version <= 2 else { throw journalError("schema_too_new: \(version)") }
+            guard version <= 4 else { throw journalError("schema_too_new: \(version)") }
             try execute("PRAGMA foreign_keys=ON")
             if !readOnly {
                 try execute("PRAGMA journal_mode=WAL"); try execute("PRAGMA synchronous=FULL")
@@ -23,7 +25,13 @@ final class RecordStore {
                 if version == 0 { try transaction { try execute(storeSchema); try execute("INSERT INTO device VALUES (?,?)", [UUID().uuidString, Date().timeIntervalSince1970]) } }
                 if version < 2 { try transaction { try execute("ALTER TABLE captures ADD COLUMN visual_changed INTEGER; PRAGMA user_version=2;") } }
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+                if version < 3 { try transaction {
+                    try execute("CREATE TABLE capture_context(capture_id TEXT PRIMARY KEY REFERENCES captures(id) ON DELETE CASCADE, body TEXT NOT NULL); PRAGMA user_version=3;")
+                } }
+                if version < 4 { try transaction { try execute(CaptureAXStorage.schema) } }
             } else { try execute("PRAGMA query_only=ON") }
+            supportsCaptureContext = !readOnly || version >= 3
+            supportsAXSnapshots = !readOnly || version >= 4
         } catch { sqlite3_close(db); db = nil; throw error }
     }
     deinit { sqlite3_close(db) }

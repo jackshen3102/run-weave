@@ -116,14 +116,18 @@ actor AnalysisCoordinator {
         // committed revision and can extend the same matter. 900 is an input
         // budget, never a time/activity boundary. All ready tails are eligible.
         var created = 0
-        for captures in groups {
+        let axSnapshots = Dictionary(uniqueKeysWithValues: page.frames.compactMap { frame in
+            frame.accessibilitySnapshot.map { (frame.capture.id, $0) }
+        })
+        for group in groups {
+            let captures = CaptureAXStorage.rebase(group, snapshots: axSnapshots)
             guard created < 1, let first = captures.first, let last = captures.last else { break }
             let context = try cards().filter { $0.spans.contains { $0.endMs >= first.capturedAtMs - 2700000 && $0.startMs <= first.capturedAtMs } }
-            let inputHash = analysisHash(try analysisJSON(captures) + analysisJSON(context) + "screen-timeline-v2-dynamic")
+            let inputHash = analysisHash(try analysisJSON(captures) + analysisJSON(context) + analysisPromptVersion)
             let id = UUID().uuidString
             let evidence = captures.filter { !$0.privacyPlaceholder }.map { AnalysisEvidence(id: $0.id, source: "screen", occurredAtMs: $0.capturedAtMs, captureID: $0.id) }
             let manifest = AnalysisManifest(batchID: id, deviceID: deviceID, day: analysisDay(first.capturedAtMs), inputHash: inputHash,
-                promptVersion: "screen-timeline-v2-dynamic", startMs: first.capturedAtMs, endMs: last.capturedAtMs, captures: captures,
+                promptVersion: analysisPromptVersion, startMs: first.capturedAtMs, endMs: last.capturedAtMs, captures: captures,
                 intervals: JournalReadCatalog.intervals(for: captures, events: sourceIntervals), context: context, evidence: evidence + (try contextEvidence(context)), agentCoverage: "unknown")
             try store.transaction {
                 try store.execute("INSERT INTO batches(id,input_hash,day,start_ms,end_ms,manifest,state,updated) VALUES (?,?,?,?,?,?,'pending',?)", [id,inputHash,manifest.day,manifest.startMs,manifest.endMs,try analysisJSON(manifest),now])
@@ -173,7 +177,7 @@ actor AnalysisCoordinator {
         let context = try cards().filter { $0.spans.contains { $0.endMs >= first.occurredAtMs-2700000 && $0.startMs <= first.occurredAtMs } }
         let id = UUID().uuidString, now = journalNowMs()
         let evidence = events.map { AnalysisEvidence(id: $0.id,source: "agent",occurredAtMs: $0.occurredAtMs,provider: $0.provider,threadID: $0.threadID,eventID: $0.eventID,text: $0.text,kind: $0.kind,independentSuccess: $0.independentSuccess) }
-        let manifest = AnalysisManifest(batchID: id,deviceID: deviceID,day: analysisDay(first.occurredAtMs),inputHash: analysisHash(try analysisJSON(events)+analysisJSON(context)),promptVersion: "screen-timeline-v1",startMs: first.occurredAtMs,endMs: last.occurredAtMs,captures: [],intervals: [],context: context,evidence: evidence + (try contextEvidence(context)),agentCoverage: "partial")
+        let manifest = AnalysisManifest(batchID: id,deviceID: deviceID,day: analysisDay(first.occurredAtMs),inputHash: analysisHash(try analysisJSON(events)+analysisJSON(context)),promptVersion: analysisPromptVersion,startMs: first.occurredAtMs,endMs: last.occurredAtMs,captures: [],intervals: [],context: context,evidence: evidence + (try contextEvidence(context)),agentCoverage: "partial")
         try store.transaction {
             try store.execute("INSERT INTO batches(id,input_hash,day,start_ms,end_ms,manifest,state,updated) VALUES (?,?,?,?,?,?,'pending',?)", [id,manifest.inputHash,manifest.day,manifest.startMs,manifest.endMs,try analysisJSON(manifest),now])
             for event in events { try store.execute("UPDATE agent_events SET batch_id=? WHERE id=?", [id,event.id]) }
@@ -217,6 +221,7 @@ actor AnalysisCoordinator {
             }
             manifest.context = try cards().filter { $0.spans.contains { $0.endMs >= manifest.startMs-2700000 && $0.startMs <= manifest.startMs } }
             manifest.evidence = ownEvidence + (try contextEvidence(manifest.context)).filter { !included.contains($0.id) }
+            manifest.promptVersion = analysisPromptVersion
             manifest.inputHash = analysisHash(try analysisJSON(manifest.captures) + analysisJSON(manifest.evidence) + analysisJSON(manifest.context) + "\(manifest.startMs):\(manifest.endMs):" + manifest.promptVersion)
             try store.transaction {
                 try store.execute("UPDATE batches SET input_hash=?,manifest=? WHERE id=?", [manifest.inputHash,try analysisJSON(manifest),id])
