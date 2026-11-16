@@ -112,6 +112,7 @@ export function validateBundledActivityRuntime(resourcesPath: string): boolean {
       manifest.workerEntry,
       manifest.evolutionWorkerEntry,
       manifest.scheduledTasksWorkerEntry,
+      "quality-workflow-sqlite-worker.cjs",
       "node_modules/better-sqlite3",
     ].map((relative) => path.join(root, relative));
     const actual = roots
