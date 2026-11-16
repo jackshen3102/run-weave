@@ -292,10 +292,10 @@ export async function sendInputToSession(
     } catch (error) { logger.warn("terminal-reply.input.failed", { error }); }
   };
   try {
-    const attachmentPty = options.textAttachmentLease && !isTmuxBackedSession(session);
-    const existing = attachmentPty ? options.runtimeRegistry.getSessionRuntime(session.id) : undefined;
-    if (attachmentPty && !existing) throw new Error("PTY attachment target is unavailable; no runtime was restored");
-    const ensured = options.supervisorInput ? null : existing ? { runtime: existing } : await ensureTerminalRuntime({
+    const existingOnlyPty = (options.textAttachmentLease || options.supervisorInput) && !isTmuxBackedSession(session);
+    const existing = existingOnlyPty ? options.runtimeRegistry.getSessionRuntime(session.id) : undefined;
+    if (existingOnlyPty && !existing) throw new Error("Original PTY target is unavailable; no runtime was restored");
+    const ensured = existing ? { runtime: existing } : options.supervisorInput ? null : await ensureTerminalRuntime({
       session,
       terminalSessionManager,
       runtimeRegistry: options.runtimeRegistry,
@@ -441,7 +441,7 @@ export async function sendInputToSession(
         await options.tmuxService.sendInput(target, dispatchData ?? "");
       }
     } else {
-      if (!ensured) throw new Error("Supervisor input requires an existing tmux runtime");
+      if (!ensured) throw new Error("Supervisor input requires an existing terminal runtime");
       if (expectedThreadId) {
         const identity = resolveReplyThread(session);
         if (identity?.id !== expectedThreadId || identity.provider !== "codex" || session.terminalState?.state !== "agent_idle") throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
@@ -450,6 +450,12 @@ export async function sendInputToSession(
         await terminalSessionManager.feishuNotifications.expectReply(session.id, null, data, operationId);
       }
       await expectMobileReply(null);
+      if (options.supervisorInput) {
+        if (terminalSessionManager.getSession(session.id) !== session || session.status !== "running" ||
+          options.runtimeRegistry.getSessionRuntime(session.id) !== ensured.runtime || !options.validateSupervisorTarget)
+          throw new Error("Original PTY target is unavailable; no runtime was restored");
+        options.validateSupervisorTarget();
+      }
       if (!exitTmuxCopyMode) {
         const attachClipboardImages = getAgentForCommand(session.activeCommand) === "codex";
         if (mode === "prompt_replace") {

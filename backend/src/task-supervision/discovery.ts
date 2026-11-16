@@ -36,12 +36,13 @@ export async function discoverSupervision(
   }
   if (watch) await synchronize(watch.watchId, target);
   watch = readWatch();
-  const panel = manager.getPanel(target.panelId);
+  const owner = manager.getSession(terminalSessionId)?.runtimeKind === "tmux"
+    ? manager.getPanel(target.panelId) : manager.getSession(terminalSessionId);
   const threadTitle =
     watch?.enabled &&
     target.threadId &&
-    panel &&
-    getTerminalSessionAgent(panel) === "codex"
+    owner &&
+    getTerminalSessionAgent(owner) === "codex"
       ? await readCodexThreadSnapshot(target.threadId)
           .then((snapshot) => snapshot.name)
           .catch(() => null)

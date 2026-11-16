@@ -9,6 +9,7 @@ import { SupervisionError } from "./errors";
 import { reserveContinuation } from "./verdict";
 import { supervisionLogger } from "./diagnostics";
 import { readFinalReply } from "./reply";
+import { resolveSupervisionTarget } from "./target";
 
 type Offer = Extract<SupervisionHookResponse, { action: "request-continuation" }>;
 interface ContinuationOperations {
@@ -60,9 +61,8 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
     if (operations.current(target) && sameTarget(operations.watch().target, target))
       synchronizeContext(operations.watch(), taskCandidates(source), operations.cancel);
   });
-  const session = operations.manager.getSession(target.terminalSessionId);
-  const panel = operations.manager.getPanel(target.panelId);
-  if (!session || !panel || panel.terminalState?.state !== "agent_idle")
+  const { session, owner, panel } = resolveSupervisionTarget(operations.manager, target.terminalSessionId, target.panelId);
+  if (owner.terminalState?.state !== "agent_idle")
     throw new SupervisionError("原 Agent 当前不是空闲状态，未重试续接。");
   const inputRevision = terminalInputAdmission(session).inputWriteRevision;
   const { native: latestReply } = await readFinalReply(async () => source, {
@@ -76,9 +76,9 @@ export async function retryContinuation(request: ChangeSupervisionRequest, opera
       !request.expectedInputVersion || terminalInputAdmission(session).inputVersion !== request.expectedInputVersion ||
       !decision || decision.decisionId !== request.decisionId || decision.outcome !== "continue" || decision.assessment?.disposition === "hold" ||
       decision.delivery !== "not_requested" || decision.deliveryBlock !== "draft_unconfirmed" || watch.status !== "error" ||
-      latestReply?.id !== decision.currentReplyId || panel.terminalState?.state !== "agent_idle")
+      latestReply?.id !== decision.currentReplyId || owner.terminalState?.state !== "agent_idle")
       throw new SupervisionError("任务或输入已变化，请重新读取并核对后重试。");
-    if (terminalInputAdmission(session).pendingUserInput.has(null) && panel.tmuxPaneId != null)
+    if (terminalInputAdmission(session).pendingUserInput.has(null) && panel?.tmuxPaneId != null)
       throw new SupervisionError("存在无法定位面板的输入，请在原终端提交后继续。", 422);
     watch.revision++;
     watch.updatedAt = new Date().toISOString();

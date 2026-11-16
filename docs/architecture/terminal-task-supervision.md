@@ -2,6 +2,8 @@
 
 监控开关绑定 `terminalSessionId`，不绑定 thread。当前终端有 Agent TUI 即可开启；启动方式、Agent provider、版本、专用监督 Hook、对话是否已经产生、历史是否暂时可读都不是开启条件。切换对话、恢复会话、重新启动 Agent 和 Backend 重启保留终端的开关。
 
+tmux 终端以原面板为目标；Windows 等 PTY 终端使用该终端的 `default` 面板身份，从终端会话读取 Agent 与 thread。PTY Host 或会话代次变化使旧续接失效。续接只使用已存在的运行时，不因监控而恢复、重建或切换终端。
+
 ## 事件与处理
 
 所有终端沿用现有 Hook、App Server 事件中心、终端状态和完成通知链路。监控服务订阅同一条完成流，也消费现有 App Server consumer 交付的 Hook、completion 和已有原生生命周期完成事件；开关只过滤后台业务处理，不控制采集。
