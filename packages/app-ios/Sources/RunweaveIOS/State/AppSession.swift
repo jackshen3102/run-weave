@@ -16,15 +16,9 @@ final class AppSession: ObservableObject {
   @Published var checking = false
   let home = HomeState()
   let drafts = TerminalDraftStore()
-  var loading: Bool {
-    get { home.loading }
-    set { home.loading = newValue }
-  }
+
   @Published var writing = false
-  var overview: HomeOverview? {
-    get { home.overview }
-    set { home.replace(newValue) }
-  }
+
   var attentionRetention: AttentionRetentionStore { home.attentionRetention }
   @Published var health = DeviceHealthSnapshot()
   @Published var error: String?
@@ -83,20 +77,11 @@ final class AppSession: ObservableObject {
   var routeLoginRequired = false
   var routeResolver: ConnectionRouteResolver? { connection.map { ConnectionRouteResolver.forComputer($0) } }
   @Published var generation = 0 { didSet { terminalQuestions.reset() } }
-  var metadataWrites: Set<String> {
-    get { home.metadataWrites }
-    set { home.metadataWrites = newValue }
-  }
+
   // Mutated by the attention extension; scoped to this connection generation.
-  var acknowledgementWrites: Set<String> {
-    get { home.acknowledgementWrites }
-    set { home.acknowledgementWrites = newValue }
-  }
+
   @Published var openingNextCompletion = false
-  var bellMarkers: Set<String> {
-    get { home.bellMarkers }
-    set { home.bellMarkers = newValue }
-  }
+
   var bellTasks: [String: Task<Void, Never>] = [:]
   private(set) var overviewRevision = 0
   var pendingOverviewEvents: [TerminalEvent] = []
