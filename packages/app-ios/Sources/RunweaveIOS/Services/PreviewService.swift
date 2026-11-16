@@ -39,8 +39,19 @@ extension APIClient {
   func changes(projectID: String, force: Bool = false) async throws -> PreviewChanges {
     try await cachedPreview(previewPath(projectID, "git-changes"), force: force)
   }
-  func file(projectID: String, path: String) async throws -> PreviewFile {
-    try await cachedPreview(previewPath(projectID, "file", ["path": path]))
+  func file(projectID: String, path: String, force: Bool = false) async throws -> PreviewFile {
+    try await cachedPreview(previewPath(projectID, "file", ["path": path]), force: force)
+  }
+  func savePreviewFile(projectID: String, file: PreviewFile, content: String,
+                       overwrite: Bool = false) async throws -> PreviewFile {
+    guard file.base == "project", !file.readonly, let mtime = file.mtimeMs else {
+      throw APIError.http(403)
+    }
+    // A lost response can follow a successful write. Invalidate reads, never replay the PUT.
+    defer { invalidatePreview(projectID: projectID) }
+    return try await authorized(previewPath(projectID, "file"), method: "PUT",
+      body: ["path": file.path, "content": content, "expectedMtimeMs": mtime, "overwrite": overwrite],
+      retryUnauthorized: false)
   }
   func videoPreviewTicket(projectID: String, path: String) async throws -> VideoPreviewTicket {
     try await authorized(previewPath(projectID, "video-ticket"), method: "POST", body: ["path": path])

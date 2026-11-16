@@ -188,6 +188,7 @@ Web/Electron 的文件名搜索、文本正文和 Diff 查询在没有观察者�
 - Save 或 `Cmd/Ctrl+S` 才写盘，不自动保存。提交 `expectedMtimeMs`；磁盘已变化时返回冲突，
   Reload 重新读取，Overwrite 显式覆盖。失败保留草稿。相关实现见 [文件编辑](../../frontend/src/components/terminal/preview/files/use-editor.ts)。
 - 切换文件、刷新、关闭或改变任务时，涉及丢弃未保存草稿的动作须走现有确认流程。
+- 原生 iOS 的普通文件预览提供独立[编辑页](../../packages/app-ios/Sources/RunweaveIOS/Features/Preview/FileEditor.swift)，复用相同保存接口与 1 MiB 限制。保存、重新读取与覆盖均由用户显式触发；取消有未保存修改时确认丢弃，失败保留当前编辑页草稿。编辑固定读取时的连接与会话，连接变化后禁止保存；不承诺强制退出后的草稿恢复。保存请求不自动重放，响应不确定时提示先核对磁盘。
 - 删除、重命名只针对项目内支持的普通文件；不扩展到目录、项目外路径或批量操作。
 - Review changes 分 Staged / Working 两组，先读索引，再按选择懒加载单文件 diff；Diff Editor 只读。
 - 变更预览由 `file-diff` 的内容能力与两侧状态决定；图片直接预览，Markdown/SVG 保留 Diff/Preview，
@@ -220,7 +221,7 @@ Markdown 默认值以 store 为准，不能沿用旧草图中的 Split 默认值
   不能由页面内容绕过项目路径和协议检查。
 - 独立 SVG 使用 [SVG renderer](../../frontend/src/components/terminal/preview/renderers/svg.tsx) 的净化与 sandbox，
   不把原始 XML 直接注入工作台 DOM。
-- `.html`/`.htm` 在 Files/Explorer 中可渲染完整页面。Backend 票据绑定 Project 和 HTML 绝对路径，静态资源只读且限制在文件所在目录内；桌面端使用无 `allow-same-origin` 的 iframe，原生 iOS 使用非持久化 WKWebView。两端 Source 均可查看，桌面端继续使用现有编辑/保存能力，iOS 保持只读。
+- `.html`/`.htm` 在 Files/Explorer 中可渲染完整页面。Backend 票据绑定 Project 和 HTML 绝对路径，静态资源只读且限制在文件所在目录内；桌面端使用无 `allow-same-origin` 的 iframe，原生 iOS 使用非持久化 WKWebView。两端 Source 均可查看，项目内可写文件支持源码编辑；iOS 在独立编辑页保存后返回源码，切换 Preview 时重新取得票据。
 - 视频只预览当前磁盘普通文件，文件扩展名与容器头均校验；实际编码支持取决于浏览器或 iOS 系统，不做转码。Git Changes 的二进制降级规则保持独立，不以工作区视频冒充暂存版本。
 - 客户端经鉴权 `POST /api/terminal/project/:id/preview/video-ticket` 获取一小时票据，再通过 `/video-preview` 读取。票据独立于 access token，绑定会话、项目、真实绝对路径和文件版本；不授予同目录其他文件权限，登出或会话失效后拒绝后续请求。日志隐藏该 URL 的票据和路径。
 - 视频 GET/HEAD 响应使用 `no-store`、正确 MIME 和 `Accept-Ranges: bytes`；单段范围支持闭区间、开放结尾和后缀，返回 206，非法或多段范围返回 416。Backend 持有验证后的同一文件描述符，使用带背压的流读取；请求中断后释放句柄。每次读取核对 inode、大小和修改时间，文件变化拒绝旧票据，用户显式重新加载后获取新票据。
