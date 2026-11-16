@@ -13,6 +13,7 @@ import path from "node:path";
 import type { ActivityStore } from "../activity/recording/store";
 import { TaskHandoffService } from "../task-handoff/service";
 import { TaskSupervisionService } from "../task-supervision/service";
+import { resolveSupervisionTarget } from "../task-supervision/target";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import type { ResourceScope } from "./resource-scope";
@@ -65,9 +66,8 @@ export async function createTerminalTaskServices(
     options.terminalEventService!,
     async (target, offer, valid) => {
       valid();
-      const session = manager.getSession(target.terminalSessionId);
-      const panel = manager.getPanel(target.panelId);
-      if (!session || !panel || !options.tmuxService)
+      const { session, panel } = resolveSupervisionTarget(manager, target.terminalSessionId, target.panelId);
+      if (panel && !options.tmuxService)
         throw new Error("原终端输入服务不可用，未发送续接。");
       const release = beginSupervisorDelivery(session);
       const inputRevision = terminalInputAdmission(session).revision;
@@ -87,7 +87,7 @@ export async function createTerminalTaskServices(
           offer.reason,
           "prompt_paste",
           offer.decisionId,
-          buildPaneTarget(session, options.tmuxService, panel),
+          panel && options.tmuxService ? buildPaneTarget(session, options.tmuxService, panel) : undefined,
         );
       } finally {
         await release();
