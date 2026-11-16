@@ -1,5 +1,13 @@
 [
   {
+    "file": "packages/runweave-cli/src/commands/terminal-review.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_TERMINAL_SESSION_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "原生 CLI Review 从所属终端继承来源身份，仅用于未显式指定来源时绑定审查，不作为持久实例配置。"
+  },
+  {
     "file": "backend/src/agent-capabilities/service.ts",
     "kind": "environment-forward",
     "expression": "...env",
