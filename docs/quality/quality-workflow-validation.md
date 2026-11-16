@@ -1,128 +1,64 @@
-# 质量工作流实施验收
+# 质量工作流验收与启用
 
-2026-11-16：P1–P5 源码已落地，隔离验收已执行；**没有达到计划的全部上线完成标准**。
-Stable 的质量 capabilities 实读为404；未更新 Stable、未安装到真机、未发布全局插件、未创建每日任务。
-计划仍保留为正在执行的过程材料。当前合同见 [质量工作流 CLI](../cli/quality-workflow.md)。
+当前源码包含自动采集、Backend 证据库、CLI 和每日归因入口；源码存在不证明目标 Backend、
+客户端、全局插件或每日任务已更新。操作与存储合同见 [质量工作流 CLI](../cli/quality-workflow.md)。
 
-## 已交付
+## 验收入口
 
-- 独立 SQLite worker、schema版本、字段白名单、同事务事件/缺口/连续确认、快照分页、保留边界与固定证据保护。
-- 桌面持久队列与 Web Locks；iOS 宿主持久队列及共享 Foundation 观察接口；按持久 Backend 身份冻结归属。
-- 本机 Backend 日志增量读取，以及显式配置的本机桌面事故目录；原始文件保留。
-- `rw quality` 与每日归因技能；先保存待处理页、CAS/租约、稳定问题 ID、归因状态、复验和独立用户关闭确认。
-- 候选分组按复发和输入影响排序，每轮最多20组，并为到期复验保留最多5个名额；其余页与水位保留。
+按 [18 条验收用例](../testing/quality/automatic-attribution.testplan.yaml) 分别取证。
+每例核对源码、实际产物、目标 backendId、客户端构建及独占资源；类型检查、构建、YAML 格式、
+历史导入或单张截图均不能替代新操作自动汇入和跨轮复验。
 
-## 实际证据
+- 桌面：使用隔离 Dev Session 和真实页面，不点导出，查询同 operationId 的新事件；
+  重启和离线补发必须保留原 source、stream、seq，不能重发业务输入。
+- iOS：使用已授权真机核对宿主构建及目标连接；模拟器证据单列。
+  共享诊断包变更还需回归随记原有本地诊断，不为随记启用自动上传。
+- Backend：用真实 API、worker 与 SQLite 核对认证、实例隔离、幂等、快照分页、清理和容量。
+  存储失败不推进 ack；未结证据和待处理页不能为腾空间而删除。
+- 每日归因：真实触发一次调度，再执行下一轮，核对去重、稳定 issueId、待处理页、
+  读取/分析水位和复验变化。直接运行准备脚本不证明调度器触发。
+- 调度既有语义见 [补跑](../testing/scheduled-tasks/catch-up.testplan.yaml) 与
+  [项目独立任务](../testing/scheduled-tasks/project-independent.testplan.yaml)。
 
-本机完整材料在 artifacts/quality-workflow/2026-11-16（本机路径：`artifacts/quality-workflow/2026-11-16/`）。
-材料不含凭据或业务输入正文；原始 Backend 日志、App 数据和设备任务目录不作为公开报告。
+## 启用与回退
 
-- HTTP验证（本机路径：`artifacts/quality-workflow/2026-11-16/http-probe.json`）：20项真实接口检查。
-- 存储验证（本机路径：`artifacts/quality-workflow/2026-11-16/storage-probe.json`）：13项真实 worker、SQLite 重启、分页、日志轮转检查。
-- 保留与满容量（本机路径：`artifacts/quality-workflow/2026-11-16/retention-probe.json`）：7项，固定未结问题的8条证据，确认503不推进ack。
-- 关闭确认（本机路径：`artifacts/quality-workflow/2026-11-16/confirmation-probe.json`）：3项；自动 analysis 禁止closed，独立确认仅接受已有修复与复验记录的问题。
-- 浏览器队列（本机路径：`artifacts/quality-workflow/2026-11-16/browser-queue-probe.txt`）：实际队列模块在隔离桌面 localStorage 执行，容量边界fixture入队后丢弃范围、恢复、并发序号与非法ack均通过；不是一万次真实用户操作。
-- 阶段分类（本机路径：`artifacts/quality-workflow/2026-11-16/classification-probe.json`）：建立前失败、建立后失效、建立后取消、缺started，取消未反写失败；缺started不报建立耗时。
-- 真实事件（本机路径：`artifacts/quality-workflow/2026-11-16/events-after-restart.json`）：桌面发送 receiveId=33–37，iOS模拟器发送=10–14，均为同一操作的五阶段；仅证明输入接受与客户端状态/界面阶段。
-- 重启后HTTP重传（本机路径：`artifacts/quality-workflow/2026-11-16/http-replay-after-restart.json`）：同Backend，acceptedCount=0、duplicateCount=2、ackThrough=2。
-- 无变化轮次（本机路径：`artifacts/quality-workflow/2026-11-16/daily-no-changes.json`）：直接运行归因准备脚本，groups=0、due=0、noChanges=true；不是调度器触发证据。
-- 最终台账（本机路径：`artifacts/quality-workflow/2026-11-16/final-ledger.json`）：已有6条假设线索保持原ID；后续41条待处理材料在读取水位后持久保存，分析水位仍停在18，租约已释放。
+1. 实读目标 `rw quality capabilities` 的 enabled、schemaVersion 和 backendId；
+   核对客户端能力与后台实际可读的技能、脚本路径，不用源码存在代替安装态。
+2. 每日一次归因复用现有定时任务。按 [scheduled-task 规则](../../plugins/toolkit/skills/scheduled-task/SKILL.md)
+   核对目标 Backend/profile、执行时刻、IANA 时区、补跑策略、执行策略、目录及完整提示词，
+   只读 validate 后取得用户对最终配置的确认，再创建并 get 回读。
+3. 核对真实 occurrence、运行结果、下一次执行与覆盖缺口；仅建任务不算全链路完成。
+   Stable 更新、手机安装和全局插件发布须各自取得授权并按对应流程执行。
+4. 回退先暂停每日任务，再停止新增采集，保留证据库、队列和水位；
+   不兼容旧版不得写新库，恢复兼容版本后续接。具体合同见 CLI 文档。
 
-本轮创建的两个Dev Session均已停止，两个自有模拟器租约均已finish；没有停止其他worktree的环境。
+## 历史验收摘要（2026-11-16）
 
-真实桌面采用当前worktree的 Beta Session `dvs-cbea0d`、`pool-05`；另一次初始化 Session `dvs-a5707f` 已停止。
-重启沿同一Backend、证据库和桌面数据目录；原sourceId/streamId未变，未确认桌面事件自动补发，pending归零。
-实际发现并修复了 worker 未进入打包资源白名单、批次路由拦截OPTIONS预检和清理时SQLite迭代器占用三个实现问题。
-最终源码另补了所有日志读取任务排空、schema版本拒绝和用户确认关闭；这些路径通过源 worker 验证及最终Beta构建。
+以下是仓库原有验收记录的摘要，本次文档整理未重新执行产品验收或检查生产部署。
+完整阶段记录保存在[当时版本](https://github.com/jackshen3102/run-weave/blob/c0fa53ceef208d8cecb370e1993b37e35b6478e3/docs/quality/quality-workflow-validation.md)；
+本机原始材料路径为 `artifacts/quality-workflow/2026-11-16/`，未随源码发布，文字摘要不替代原始证据。
 
-iOS 使用池中 `0986DF97-0644-4138-847E-5BC690CFEF7E` 模拟器；Runweave与随记宿主均构建、安装和启动成功。
-Runweave执行真实输入发送并查询Backend确认收录；随记只执行启动、构建信息展示与本机分享呈现，
-没有登录正式账户或发送消息。随记原有操作诊断导出的完整回归没有执行，不能据构建成功替代。
-截图：iOS发送后（本机路径：`artifacts/quality-workflow/2026-11-16/ios-after-send.png`）。桌面截图采集超时，没有交付桌面图片；真实操作与上传以事件和HTTP证据核对。
+| 用例                             | 当时结果与证据边界                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| QWF-001、003、006、008、010、012 | 记录为通过：桌面新操作、重传/冲突、客户端重启、Backend 持久化、字段白名单、台账恢复   |
+| QWF-015、016、017、018           | 记录为通过：Clarity 缺失不阻断、日志轮转、固定证据满容量、无变化轮次；后者仅直接脚本  |
+| QWF-002                          | 部分：模拟器发送入库，真机未执行                                                      |
+| QWF-004                          | 部分：认证/归属拒绝已检验，未完整建立双 Backend 对照                                  |
+| QWF-005、007                     | 部分：上传失败、队列容量和缺口分别验证，纯断网与溢出恢复全链路未完成                  |
+| QWF-009、011                     | 部分：worker 清理/恢复和阶段 fixture 已检验，API/每日过期恢复及跨端逆序时钟未完整串联 |
+| QWF-013                          | 未执行：未创建每日任务，无真实每日 occurrence                                         |
+| QWF-014                          | 部分：完成假设归因，缺匹配 clean 构建的 located 对照组                                |
 
-## 18条验收合同的覆盖
+当时 Stable capabilities 返回 404；未更新 Stable、未安装真机、未发布全局插件。
+随记只完成构建、安装、启动与分享呈现，原有操作诊断导出完整回归未执行。
+两个自有 Dev Session 与模拟器租约已结束，不影响其他工作区。
 
-“部分”表示已取得分层证据，但未按原用例完整建立全部前置条件或执行全部步骤。
+后续同日修复复验覆盖确认丢失后的重叠丢弃区间、台账事务容量预算、清理后沿旧 issueId 重开，
+以及跨轮补齐同操作历史阶段。真实 worker/HTTP 与构建 CLI 的隔离 fixture 通过；
+该 CLI fixture 不包含生产登录、token 刷新或完整服务启动。
+最后一轮未重跑桌面离线/多窗口/切换目标、真机、随记诊断、实际 Agent 调查或真实观察窗口。
+较早通过记录不能充当这些路径的同版复验，部分与未执行项继续保留。
 
-| 用例    | 本轮状态 | 实际范围与缺口                                                                          |
-| ------- | -------- | --------------------------------------------------------------------------------------- |
-| QWF-001 | 通过     | 真实桌面发送、不导出，重启恢复上报并核对同ID、构建与项目归属                            |
-| QWF-002 | 部分     | 模拟器五阶段真实入库；真机未执行                                                        |
-| QWF-003 | 通过     | 真实HTTP重复幂等与同序号内容冲突                                                        |
-| QWF-004 | 部分     | 实际401/409/403；未同时建立两个Backend做完整隔离对照                                    |
-| QWF-005 | 部分     | CORS上传失败保留队列，业务发送完成；恢复同时包含桌面/Backend重启，不是纯网络开关用例    |
-| QWF-006 | 通过     | 相同桌面数据根重启，原source/stream/seq补发并收到ack                                    |
-| QWF-007 | 部分     | 浏览器真实队列容量与缺口、Backend显式缺口确认分别验证；未完整串联容量溢出后的客户端上传 |
-| QWF-008 | 通过     | 实际Backend重启后原事件仍在，同批次HTTP重传不重复                                       |
-| QWF-009 | 部分     | 源worker实际清理、cursor_expired和最早位置恢复通过；API与每日脚本的过期恢复未完整串联   |
-| QWF-010 | 通过     | 真实API拒绝非法字段，日志白名单剔除正文/编码片段，真实发送标记不进入证据                |
-| QWF-011 | 部分     | 四类阶段fixture已跑；未把跨端逆序时钟fixture走完独立场景                                |
-| QWF-012 | 通过     | worker重启恢复待处理页、CAS幂等、写者互斥，以及脚本跨轮保留待处理材料与分析水位         |
-| QWF-013 | 未执行   | 未确认测试日程/执行策略，不创建任务；没有真实每日occurrence证据                         |
-| QWF-014 | 部分     | 实际自动取数后按源码/运行材料写入假设归因；没有匹配clean构建的located对照组             |
-| QWF-015 | 通过     | Clarity未验证/不可用时本地分析与台账提交完成，不记录云端零异常或自动关闭                |
-| QWF-016 | 通过     | 真实文件追加、重命名轮转与截短，按inode/偏移读取并披露缺口                              |
-| QWF-017 | 通过     | 未结问题固定证据占满有界库后503，原证据、ack及storage_full保持可核对                    |
-| QWF-018 | 通过     | 无新增/到期项的直接脚本轮次不展开旧组，原问题ID与水位保留；仍有Agent启动成本            |
-
-## 静态与构建
-
-共享包、Backend、Frontend、CLI的typecheck/lint、CLI build、architecture、configuration、docs、
-18条YAML格式与技能校验均通过；`swift build --package-path packages/ios-diagnostics`及两个iOS宿主构建通过。
-Backend现有生命周期验证通过。定时任务现有运行验证清除继承的Activity/Evolution/Scheduled worker入口后通过；
-首轮继承旧安装路径而失败的结果保留，不能混作调度能力回归。
-没有新增单元测试，也没有把格式/类型检查当作上表的运行通过依据。
-
-## 可靠性修复复验（2026-11-16）
-
-针对后续复核发现的两个P1问题，已修复并使用相同真实SQLite worker / service场景复验。
-材料位于 reliability-fix（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/`），未新增单元测试。
-
-- 修复前基线（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/baseline.json`）保存源码摘要与原始结果：
-  确认丢失后上报重叠丢弃区间返回409；10,000字节预算的台账提交后占用10,702字节，事件读取503。
-- 同场景复验（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/after.json`）：下一批正常接受，ack推进到2，
-  原事件保留且未虚报缺口；超预算台账提交503并整体回滚，占用仍为4,119字节，revision仍为2，
-  4条待处理材料和空分析水位保留，4条原事件可读。
-- 10项组合边界（本机路径：`artifacts/quality-workflow/2026-11-16/reliability-fix/edges.json`）通过：混合已接收/缺失区间
-  只记录真实缺口，溢出批次重传幂等，内容冲突和同批次矛盾仍拒绝；提交回执也计入精确预算，
-  旧版本已超预算的固定证据和写满后的固定证据仍可读取。
-- 重跑13项存储/恢复检查、7项清理与容量检查和3项关闭确认检查。容量回归的填充fixture按实际预算
-  调整：去掉原先固定预留2,048字节后，同样数量的事件未必触发清理；核心两个缺陷的前后对照使用同一fixture。
-
-本轮只修改Backend存储与合同说明，未重跑桌面、模拟器或真机UI；上表原有的部分通过和未执行项继续保留。
-
-## Review 第1轮修复复验（2026-11-16）
-
-本节对应 review `5863a2e7-6193-4b61-a089-68d4e4adec48` 的两个已复现缺陷。
-原始结果及源码摘要保存在本机 `artifacts/quality-workflow/2026-11-16/review-round-1/`；
-材料未随冻结输入提供时，本节文字不替代运行证据。合成分析提交只检验数据流，不作为自动归因成功的证明。
-
-- 关闭 fixture 后，通过真实保留入口清理旧事件。修复前保留旧引用重开返回409 `evidence_expired`，
-  删除旧引用返回409 `issue_history_missing`；修复后沿原ID、首次时间、旧引用及复验记录成功重开。
-  删除历史引用仍拒绝，追加不存在的新引用仍返回409 `evidence_expired`。
-- 第一轮 started + confirmed 完成 prepare/finish，第二轮追加同操作 failed。
-  修复前实际每日入口输出 `failed_before_established`、两项耗时均null；修复后输出
-  `established_then_lost`、建立耗时200ms、连接持续时间4800ms，历史引用为1/2/3，第二轮提交后pending为空。
-- 新增上下文查询的15项真实worker/HTTP边界检查通过：分页去重、来源/启动/动作隔离、检查点快照、
-  旧检查点拒绝、分页及操作数上限、无认证拒绝、错误Backend拒绝、请求体上限与先鉴权后解析，
-  以及清理后剩余材料可读且披露边界。
-- 构建后的真实CLI经隔离存储profile、HTTP认证fixture和真实worker完成两轮prepare/finish及分页/错误输出，8项检查通过。
-  该fixture不包含生产登录、token刷新或完整服务启动，不能替代Review要求的真实隔离profile全链路验收。
-- 重跑13项存储/恢复、7项保留/容量、3项关闭确认检查通过。类型、Lint、CLI构建及架构检查通过。
-
-本轮未运行真实桌面、客户端离线/多窗口/切换目标、真机、随记诊断回归、实际Agent调查、完整服务生命周期
-或真实复验观察窗口。上表较早轮次的结果不代表这些路径已在本轮同版复验；Review列出的证据缺口继续保留。
-
-## 启用前
-
-完整任务草稿（本机路径：`artifacts/quality-workflow/2026-11-16/scheduled-task-draft.json`） 与
-只读validate响应（本机路径：`artifacts/quality-workflow/2026-11-16/scheduled-task-validation.json`） 已保存。
-目标是Stable、profile=local；建议每天09:00 Asia/Shanghai、Codex默认模型、补最近一次且有效期24小时。
-当前草稿enabled=false，executionPolicy=full-access：**无沙箱、无交互审批**，允许访问任务工作目录外的仓库、
-只读Git、认证CLI与可选Browser；这只是待确认提案，不是已授权扩大权限。
-摘要为 `188cdd7aab4a3edc44f30e9d561d733254cf89e89f2d4f5ce864bc6c05244d00`，预览下一日程为
-2026-11-17 09:00 Asia/Shanghai（01:00 UTC），草稿暂停所以nextRunAt=null，且并未创建任务。
-
-按 [scheduled-task规则](../../plugins/toolkit/skills/scheduled-task/SKILL.md) 等待用户确认完整最终配置；
-任何启用或时刻/策略改动须重新校验。还需另行授权更新Stable和手机，完成真机与真实每日触发验收，
-才能把P6和整个计划标为完成。没有数据或只有健康事件都不自动关闭问题。
+当时仅保存过 enabled=false 的任务草稿与只读 validate 响应；建议的每天 09:00 Asia/Shanghai、
+Stable/profile=local 和 full-access 均为历史提案，不是本次授权或已启用配置。
+具体上线与验收进度须从目标实例重新核对，不再依赖已删除的过程计划。

@@ -10,7 +10,7 @@
 
 ## 当前参考入口
 
-- [quality-workflow](./quality-workflow/index.html)：当前项目质量巡检、问题跟踪与复验闭环的待评审方案；交互场景为模拟，不代表工作流已实现。
+- [quality-workflow](./quality-workflow/index.html)：质量巡检、问题跟踪与复验闭环的冻结历史原型；交互为模拟，当前合同与验收边界见[说明](./quality-workflow/README.md)。
 
 - `terminal-quick-commands/`：终端快捷指令 Tab、全局后台任务看板和当前项目执行的冻结历史原型。
 
