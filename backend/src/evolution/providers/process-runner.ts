@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { resolveProviderBinary } from "./launch";
 import { ProviderProcessError, readProviderOutput } from "./output";
 import type {
   EvolutionProviderName,
@@ -41,7 +42,7 @@ export async function runProviderProcess(params: {
     "last-message.json",
   );
   const child = spawn(
-    params.binary,
+    resolveProviderBinary(params.provider, params.binary, params.env ?? process.env),
     [...params.args, "--output-last-message", outputFile, "-"],
     {
       cwd: params.request.workingDirectory,
