@@ -31,6 +31,13 @@ HTTP 探测成功后分别检查首页事件流和终端 WebSocket 的存活；�
 登录检查、健康探测、重连和会话错误处理将任务取消与 URLSession 的请求取消视为正常结束，
 不因此把电脑标记离线或弹出错误；取消请求不代表 Backend 故障。
 
+会话阅读、已加载的 Markdown 只读预览及其 Browser 展示归属与请求代次分开：同一电脑、
+终端和控制器的传输恢复保留已加载正文与浏览器展示，不因请求 generation 变化自动关闭阅读页。
+旧代次的在途阅读响应仍被丢弃；Markdown 重试期间保留已加载文档，错误照常显示。
+退出认证或关闭、更换终端会使原 Browser 归属失效。电脑连接代次变化后，旧本地预览传输
+拒绝新连接并提示重新打开；已加载的外部网页不因此关闭。该保留规则不放宽编辑页的连接校验，
+也不补发输入或重放保存。阅读与预览的完整合同见[代码预览](./terminal-code-preview.md)。
+
 本机诊断自动记录 HTTP 错误 domain/code、健康探测耗时和 Backend serviceInstanceId/runtimeReleaseId、
 首页事件流与终端 socket 的连接/关闭/重试、网络路径和应用前后台变化。
 WebSocket 使用 connectionId 与每次新生成的 attemptId 与 Backend/中继日志关联；不记录鉴权 ticket、
