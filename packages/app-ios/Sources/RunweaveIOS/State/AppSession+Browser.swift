@@ -9,12 +9,19 @@ extension AppSession {
       guard let self, self.browserSource == source, let api = self.api, let terminal = self.terminal else {
         throw CancellationError()
       }
-      return try await BrowserLocalTransport(api: api, target: target, terminalID: terminal.id).prepare()
+      let generation = self.generation
+      let current = { [weak self] in
+        self?.generation == generation && self?.browserSource == source
+      }
+      let preview = try await BrowserLocalTransport(
+        api: api, target: target, terminalID: terminal.id, isCurrent: current).prepare()
+      guard current() else { preview.close(); throw CancellationError() }
+      return preview
     }
   }
 
   var browserSource: BrowserContext? {
     guard authenticated, let connection, let terminal, terminalController != nil else { return nil }
-    return BrowserContext(scope: [connection.scope, terminal.id], generation: String(generation))
+    return BrowserContext(scope: [connection.scope, terminal.id], generation: browserGeneration.uuidString)
   }
 }

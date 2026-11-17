@@ -49,6 +49,12 @@ struct FilePreview: View {
 
   private var content: String { diff?.previewContent ?? payload?.content ?? "" }
   private var suffix: String { (file.path as NSString).pathExtension.lowercased() }
+  // A transport retry must not remove MarkdownPreview (and its presented
+  // browser). Keep the loaded, read-only document while its request is retried.
+  private var retainsMarkdown: Bool {
+    mode == "preview" && ["md", "markdown"].contains(suffix)
+      && (payload != nil || diff?.previewContent != nil)
+  }
   private var isImage: Bool {
     diff?.contentKind == "image" || (diff?.contentKind == nil && isPreviewImage(file.path))
   }
@@ -86,7 +92,7 @@ struct FilePreview: View {
         Text(failure).foregroundColor(.red)
         Button(isVideo ? "重试" : "重新加载") { loadedMode = nil; loadRevision += 1 }
       }
-      if !loading, failure == nil {
+      if (!loading && failure == nil) || retainsMarkdown {
         if let problem = diff?.problem {
           Text(problem).foregroundColor(.secondary).padding()
           if let size = diff?.previewSide?.sizeBytes {
@@ -219,7 +225,7 @@ struct FilePreview: View {
     image = nil
     htmlURL = nil
     videoURL = nil
-    diff = nil
+    if !retainsMarkdown { diff = nil }
     lines = []
     if file.changeKind == nil, let api = session.api {
       if isPreviewImage(file.path), mode == "preview" {

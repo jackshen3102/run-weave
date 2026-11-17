@@ -28,19 +28,14 @@ struct MarkdownPreview: View {
   }
 
   var body: some View {
-    ScrollView {
-      MarkdownContent(content: renderedContent)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-    }
-    .environment(\.openURL, OpenURLAction { url in
+    MarkdownPreviewDocument(content: renderedContent) { url in
       guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), let source = browser.currentSource?()
       else { return url.scheme?.lowercased() == "mailto" ? .systemAction : .discarded }
       browser.open(BrowserOpenIntent(target: url.absoluteString, origin: .host, action: .internalOpen),
         source: source, presentationAvailable:
           browser.hostPresentationAvailable(source: source, registrationID: presentationID))
       return .handled
-    })
+    }
     .safeAreaInset(edge: .bottom) {
       if browser.state == .collapsed {
         Button { browser.resume() } label: {
@@ -90,6 +85,58 @@ struct MarkdownPreview: View {
     browser.registerHostPresentation(id: presentationID, source: source, hostID: ObjectIdentifier(browser)) { [weak browser] in
       guard let browser else { return false }
       return visible.wrappedValue && browser.state != .presented && !browser.hasPrompt
+    }
+  }
+}
+
+/// Keep the document's layout graph independent of session and browser chrome
+/// updates. Reassigning a hosting root for an unchanged long document also
+/// invalidates its tables and text while its browser is covering it.
+private struct MarkdownPreviewDocument: UIViewControllerRepresentable {
+  let content: String
+  let openURL: (URL) -> OpenURLAction.Result
+
+  func makeCoordinator() -> Coordinator { Coordinator(content: content, openURL: openURL) }
+
+  func makeUIViewController(context: Context) -> UIHostingController<Document> {
+    let controller = UIHostingController(rootView: document(context.coordinator))
+    controller.view.backgroundColor = .clear
+    return controller
+  }
+
+  func updateUIViewController(_ controller: UIHostingController<Document>, context: Context) {
+    // Refresh the action without replacing the document or capturing an obsolete
+    // source identity. The retained document consults this action on every tap.
+    context.coordinator.openURL = openURL
+    guard context.coordinator.content != content else { return }
+    context.coordinator.content = content
+    controller.rootView = document(context.coordinator)
+  }
+
+  private func document(_ coordinator: Coordinator) -> Document {
+    Document(content: content, openURL: { coordinator.openURL($0) })
+  }
+
+  final class Coordinator {
+    var content: String
+    var openURL: (URL) -> OpenURLAction.Result
+    init(content: String, openURL: @escaping (URL) -> OpenURLAction.Result) {
+      self.content = content
+      self.openURL = openURL
+    }
+  }
+
+  struct Document: View {
+    let content: String
+    let openURL: (URL) -> OpenURLAction.Result
+
+    var body: some View {
+      ScrollView {
+        MarkdownContent(content: content)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding()
+      }
+      .environment(\.openURL, OpenURLAction(handler: openURL))
     }
   }
 }

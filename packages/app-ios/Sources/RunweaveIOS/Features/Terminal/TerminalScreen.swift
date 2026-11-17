@@ -292,10 +292,10 @@ struct TerminalScreen: View {
       snapshotShare = nil
       shareFailure = nil
       replyContext = nil
-      showingConversation = false
       if !sideChat.current { sideChat.visible = false }
       sideChat.suspend()
     }
+    .onChange(of: session.browserSource) { _ in showingConversation = false }
     .alert("分享失败", isPresented: Binding(
       get: { shareFailure != nil }, set: { if !$0 { shareFailure = nil } }
     )) {

@@ -132,7 +132,7 @@ struct ConversationReaderView: View {
         anchor.commit()
       }
       .onChange(of: scenePhase) { phase in if phase != .active { anchor.persist() } }
-      .onChange(of: session.generation) { _ in model.cancel(); close() }
+      .onChange(of: session.browserSource) { _ in model.cancel(); close() }
       .onChange(of: session.terminal?.id) { id in if id != terminalID { model.cancel(); close() } }
       .onChange(of: session.terminalController.map(ObjectIdentifier.init)) { identity in
         if identity != ObjectIdentifier(controller) { model.cancel(); close() }
