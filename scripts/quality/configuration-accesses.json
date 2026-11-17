@@ -1,5 +1,13 @@
 [
   {
+    "file": "backend/src/evolution/providers/launch.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(manifestPath)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read only the installed Codex package manifest to identify its Windows native executable; this package metadata is not instance configuration or credentials."
+  },
+  {
     "file": "packages/runweave-cli/src/commands/terminal-review.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_TERMINAL_SESSION_ID",

@@ -2,6 +2,7 @@ import { settingText } from "@runweave/config-node";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { EvolutionProviderAvailability } from "@runweave/shared/evolution";
+import { resolveProviderBinary } from "./launch";
 
 const execFileAsync = promisify(execFile);
 const PROBE_TIMEOUT_MS = 5_000;
@@ -34,7 +35,7 @@ export class EvolutionProviderAvailabilityService {
         binary: settingText("agents.traex.binary")?.trim() || "traex",
       },
     ];
-    const value = await Promise.all(commands.map((command) => probe(command)));
+    const value = await Promise.all(commands.map((command) => probe(command, this.env)));
     this.cached = { expiresAt: now + CACHE_TTL_MS, value };
     return value.map((item) => ({ ...item }));
   }
@@ -42,9 +43,11 @@ export class EvolutionProviderAvailabilityService {
 
 async function probe(
   command: ProviderCommand,
+  env: NodeJS.ProcessEnv,
 ): Promise<EvolutionProviderAvailability> {
   const checkedAt = new Date().toISOString();
-  const versionResult = await runProbe(command.binary, ["--version"]);
+  const binary = resolveProviderBinary(command.provider, command.binary, env);
+  const versionResult = await runProbe(binary, ["--version"], env);
   if (!versionResult.ok) {
     return {
       provider: command.provider,
@@ -56,7 +59,7 @@ async function probe(
       checkedAt,
     };
   }
-  const authResult = await runProbe(command.binary, ["login", "status"]);
+  const authResult = await runProbe(binary, ["login", "status"], env);
   return {
     provider: command.provider,
     available: authResult.ok,
@@ -71,12 +74,14 @@ async function probe(
 async function runProbe(
   binary: string,
   args: string[],
+  env: NodeJS.ProcessEnv,
 ): Promise<{ ok: true; output: string } | { ok: false; reason: string }> {
   try {
     const result = await execFileAsync(binary, args, {
       timeout: PROBE_TIMEOUT_MS,
       maxBuffer: 64 * 1024,
       windowsHide: true,
+      env,
     });
     return {
       ok: true,
