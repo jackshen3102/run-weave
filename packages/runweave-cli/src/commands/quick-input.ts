@@ -7,6 +7,12 @@ import {
 import { resolveAuthContext } from "../client/auth-context.js";
 import { CliError } from "../errors.js";
 import { writeOutput } from "../output/format.js";
+import { readFile } from "node:fs/promises";
+import type {
+  CreateTerminalQuickInputRequest,
+  TerminalQuickInputMode,
+  UpdateTerminalQuickInputRequest,
+} from "@runweave/shared/terminal/input";
 
 export async function runQuickInputCommand(
   command: string | undefined,
@@ -17,8 +23,14 @@ export async function runQuickInputCommand(
   },
 ): Promise<void> {
   const usage =
-    "Usage: rw quick-input list [--project-id <id>] [--kind all|pinned|recent] [--q <text>] [--limit 1..100] | rw quick-input run <id> --project-id <id> --expected-updated-at <timestamp> --idempotency-key <key> [--json]";
-  if (command !== "list" && command !== "run") throw new CliError(usage, 2);
+    "Usage: rw quick-input list [--project-id <id>] [--kind all|pinned|recent] [--q <text>] [--limit 1..100] | rw quick-input create --title <title> --text-file <path> --client-import-id <UUID> [--mode line|codex_slash_command|prompt_paste] | rw quick-input update <id> --text-file <path> --expected-updated-at <timestamp> | rw quick-input run <id> --project-id <id> --expected-updated-at <timestamp> --idempotency-key <key> [--json]";
+  if (
+    command !== "list" &&
+    command !== "run" &&
+    command !== "create" &&
+    command !== "update"
+  )
+    throw new CliError(usage, 2);
   const { options, positionals } = parseArgs(args, new Set(["json", "plain"]));
   const allowed = new Set([
     "profile",
@@ -27,19 +39,80 @@ export async function runQuickInputCommand(
     "config-dir",
     "json",
     "plain",
-    "project-id",
     ...(command === "list"
-      ? ["kind", "q", "limit"]
-      : ["expected-updated-at", "idempotency-key"]),
+      ? ["project-id", "kind", "q", "limit"]
+      : command === "create"
+        ? ["title", "text-file", "mode", "client-import-id"]
+        : command === "update"
+          ? ["text-file", "expected-updated-at"]
+          : ["project-id", "expected-updated-at", "idempotency-key"]),
   ]);
   if (
-    positionals.length !== (command === "list" ? 0 : 1) ||
+    positionals.length !==
+      (command === "run" || command === "update" ? 1 : 0) ||
     Object.keys(options).some((key) => !allowed.has(key))
   )
     throw new CliError(usage, 2);
   let route = "/api/terminal/quick-inputs";
   let init: RequestInit | undefined;
-  if (command === "list") {
+  if (command === "update") {
+    const expectedUpdatedAt = requireStringOption(
+      options,
+      "expected-updated-at",
+    );
+    if (!Number.isFinite(Date.parse(expectedUpdatedAt)))
+      throw new CliError("Invalid --expected-updated-at", 2);
+    const data = await readFile(
+      requireStringOption(options, "text-file"),
+      "utf8",
+    );
+    if (!data.trim())
+      throw new CliError("--text-file must contain nonempty UTF-8 text", 2);
+    const payload: UpdateTerminalQuickInputRequest = {
+      data,
+      expectedUpdatedAt,
+    };
+    route += `/${encodeURIComponent(positionals[0]!)}`;
+    init = {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    };
+  } else if (command === "create") {
+    const title = requireStringOption(options, "title").trim();
+    const mode = getStringOption(options, "mode") ?? "line";
+    const clientImportId = requireStringOption(options, "client-import-id");
+    if (!title || title.length > 120)
+      throw new CliError("--title must contain 1..120 characters", 2);
+    if (!["line", "codex_slash_command", "prompt_paste"].includes(mode))
+      throw new CliError("Invalid --mode", 2);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(
+        clientImportId,
+      )
+    )
+      throw new CliError(
+        "--client-import-id must be a UUID; reuse it when retrying the same import",
+        2,
+      );
+    const data = await readFile(
+      requireStringOption(options, "text-file"),
+      "utf8",
+    );
+    if (!data.trim())
+      throw new CliError("--text-file must contain nonempty UTF-8 text", 2);
+    const payload: CreateTerminalQuickInputRequest = {
+      title,
+      data,
+      mode: mode as TerminalQuickInputMode,
+      clientImportId,
+    };
+    init = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    };
+  } else if (command === "list") {
     const query = new URLSearchParams();
     for (const name of ["project-id", "kind", "q", "limit"]) {
       const value = getStringOption(options, name);
