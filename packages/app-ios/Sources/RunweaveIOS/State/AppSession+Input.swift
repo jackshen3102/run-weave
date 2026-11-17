@@ -2,6 +2,11 @@ import IOSDiagnostics
 import Foundation
 
 extension AppSession {
+  func recordUserAction(_ action: String, terminalID: String) {
+    guard terminal?.id == terminalID else { return }
+    terminalController?.recordUserAction(action)
+  }
+
   func isCommandActive(_ id: String) -> Bool {
     overview?.sessions.first { $0.id == id }?.terminalState.state == "agent_running"
   }
