@@ -9,6 +9,7 @@ final class AppSession: ObservableObject {
   @Published var connection: BackendConnection?
   @Published var authenticated = false {
     didSet {
+      if oldValue && !authenticated { browserGeneration = UUID() }
       if oldValue != authenticated { knowledgeInbox.reset(api: authenticated ? api : nil) }
       if !authenticated { showingScheduledTasks = false; showingEnergyMonitor = false; showingDevelopmentResources = false; scheduledSource = nil }
     }
@@ -77,6 +78,9 @@ final class AppSession: ObservableObject {
   var routeLoginRequired = false
   var routeResolver: ConnectionRouteResolver? { connection.map { ConnectionRouteResolver.forComputer($0) } }
   @Published var generation = 0 { didSet { terminalQuestions.reset() } }
+  // Read-only browser ownership survives transport recovery. Requests still use
+  // generation; logout and terminal replacement retire the browser identity.
+  @Published private(set) var browserGeneration = UUID()
 
   // Mutated by the attention extension; scoped to this connection generation.
 
@@ -408,6 +412,7 @@ final class AppSession: ObservableObject {
   }
 
   func closeTerminal() {
+    browserGeneration = UUID()
     requestedConversation = nil
     browser.invalidate()
     routeRequest += 1

@@ -15,6 +15,7 @@ final class BrowserLocalTransport {
   private let api: APIClient
   private let target: BrowserLocalTarget
   private let terminalID: String
+  private let isCurrent: () -> Bool
   private let identity = UUID()
   private let password = UUID().uuidString + UUID().uuidString
   private var listener: NWListener?
@@ -24,8 +25,9 @@ final class BrowserLocalTransport {
   private var startupTimeout: Task<Void, Never>?
   private weak var preview: BrowserLocalPreview?
 
-  init(api: APIClient, target: BrowserLocalTarget, terminalID: String) {
+  init(api: APIClient, target: BrowserLocalTarget, terminalID: String, isCurrent: @escaping () -> Bool) {
     self.api = api; self.target = target; self.terminalID = terminalID
+    self.isCurrent = isCurrent
   }
 
   func prepare() async throws -> BrowserLocalPreview {
@@ -81,6 +83,12 @@ final class BrowserLocalTransport {
   }
 
   private func accept(_ incoming: NWConnection) {
+    guard isCurrent() else {
+      incoming.cancel()
+      preview?.onFailure?("电脑连接已变化，请重新打开本地预览。已加载的外部网页不受影响。")
+      close()
+      return
+    }
     guard !closed, streams.count < 32 else { incoming.cancel(); return }
     let id = UUID()
     let stream = BrowserLocalStream(incoming: incoming, api: api,

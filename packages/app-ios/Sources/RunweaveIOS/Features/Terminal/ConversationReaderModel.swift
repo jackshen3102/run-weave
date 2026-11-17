@@ -1,4 +1,5 @@
 import SwiftUI
+import RunweaveBrowser
 
 @MainActor final class ConversationReaderModel: ObservableObject {
   @Published private(set) var data: TerminalConversation?
@@ -8,7 +9,7 @@ import SwiftUI
   private weak var session: AppSession?
   private weak var controller: SessionController?
   private let terminalID: String
-  private let generation: Int
+  private let source: BrowserContext?
   private let connectionID: String?
   var readingPositionKey: String? {
     guard let connectionID, let target = data?.target,
@@ -22,13 +23,13 @@ import SwiftUI
 
   init(session: AppSession, controller: SessionController, terminalID: String, expectedTarget: TerminalConversation.Target? = nil) {
     self.session = session; self.controller = controller
-    self.terminalID = terminalID; generation = session.generation
+    self.terminalID = terminalID; source = session.browserSource
     boundTarget = expectedTarget
     connectionID = session.connection?.id
   }
   private var current: Bool {
     guard let session, let controller else { return false }
-    return session.generation == generation && session.terminal?.id == terminalID
+    return source != nil && session.browserSource == source && session.terminal?.id == terminalID
       && session.terminalController === controller
   }
   func open() { guard !started else { return }; started = true; refresh() }
@@ -38,6 +39,7 @@ import SwiftUI
     let ticket = sequence
     let previous = data
     let target = boundTarget
+    let generation = session.generation
     loading = true; failure = nil; unchanged = false
     operation = Task { [weak self] in
       do {
@@ -47,6 +49,9 @@ import SwiftUI
         }
         try Task.checkCancellation()
         guard let self, self.current, self.sequence == ticket else { return }
+        guard session.generation == generation else {
+          self.loading = false; self.operation = nil; return
+        }
         if let previousTarget = self.boundTarget, previousTarget != response.target {
           self.data = nil; self.failure = "会话已变化，请关闭后重新打开阅读页"
         } else {
@@ -56,6 +61,9 @@ import SwiftUI
         }
       } catch {
         guard let self, !(error is CancellationError), self.current, self.sequence == ticket else { return }
+        guard session.generation == generation else {
+          self.loading = false; self.operation = nil; return
+        }
         if (error as? TerminalConversationFailure)?.code == "CONVERSATION_TARGET_CHANGED" { self.data = nil }
         self.failure = displayError(error)
       }
