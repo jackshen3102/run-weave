@@ -21,7 +21,8 @@ function fileLinkPaths(
     const prefix = fragment?.[1];
     if (
       !fragment || !prefix ||
-      prefix.includes(":") || Array.from(prefix).some((char) => char.charCodeAt(0) < 32) ||
+      (prefix.includes(":") && !/^[a-z]:[\\/][^:]*$/i.test(prefix)) ||
+      Array.from(prefix).some((char) => char.charCodeAt(0) < 32) ||
       isSupportedTerminalFileLinkPath(prefix)
     )
       break;

@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import path from "node:path";
 import { z } from "zod";
 import type { AuthService } from "../../../auth/service";
 import { readBearerToken } from "../../../auth/middleware";
@@ -42,7 +43,7 @@ export function registerTerminalHtmlPreviewRoutes(router: Router, manager: Termi
       });
       const encodedPath = Buffer.from(htmlPath, "utf8").toString("base64url");
       const payload: CreateTerminalHtmlPreviewTicketResponse = {
-        path: `/html-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodedPath}/${change ? `change/${change.kind}/${change.version}/` : ""}${encodeURIComponent(htmlPath.split("/").at(-1)!)}`,
+        path: `/html-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodedPath}/${change ? `change/${change.kind}/${change.version}/` : ""}${encodeURIComponent(path.basename(htmlPath))}`,
         expiresIn: ticket.expiresIn,
       };
       res.json(payload);
