@@ -168,6 +168,14 @@
     "reason": "读取用户通过 --reply-file 明确指定的续接回复原文，作为现有运行的本次请求输入，不作为实例业务配置来源。"
   },
   {
+    "file": "packages/runweave-cli/src/commands/quick-input.ts",
+    "kind": "file-io",
+    "expression": "readFile(requireStringOption(options, \"text-file\"))",
+    "count": 2,
+    "category": "external-protocol",
+    "reason": "读取用户通过 --text-file 明确指定的快捷指令创建或正文更新输入，经已认证 Backend 处理幂等和版本冲突，不作为实例业务配置来源。"
+  },
+  {
     "file": "packages/runweave-cli/src/commands/experience-inbox.ts",
     "kind": "file-io",
     "expression": "readFile(file)",

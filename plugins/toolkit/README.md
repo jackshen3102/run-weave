@@ -28,6 +28,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `debugging-strategies`
 - `diagnostic-log-debugging`
 - `doc-coauthoring`
+- [`research-desk`](./skills/research-desk/SKILL.md)：按研究方向冻结论文与博客全文，独立模型审阅后生成中文总结与跨篇研究；支持去重、历史资料和中断续跑，提供快捷指令内容。
 - [`eli5`](./skills/eli5/SKILL.md)：用大图和少量文字生成零基础 HTML 图解；源自 [Thariq Shihipar 的上游技能](https://github.com/anthropics/claude-plugins-community/blob/863e70dc7cff21a2facc749e40a7ecd1a5d19833/eli5/skills/eli5/SKILL.md)，保留核心指令并适配 Codex 主题参数。
 - [`experience`](./skills/experience/SKILL.md)：任意 Git 项目的按需经验检索与结果反馈；按仓库隔离，不依赖项目 `AGENTS.md`。
 - `git-advanced-workflows`

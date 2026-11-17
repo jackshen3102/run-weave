@@ -148,12 +148,19 @@ rw scheduled-task run archive <run-id> --json
 `open-terminal` 只准备或恢复终端，检查 `attachmentState`，不承诺切换桌面当前页面；
 不会覆盖已改作其他用途的终端绑定。`archive` 仅支持已结束的快捷指令运行。
 
-已保存的快捷指令通过以下命令发现并执行：
+快捷指令通过以下命令创建、发现并执行：
 
 ```bash
+rw quick-input create --title '研究一次' --text-file /absolute/path/research-prompt.txt --client-import-id <本次导入的UUID> --json
+rw quick-input update <input-id> --text-file /absolute/path/research-prompt.txt --expected-updated-at <读取到的updatedAt> --json
 rw quick-input list --project-id <project-id> --kind pinned --limit 50 --json
 rw quick-input run <input-id> --project-id <project-id> --expected-updated-at <list 返回的 updatedAt> --idempotency-key <本次唯一 UUID> --json
 ```
+
+`quick-input create` 创建全局固定指令，正文从 UTF-8 文件读取，默认 `--mode line`；还支持
+`codex_slash_command` 和 `prompt_paste`。同一次导入重试必须沿用 `--client-import-id`，Backend
+返回已有记录，不覆盖其后续人工修改；保存后核对返回的正文和模式。该命令不执行指令，也不创建定时任务。
+`quick-input update` 只修改正文，要求 `--expected-updated-at`；版本冲突时保留当前记录，不擅自覆盖或重试。
 
 `quick-input run` 要求原指令版本和精确项目身份，模型与权限沿用当前 Backend 已配置的
 后台运行策略；CLI 不隐式修改指令或任务定义。运行结果继续用上面的 `scheduled-task run` 命令读取。
