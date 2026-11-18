@@ -62,7 +62,7 @@ public struct RemoteDesktopStatistics: Equatable {
     public internal(set) var surfaceInWindow = false
     public internal(set) var viewportSize: CGSize = .zero
     public internal(set) var videoLayerSize: CGSize = .zero
-    public internal(set) var preventsCapture = true
+    public internal(set) var preventsCapture = false
     public internal(set) var outputObscured = false
     public internal(set) var decodedPixelFormat: UInt32?
     public internal(set) var decodedHasIOSurface: Bool?
