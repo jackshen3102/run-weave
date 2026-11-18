@@ -1,3 +1,4 @@
+import type { NativeSessions } from "./sessions.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import path from "node:path";
@@ -73,6 +74,7 @@ finally:
 
 export interface ToolsContext {
   backend: Backend;
+  sessions: NativeSessions;
   activity: Activity;
   commands: Commands;
   evidence: Evidence;
@@ -82,7 +84,7 @@ export interface ToolsContext {
 
 export function createMcp(context: ToolsContext) {
   const result = (run: () => Promise<object>) => toolResult(run, context.onToolSuccess);
-  const { backend, activity, commands, evidence, files } = context;
+  const { backend, activity, commands, evidence, files, sessions } = context;
   const server = new McpServer(
     { name: "runweave-research", version: "0.1.0" },
     {
@@ -106,7 +108,7 @@ export function createMcp(context: ToolsContext) {
     "search",
     {
       description:
-        "Keyword evidence search. query accepts source:activity|logs|codex|pi|claude|workspace|extra1, project:ID, from:ISO, to:ISO and literal text. Default Activity last 24h. Bounded coverage is in the search-receipt result; use query_data/run_command to continue wider investigations.",
+        "Keyword evidence search. query accepts source:sessions|activity|logs|codex|pi|claude|workspace|extra1, project:ID, from:ISO, to:ISO and literal text. source:sessions uses the Backend native transcript index with project/time filters; other sources retain bounded scanning. Default Activity last 24h. Bounded coverage is in the search-receipt result; use query_data/run_command to continue wider investigations.",
       inputSchema: { query: z.string().min(1).max(2000) },
       annotations: readOnly,
       outputSchema: { results: z.array(referenceSchema) },
@@ -125,6 +127,7 @@ export function createMcp(context: ToolsContext) {
           .trim();
         let data: object;
         let hits: Array<{ id: string; title: string; url: string }>;
+        if (options.source === "sessions") return sessions.search({ query: keyword, projectId: options.project, from: options.from, to: options.to });
         if (!options.source || options.source === "activity") {
           const parsed = filters.parse({
             projectId: options.project,
@@ -183,6 +186,20 @@ export function createMcp(context: ToolsContext) {
         return { results: [...hits, receipt] };
       }),
   );
+
+  server.registerTool("search_sessions", {
+    description: "Search only native Agent transcript records on the selected Backend. Defaults to the configured workspace repository; explicit allProjects searches all indexed repositories. Keyword search, not semantic Q&A. Returns evidence references plus coverage/cursor; fetch revalidates originals. Does not ingest Activity, Work History or experience records.",
+    inputSchema: { query: z.string().trim().min(1).max(500), projectId: z.string().optional(),
+      allProjects: z.boolean().optional(), provider: z.enum(["codex", "pi", "claude"]).optional(),
+      level: z.enum(["chat", "work", "full"]).optional(), includeOtherOrigins: z.boolean().optional(),
+      from: z.string().datetime({ offset: true }).optional(), to: z.string().datetime({ offset: true }).optional(),
+      limit: z.number().int().min(1).max(50).optional(), cursor: z.string().optional() },
+    annotations: readOnly, outputSchema: { results: z.array(referenceSchema) },
+  }, query => result(() => sessions.search(query)));
+  server.registerTool("session_search_status", {
+    description: "Read native transcript index coverage and refresh state on the selected Backend. Source paths and history belong to that Backend node, not necessarily this MCP host.",
+    inputSchema: {}, annotations: readOnly,
+  }, () => result(() => sessions.status()));
 
   server.registerTool(
     "fetch",

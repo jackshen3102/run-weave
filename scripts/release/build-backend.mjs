@@ -121,6 +121,7 @@ const shared = {
 };
 for (const [source, output] of [
   ["backend/src/index.ts", "index.cjs"],
+  ["backend/src/session-search/worker.ts", "session-search-worker.cjs"],
   ["backend/src/quality-workflow/sqlite-worker.ts", "quality-workflow-sqlite-worker.cjs"],
   [
     "backend/src/activity/database/sqlite-worker.ts",

@@ -48,3 +48,5 @@ rw screen-recording analysis export --instance stable --day 2026-10-31 --out /ab
 不带 `--out` 时标准输出为冻结快照 JSON。导出不包含图片、视频、本地媒体路径或易失 viewID。
 `revision` 按日期维护，`coverage=complete` 仅表示已记录范围结算完成，不能证明全天工作完整。
 来源不可达返回失败；待处理或过期未处理材料保留缺口，不能解释成当天没有工作。
+
+- [会话搜索](session-search.md)：仅原生 Agent 记录的关键词检索、增量索引、原文定位与 CLI / MCP 合同。

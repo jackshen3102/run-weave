@@ -12,8 +12,10 @@ import {
   User,
   CalendarClock,
   PanelsTopLeft,
+  Search,
 } from "lucide-react";
 export const appNavigationItems = [
+  { path: "/session-search", title: "会话搜索", icon: Search },
   { path: "/activity", title: "Activity", icon: Activity },
   { path: "/evolution", title: "Evolution", icon: Sparkles },
   { path: "/system-monitor", title: "System Monitor", icon: Activity },

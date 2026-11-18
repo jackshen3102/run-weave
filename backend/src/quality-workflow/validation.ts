@@ -21,7 +21,8 @@ export const contextSchema = z.object({ schemaVersion: z.literal(1), backendId: 
   after: integer.optional(), limit: integer.min(1).max(1000).optional(),
 }).strict();
 export const evidenceSchema = eventSchema.extend({ receiveId: integer.positive(), receivedAt: time, backendId: id, sourceId: id, streamId: id,
-  client: z.enum(["desktop", "web", "ios", "backend"]), projectId: id.nullable() }).strict();
+  // Server-resolved project keys include wt:<parent>:<worktree>, unlike event identifiers.
+  client: z.enum(["desktop", "web", "ios", "backend"]), projectId: z.string().min(1).max(2_000).nullable() }).strict();
 const evidenceIds = z.array(integer.positive()).max(1000);
 const text = z.string().max(8000);
 export const issueSchema = z.object({ issueId: id, groupKey: z.string().max(512), firstAt: time, lastAt: time,

@@ -21,6 +21,7 @@ struct HomeView: View {
   @State private var showingDiagnostics = false
   @State private var showingScreenRecording = false
   @State private var showingKnowledgeInbox = false
+  @State private var showingSessionSearch = false
   @State private var screenConversation: (target: TerminalConversation.Target, generation: Int)?
   @State private var renaming: HomeTerminal?
   @State private var moving: HomeTerminal?
@@ -158,6 +159,11 @@ struct HomeView: View {
           .id(session.generation)
       } label: { EmptyView() }.hidden()
     }
+    .background {
+      NavigationLink(isActive: $showingSessionSearch) {
+        SessionSearchView(session: session).id(session.generation)
+      } label: { EmptyView() }.hidden()
+    }
     .searchable(text: $query, prompt: "Search projects and terminals")
     .refreshable { await refreshHome() }
     .task(id: conversationRefreshKey) {
@@ -188,6 +194,7 @@ struct HomeView: View {
       initializedGeneration = nil
       query = ""
       showingKnowledgeInbox = false
+      showingSessionSearch = false
       newTerminalProject = nil
       branchUpdatesTarget = nil
       renaming = nil
@@ -201,6 +208,7 @@ struct HomeView: View {
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Menu {
+          Button("会话搜索") { showingSessionSearch = true }.accessibilityIdentifier("session-search-entry")
           Button("自进化") { showingKnowledgeInbox = true }
             .accessibilityIdentifier("knowledge-inbox-entry")
           Button("屏幕记录") { showingScreenRecording = true }.accessibilityIdentifier("screen-recording-entry")

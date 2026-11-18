@@ -38,13 +38,15 @@ node /absolute/path/to/browser-viewer/packages/runweave-mcp/dist/index.cjs \
 
 ## 五个工具
 
-| 工具           | 用途                                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `list_sources` | Backend 健康、项目、Activity 留存、当前状态、ThreadRef 样本，以及本地日志/原生会话/代码路径；各来源独立返回错误 |
-| `search`       | 标准 `{query}` → `{results:[{id,title,url}]}` 关键词检索，并返回一份可 fetch 的覆盖说明                         |
-| `fetch`        | 标准 `{id}` → `{id,title,text,url,metadata}`；长内容沿 `metadata.next.id` 继续                                  |
-| `query_data`   | Activity 明细/状态分布、原文、文件、SQLite、当前状态和会话引用                                                  |
-| `run_command`  | 任意本机 shell，支持 start/read/cancel、分片输出、退出码和工作目录                                              |
+| 工具                    | 用途                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `list_sources`          | Backend 健康、项目、Activity 留存、当前状态、ThreadRef 样本，以及本地日志/原生会话/代码路径；各来源独立返回错误 |
+| `search`                | 标准 `{query}` → `{results:[{id,title,url}]}` 关键词检索，并返回一份可 fetch 的覆盖说明                         |
+| `search_sessions`       | 通过所选 Backend 的原生记录索引检索；按项目、Agent、对话/操作/输出分层，返回证据引用与覆盖回执                  |
+| `session_search_status` | 查看同一 Backend 的索引状态及各格式覆盖缺口                                                                     |
+| `fetch`                 | 标准 `{id}` → `{id,title,text,url,metadata}`；长内容沿 `metadata.next.id` 继续                                  |
+| `query_data`            | Activity 明细/状态分布、原文、文件、SQLite、当前状态和会话引用                                                  |
+| `run_command`           | 任意本机 shell，支持 start/read/cancel、分片输出、退出码和工作目录                                              |
 
 原生 Codex、Pi、Claude JSONL 通过文件能力原样读取，包含工具项；不经过 UI 的消息展示投影。其他 Provider、外部数据库及自定义目录可用 `--data-dir` 或 `run_command` 发现。
 
@@ -137,3 +139,7 @@ pnpm testplan:validate docs/testing/architecture/research-mcp.testplan.yaml
 ```
 
 真实行为合同见 [验收计划](../../docs/testing/architecture/research-mcp.testplan.yaml)。本地协议、文件、SQL 和进程验证不能替代其中的 ChatGPT/Tunnel 用例。没有配置账号时，明确记录那些用例未执行。
+
+原生索引检索也可使用标准 `search` 的 `source:sessions`。它与 MCP 本机的 `source:codex/pi/claude` 尾部读取不同，不另建索引；fetch 会重新核对原始记录的字节范围与哈希。范围、增量更新和限制见[会话搜索合同](../../docs/cli/session-search.md)。
+
+会话索引更新策略与 ags 0.5.0 一致：MCP 进程首次调用会话工具时尝试更新一次，之后只读已有索引；不监听文件、不定时扫描。首次更新失败也不自动重试。用 `rw session-search index` 手动更新，或重启 MCP 后重新初始化。

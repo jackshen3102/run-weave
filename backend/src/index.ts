@@ -1,3 +1,4 @@
+import { createSessionSearchRouter } from "./routes/session-search";
 import { createQualityWorkflowRouter, installQualityWorkflowBodyParsers } from "./routes/diagnostics/quality-workflow";
 import { createScreenRecordingAnalysisRouter } from "./routes/screen-recording-analysis";
 import { createScreenRecordingRouter } from "./routes/screen-recording";
@@ -101,7 +102,6 @@ import { reconcileHostedTerminals } from "./terminal/runtime/pty-host-runtime";
 const HASHED_ASSET_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
 const REVALIDATED_STATIC_CACHE_CONTROL = "no-cache";
-
 type BackendStartStage =
   | "runtime-config"
   | "storage-migration"
@@ -112,7 +112,6 @@ type BackendStartStage =
   | "websocket-servers"
   | "listen"
   | "lifecycle-handlers";
-
 class BackendStartError extends Error {
   constructor(
     readonly stage: BackendStartStage,
@@ -298,6 +297,7 @@ function createHttpApp(
   );
   app.use("/api/agent-capabilities", requireAuth, createAgentCapabilitiesRouter(services.agentCapabilitiesService));
   app.use("/api/race", requireAuth, createRaceRouter(services.raceService));
+  app.use("/api/session-search", requireAuth, createSessionSearchRouter(services.sessionSearch));
   app.use("/api/side-chats", requireTunnelAuth, requireAuth, createSideChatRouter(services.sideChatService));
   app.use("/api/scheduled-tasks", requireAuth, createScheduledTasksRouter(services.scheduledTaskService));
   app.use("/api/knowledge-inbox", createKnowledgeInboxRouter(services.knowledgeInboxService, services.authService));

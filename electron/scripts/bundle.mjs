@@ -166,6 +166,14 @@ await build({
   format: "cjs",
   external: ["better-sqlite3", "fs-native-extensions"],
 });
+await build({
+  ...shared,
+  ...importMetaUrlShim,
+  entryPoints: ["../backend/src/session-search/worker.ts"],
+  outfile: path.resolve(outputDir, "backend", "session-search-worker.cjs"),
+  format: "cjs",
+  external: ["better-sqlite3", "fs-native-extensions"],
+});
 finalizeActivitySqliteRuntime(
   activityWorkerEntry,
   evolutionWorkerEntry,
