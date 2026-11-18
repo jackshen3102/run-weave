@@ -118,7 +118,7 @@ struct TerminalCodeReviewView: View {
             Text("报告尚未完成")
             ForEach(Array((detail.snapshot?.omissions ?? []).enumerated()), id: \.offset) { _, text in Text(text) }
           }
-          Text("Review 核对冻结代码与可取得的用户要求；目标或证据缺失会保留缺口，不自动授权修复或发布。").font(.caption).foregroundStyle(.secondary)
+          Text("Review 将已复现问题回传主 Agent，由主 Agent 按当前任务已有授权修复并验证；未验证项保留在报告中。").font(.caption).foregroundStyle(.secondary)
         } else if failure == nil { ProgressView("读取报告…") }
       }.navigationTitle("代码 Review").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("关闭") { dismiss() } } }

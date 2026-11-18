@@ -107,7 +107,7 @@ Dots 可通过现有 MCP run_command 调用这些命令并有界等待。command
 ## 原生 CLI 与终端页面独立代码 Review
 
 原生 CLI 的 `review-agent` Skill 将 `@review` 或明确的独立代码审查请求代发到同一 Backend
-Review 服务。当前 Agent 只发起和读取结果；独立 Reviewer 仍执行 `review-only` 职责。
+Review 服务。当前 Agent 发起和读取结果，并按原任务已有授权处理已复现问题；独立 Reviewer 执行 `review-only` 职责。
 这是提交后的 Skill 调用，不增加原生 CLI 的 @ 自动补全，也不要求打开 Runweave 图形界面。
 
 ```sh
@@ -144,9 +144,10 @@ GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
 每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 且覆盖完整时 caseStatus 为 passed，
 事项自动结束、状态条隐藏，delivery 为 skipped，不向来源终端发送消息；有 Bug 时事项保持 open，
-回传已复现问题的级别、位置、标题和影响。目标未达成、目标未验证或核验覆盖缺口单独标记为非 Bug 结论，一并回传条件、实际结果及完整报告路径；不主动要求来源 Agent 修复或补做验收。
+仅回传已复现问题的级别、位置、标题、影响及完整报告路径。目标未达成、目标未验证和核验覆盖缺口保留在完整报告中，不回写来源终端。
+公共反馈明确要求来源实现 Agent 按原任务已有授权核对、修复并验证问题，CLI 和菜单入口使用相同规则，不依赖来源是否加载 Skill。Review 不撤销既有授权，也不要求用户重复授权；用户最新的只读、等待确认、停止或人工接管限制优先。
 问题必须由 Reviewer 实际复现并提供同版检查与证据；静态推断不能进入新报告的问题列表，也不回传旧报告中的静态问题。
-无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不把疑点作为 Bug 投递。已保存的目标反馈即使 phase=blocked 也按原投递账本回传；纯代码范围的非 Bug 覆盖缺口仅展示报告。
+无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，delivery 为 skipped；报告表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不把疑点作为 Bug 投递。
 此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
 仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
 `POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；
