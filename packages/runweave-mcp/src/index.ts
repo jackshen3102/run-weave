@@ -6,6 +6,7 @@ import {
   resolveConfigurationContext,
   withConfigurationArguments,
 } from "@runweave/config-node";
+import { NativeSessions } from "./sessions.js";
 import { Backend } from "./backend.js";
 import { Activity } from "./activity.js";
 import { Evidence } from "./evidence.js";
@@ -51,6 +52,7 @@ async function main() {
   const evidence = new Evidence(baseUrl);
   const commands = await Commands.create(values.cwd);
   const activity = new Activity(backend, evidence);
+  const sessions = new NativeSessions(backend, evidence, values.cwd);
   const runtimeStatus = createMcpRuntimeStatus(backend);
   const app = express();
   app.disable("x-powered-by");
@@ -97,6 +99,7 @@ async function main() {
     void withConfigurationArguments(process.argv.slice(2), async () => {
       const server = createMcp({
         backend,
+        sessions,
         activity,
         commands,
         evidence,

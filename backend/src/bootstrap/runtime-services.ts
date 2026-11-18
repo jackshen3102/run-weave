@@ -1,3 +1,4 @@
+import { SessionSearchService } from "../session-search/service";
 import { ScreenRecordingAnalysisRuntime } from "../screen-recording-analysis/runtime";
 import { ScreenRecordingService } from "../screen-recording/service";
 import { SideChatService } from "../side-chat/service";
@@ -73,7 +74,6 @@ import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
 } from "./tmux-paths";
-
 function resolveTerminalHookToken(
   env: NodeJS.ProcessEnv,
   tokenFilePath: string,
@@ -81,14 +81,12 @@ function resolveTerminalHookToken(
   const existing = env.RUNWEAVE_HOOK_TOKEN?.trim();
   return existing || loadOrCreateHookToken(tokenFilePath);
 }
-
 function shouldScanTmuxOrphans(): boolean {
   return (
     settingText("terminal.tmux.scanOrphansOnStart")?.trim().toLowerCase() === "true" ||
     settingText("terminal.tmux.cleanupOrphans")?.trim().toLowerCase() === "true"
   );
 }
-
 export async function createRuntimeServices(
   serviceInstanceId?: string,
 ): Promise<RuntimeServices> {
@@ -104,7 +102,6 @@ export async function createRuntimeServices(
     throw error;
   }
 }
-
 async function assembleRuntimeServices(
   resources: ResourceScope,
   serviceInstanceId?: string,
@@ -437,6 +434,9 @@ async function assembleRuntimeServices(
     terminalCompletionEventService,
     terminalStateService,
   );
+  const sessionSearch = new SessionSearchService(path.join(storagePaths.browserProfileDir, "session-search", "index.sqlite"),
+    id => terminalSessionManager.getProjectContext(id)?.path ?? terminalSessionManager.getProject(id)?.path);
+  resources.defer("session-search", () => sessionSearch.dispose());
   const qualityRuntime = await (await import("../quality-workflow/runtime")).createQualityRuntime(resources, storagePaths, connectionIdentity, terminalSessionManager);
   const devResources = new DevResourcesService();
   resources.defer("dev-resources", () => devResources.dispose());
@@ -520,7 +520,7 @@ async function assembleRuntimeServices(
   screenRecordingAnalysis.start();
   let disposed = false;
   const services: RuntimeServices = {
-    qualityWorkflow: qualityRuntime.service, screenRecording,
+    sessionSearch, qualityWorkflow: qualityRuntime.service, screenRecording,
     screenRecordingAnalysis,
     ...deviceMonitoring,
     terminalBadges,

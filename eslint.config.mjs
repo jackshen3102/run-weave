@@ -32,6 +32,7 @@ export default tseslint.config(
       "packages/runweave-server/src/**/*.ts",
       "packages/runweave-mcp/src/**/*.ts",
       "packages/daily-record/src/**/*.ts",
+      "packages/agent-history-node/src/**/*.ts",
       "packages/browser-history/src/**/*.ts",
       "packages/config-node/src/**/*.ts",
       "electron/src/**/*.ts",

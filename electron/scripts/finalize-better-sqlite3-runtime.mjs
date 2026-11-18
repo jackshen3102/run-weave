@@ -110,6 +110,7 @@ export function finalizeActivitySqliteRuntime(
     evolutionWorkerEntry,
     scheduledTasksWorkerEntry,
     path.join(resourcesBackendDir, "quality-workflow-sqlite-worker.cjs"),
+    path.join(resourcesBackendDir, "session-search-worker.cjs"),
     ...runtimePackageNames.map((packageName) =>
       path.join(runtimeNodeModules, packageName),
     ),

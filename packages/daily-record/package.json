@@ -10,7 +10,8 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@runweave/shared": "workspace:*"
+    "@runweave/shared": "workspace:*",
+    "@runweave/agent-history-node": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

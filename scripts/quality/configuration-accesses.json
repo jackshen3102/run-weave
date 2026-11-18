@@ -13783,5 +13783,29 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "Write the deterministic phase-outcome receipt in this quality run private directory; no online database or instance configuration access."
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "environment",
+    "expression": "process.env.CLAUDE_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "environment",
+    "expression": "process.env.PI_CODING_AGENT_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
   }
 ]

@@ -2,7 +2,7 @@ import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { useMemoizedFn } from "ahooks";
 import type { SettingsPageId } from "./registry";
 export function isManagementPath(pathname: string) {
-  return /^\/(?:settings|activity|evolution|system-monitor|dev-resources|scheduled-tasks|background-runs|prototypes|connections|login)(?:\/|$)/u.test(pathname);
+  return /^\/(?:settings|activity|evolution|system-monitor|dev-resources|scheduled-tasks|background-runs|session-search|prototypes|connections|login)(?:\/|$)/u.test(pathname);
 }
 export function settingsBackground(location: Location): Location | null {
   const value: unknown = location.state?.settingsBackground;

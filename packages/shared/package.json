@@ -109,7 +109,8 @@
     "./screen-recording": "./src/screen-recording/index.ts",
     "./terminal/code-review": "./src/terminal/code-review.ts",
     "./terminal/shell": "./src/terminal/shell.ts",
-    "./terminal/pty-host": "./src/terminal/pty-host.ts"
+    "./terminal/pty-host": "./src/terminal/pty-host.ts",
+    "./session-search": "./src/session-search.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

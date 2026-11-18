@@ -92,6 +92,9 @@ importers:
 
   backend:
     dependencies:
+      "@runweave/agent-history-node":
+        specifier: workspace:*
+        version: link:../packages/agent-history-node
       "@runweave/pty-host":
         specifier: workspace:*
         version: link:../packages/pty-host
@@ -652,6 +655,9 @@ importers:
 
   packages/daily-record:
     dependencies:
+      "@runweave/agent-history-node":
+        specifier: workspace:*
+        version: link:../agent-history-node
       "@runweave/shared":
         specifier: workspace:*
         version: link:../shared
@@ -698,6 +704,19 @@ importers:
         version: 5.9.3
 
   packages/browser-annotation: {}
+
+  packages/agent-history-node:
+    dependencies:
+      "@runweave/shared":
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      "@types/node":
+        specifier: ^22.13.10
+        version: 22.19.15
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
 
   packages/browser-history:
     dependencies:

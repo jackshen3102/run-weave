@@ -4,6 +4,7 @@ import { createHash, randomUUID, type Hash } from "node:crypto";
 import path from "node:path";
 import type { DailyMaterial } from "@runweave/shared/daily-record";
 import { hash } from "./data.js";
+import { scanNativeLines } from "@runweave/agent-history-node";
 
 // Bump when normalization/filtering semantics change. No raw reasoning is indexed.
 const version = 1;
@@ -135,44 +136,14 @@ export class NativeFileIndex {
   }
   async scan(consume: (row: Record<string, unknown>, locator: NativeLine) => void, issues: string[]): Promise<void> {
     if (this.unchanged) return;
-    const buffer = Buffer.alloc(512 * 1024), size = Number(this.before.size);
-    let position = this.offset, offset = this.offset, line = this.line;
-    let pending = Buffer.alloc(0), discarding = false;
-    this.tail = false;
-    while (position < size) {
-      const { bytesRead } = await this.handle.read(buffer, 0, Math.min(buffer.length, size - position), position);
-      if (!bytesRead) throw new Error("源文件读取期间被截断");
-      this.metrics.sourceBytesRead += bytesRead; this.metrics.parsedBytes += bytesRead;
-      const chunk = buffer.subarray(0, bytesRead), lastNewline = chunk.lastIndexOf(10);
-      if (lastNewline >= 0) {
-        this.prefixHash = this.digest.copy().update(chunk.subarray(0, lastNewline + 1)).digest("hex");
-        this.offset = position + lastNewline + 1;
-      }
-      this.digest.update(chunk); position += bytesRead;
-      const bytes = Buffer.concat([pending, chunk]);
-      let start = 0, end: number;
-      while ((end = bytes.indexOf(10, start)) !== -1) {
-        line++;
-        const raw = bytes.subarray(start, end + 1);
-        if (!discarding && raw.length > 1) {
-          try {
-            const value: unknown = JSON.parse(raw.toString("utf8"));
-            const row = value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-            consume(row, { path: this.file, line, byteOffset: offset, byteLength: raw.length, sha256: hash(raw) });
-          } catch (error) {
-            if (!(error instanceof SyntaxError)) throw error;
-            issues.push(`${this.file}:${line}: 非法 JSON`);
-          }
-        }
-        discarding = false; offset += raw.length; start = end + 1;
-      }
-      pending = Buffer.from(bytes.subarray(start));
-      if (discarding || pending.length > 16 * 1024 * 1024) {
-        if (!discarding) issues.push(`${this.file}:${line + 1}: 单行超过 16 MiB，未采集`);
-        discarding = true; offset += pending.length; pending = Buffer.alloc(0);
-      }
-    }
-    this.line = line; this.tail = Boolean(pending.length || discarding);
+    const result = await scanNativeLines({
+      file: this.file, handle: this.handle, start: this.offset, end: Number(this.before.size),
+      line: this.line, digest: this.digest,
+      onBytes: bytes => { this.metrics.sourceBytesRead += bytes; this.metrics.parsedBytes += bytes; },
+      onRow: consume, onIssue: message => issues.push(message),
+    });
+    this.offset = result.offset; this.line = result.line;
+    this.prefixHash = result.prefixHash; this.tail = result.incompleteTail;
   }
   get incompleteTail(): boolean { return this.tail; }
   async finish(data: NativeIndexData): Promise<void> {

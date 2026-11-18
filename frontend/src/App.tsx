@@ -39,6 +39,7 @@ import { LoginPage } from "./pages/login-page";
 import { ConnectionsPage } from "./pages/connections-page";
 import { SystemMonitorPage } from "./pages/system-monitor-page";
 import { TerminalRoutePage } from "./pages/terminal-page";
+import { SessionSearchPage } from "./pages/session-search-page";
 import { PrototypesPage } from "./pages/prototypes-page";
 import { TerminalSnapshotShareNotification } from "./components/terminal/workspace/snapshot-share-notification";
 import { ActivityPage } from "./pages/activity-page";
@@ -453,6 +454,12 @@ function RunweaveApp() {
               )
             }
           />
+          <Route path="/session-search" element={
+            needsConnection ? <Navigate to="/connections" replace /> : isAuthChecking ? authPendingView : token ? (
+              <SessionSearchPage key={`${activeConnectionId}:${apiBase}`} apiBase={apiBase} token={token}
+                connectionGeneration={activeConnection?.generation ?? 0} onAuthExpired={clearToken} />
+            ) : <Navigate to="/login" replace />
+          } />
           <Route
             path="/prototypes"
             element={
