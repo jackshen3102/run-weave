@@ -54,6 +54,14 @@ RUNWEAVE_BACKEND_LOG_DIR=/tmp/runweave-backend-logs pnpm --filter ./backend star
 tail -n 50 /tmp/runweave-backend-logs/backend-$(date +%F).jsonl
 ```
 
+## 屏幕事项分析失败
+
+`screen-analysis.tick.failed` 记录 `stage` 与 `code`，用于区分清理、配置、分析状态读取、
+Agent 证据采集、领取任务、执行和每日完成登记阶段。错误消息只有符合 1–80 位大写字母或
+下划线的错误码才原样记录，否则统一为 `ANALYSIS_UNAVAILABLE`，不写入原始错误正文。
+批次执行失败另记 `screen-analysis.batch.failed`，包含错误码与尝试次数；不能仅凭 tick
+日志判断某个批次失败，也不能把分析失败当作采集或回放停止。
+
 ## 脱敏边界
 
 后端滚动日志不记录 token、cookie、authorization header、密码、完整敏感 URL、本地文件内容、终端输入正文、终端输出正文、截图或剪贴板图片正文。
