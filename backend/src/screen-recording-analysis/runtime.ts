@@ -27,6 +27,7 @@ export class ScreenRecordingAnalysisRuntime {
   private controller?: AbortController;
   private unregisterConfiguration?: () => void;
   private closed = false;
+  private tickStage = 'cleanup';
   constructor(private readonly history: WorkHistoryService) {}
   start(): void {
     if (process.platform !== 'darwin') return;
@@ -38,11 +39,16 @@ export class ScreenRecordingAnalysisRuntime {
   private schedule(delay: number): void {
     if (this.closed) return;
     this.timer = setTimeout(() => {
-      this.active = this.tick().catch(() => { logger.warn('screen-analysis.tick.failed', { code: 'ANALYSIS_UNAVAILABLE' }); }).finally(() => { this.active = undefined; this.schedule(60000); });
+      this.active = this.tick().catch(error => {
+        const code = error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message) ? error.message : 'ANALYSIS_UNAVAILABLE';
+        logger.warn('screen-analysis.tick.failed', { code,stage: this.tickStage });
+      }).finally(() => { this.active = undefined; this.schedule(60000); });
     },delay); this.timer.unref();
   }
   private async tick(): Promise<void> {
+    this.tickStage = 'cleanup';
     await cleanAbandonedJobs(configurationPath("storage.screenAnalysisDirectory","screen-analysis"));
+    this.tickStage = 'configuration';
     if (settingText('screenRecording.analysis.enabled') !== 'true' || this.closed) return;
     const deviceID = settingText('screenRecording.analysis.deviceID')?.trim();
     const effectiveFrom = Date.parse(settingText('screenRecording.analysis.effectiveFrom') ?? '');
@@ -53,6 +59,7 @@ export class ScreenRecordingAnalysisRuntime {
     // The owner persists completion, so restarting cannot start another round.
     const throughMs = dailyAnalysisCutoff(Date.now());
     if (effectiveFrom > throughMs) return;
+    this.tickStage = 'analysis_status';
     const status = await this.collector.request<AnalysisStatus>('analysisStatus',{});
     if (this.closed || settingText('screenRecording.analysis.enabled') !== 'true') return;
     if (status.deviceID !== deviceID) throw new Error('DEVICE_MISMATCH');
@@ -63,17 +70,22 @@ export class ScreenRecordingAnalysisRuntime {
     this.controller = new AbortController();
     const signal = this.controller.signal;
     try {
+      this.tickStage = 'agent_evidence';
       await collectAgentEvidence(this.history,this.collector,deviceID,effectiveFrom,signal).catch(() => { logger.warn("screen-analysis.agent-source.unavailable",{}); });
       for (let count = 0; count < 4 && Date.now()-started < 600000 && !signal.aborted; count++) {
+        this.tickStage = 'claim';
         const claim = await this.collector.request<AnalysisClaim | null>('claimAnalysis',{ workerID: this.workerID,expectedDeviceID: deviceID,effectiveFrom,throughMs },signal);
         if (!claim) {
+          this.tickStage = 'analysis_status';
           const current = await this.collector.request<AnalysisStatus>('analysisStatus',{},signal);
           if (current.windowThroughMs === throughMs && current.windowDrained) {
+            this.tickStage = 'complete_day';
             await this.collector.request('completeAnalysisDay',{ expectedDeviceID: deviceID,throughMs },signal);
             logger.info('screen-analysis.daily.completed',{ throughMs });
           }
           break;
         }
+        this.tickStage = 'execute';
         await this.execute(claim,provider,signal);
       }
     } finally { this.controller = undefined; }

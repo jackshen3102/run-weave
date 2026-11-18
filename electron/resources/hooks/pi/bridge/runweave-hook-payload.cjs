@@ -160,9 +160,12 @@ function normalizeSummaryText(value) {
   if (!trimmed) {
     return null;
   }
-  return trimmed.length > 8000
-    ? `${trimmed.slice(0, 8000)}\n...[truncated]`
-    : trimmed;
+  if (trimmed.length <= 8000) return trimmed;
+  const suffix = "\n...[truncated]";
+  let end = 8000 - suffix.length;
+  // Keep the marker inside the wire limit without splitting a UTF-16 pair.
+  if (/[\uD800-\uDBFF]/.test(trimmed[end - 1])) end -= 1;
+  return `${trimmed.slice(0, end)}${suffix}`;
 }
 
 function extractCompletionSummary(payload) {
