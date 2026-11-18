@@ -465,16 +465,19 @@ export async function sendInputToSession(
           const text = mode === "prompt_paste"
             ? buildPromptPasteInput(data, attachClipboardImages)
             : data;
-          const submit = mode === "prompt_paste" && composerSubmitKey === "Tab" ? "\t" : "\r";
+          let submitInput = mode === "prompt_paste" && composerSubmitKey === "Tab" ? "\t" : "\r";
+          // Ctrl+E flushes Codex's Windows paste-burst buffer without editing the prompt.
+          if (mode === "prompt_paste" && process.platform === "win32" && attachClipboardImages)
+            submitInput = `\x05${submitInput}`;
           if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([
             { type: "text", data: text }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
-            { type: "text", data: submit },
+            { type: "text", data: submitInput },
           ], operationId);
           else {
             ensured.runtime.write(text);
             await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
             options.validateSupervisorTarget?.();
-            ensured.runtime.write(submit);
+            ensured.runtime.write(submitInput);
           }
         } else {
           const value = (
