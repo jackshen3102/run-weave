@@ -129,14 +129,6 @@ function buildClipboardImagePaste(text: string): string | null {
   return parts.length > 1 || parts[0] !== text ? parts.map((value) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`).join("") : null;
 }
 
-function buildPromptPastePtyInput(
-  text: string,
-  submitKey: "Enter" | "Tab",
-  attachClipboardImages = false,
-): string {
-  return `${buildPromptPasteInput(text, attachClipboardImages)}${submitKey === "Tab" ? "\t" : "\r"}`;
-}
-
 function splitPromptPaste(value: string): string[] {
   const chunks: string[] = [];
   for (let index = 0; index < value.length; index += PROMPT_PASTE_CHUNK_SIZE) {
@@ -468,16 +460,21 @@ export async function sendInputToSession(
             operationId,
             options.beforeTextAttachmentWrite,
           );
-        } else if (mode === "line") {
+        } else if (mode === "line" || mode === "prompt_paste") {
           // Match tmux: a TUI can treat text and Enter in one PTY write as paste.
+          const text = mode === "prompt_paste"
+            ? buildPromptPasteInput(data, attachClipboardImages)
+            : data;
+          const submit = mode === "prompt_paste" && composerSubmitKey === "Tab" ? "\t" : "\r";
           if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([
-            { type: "text", data }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
-            { type: "text", data: "\r" },
+            { type: "text", data: text }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
+            { type: "text", data: submit },
           ], operationId);
           else {
-            ensured.runtime.write(data);
+            ensured.runtime.write(text);
             await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
-            ensured.runtime.write("\r");
+            options.validateSupervisorTarget?.();
+            ensured.runtime.write(submit);
           }
         } else {
           const value = (
@@ -486,9 +483,7 @@ export async function sendInputToSession(
                   codexSlashCommand,
                   composerSubmitKey,
                 )
-              : mode === "prompt_paste"
-                ? buildPromptPastePtyInput(data, composerSubmitKey, attachClipboardImages)
-                : (dispatchData ?? "")
+              : (dispatchData ?? "")
           );
           if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([{ type: "text", data: value }], operationId);
           else ensured.runtime.write(value);
