@@ -91,6 +91,9 @@ TerminalState Stop fallback，但 backend consumer 不会把它再次写入
 `TerminalCompletionEventService`。因此不能把 app-server `agent.completion` 当作小绿点的
 completion feed 来源；如果后续要收敛到 app-server 驱动，需要先设计跨链路的 completion 去重。
 
+公共 Hook 回复摘要最多 8000 个 UTF-16 码元，截断标记 `\n...[truncated]` 计入上限，
+截断不拆开代理对。摘要只用于事件与通知，不能替代任务监督从原会话读取的完整最终回复。
+
 上报 payload 示例：
 
 ```json
