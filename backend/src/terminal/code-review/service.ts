@@ -275,7 +275,7 @@ export class CodeReviewService {
     }
     record.delivery.reportHash = reviewDigest(report);
     await this.touch(record);
-    // Feedback is delivered on a following serial tick, including blocked goal checks.
+    // Reproduced findings are delivered on a following serial tick.
   }
   async dispose() {
     this.closing = true; if (this.timer) clearTimeout(this.timer); this.unlisten?.();

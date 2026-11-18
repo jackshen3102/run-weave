@@ -25,7 +25,7 @@ v1 已执行下列 20 项交互检查。v2 收敛正文来源后，另通过 Run
 - 文档检查：`pnpm docs:check` 通过。
 - Runweave 浏览器交互：通过当前终端解析的 Profile 1，在现有原型库的真实预览票据入口执行 20 项检查：架构节点、追加/重写/离线场景、对话与工具输出分层、中文检索演示、来源筛选、表单提交、来源定位展开、零结果、章节及返回顶部。
 - 桌面窄视口：390 × 844 的同一页面检索交互通过、无整页横向溢出，宽表格可以局部横向滚动。它只证明桌面响应式行为，不是手机验收。
-- 截图来源：Runweave Browser 原型预览。[架构](../../../.runweave/session-search-plan/architecture-desktop.png)、[搜索演示](../../../.runweave/session-search-plan/search-desktop.png)、[桌面窄视口](../../../.runweave/session-search-plan/narrow-browser-hero.png)。架构截图已更新为 v2，搜索演示与窄视口首页截图为 v1。截图不证明后台检索实现。
+- 截图来源：Runweave Browser 原型预览。历史截图路径为 `.runweave/session-search-plan/` 下的 `architecture-desktop.png`、`search-desktop.png` 和 `narrow-browser-hero.png`；图片未入库，当前仓库不可读取。架构截图已更新为 v2，搜索演示与窄视口首页截图为 v1。截图不证明后台检索实现。
 - iPhone 真机阅读：未执行。页面含响应式布局，但这不能代替真机阅读验收；本次未要求手机交付。
 
 ## 代码依据

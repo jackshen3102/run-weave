@@ -59,7 +59,7 @@ export function CodeReviewReportView() {
         <p>资源清理：{report.cleanup}</p>
         <details><summary>受审文件（{report.reviewedChanges.length}）</summary>{report.reviewedChanges.map((entry) => <p key={`${entry.changeKind}:${entry.path}`} className="break-all">{entry.changeKind} · {entry.path}</p>)}</details>
       </> : <p>报告尚未完成。{value.snapshot?.omissions.join("；")}</p>}
-      <p className="text-xs text-muted-foreground">Review 核对冻结代码与可取得的用户要求；目标或证据缺失会保留缺口，不自动授权修复、发布或其他外部操作。</p>
+      <p className="text-xs text-muted-foreground">Review 将已复现问题回传主 Agent，由主 Agent 按当前任务已有授权修复并验证；未验证项保留在报告中。</p>
     </>}
     {artifactError ? <p role="alert">{artifactError}</p> : null}
   </div>;

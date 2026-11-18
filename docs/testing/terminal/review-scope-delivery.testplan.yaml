@@ -1,7 +1,7 @@
 version: 1
-name: Review 代码范围收口与目标反馈
+name: Review 代码范围与问题回传
 description: >
-  验证需求不可得时纯代码审查可以结束，明确目标缺口会回传主 Agent，自动反馈不变成新需求。
+  验证仅已复现 Bug 回传主 Agent，目标及覆盖缺口保留在报告，自动反馈不变成新需求。
   使用自有项目和当前源码 Dev Session；代码通过不等于业务目标通过，written 不等于 Agent 已消费。
 cases:
   - id: RSD-001
@@ -15,16 +15,16 @@ cases:
       - 确认 scope 为 code，代码覆盖完整时 caseStatus 为 passed、delivery 为 skipped；报告显示仅代码且未核验用户目标，没有把需求缺失当作待完成条件。
       - 读取真实页面报告，保存 DOM 和原始报告，清理本例自有资源。
   - id: RSD-002
-    name: 目标缺口回传并被主 Agent 接收
+    name: 零 Bug 的目标缺口仅保留在报告
     required: true
-    description: 零 Bug 但目标未验证时保留未通过状态，并可靠回传具体事实而不冒充 Bug 或新增授权。
+    description: 零 Bug 但目标未验证时保留验收阻塞和完整报告，不向来源终端发送反馈。
     preconditions:
       - 自有来源 Agent 的明确要求包括已能通过的代码条件和缺少指定真机证据的条件，只允许核对报告、不修改实现。
       - 原生来源和独立 Reviewer 可运行，目标代码不会在本例执行时变化。
     steps:
       - 用 toolkit:playwright-cli 点击现有 Review，等待原生完整 final；确认 scope 为 code_and_goals、目标为 not_run、findings 为空、事项保持 open。
-      - 观察 blocked 报告的 delivery 从 pending 到 written，读取来源原生 user message，确认出现本轮唯一反馈标记、条件、实际缺口、报告路径和非新增授权说明；再观察来源 Agent 的实际回复确认消费，不能只靠 written 判定。
-      - 继续观察多个调度周期，确认同一 reviewId 未重复回传，没有伪造 Bug 或触发未经授权的实现；保存消息和账本后清理自有资源。
+      - 确认 blocked 报告的 delivery 为 skipped，完整报告仍保留未验证条件、实际缺口和证据；来源原生消息没有本轮反馈标记。
+      - 继续观察多个调度周期，确认来源消息数未增加、attemptedAt 为空；保存报告和账本后清理自有资源。
   - id: RSD-003
     name: 用户取消条件后反馈不再阻塞或污染需求
     required: true
@@ -38,9 +38,41 @@ cases:
   - id: RSD-004
     name: 不确定投递在重启后不重放
     required: false
-    description: 全量回归时对目标反馈执行真实故障注入，沿用未知写入与身份恢复边界。
+    description: 全量回归时对已复现 Bug 的反馈执行真实故障注入，沿用未知写入与身份恢复边界。
     preconditions:
-      - 本例独立环境可在目标反馈已持久化 attemptedAt 后中断写入确认，并记录来源输入计数。
+      - 本例独立环境有已复现 Bug 的反馈，可在持久化 attemptedAt 后中断写入确认，并记录来源输入计数。
     steps:
       - 制造一次不确定写入，确认 delivery 为 unknown，再在本例内停止和重启 Backend，重新取得准确端点。
       - 回读原记录并观察多个周期，确认反馈和报告保留、无新派发或自动重发，来源消息计数不增加；保存故障证据并清理仅本例资源。
+  - id: RSD-005
+    name: 混合报告只回传已复现 Bug
+    required: true
+    description: 同一报告含 Bug 和未验证条件时，普通回传及超长降级均不夹带非 Bug 内容。
+    preconditions:
+      - 自有项目有可实际复现的 Bug 和缺少必要验证证据的用户条件，原生来源消息及投递账本可读。
+      - 自有环境可以生成超过 48000 字节的已复现问题内容，完整报告与证据可读取。
+    steps:
+      - 发起真实 Review 并等待报告保存，核对 findings、未验证 checks 和 limitations 均保留在报告中。
+      - 读取来源原生反馈，确认问题内容只含已复现 Bug 的级别、位置、标题、影响和报告路径，并有按当前任务已有授权继续修复验证的接续规则，没有目标缺口、报告 summary 或不新增修复授权的尾注。
+      - 在同一自有环境对超长问题内容发起新一轮 Review，确认来源只收到 Bug 数量、读取 findings 及证据的提示和报告路径，不夹带 summary 或未验证项；保存证据并清理自有资源。
+  - id: RSD-006
+    name: 实现者按已有授权继续修复
+    required: true
+    description: 原任务要求实现功能时，调用独立 Review 后实现者处理本任务 Bug，无需用户再次催促或授权。
+    preconditions:
+      - 自有来源 Agent 已获实现简单功能的明确授权，代码存在属于该任务且可实际复现的 Bug。
+      - 独立 Reviewer 和原生消息读取可用；CLI 入口来源加载当前 review-agent Skill，菜单入口来源不预先加载该 Skill。
+    steps:
+      - CLI 入口在原任务中要求调用 review agent；菜单入口使用 toolkit:playwright-cli 点击终端代码 Review。两种入口分别使用本例自有来源，等待独立 Reviewer 保存有 Bug 的报告并回传。
+      - 观察来源 Agent 的原生工具记录和文件改动，确认其继续修复并实际验证该 Bug，没有要求用户再次授权；仅口头表示要修复不算完成。
+      - 保存原始授权、Review 报告、修复差异和验证输出，清理自有资源。
+  - id: RSD-007
+    name: 明确只审查时实现者保持只读
+    required: true
+    description: 用户明确要求只审查不修改时，已复现 Bug 的回传不会覆盖该限制。
+    preconditions:
+      - 自有项目存在可实际复现的 Bug，来源 Agent 的当前用户要求明确为只审查、不修改。
+      - 来源 Agent 加载当前 review-agent Skill，原生消息和工作区差异可读。
+    steps:
+      - 要求调用独立 Review 并等待已复现 Bug 回传，读取来源 Agent 的原生回复与工具记录。
+      - 确认来源只回报已复现问题且未修改业务代码；保存执行前后差异及原始消息，清理自有资源。

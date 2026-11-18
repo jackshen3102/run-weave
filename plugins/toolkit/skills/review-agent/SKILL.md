@@ -47,12 +47,15 @@ Reviewer；用后续查询核对，不能把 `preparing` 说成已经审完。�
 的 reviewId 继续查询，不把缺少状态解释为审查失败。wait-ms=0 仅执行一次查询。
 网络结果未知时先 list 查询原 requestId，再用同一 ID 恢复，不换 ID 盲目重发。
 
-回报独立报告中的 summary、findings、checks、limitations、coverageComplete，以及
-run 的 phase、scope、stale、delivery/error。`completed`、零 findings、`delivery=written`
-都不单独表示需求完成：覆盖缺失、目标未核验、过期快照、回传异常需要明确说明。
-原 CLI 报告必须基于保存的报告，不冒充 Reviewer 作答。
+读取保存的独立报告和 run 状态，核对范围、快照有效性及回传结果。默认只回报已实际复现的
+Bug：级别、位置、标题、影响和证据。未验证目标、覆盖缺口和 limitations 保留在完整报告，
+不逐项转抄到来源终端；用户明确询问时再解释。零 Bug 不发送问题反馈，也不代表需求已经
+全部验证。原 CLI 报告必须基于保存的报告，不冒充 Reviewer 作答。
 
-Backend 负责必要反馈的自动回传；Skill 不再向来源终端 send 一份。无问题且覆盖完整时
-可能 skipped，此时仍从 show 读取结论。不要自动关闭事项、改代码或追着重试失败的 Reviewer。
-用户授权修复时可由当前实现者处理，再按新请求复审；复审会冻结新快照，Backend 决定安全复用
-原 Reviewer 或创建新会话。这不是任意聊天转发，目前仅有 Review 一个目标。
+Backend 仅自动回传已复现的 Bug；Skill 不再向来源终端 send 一份。没有已复现 Bug 时
+delivery 为 skipped，即使报告仍有验收阻塞。不要自动关闭事项或追着重试失败的 Reviewer。
+独立 Reviewer 只审查、不修改业务代码；来源实现 Agent 收到问题后，按原任务已有授权继续
+修复并验证，不因调用 Review 或收到自动反馈而要求用户重复授权。用户明确要求只审查、
+不修改、等待确认、停止或已人工接管时遵循最新限制；超出原任务范围的操作仍需相应授权。
+复审按新请求冻结新快照，Backend 决定安全复用原 Reviewer 或创建新会话。
+这不是任意聊天转发，目前仅有 Review 一个目标。
