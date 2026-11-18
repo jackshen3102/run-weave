@@ -137,8 +137,8 @@ Host 本地执行，界面明确区分两种操作。Host 不创建隧道；可�
 Agent 控制不属于首版；不降低 SIP/AMFI，不承诺 FileVault、Touch ID 或系统安全弹窗
 都可远控。
 
-远控与配对全屏在宿主整体 `clarityMask()`，原生视频 layer 另设 `preventsCapture`。
-后者不能替代 Clarity 云端回放验收。screen 分类固定为 `remote_desktop`、`remote_hosts`
+远控与配对全屏在宿主整体 `clarityMask()`；原生视频 layer 允许用户截屏与录屏，
+Clarity 云端回放遮罩需单独验收。screen 分类固定为 `remote_desktop`、`remote_hosts`
 和 `remote_pairing`，不包含机器名、Host ID、endpoint 或输入正文。日志只保留非敏感
 状态、尺寸、时序与计数，不记录帧、文本、配对码或 credential。
 

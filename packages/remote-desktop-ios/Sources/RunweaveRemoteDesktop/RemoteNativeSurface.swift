@@ -58,9 +58,8 @@ final class RemoteSurfaceUIView: UIView, UIGestureRecognizerDelegate {
         videoView.backgroundColor = .black
         videoView.isUserInteractionEnabled = false // Gestures remain on the outer surface.
         videoLayer.videoGravity = .resize
-        // This prevents ordinary capture of the layer; the host must also mask
-        // the full presentation in its analytics SDK, including text and pairing.
-        videoLayer.preventsCapture = true
+        // Allow user screenshots; analytics masking belongs to the embedding app.
+        videoLayer.preventsCapture = false
         addSubview(videoView)
         if #available(iOS 17.4, *) {
             displayReadyObserver = NotificationCenter.default.addObserver(
