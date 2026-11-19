@@ -321,12 +321,9 @@ async function chooseModelAndEffort(
   try {
     await typeText(target, "/model");
     await press(target, "Enter");
-    if (target.provider === "traex") {
-      // TraeX first confirms the slash-command completion, then opens its menu.
-      const prompt = await waitForEitherMenu(target,
-        ["Select Model and Effort", "/model  choose what model"]);
-      if (!prompt.startsWith("Select Model and Effort")) await press(target, "Enter");
-    }
+    // Wait for the native menu after submitting the slash command. The PTY
+    // write acknowledgement can precede rendering; a stale autocomplete frame
+    // must never cause a second Enter that selects the current model.
     let menu = await waitForMenu(target, "Select Model and Effort");
     if (target.provider === "traex") {
     await typeText(target, model.label);
