@@ -4,6 +4,10 @@ import type {
 } from "@runweave/shared/feishu/bridge";
 import { resolveAuthContext } from "../client/auth-context.js";
 import { CliError } from "../errors.js";
+export function isHostedFeishuEndpoint(endpoint: string): boolean {
+  const url = new URL(endpoint);
+  return url.hostname === "127.0.0.1" && url.pathname === "/backend/internal/terminal-completion";
+}
 export async function notifyFeishuNode(
   payload: FeishuNotifyPayload,
   env: NodeJS.ProcessEnv,
@@ -22,7 +26,7 @@ export async function notifyFeishuNode(
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(40_000),
   };
-  if (endpoint && env.RUNWEAVE_HOOK_TOKEN) {
+  if (endpoint && env.RUNWEAVE_HOOK_TOKEN && !isHostedFeishuEndpoint(endpoint)) {
     const response = await fetch(
       `${endpoint.replace(/\/$/, "")}/feishu/notify`,
       {

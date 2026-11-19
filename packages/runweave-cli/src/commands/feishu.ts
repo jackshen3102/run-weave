@@ -47,7 +47,10 @@ export async function runFeishuCommand(
     if (parsed.options.stdin !== true)
       throw new CliError("rw feishu notify requires --stdin", 2);
     payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
-    if (!(await awaitFeishuNotification(payload, io.env))) {
+    if (!(await awaitFeishuNotification(payload, io.env, {
+      profileName: getStringOption(parsed.options, "profile"),
+      backendPort: getStringOption(parsed.options, "backend-port"),
+    }))) {
       writeOutput(io.stdout, mode, {
         sent: false,
         reason: "notification_policy",

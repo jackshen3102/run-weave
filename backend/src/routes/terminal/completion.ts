@@ -1,5 +1,5 @@
 import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
-import { feishuNotifyHandler } from "../feishu";
+import { feishuNotificationPolicyHandler, feishuNotifyHandler } from "../feishu";
 import type { FeishuBridgeConnector } from "../../feishu/bridge-connector";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { Router } from "express";
@@ -68,26 +68,13 @@ export function createInternalTerminalCompletionRouter(options: {
     next();
   }, feishuNotifyHandler(options.feishuConnector, options.terminalSessionManager));
 
-  router.post("/feishu", async (req, res) => {
+  router.post("/feishu", (req, res, next) => {
     if (!options.hookToken || req.header("x-runweave-hook-token") !== options.hookToken) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
-    const parsed = z.object({
-      terminalSessionId: z.string().min(1),
-      notificationId: z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,15}$/)]),
-      claim: z.boolean(),
-    }).strict().safeParse(req.body);
-    if (!parsed.success) { res.status(400).json({ message: "Invalid notification request" }); return; }
-    try {
-      res.json(await options.terminalSessionManager.feishuNotifications.decide(
-        parsed.data.terminalSessionId, parsed.data.notificationId, parsed.data.claim,
-      ));
-    } catch (error) {
-      terminalCompletionLogger.warn("terminal-completion.feishu-policy.failed", { error });
-      res.status(503).json({ message: "Notification policy unavailable" });
-    }
-  });
+    next();
+  }, feishuNotificationPolicyHandler(options.terminalSessionManager));
 
   router.post("/", async (req, res) => {
     const expectedToken = options.hookToken;

@@ -193,7 +193,7 @@ export function createTerminalRouter(
       if (!session) { res.status(404).json({ code: "agent_settings_unavailable", message: "终端不存在" }); return; }
       if (!options?.tmuxService) { res.status(503).json({ code: "agent_settings_unavailable", message: "终端服务不可用" }); return; }
       const panelId = typeof req.query.panelId === "string" ? req.query.panelId : undefined;
-      res.json(await getTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, panelId));
+      res.json(await getTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, panelId, options.runtimeRegistry));
     } catch (error) { sendAgentSettingsError(res, error); }
   });
   router.put("/session/:id/agent-settings", async (req, res) => {
@@ -203,7 +203,7 @@ export function createTerminalRouter(
       const session = terminalSessionManager.getSession(req.params.id);
       if (!session) { res.status(404).json({ code: "agent_settings_unavailable", message: "终端不存在" }); return; }
       if (!options?.tmuxService) { res.status(503).json({ code: "agent_settings_unavailable", message: "终端服务不可用" }); return; }
-      res.json(await updateTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, parsed.data));
+      res.json(await updateTerminalAgentSettings(terminalSessionManager, options.tmuxService, session, parsed.data, options.runtimeRegistry));
     } catch (error) { sendAgentSettingsError(res, error); }
   });
 

@@ -36,6 +36,11 @@ Dots 等主 Agent 的专用终端派发、观察、验收和接手见[终端任�
 升级旧锁协议及安装依赖的要求见 [飞书部署](../deployment/feishu-app-integration.md)。
 详细合同见 [桌面与飞书完成通知](../architecture/terminal-completion-notifications.md)。
 
+Windows 独立 Server 的自动通知沿用所属实例已登录的 CLI profile，调用
+`POST /api/feishu/notification-policy` 领取原有发送资格，再调用 `/api/feishu/notify`。
+这条路径不依赖长期存活的 PTY Host 是否代理飞书接口；未登录时按认证失败处理，
+不会绕过时长、查看状态或单次领取规则。
+
 ### 屏幕事项冻结导出
 
 ```bash
