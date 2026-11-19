@@ -5,7 +5,7 @@ import type {
   TerminalFileLinkResponse,
 } from "@runweave/shared/terminal/file-link";
 import { isSupportedTerminalFileLinkPath } from "@runweave/shared/terminal-preview-core";
-import { resolvePreviewPath, TerminalPreviewError } from "./paths";
+import { normalizePreviewFilePath, resolvePreviewPath, TerminalPreviewError } from "./paths";
 
 function fileLinkPaths(
   path: string,
@@ -21,7 +21,7 @@ function fileLinkPaths(
     const prefix = fragment?.[1];
     if (
       !fragment || !prefix ||
-      (prefix.includes(":") && !/^[a-z]:[\\/][^:]*$/i.test(prefix)) ||
+      (prefix.includes(":") && !/^\/?[a-z]:[\\/][^:]*$/i.test(prefix)) ||
       Array.from(prefix).some((char) => char.charCodeAt(0) < 32) ||
       isSupportedTerminalFileLinkPath(prefix)
     )
@@ -60,10 +60,11 @@ export async function resolveTerminalFileLink(input: {
   }
   const candidates: TerminalFileLinkResponse["candidates"] = [];
   // Resolve every hypothesis; an existing short suffix must not hide a full path.
-  for (const requestedPath of fileLinkPaths(
+  for (const candidatePath of fileLinkPaths(
     input.requestedPath.trim(),
     input.context,
   )) {
+    const requestedPath = normalizePreviewFilePath(candidatePath);
     const absolute = path.isAbsolute(requestedPath);
     const explicitRelative = /^\.{1,2}[\\/]/.test(requestedPath);
     const roots = absolute

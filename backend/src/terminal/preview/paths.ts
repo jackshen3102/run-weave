@@ -49,6 +49,15 @@ function isInsidePath(rootPath: string, targetPath: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+export function normalizePreviewFilePath(requestedPath: string): string {
+  const trimmed = requestedPath.trim();
+  // Markdown/file URLs can encode a Windows drive as /C:/ rather than C:/.
+  // Only Windows owns that interpretation; /C:/ can be a real POSIX path.
+  return process.platform === "win32" && /^\/[a-z]:[\\/]/i.test(trimmed)
+    ? trimmed.slice(1)
+    : trimmed;
+}
+
 export async function resolvePreviewPath(
   projectPath: string | null | undefined,
   requestedPath: string,
@@ -59,7 +68,7 @@ export async function resolvePreviewPath(
   previewPath: string;
   relativePath: string;
 }> {
-  const trimmedPath = requestedPath.trim();
+  const trimmedPath = normalizePreviewFilePath(requestedPath);
   if (!trimmedPath) {
     throw new TerminalPreviewError("Enter a file path", 400);
   }
