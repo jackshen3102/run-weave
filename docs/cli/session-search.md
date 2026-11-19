@@ -26,7 +26,7 @@ rw session-search search --query '缓存查询' --all-projects --no-update --jso
 
 ## 更新与定位
 
-更新触发策略严格对齐 ags 0.5.0：按需查询或手动 `index` 时更新；没有文件监听、定时扫描或 Backend 启动预扫描。打开页面及状态查询只读取已有索引元数据。新文件完整建立索引；追加文件先校验旧前缀哈希，再解析新增完整行；重写、截断或替换会重建。追加路径仍会读取旧前缀，不声称只读新增字节。未完成的末行暂缓，损坏行和不支持的格式明确报告覆盖缺口。已删除文件从索引移除，不可读来源暂停返回结果。
+更新触发策略严格对齐 ags 0.5.0：按需查询或手动 `index` 时更新；没有文件监听、定时扫描或 Backend 启动预扫描。打开页面、CLI `status` 及 HTTP 状态查询只读取已有索引元数据；MCP 首次调用（含 `session_search_status`）仍会尝试更新一次，见下文 MCP 合同。新文件完整建立索引；追加文件先校验旧前缀哈希，再解析新增完整行；重写、截断或替换会重建。追加路径仍会读取旧前缀，不声称只读新增字节。未完成的末行暂缓，损坏行和不支持的格式明确报告覆盖缺口。已删除文件从索引移除，不可读来源暂停返回结果。
 
 默认目录遵循 Agent 自身配置：`CODEX_HOME/{sessions,archived_sessions}`、`PI_CODING_AGENT_DIR/sessions`、`CLAUDE_CONFIG_DIR/projects`；未配置时使用各 Agent 的默认用户目录。索引位于 Backend browser profile 的 `session-search/index.sqlite`，通过独立 Worker 读写。单文件上限 512 MiB，单行 16 MiB，单条文本 2 MiB；超限来源或记录会在覆盖状态中报告。
 
