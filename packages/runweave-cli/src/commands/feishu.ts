@@ -8,7 +8,7 @@ import { notifyFeishuWebhook } from "../feishu/webhook-notifier.js";
 import { runBridgeConnection } from "../feishu/bridge-runtime.js";
 import * as Lark from "@larksuiteoapi/node-sdk";
 import { getStringOption, parseArgs, resolveOutputMode } from "../args.js";
-import { resolveAuthContext } from "../client/auth-context.js";
+import { resolveAuthContext, type AuthContext } from "../client/auth-context.js";
 import { TerminalHttpClient } from "../client/terminal-http-client.js";
 import { CliError } from "../errors.js";
 import {
@@ -42,12 +42,21 @@ export async function runFeishuCommand(
   const parsed = parseArgs(args, new Set(["json", "plain", "stdin"]));
   const mode = resolveOutputMode(parsed.options);
   configuration().requireDomain("services.feishu");
+  // Policy and delivery use one login bound to this invocation's instance.
+  // Re-reading Windows ACLs between requests can block socket-close events.
+  let nodeAuth: Promise<AuthContext> | undefined;
+  const getAuthContext = () => nodeAuth ??= resolveAuthContext({
+    env: io.env,
+    profileName: getStringOption(parsed.options, "profile"),
+    backendPort: getStringOption(parsed.options, "backend-port"),
+  });
   let payload: NotifyPayload | undefined;
   if (subcommand === "notify") {
     if (parsed.options.stdin !== true)
       throw new CliError("rw feishu notify requires --stdin", 2);
     payload = JSON.parse(await readStdin(io.stdin)) as NotifyPayload;
     if (!(await awaitFeishuNotification(payload, io.env, {
+      getAuthContext,
       profileName: getStringOption(parsed.options, "profile"),
       backendPort: getStringOption(parsed.options, "backend-port"),
     }))) {
@@ -76,6 +85,7 @@ export async function runFeishuCommand(
       io.env,
       getStringOption(parsed.options, "profile"),
       getStringOption(parsed.options, "backend-port"),
+      getAuthContext,
     );
     writeOutput(io.stdout, mode, {
       sent: true,

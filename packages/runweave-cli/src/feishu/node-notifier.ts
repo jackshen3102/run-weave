@@ -2,7 +2,7 @@ import type {
   FeishuNotifyPayload,
   FeishuTopicResult,
 } from "@runweave/shared/feishu/bridge";
-import { resolveAuthContext } from "../client/auth-context.js";
+import { resolveAuthContext, type AuthContext } from "../client/auth-context.js";
 import { CliError } from "../errors.js";
 export function isHostedFeishuEndpoint(endpoint: string): boolean {
   const url = new URL(endpoint);
@@ -13,6 +13,7 @@ export async function notifyFeishuNode(
   env: NodeJS.ProcessEnv,
   profileName?: string,
   backendPort?: string,
+  getAuthContext?: () => Promise<AuthContext>,
 ): Promise<FeishuTopicResult> {
   const endpoint =
     env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT ??
@@ -45,6 +46,6 @@ export async function notifyFeishuNode(
       );
     return (await response.json()) as FeishuTopicResult;
   }
-  const auth = await resolveAuthContext({ env, profileName, backendPort });
+  const auth = await (getAuthContext?.() ?? resolveAuthContext({ env, profileName, backendPort }));
   return auth.requestJson<FeishuTopicResult>("/api/feishu/notify", init);
 }

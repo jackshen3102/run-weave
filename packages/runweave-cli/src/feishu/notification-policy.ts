@@ -1,13 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { TerminalFeishuDecision, TerminalFeishuNotificationRequest } from "@runweave/shared/terminal/completion";
-import { resolveAuthContext } from "../client/auth-context.js";
+import { resolveAuthContext, type AuthContext } from "../client/auth-context.js";
 import { isHostedFeishuEndpoint } from "./node-notifier.js";
 
 /** The detached notification process waits; the agent's Stop hook never does. */
 export async function awaitFeishuNotification(
   payload: { terminalSessionId?: unknown; feishuNotificationId?: unknown },
   env: NodeJS.ProcessEnv,
-  options: { profileName?: string; backendPort?: string } = {},
+  options: { profileName?: string; backendPort?: string; getAuthContext?: () => Promise<AuthContext> } = {},
 ): Promise<boolean> {
   const endpoint = env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT ?? env.RUNWEAVE_HOOK_ENDPOINT?.replace(/\/internal\/terminal\/agent-hook\/?$/, "/internal/terminal-completion");
   const token = env.RUNWEAVE_HOOK_TOKEN;
@@ -17,7 +17,7 @@ export async function awaitFeishuNotification(
   if (!endpoint || !token || typeof payload.terminalSessionId !== "string" || typeof notificationId !== "string" || !notificationId) return false;
   // The long-lived PTY Host does not proxy Feishu routes. Use this instance's
   // existing CLI login without changing or restarting the terminal owner.
-  const auth = isHostedFeishuEndpoint(endpoint) ? await resolveAuthContext({ ...options, env }) : null;
+  const auth = isHostedFeishuEndpoint(endpoint) ? await (options.getAuthContext?.() ?? resolveAuthContext({ ...options, env })) : null;
   const deadline = Date.now() + 35_000;
   while (Date.now() <= deadline) {
     const request = {
