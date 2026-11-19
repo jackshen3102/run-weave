@@ -148,8 +148,15 @@ CLI 探测成功不等同当前会话就绪，未验证的 Claude 操作保持�
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行) |
 | 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml)                                                                |
+| 原生 Agent 历史关键词搜索 | [会话搜索合同](../cli/session-search.md) |
 | 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                                                                               |
 | Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                                                                                     |
+
+会话搜索由 Backend 持有原生记录的 SQLite/FTS5 派生索引，Web、Electron、iOS、CLI 和 MCP 共用该索引。
+`packages/agent-history-node` 提供原生格式解析与完整行读取，供会话搜索和日报复用；
+两者保留独立投影与生命周期，不以日报或 Activity 代替原文。索引只在查询或手动更新时扫描，
+MCP 每个进程首次会话工具调用尝试更新一次；没有启动预扫描、文件监听或定时扫描。
+来源、资源预算和证据定位统一见[会话搜索合同](../cli/session-search.md)。
 
 普通定时任务不绑定项目，每次运行使用系统分配的私有目录；Task 不保存项目，Run 的 executionContext 冻结执行位置。
 旧项目任务须显式预览并迁移，旧日程迁移后暂停，操作与协议版本见 [定时任务 CLI](../cli/scheduled-task-cli.md)。

@@ -11,6 +11,7 @@
 | Terminal、Project、输入投递与 Agent 控制                | [terminal-cli.md](./terminal-cli.md)                                                                                                                     |
 | Terminal 快照分享、匿名读取与有效期                     | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                                                                                               |
 | iOS 两台模拟器跨 worktree 复用                          | [ios-simulators.md](./ios-simulators.md)                                                                                                                 |
+| 原生 Agent 历史关键词检索、增量索引与原文定位        | [会话搜索](./session-search.md)                                                                                                                         |
 | 普通会话经验检索、历史盘点、增量审查与结果回执          | [experience-cli.md](./experience-cli.md)                                                                                                                 |
 | 本机 Codex 历史用量与执行疑点报告                       | [token-report.md](./token-report.md)                                                                                                                     |
 | 本机 Codex Skill 加载与候选使用统计                     | [skill-report.md](./skill-report.md)                                                                                                                     |
@@ -48,5 +49,3 @@ rw screen-recording analysis export --instance stable --day 2026-10-31 --out /ab
 不带 `--out` 时标准输出为冻结快照 JSON。导出不包含图片、视频、本地媒体路径或易失 viewID。
 `revision` 按日期维护，`coverage=complete` 仅表示已记录范围结算完成，不能证明全天工作完整。
 来源不可达返回失败；待处理或过期未处理材料保留缺口，不能解释成当天没有工作。
-
-- [会话搜索](session-search.md)：仅原生 Agent 记录的关键词检索、增量索引、原文定位与 CLI / MCP 合同。
