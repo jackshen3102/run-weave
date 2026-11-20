@@ -132,7 +132,7 @@ function detailPage() {
   );
 }
 function terminalPage() {
-  return `<div class="terminal-content"><p>${escape(state.terminalHistory)}</p>${state.sent.map((text) => `<p class="prompt">› ${escape(text)}</p><p>• 已接收指令。</p>`).join("")}</div>${state.composer ? `<div class="composer"><textarea id="draft" aria-label="终端输入框">${escape(state.draft)}</textarea><div class="composer-footer"><span>GPT-6.1-Sol · 中</span><button data-action="submit-draft" aria-label="发送输入框内容">${icon("send")}</button></div></div>` : `<div class="terminal-footer">${button("composer", "打开输入框", "text-button")}</div>`}`;
+  return `<div class="terminal-content"><p>${escape(state.terminalHistory)}</p>${state.sent.map((text) => `<p class="prompt">› ${escape(text)}</p><p>• 已接收指令。</p>`).join("")}</div>${state.composer ? `<div class="composer"><textarea id="draft" aria-label="终端输入框">${escape(state.draft)}</textarea><div class="composer-footer"><span>GPT-6.2-Sol · 中</span><button data-action="submit-draft" aria-label="发送输入框内容">${icon("send")}</button></div></div>` : `<div class="terminal-footer">${button("composer", "打开输入框", "text-button")}</div>`}`;
 }
 function overlay() {
   if (!state.overlay) return "";

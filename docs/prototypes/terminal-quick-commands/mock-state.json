@@ -25,7 +25,7 @@
     { "id": "clear", "title": "/clear", "data": "/clear" }
   ],
   "backgroundDefaults": {
-    "model": "GPT-6.1-Sol",
+    "model": "GPT-6.2-Sol",
     "effort": "中",
     "executionPolicy": "完全访问"
   },
