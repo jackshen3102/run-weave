@@ -115,7 +115,7 @@ def defaults(slug, name):
         "keywords": ["agent memory", "long-term memory", "episodic memory"],
         "window_days": 60, "candidate_limit": 80, "max_documents": 5,
         "history_days": 180, "history_limit": 30,
-        "generation_model": "gpt-6.1-sol", "review_model": "gpt-6-astra",
+        "generation_model": "gpt-6.2-sol", "review_model": "gpt-6-astra",
         "max_model_turns": 24, "model_timeout_seconds": 600,
         "max_prompt_chars": 600000, "max_source_chars": 200000,
         "sources": [

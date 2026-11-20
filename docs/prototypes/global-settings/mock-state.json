@@ -950,7 +950,7 @@
           "supportsFast": true
         },
         {
-          "id": "gpt-6.1-sol",
+          "id": "gpt-6.2-sol",
           "efforts": ["low", "medium", "high", "xhigh"],
           "supportsFast": true
         },

@@ -13,7 +13,7 @@
 | `sources`                                         | arXiv、Letta/LangChain站点地图、Hugging Face和美团RSS；按来源轮询分配候选，不让单一源占满全部名额 |
 | `window_days`、`candidate_limit`、`max_documents` | 60、80、5；明确URL来源由用户指定，不强制落在时间窗内                                              |
 | `history_days`、`history_limit`                   | 180、30；仅使用已准入研究，实际绑定数量受完整输入预算约束                                         |
-| `generation_model`、`review_model`                | `gpt-6.1-sol`、`gpt-6-astra`；必须不同，以CLI请求配置记录，不推测服务端内部模型                   |
+| `generation_model`、`review_model`                | `gpt-6.2-sol`、`gpt-6-astra`；必须不同，以CLI请求配置记录，不推测服务端内部模型                   |
 | `max_model_turns`                                 | 24，包含修订和结果未知的已预留CLI轮次；不等同服务端请求计数或美元费用                             |
 | `model_timeout_seconds`                           | 每轮600秒；超时终止本次子进程组，保留未知结果，不自动重发                                         |
 | `max_source_chars`、`max_prompt_chars`            | 单篇完整正文200000字符、每次输入600000字符；不截断原文冒充全文                                    |
