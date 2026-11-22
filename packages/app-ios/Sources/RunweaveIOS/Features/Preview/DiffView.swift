@@ -23,43 +23,29 @@ enum DiffBuilder {
           id: result.count, kind: kind, old: i.map { $0 + 1 }, new: j.map { $0 + 1 },
           content: content))
     }
-    if a.count + b.count > 800 || a.count * b.count > 180000 {
-      for (i, text) in a.enumerated() { append("removed", i, nil, text) }
-      for (j, text) in b.enumerated() { append("added", nil, j, text) }
-      return result
-    }
-    let width = b.count + 1
-    var table = [Int](repeating: 0, count: (a.count + 1) * width)
-    for i in a.indices.reversed() {
-      for j in b.indices.reversed() {
-        table[i * width + j] =
-          a[i] == b[j]
-          ? table[(i + 1) * width + j + 1] + 1
-          : max(table[(i + 1) * width + j], table[i * width + j + 1])
+    let changes = b.difference(from: a)
+    var removed = IndexSet()
+    var added = IndexSet()
+    for change in changes {
+      switch change {
+      case .remove(let offset, _, _): removed.insert(offset)
+      case .insert(let offset, _, _): added.insert(offset)
       }
     }
     var i = 0
     var j = 0
-    while i < a.count && j < b.count {
-      if a[i] == b[j] {
+    while i < a.count || j < b.count {
+      if removed.contains(i) {
+        append("removed", i, nil, a[i])
+        i += 1
+      } else if added.contains(j) {
+        append("added", nil, j, b[j])
+        j += 1
+      } else {
         append("equal", i, j, a[i])
         i += 1
         j += 1
-      } else if table[(i + 1) * width + j] >= table[i * width + j + 1] {
-        append("removed", i, nil, a[i])
-        i += 1
-      } else {
-        append("added", nil, j, b[j])
-        j += 1
       }
-    }
-    while i < a.count {
-      append("removed", i, nil, a[i])
-      i += 1
-    }
-    while j < b.count {
-      append("added", nil, j, b[j])
-      j += 1
     }
     var collapsed: [DiffLine] = []
     var cursor = 0
