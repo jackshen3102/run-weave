@@ -195,6 +195,8 @@ Web/Electron 的文件名搜索、文本正文和 Diff 查询在没有观察者�
 - Review changes 分 Staged / Working 两组，先读索引，再按选择懒加载单文件 diff；Diff Editor 只读。
 - 变更预览由 `file-diff` 的内容能力与两侧状态决定；图片直接预览，Markdown/SVG 保留 Diff/Preview，
   普通文本默认 Diff。空文件、无文本变化、不支持格式、超限和读取失败分别展示，不用空字符串隐去错误。
+- 原生 iOS 的[文本 Diff 渲染器](../../packages/app-ios/Sources/RunweaveIOS/Features/Preview/DiffView.swift)
+  对服务端返回的文本按行比较。大文件也保留未变更上下文和对应的新旧行号，连续的未变更区段会折叠中间行。
 - Staged 比较 HEAD → index，Working 比较 index → 工作区；重命名保留原路径。图片使用鉴权
   `preview/change-asset`，参数限于 path、kind、side、version，默认新侧，删除时展示旧侧并标注版本。
   version 为响应字节摘要，变化返回 409 供重新加载；不会用磁盘图片冒充暂存版本。旧 Backend 缺少能力字段时，
