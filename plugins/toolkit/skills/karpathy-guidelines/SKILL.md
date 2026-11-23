@@ -24,7 +24,7 @@ Before implementing:
 
 **Minimum code that solves the problem. Nothing speculative.**
 
-- No features beyond what was asked.
+- Before expanding the scope, identify the current requirement or existing behavior that depends on the extra change. Ground that dependency in the user's request, an actual caller, or an existing contract. If you cannot establish it, leave the change out.
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
