@@ -166,6 +166,10 @@ export function buildPtyEnv(
       ...sessionEnv,
     },
   );
+  // node-pty serializes undefined values as text. A missing pane ID must stay absent.
+  for (const [name, value] of Object.entries(merged)) {
+    if (value === undefined) delete merged[name];
+  }
   const currentTerm = merged.TERM?.trim();
   if (!currentTerm || currentTerm === "dumb") {
     merged.TERM = "xterm-256color";

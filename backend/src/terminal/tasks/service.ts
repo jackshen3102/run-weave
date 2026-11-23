@@ -13,6 +13,7 @@ import { buildPaneTarget } from "../application/panel-common";
 import { sendInputToSession } from "../application/input-dispatcher";
 import { resolveConversationTarget } from "../application/conversation";
 import { beginSupervisorDelivery, observeTerminalInput } from "../runtime/input-admission";
+import type { PtyRuntime } from "../runtime/pty-service";
 import { TerminalTaskStore } from "./store";
 
 export class TerminalTaskError extends Error {
@@ -24,6 +25,7 @@ function digest(value: unknown): string { return createHash("sha256").update(JSO
 export class TerminalTaskService {
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly observers = new Map<string, () => void>();
+  private readonly ptyTargets = new Map<string, PtyRuntime>();
   private closing = false;
 
   constructor(
@@ -80,6 +82,10 @@ export class TerminalTaskService {
 
   private target(task: TerminalTask) {
     const session = task.terminalSessionId ? this.manager.getSession(task.terminalSessionId) : null;
+    const owner = this.ptyTargets.get(task.taskId);
+    if (owner && session?.runtimeKind === "pty" && session.status === "running" &&
+        this.options.runtimeRegistry?.getSessionRuntime(session.id) === owner)
+      return { session, panel: null, pane: undefined };
     const panel = task.panelId ? this.manager.getPanel(task.panelId) : null;
     if (!session || session.status !== "running" || session.runtimeKind !== "tmux" ||
         !panel || panel.terminalSessionId !== session.id || panel.status !== "running" || !this.options.tmuxService)
@@ -89,10 +95,11 @@ export class TerminalTaskService {
 
   private assertIdentity(task: TerminalTask): void {
     const { session, panel } = this.target(task);
-    const identity = resolveConversationTarget(this.manager, session.id, panel.id).target;
-    if (task.threadId && (identity?.threadId !== task.threadId || identity.provider !== "codex"))
+    const identity = resolveConversationTarget(this.manager, session.id, panel?.id).target;
+    if (task.threadId && (identity?.threadId !== task.threadId || identity.provider !== "codex" ||
+        (!panel && (identity.panelId !== null || session.terminalState?.agent !== "codex"))))
       conflict("target_changed", "Original Codex thread changed; automatic input disabled");
-    if (task.launchOperationId && !this.manager.matchesPanelAgentOperationGeneration(session.id, panel.id, task.launchOperationId, "codex"))
+    if (panel && task.launchOperationId && !this.manager.matchesPanelAgentOperationGeneration(session.id, panel.id, task.launchOperationId, "codex"))
       conflict("target_changed", "Agent launch generation changed");
   }
 
@@ -102,8 +109,11 @@ export class TerminalTaskService {
   }
 
   private bootstrap(task: TerminalTask): string { return `RW_TASK_READY_${digest(task.taskId).slice(0, 20)}`; }
+  private bootstrapPrompt(task: TerminalTask): string {
+    return `初始化任务终端。只回复 ${this.bootstrap(task)}，不要执行其他工作。`;
+  }
 
-  create(request: CreateTerminalTaskRequest): Promise<TerminalTask> {
+  create(request: CreateTerminalTaskRequest, ptyLaunch?: { command: string; args: string[] }): Promise<TerminalTask> {
     return this.exclusive(request.taskId, async () => {
       this.store.assertWritable();
       const existing = this.store.tasks.get(request.taskId);
@@ -120,13 +130,24 @@ export class TerminalTaskService {
       this.store.tasks.set(task.taskId, task);
       await this.touch(task);
       try {
-        const session = await createTerminalSession(this.manager, { projectId: task.projectId, cwd: task.cwd, runtimePreference: "tmux" }, {
+        const launch = ptyLaunch
+          ? { runtimePreference: "pty" as const, command: ptyLaunch.command,
+              args: ["-c", "check_for_update_on_startup=false", ...ptyLaunch.args, this.bootstrapPrompt(task)] }
+          : { runtimePreference: "tmux" as const };
+        const session = await createTerminalSession(this.manager, { projectId: task.projectId, cwd: task.cwd, ...launch }, {
           ...this.options, strictDefaultPanel: true,
           onSessionCreated: async (id) => { task.terminalSessionId = id; await this.touch(task); },
         });
+        if (ptyLaunch) {
+          const runtime = this.options.runtimeRegistry?.getSessionRuntime(session.id);
+          if (runtime) {
+            this.ptyTargets.set(task.taskId, runtime);
+            runtime.onExit(() => this.ptyTargets.delete(task.taskId));
+          }
+        }
         task.panelId = this.manager.getPanelWorkspace(session.id)?.activePanelId ?? null;
         this.target(task);
-        task.phase = "created";
+        task.phase = ptyLaunch ? "starting" : "created";
         this.watchInput(task);
       } catch (error) {
         task.phase = "unavailable";
@@ -145,7 +166,7 @@ export class TerminalTaskService {
       this.checkRevision(task, request.expectedRevision);
       this.assertControl(task);
       const { session, panel } = this.target(task);
-      if (panel.terminalState?.state !== "shell_idle") conflict("agent_not_idle", "Task terminal is no longer an idle shell");
+      if (!panel || panel.terminalState?.state !== "shell_idle") conflict("agent_not_idle", "Task terminal is no longer an idle shell");
       const release = beginSupervisorDelivery(session);
       try {
         task.phase = "starting";
@@ -153,7 +174,7 @@ export class TerminalTaskService {
         const prepared = await prepareTerminalAgent(this.manager, session, this.options, {
           agent: "codex", panelId: panel.id, cwd: task.cwd,
           ...(internal ?? {}),
-          prompt: `初始化任务终端。只回复 ${this.bootstrap(task)}，不要执行其他工作。`,
+          prompt: this.bootstrapPrompt(task),
           ...(request.commandLine ? { commandLine: request.commandLine } : {}),
         }, { supervisorInput: true, validateSupervisorTarget: () => this.assertControl(task) });
         task.launchOperationId = prepared.operationId;
@@ -179,13 +200,13 @@ export class TerminalTaskService {
     let terminalState = null;
     try {
       const { session, panel } = this.target(task);
-      terminalState = panel.terminalState ?? null;
+      terminalState = (panel ?? session).terminalState ?? null;
       this.assertIdentity(task);
-      const identity = resolveConversationTarget(this.manager, session.id, panel.id).target;
-      if (identity?.provider === "codex" && task.launchOperationId) {
+      const identity = resolveConversationTarget(this.manager, session.id, panel?.id).target;
+      if (identity?.provider === "codex" && (panel ? task.launchOperationId : identity.panelId === null)) {
         const response = await this.history.getThreadDetail(identity.threadId);
         this.assertIdentity(task);
-        const current = resolveConversationTarget(this.manager, session.id, panel.id).target;
+        const current = resolveConversationTarget(this.manager, session.id, panel?.id).target;
         if (current?.threadId !== identity.threadId) conflict("target_changed", "Thread changed while reading");
         if (response.availability !== "available" || !response.detail || !("threadId" in response.detail) ||
             response.detail.provider !== "codex" || response.detail.threadId !== identity.threadId)
@@ -193,7 +214,7 @@ export class TerminalTaskService {
         turns = response.detail.turns;
         partial = turns.some((turn) => turn.itemsView !== "full");
         const bootstrap = turns.find((turn) => turn.messages.some((message) => message.role === "user" && message.text.includes(this.bootstrap(task))));
-        if (task.phase === "starting" && bootstrap?.status === "completed" && panel.terminalState?.state === "agent_idle") {
+        if (task.phase === "starting" && bootstrap?.status === "completed" && (panel ? panel.terminalState : session.terminalState)?.state === "agent_idle") {
           task.threadId = identity.threadId;
           task.phase = "ready";
           delete task.error;
@@ -246,7 +267,7 @@ export class TerminalTaskService {
       if (observation.availability !== "available" || task.phase !== "ready") conflict("agent_not_ready", "Agent bootstrap and native history must be ready before business input");
       if (task.dispatches.some((item) => item.status !== "received")) conflict("delivery_unresolved", "Reconcile the previous dispatch before sending another");
       const { session, panel, pane } = this.target(task);
-      const state = panel.terminalState?.state;
+      const state = (panel ?? session).terminalState?.state;
       if (state !== "agent_idle" && !(request.delivery === "queue" && state === "agent_running"))
         conflict("agent_busy", "Agent is busy; explicitly request queue delivery or wait for idle");
       const release = beginSupervisorDelivery(session);
@@ -262,7 +283,8 @@ export class TerminalTaskService {
         try {
           await sendInputToSession(this.manager, { ...this.options, supervisorInput: true, validateSupervisorTarget: () => {
             this.assertControl(task);
-            if (request.delivery === "when_idle" && this.target(task).panel.terminalState?.state !== "agent_idle")
+            const current = this.target(task);
+            if (request.delivery === "when_idle" && (current.panel ?? current.session).terminalState?.state !== "agent_idle")
               conflict("agent_busy", "Agent changed before input; no business text written");
           } }, session,
             dispatch.wireText, "prompt_paste", request.dispatchId, pane);
@@ -325,7 +347,7 @@ export class TerminalTaskService {
       if (observation.availability !== "available" || request.scope !== "terminal")
         conflict("terminal_unavailable", "Explicit terminal scope and available original thread are required");
       const { session, panel, pane } = this.target(task);
-      if (panel.terminalState?.state !== "agent_running") conflict("turn_not_running", "Original Agent is no longer running");
+      if ((panel ?? session).terminalState?.state !== "agent_running") conflict("turn_not_running", "Original Agent is no longer running");
       const release = beginSupervisorDelivery(session);
       try {
         this.assertControl(task);
@@ -343,6 +365,7 @@ export class TerminalTaskService {
     await Promise.allSettled(this.pending.values());
     for (const unwatch of this.observers.values()) unwatch();
     this.observers.clear();
+    this.ptyTargets.clear();
     await this.store.close();
   }
 }
