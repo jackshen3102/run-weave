@@ -48,7 +48,7 @@ When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
 
-The test: Every changed line should trace directly to the user's request.
+The test: Every changed line should trace directly to the user's request. When several places could control the requested behavior, use the available evidence to identify which one governs the user's specific case before editing. When asked to narrow a change, check the full diff the user is reviewing against the same baseline.
 
 ## 4. Goal-Driven Execution
 
