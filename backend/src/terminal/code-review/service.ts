@@ -205,14 +205,20 @@ export class CodeReviewService {
         // dispatch a new turn. Never restart/resume an executor or overwrite a report.
         run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
       } else {
+        if (record.recovered)
+          throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
+        const launch = await prepareReviewerLaunch(record.source.rootPath);
+        const usePty = process.platform === "win32";
         const task = await this.tasks.create({ taskId: record.reviewerTaskId, projectId: record.source.projectId,
-          cwd: record.source.rootPath, goal: `Independent code review ${id}` });
+          cwd: record.source.rootPath, goal: `Independent code review ${id}` }, usePty ? launch : undefined);
         run.reviewerTerminalId = task.terminalSessionId; run.reviewerPanelId = task.panelId;
         run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
         if (task.terminalSessionId) await this.manager.updateSessionAlias(task.terminalSessionId, `Review · ${id.slice(0, 8)}`);
-        if (record.recovered || task.phase !== "created" || task.control !== "supervisor")
+        if (task.phase === "unavailable")
+          throw new CodeReviewError(503, "reviewer_unavailable", "无法创建可用的 Reviewer 终端");
+        if (task.phase !== (usePty ? "starting" : "created") || task.control !== "supervisor")
           throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
-        await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, await prepareReviewerLaunch(record.source.rootPath));
+        if (!usePty) await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, launch);
       }
     }
     if (Date.now() - record.startedAt > (run.phase === "starting" ? 120_000 : 30 * 60_000))
