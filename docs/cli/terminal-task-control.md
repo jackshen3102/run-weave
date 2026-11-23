@@ -1,8 +1,9 @@
 # 主 Agent 控制终端任务
 
 `rw terminal task` 用于 Dots 等主 Agent 创建专用终端、持续交办、读取原生结果并记录验收。
-当前执行器是 Codex，运行于 tmux。一个任务绑定一个终端和固定面板；返工沿用该终端。
+通过 `rw terminal task create` 创建的任务在 tmux 中运行 Codex。任务绑定一个终端和固定面板，返工沿用该终端。
 主 Agent 决定目标和下一步，Backend 保存执行事实，不运行第二个调度器。
+独立 Reviewer 的启动与审查流程见[下文](#原生-cli-与终端页面独立代码-review)。
 
 ## 创建、启动、交办
 
@@ -136,7 +137,9 @@ CLI `terminal review` 是发起独立审查，和 `terminal task review` 给任�
 桌面 / Web 与原生 iOS 的终端「更多 → 代码 Review」直接请求 Backend 创建独立的可见
 Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执行能力，但**不调用
 `task review` 登记验收**；单轮执行结束表示独立报告已保存，事项是否结束另由审查结果或用户决定，不自动表示需求符合或可发布，需求与验证结果须逐项核对。
-Windows 的独立 Reviewer 直接在专用 PTY 中启动原生 Codex，核对同一 PTY 和原生会话后才发送冻结审查输入。
+Windows 在专用 PTY 中启动原生 Codex，其他平台通过 tmux 面板启动。Backend 等待
+原生会话完成初始化并进入空闲，确认仍可控制原终端和同一原生会话后，才发送冻结审查输入。
+Windows 启动要求能解析到 Codex 的 `.exe`，启动前先完成下文的 Hooks 检查。
 
 [共享合同](../../packages/shared/src/terminal/code-review.ts)与
 [Backend owner](../../backend/src/terminal/code-review/service.ts)定义当前协议。
