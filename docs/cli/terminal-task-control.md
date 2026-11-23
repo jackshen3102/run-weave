@@ -136,6 +136,7 @@ CLI `terminal review` 是发起独立审查，和 `terminal task review` 给任�
 桌面 / Web 与原生 iOS 的终端「更多 → 代码 Review」直接请求 Backend 创建独立的可见
 Reviewer 终端，不需要来源 Agent 调用 CLI。它复用本页的任务执行能力，但**不调用
 `task review` 登记验收**；单轮执行结束表示独立报告已保存，事项是否结束另由审查结果或用户决定，不自动表示需求符合或可发布，需求与验证结果须逐项核对。
+Windows 的独立 Reviewer 直接在专用 PTY 中启动原生 Codex，核对同一 PTY 和原生会话后才发送冻结审查输入。
 
 [共享合同](../../packages/shared/src/terminal/code-review.ts)与
 [Backend owner](../../backend/src/terminal/code-review/service.ts)定义当前协议。
