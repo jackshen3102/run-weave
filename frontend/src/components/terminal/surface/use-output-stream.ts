@@ -93,7 +93,6 @@ interface UseTerminalOutputStreamOptions {
   hasRenderedSnapshotRef: MutableRef<boolean>;
   lastInputSentAtRef: MutableRef<number | null>;
   outputSequenceRef: MutableRef<number>;
-  onOutputReceived?: () => void;
   refreshTerminalViewportRef: MutableRef<(() => void) | null>;
   requiresSnapshotRestoreRef: MutableRef<boolean>;
   setHasNewOutputBelow: Dispatch<SetStateAction<boolean>>;
@@ -114,7 +113,6 @@ export function useTerminalOutputStream({
   hasRenderedSnapshotRef,
   lastInputSentAtRef,
   outputSequenceRef,
-  onOutputReceived,
   refreshTerminalViewportRef,
   requiresSnapshotRestoreRef,
   setHasNewOutputBelow,
@@ -357,7 +355,6 @@ export function useTerminalOutputStream({
       const nextChunk = filterBrowserHandledTerminalOutput(data);
       if (delivery) {
         websocketContentVersionRef.current += 1;
-        if (nextChunk) onOutputReceived?.();
         enqueueNetworkWrite(
           () =>
             new Promise<void>((resolve) => {
@@ -385,7 +382,6 @@ export function useTerminalOutputStream({
       if (!nextChunk) {
         return;
       }
-      onOutputReceived?.();
       websocketContentVersionRef.current += 1;
 
       const now = Date.now();

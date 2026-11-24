@@ -1,4 +1,3 @@
-import { clearInputLagTimer } from "./input-lag-timer";
 import { useDraftInsertion } from "./use-draft-insertion";
 import { useSendDiagnostics } from "./use-send-diagnostics";
 import type { FloatingDraftState, UseTerminalFloatingDraftControllerOptions } from "./floating-draft-types";
@@ -25,8 +24,6 @@ import { logTerminalPerf } from "../../../features/terminal/output/performance";
 import { sendTerminalInput as sendTerminalInputRequest } from "../../../services/terminal/index";
 import { useTerminalInstantReplyController } from "./use-terminal-instant-reply-controller";
 
-const INPUT_LAG_FALLBACK_DELAY_MS = 150;
-
 export function useTerminalFloatingDraftController({
   active,
   activeCommand,
@@ -38,7 +35,6 @@ export function useTerminalFloatingDraftController({
   searchOpen,
   scrollToBottom,
   sessionStatus,
-  showScrollToBottomControl,
   terminalAtBottom,
   terminalSessionId,
   terminalState,
@@ -49,12 +45,10 @@ export function useTerminalFloatingDraftController({
   const floatingDraftDirtyRef = useRef(false);
   const floatingDraftSyncPendingRef = useRef(false);
   const floatingComposerVisibleRef = useRef(false);
-  const inputLagFallbackTimerRef = useRef<number | null>(null);
   const [floatingComposerOpen, setFloatingComposerOpen] = useState(false);
   const [floatingDraft, setFloatingDraft] = useState("");
   const [nativeDraftMirrorSupported, setDraftMirrorSupported] = useState(true);
   const attachmentMirrorUnreliable = useRef(false);
-  const [inputLagFallbackActive, setInputLagFallbackActive] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const requestScopeRef = useRef<object | null>(null);
@@ -71,7 +65,6 @@ export function useTerminalFloatingDraftController({
     `${codexContext?.generation ?? "unknown"}:${codexContext?.displayedThreadId ?? "unknown"}`;
 
   useEffect(() => {
-    clearInputLagTimer(inputLagFallbackTimerRef);
     const target = JSON.stringify([
       apiBase,
       terminalSessionId,
@@ -92,7 +85,6 @@ export function useTerminalFloatingDraftController({
     setSendError(saved?.error ?? null);
     setFloatingComposerOpen(Boolean(saved?.dirty || saved?.error));
     setSending(false);
-    setInputLagFallbackActive(false);
     return () => {
       draftsByTarget.set(target, {
         draft: floatingDraftRef.current,
@@ -154,8 +146,6 @@ export function useTerminalFloatingDraftController({
     () => {
       // Insertion uses the server's single delivery path; cursor position cannot be inferred from xterm output.
       attachmentMirrorUnreliable.current = true;
-      clearInputLagFallbackTimer();
-      setInputLagFallbackActive(false);
       setDraftMirrorSupported(false);
       setSendError(
         "TUI 路径投递后，光标草稿无法可靠镜像；请核对终端并在那里继续编辑、提交。",
@@ -172,14 +162,6 @@ export function useTerminalFloatingDraftController({
   const queueKey = getFloatingComposerQueueKey({
     activeCommand: targetActiveCommand,
     terminalState: targetTerminalState,
-  });
-
-  const clearInputLagFallbackTimer = useMemoizedFn(() => {
-    clearInputLagTimer(inputLagFallbackTimerRef);
-  });
-
-  const handleOutputReceived = useMemoizedFn(() => {
-    clearInputLagFallbackTimer();
   });
 
   const handleUserInputData = useMemoizedFn((data: string) => {
@@ -205,10 +187,8 @@ export function useTerminalFloatingDraftController({
     if (!eligible || !draftMirrorSupported) {
       return;
     }
-    const previousDraft = lastSyncedTuiDraftRef.current;
-    const next = applyTerminalDraftInput(previousDraft, data);
+    const next = applyTerminalDraftInput(lastSyncedTuiDraftRef.current, data);
     if (!next.supported) {
-      clearInputLagFallbackTimer();
       if (lastSyncedTuiDraftRef.current) {
         setDraftMirrorSupported(false);
       }
@@ -221,30 +201,6 @@ export function useTerminalFloatingDraftController({
     }
     floatingDraftRef.current = next.draft;
     setFloatingDraft(next.draft);
-
-    // Managed TUI state arrives independently of output. A quiet output stream
-    // must not steal native keyboard focus while a slash-command popup changes.
-    if (codexContext !== undefined) return;
-    if (!next.draft) {
-      clearInputLagFallbackTimer();
-      setInputLagFallbackActive(false);
-      return;
-    }
-    if (
-      next.draft === previousDraft ||
-      floatingComposerVisibleRef.current ||
-      inputLagFallbackTimerRef.current !== null
-    ) {
-      return;
-    }
-    inputLagFallbackTimerRef.current = window.setTimeout(() => {
-      inputLagFallbackTimerRef.current = null;
-      if (!floatingDraftRef.current || !eligible || !draftMirrorSupported) {
-        return;
-      }
-      setInputLagFallbackActive(true);
-      setFloatingComposerOpen(true);
-    }, INPUT_LAG_FALLBACK_DELAY_MS);
   });
 
   const handleDraftChange = useMemoizedFn((value: string) => {
@@ -410,14 +366,9 @@ export function useTerminalFloatingDraftController({
     eligible &&
     (draftMirrorSupported ||
       Boolean(sendError) ||
-      textAttachments.composerItems.length > 0) &&
-    (showScrollToBottomControl ||
-      inputLagFallbackActive ||
-      floatingComposerOpen ||
-      sending ||
-      Boolean(sendError));
+      textAttachments.composerItems.length > 0);
   const visible = available && floatingComposerOpen;
-  const showTrigger = available && !floatingComposerOpen;
+  const showTrigger = active && available && !floatingComposerOpen;
   const handleInstantReplySent = useMemoizedFn(() => {
     lastSyncedTuiDraftRef.current = "";
     floatingDraftDirtyRef.current = floatingDraftRef.current.length > 0;
@@ -450,8 +401,6 @@ export function useTerminalFloatingDraftController({
     ) {
       return;
     }
-    clearInputLagFallbackTimer();
-    setInputLagFallbackActive(false);
     setFloatingComposerOpen(false);
     scrollToBottom();
   });
@@ -460,8 +409,6 @@ export function useTerminalFloatingDraftController({
     if ((!floatingDraftRef.current && !textAttachments.ids.length) || !queueKey)
       return;
     if (!(await sendDraftToTui({ submit: true, submitKey: queueKey }))) return;
-    clearInputLagFallbackTimer();
-    setInputLagFallbackActive(false);
     setFloatingComposerOpen(true);
   });
 
@@ -500,11 +447,8 @@ export function useTerminalFloatingDraftController({
 
   useEffect(() => {
     if (!attachmentMirrorUnreliable.current) setDraftMirrorSupported(true);
-    clearInputLagFallbackTimer();
-    setInputLagFallbackActive(false);
   }, [
     targetActiveCommand,
-    clearInputLagFallbackTimer,
     terminalSessionId,
     targetTerminalState?.agent,
     targetTerminalState?.state,
@@ -514,17 +458,8 @@ export function useTerminalFloatingDraftController({
     if (eligible) {
       return;
     }
-    clearInputLagFallbackTimer();
-    setInputLagFallbackActive(false);
     setFloatingComposerOpen(false);
-  }, [clearInputLagFallbackTimer, eligible]);
-
-  useEffect(
-    () => () => {
-      clearInputLagFallbackTimer();
-    },
-    [clearInputLagFallbackTimer],
-  );
+  }, [eligible]);
 
   const guardHandoffInput = useMemoizedFn((event: Event) => {
     const detail = (event as CustomEvent<HandoffInputGuard>).detail;
@@ -566,8 +501,6 @@ export function useTerminalFloatingDraftController({
 
   const handleClose = useMemoizedFn(() => {
     richPaste.markInput();
-    clearInputLagFallbackTimer();
-    setInputLagFallbackActive(false);
     setFloatingComposerOpen(false);
   });
   return {
@@ -578,14 +511,12 @@ export function useTerminalFloatingDraftController({
     sendError,
     draftMirrorSupported,
     eligible,
-    handleOutputReceived,
     handleDraftChange,
     insertDraft,
     handleSend,
     handleQueue,
     queueKey,
     handleUserInputData,
-    inputLagFallbackActive,
     instantReplyAvailable: instantReply.available,
     instantReplyFeedback: instantReply.feedback,
     instantReplyOpen: instantReply.open,

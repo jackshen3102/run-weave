@@ -1,5 +1,6 @@
 import type { EnvironmentContext } from "../configuration";
 import type { TerminalModeState, TerminalOutputCursor, TerminalOutputRange } from "./runtime/websocket";
+import type { TerminalProgramStatus } from "./runtime/program-status";
 
 export const PTY_HOST_PROTOCOL_VERSION = 1;
 export interface PtyHostBinding {
@@ -26,6 +27,7 @@ export interface PtyHostSession extends PtyHostBinding {
   rows: number;
   /** Actual launch, available on newer Hosts (including system-shell fallback). */
   launch?: { command: string; args: string[]; fallbackReason?: string };
+  programStatus?: Omit<TerminalProgramStatus, "source">;
   gatewayToken: string;
   nextSequence: number;
 }
@@ -97,6 +99,7 @@ export interface PtyHostWireRequest {
 }
 export type PtyHostEvent =
   | { type: "launch"; terminalSessionId: string; launch: NonNullable<PtyHostSession["launch"]> }
+  | { type: "program-status"; terminalSessionId: string; status?: PtyHostSession["programStatus"] }
   | { type: "resize"; terminalSessionId: string; cols: number; rows: number; cursor: TerminalOutputCursor }
   | { type: "output"; terminalSessionId: string; data: string; cursor: TerminalOutputCursor; range: TerminalOutputRange }
   | { type: "exit"; terminalSessionId: string; exitCode: number }

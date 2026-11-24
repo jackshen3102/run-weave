@@ -212,6 +212,17 @@ GET /api/app-server/threads/:threadId
 
 ## 与完成通知的边界
 
+Codex 的 OSC 7501 实时报文驱动 Panel 和会话的可选 `programStatus` 展示。
+本地 tmux 在每个 Pane 的输出管道被动采集。直连 PTY 根据终端前台进程组识别 Codex。
+Windows PTY Host 核对同一 ConPTY 控制台内唯一的原生 Codex，使用进程 PID 和创建时间区分实例。
+直连与 Host 的默认 Panel 和会话摘要共享会话投影，进程退出后清除旧状态。同一个 shell
+随后启动 Codex 时按新进程接收报告。
+
+实时路径在终端回放和历史记录之前移除 OSC 7501 帧。状态事件只携带状态、来源、观测时间
+和可选等待类型。没有有效 OSC 时使用既有 `TerminalState`，原生证据确认当前轮结束或取消时也可
+解除滞留的工作状态。输入、停止、完成修订和外部通知继续使用既有证据。
+Claude 当前沿用 Hook。其 OSC 探测需要能力应答先于设备属性应答。
+
 `TerminalState` 不消费 `/internal/terminal-completion` 或普通 completion feed，也不把完成提醒本身作为状态来源。`/internal/terminal-completion` 只负责“非当前终端里的 AI 任务完成提醒”，例如终端 tab 小绿点。唯一例外是 app-server `agent.completion` 中由 hook bridge 双写出来的 `hook_stop + Stop` 事件：它可以作为丢失直连 agent hook 时的 Stop hook fallback，进入同一个 agent hook processor，而不是绕过状态门禁直接写状态。App Server 的 Codex thread 状态补偿同样生成 `agent.hook` 事件，而不是新增 backend 私有状态写入路径。状态服务在状态变化后会向全局 `TerminalEventService` 记录 `terminal_state_changed` envelope，由 `/ws/terminal-events` 推送给 Web/App；这个推送是状态结果的分发通道，不是状态判定来源。
 
 Stop、ESC、SIGINT 或 HTTP interrupt 也不直接写 `TerminalState`。控制输入发出后，状态只能由后续 `Stop` hook 或 active command 变化自然校正。这样可以避免前端/App 在用户点击 Stop 后提前隐藏 Stop 按钮，造成状态假成功。
@@ -232,7 +243,7 @@ Agent 不推断为“卡住”或“需要确认”，也不按多久没有输�
 
 Web desktop terminal 的 floating composer 是 `TerminalState` 的消费方之一，但不是新的状态来源。它只在受支持 agent 命中、session 仍 running、搜索栏未打开、且终端处于 TUI/agent 场景时启用；Codex 与 Trae family 可以来自 `terminalState.agent`，Claude 首期只通过 `activeCommand` basename 命中。
 
-当前交互是离底或 tmux scrollback active 时先显示一个紧凑的打开按钮。用户点开后，底部出现浮动 composer；composer 上方的回到底部按钮与 composer 同步显示。受支持 TUI 在输入后 150ms 内没有任何终端输出时，也会自动进入 composer，把后续编辑保留在 Web 本地，并在提交时通过既有 `prompt_replace` 路径一次性同步，避免系统高负载拖慢 PTY 回显后继续阻塞输入反馈。回到底部或关闭 composer 后，焦点回到原始 xterm/TUI 输入。普通 shell、mobile client mode、已退出 session、搜索栏打开或 unsupported TUI 都继续使用原有右下角 `Scroll terminal to bottom` 行为。
+支持浮动输入且草稿可镜像时，当前终端在停留底部和向上滚动时都提供右下角「切换到浮动输入框」按钮。直接在终端输入时，即使回显延迟，焦点和后续按键仍留在原生 xterm/TUI。点击按钮后浮动输入框接收焦点，点击「返回原生终端」后焦点回到 xterm/TUI。回到底部按钮在可回滚、且离底或处于 tmux scrollback 时显示。普通 shell、mobile client mode、已退出 session、搜索栏打开或 unsupported TUI 都继续使用原有右下角 `Scroll terminal to bottom` 行为。
 
 浮动 composer 维护 Web 侧 draft mirror：普通字符、换行、Backspace、Ctrl+U、bracketed paste 等可识别输入会同步为 draft；焦点报告和鼠标控制序列会忽略；未知 escape sequence 会让本 session 暂停 floating composer，直到用户回到底部或 agent/session metadata 变化后重新评估。composer 发送或回到底部同步草稿时，会保守使用 Ctrl+U + draft 替换真实 TUI 输入行；这个 replay 只允许在 supported agent/TUI gate 内发生。
 

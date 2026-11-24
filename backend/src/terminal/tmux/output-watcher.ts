@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
+import { ProgramStatusStream } from "@runweave/shared/terminal/program-status";
 import { logger } from "../../logging/index";
 import { createTerminalRuntimeRecorder } from "../runtime/recorder";
 import {
@@ -201,26 +203,26 @@ export class TmuxOutputWatcher {
         watched.terminalSessionId === session.id &&
         watched.reconcileSessionLifecycle,
     );
-    if (
-      existingLifecycleWatcher &&
-      isSamePaneTarget(existingLifecycleWatcher.target, paneTarget)
-    ) {
-      existingLifecycleWatcher.recordSessionOutput = true;
-      return;
-    }
-
-    if (existingLifecycleWatcher) {
-      const existingKey = resolvePaneWatcherKey(
-        session.id,
-        existingLifecycleWatcher.target.paneId,
-      );
-      this.watchedPanes.delete(existingKey);
-      await this.operations.stop(existingLifecycleWatcher);
+    if (existingLifecycleWatcher && !isSamePaneTarget(existingLifecycleWatcher.target, paneTarget)) {
+      existingLifecycleWatcher.reconcileSessionLifecycle = false;
+      existingLifecycleWatcher.recordSessionOutput = false;
     }
     await this.ensurePaneWatcherNow(session, paneTarget, {
       reconcileSessionLifecycle: true,
       recordSessionOutput: true,
     });
+    for (const panel of this.terminalSessionManager.listPanels(session.id)) {
+      if (panel.status === "running" && panel.tmuxPaneId !== paneId) {
+        await this.ensurePaneWatcherNow(session, { ...target, paneId: panel.tmuxPaneId }, {
+          reconcileSessionLifecycle: false,
+          recordSessionOutput: false,
+        });
+      }
+    }
+  }
+
+  async watchPane(session: TerminalSessionRecord, target: TmuxPaneTarget): Promise<void> {
+    await this.ensurePaneWatcher(session, target, { reconcileSessionLifecycle: false, recordSessionOutput: false });
   }
 
   async capturePaneOutputCursorAndSendInput(
@@ -415,9 +417,16 @@ export class TmuxOutputWatcher {
     }
 
     const filePath = this.operations.outputPath(session.id, target.paneId);
+    let liveProgramOutputOffset: number;
     try {
-      await mkdir(this.outputDir, { recursive: true });
-      await writeFile(filePath, "", { flag: "a" });
+      await mkdir(this.outputDir, { recursive: true, mode: 0o700 });
+      const file = await open(filePath, constants.O_CREAT | constants.O_APPEND | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+      try {
+        await file.chmod(0o600);
+        liveProgramOutputOffset = (await file.stat()).size;
+      } finally {
+        await file.close();
+      }
       await this.tmuxService.pipePaneOutput(target, filePath);
     } catch (error) {
       tmuxOutputLogger.warn("terminal.tmux.output-watch.setup.failed", {
@@ -441,6 +450,9 @@ export class TmuxOutputWatcher {
       filePath,
       generation: this.nextWatcherGeneration,
       offset: 0,
+      liveProgramOutputOffset,
+      programStatusStream: new ProgramStatusStream(),
+      programStatusRecords: new Map(),
       outputBuffer: createScrollbackBuffer("", this.maxTransportBytes),
       polling: null,
       recordSessionOutput: options.recordSessionOutput,
@@ -571,6 +583,11 @@ export class TmuxOutputWatcher {
     watched.generation = this.nextWatcherGeneration;
     this.nextWatcherGeneration += 1;
     watched.outputBuffer = createScrollbackBuffer("", this.maxTransportBytes);
+    watched.programStatusStream = new ProgramStatusStream();
+    watched.programStatusRecords.clear();
+    const panel = this.terminalSessionManager.listPanels(watched.terminalSessionId)
+      .find(item => item.tmuxPaneId === watched.target.paneId);
+    if (panel) this.terminalSessionManager.setPanelProgramStatus(panel.id);
   }
 
 }

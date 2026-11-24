@@ -1,0 +1,95 @@
+version: 1
+name: OSC 7501 来源仲裁与使用场景
+description: >
+  覆盖 Full Access 正常使用、OSC 优先和 Hook 自然降级。各例使用独立会话。
+  区分真实模型、真实 CLI 配受控服务和 UI 取证，测试通知只进入隔离 sink。
+
+cases:
+  - id: OSCS-001
+    name: Full Access Codex 正常轮次采用 OSC
+    required: true
+    description: 真实受管 Codex 在无审批设置下从运行进入本轮结束。
+    preconditions:
+      - 隔离本地 tmux 使用已登录 Codex 0.164.0 或更高版本，设置 never 与 danger-full-access。
+    steps:
+      - 提交三轮简短请求，其中一轮用无副作用的短时等待让运行态可观察。
+      - 核对每轮 working 和 done 的来源为 OSC，状态帧到 Backend 快照不超过 1 秒，未出现审批提示。
+
+  - id: OSCS-002
+    name: Full Access Codex 原生错误显示本轮失败
+    required: true
+    description: 真实 Codex 报告 error 时，面板展示失败且不会增加成功交付。
+    preconditions:
+      - 隔离真实 Codex 使用 never 与 danger-full-access，本例受控服务可稳定返回不可重试错误。
+    steps:
+      - 提交一轮请求，核对真实 CLI 帧、Backend 快照及完成修订。
+      - 确认终态为 source=osc 的 error，业务端没有新增成功修订或消息。
+
+  - id: OSCS-003
+    name: 手动启动的 Full Access Codex 用 OSC 展示状态
+    required: true
+    description: 未配置 Hook 的手动 Codex 会话仍能展示运行和结束。
+    preconditions:
+      - 独立 tmux 的临时配置关闭 Hook，真实 Codex 已登录并设置 never 与 danger-full-access。
+    steps:
+      - 从 shell 手动启动 Codex，提交简短任务并核对原始报告和 Panel 快照。
+      - 确认 working 和 done 均来自 OSC，没有 Hook 回传。
+
+  - id: OSCS-004
+    name: 没上报 OSC 时正常采用 Hook
+    required: true
+    description: 尚无有效 OSC 的会话仍显示可信 Hook 工作和空闲状态。
+    preconditions:
+      - 隔离终端有正常 Hook，且运行在未开启 OSC 的普通路径。
+    steps:
+      - 执行一轮简短任务，核对工作和空闲都与现有 Hook 一致，未出现来自 OSC 的完成状态。
+
+  - id: OSCS-005
+    name: 可信原生结束信号让缺少终态报告的本轮收敛
+    required: true
+    description: OSC 优先期间，普通 Stop 候选不会抢先改变显示，可信同轮结束能解除滞留的工作态。
+    preconditions:
+      - 隔离受管 Codex 会话使用正常终端链路，可用受控状态报告只发 working，并观测同一轮的原生开始和结束。
+    steps:
+      - 工作阶段只提供 OSC working，确认仅有 Stop 候选时仍显示工作中。
+      - 提供与当前轮身份匹配的原生结束记录，确认显示空闲，未合成 OSC done 或新增业务完成事件。
+
+  - id: OSCS-006
+    name: Web 标签页和 Panel 展示各自的当前状态
+    required: true
+    description: 同一终端的两个 Panel 不串状态，会话摘要在其中仍有工作时显示运行。
+    preconditions:
+      - 隔离 Dev Session 的真实 Web 页面可打开包含两个 Panel 的会话。
+    steps:
+      - 使用 toolkit:playwright-cli 查看页面，让两个 Panel 分别处于运行和本轮已结束状态。
+      - 切换 Panel，确认各自状态正确且会话摘要仍为运行，健康本地链路状态在有效帧后 2 秒内可见。
+
+  - id: OSCS-007
+    name: 重新打开 Electron 终端能看到当前状态
+    required: true
+    description: 离开终端再打开时，桌面界面从当前快照取得状态。
+    preconditions:
+      - 隔离真实 Electron 可连接候选 Backend，目标 Codex 终端可在切页期间继续运行。
+    steps:
+      - 用 toolkit:playwright-cli 查看当前运行状态，切到另一终端，等目标轮次结束后再打开原终端。
+      - 确认标签页和详情显示本轮已结束，终端仍可正常输入。
+
+  - id: OSCS-008
+    name: 真实 Claude 展示实际报告的状态
+    required: true
+    description: 通过能力协商的 Claude 会话采用 OSC，界面反映实际报告的工作和结束状态。
+    preconditions:
+      - 独立目标终端上的真实 Claude 已通过能力协商，模型可用。
+    steps:
+      - 启动 Claude 并完成一轮简短只读任务，保存工作和结束阶段的原始报告及快照。
+      - 确认工作态来自 OSC，结束阶段与该版本实际报告一致。报告 idle 时展示空闲。
+
+  - id: OSCS-009
+    name: iPhone 查看 Full Access Codex 的运行与结束
+    required: true
+    description: 原生 iOS 列表和终端能呈现 OSC 状态变化。
+    preconditions:
+      - 验收 iPhone 安装候选包并连接隔离 Backend 上的真实 Full Access Codex。
+    steps:
+      - 连续完成三轮简短请求，用 toolkit:agent-device 查看列表和终端状态。
+      - 确认工作与结束正确显示，稳定局域网下状态帧后 2 秒内可见。

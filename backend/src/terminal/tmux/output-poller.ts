@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
+import { resolveProgramStatus, updateProgramStatusRecords, type ProgramStatusReport } from "@runweave/shared/terminal/program-status";
 import { logger } from "../../logging/index";
 import type { TerminalSessionManager } from "../manager/manager";
 import { appendToScrollbackBuffer } from "../scrollback/scrollback-buffer";
@@ -13,8 +14,10 @@ import {
 } from "./output-watcher-helpers";
 import type { TmuxService } from "./service";
 import { lockTmuxOutputTransport } from "./output-transport";
+import { isCodexActiveCommand } from "../state/terminal-state-service";
 
 const FORCE_TRUNCATE_TRANSPORT_BYTES_MULTIPLIER = 2;
+const NATIVE_SETTLE_GRACE_MS = 750;
 const tmuxOutputLogger = logger.child({ component: "terminal" });
 
 export class TmuxOutputPoller {
@@ -63,9 +66,11 @@ export class TmuxOutputPoller {
       if (!isCurrent()) return false;
       if (fileStat.size < watched.offset) {
         watched.offset = 0;
+        watched.liveProgramOutputOffset = 0;
         this.invalidatePaneCursor(watched);
       }
       if (fileStat.size === watched.offset) {
+        this.settleProgramStatus(watched);
         // A preceding poll may have found the writer holding the lock. Retry
         // compaction even if no new output arrives after that poll.
         if (watched.offset > 0) {
@@ -88,6 +93,8 @@ export class TmuxOutputPoller {
         this.invalidatePaneCursor(watched);
       }
 
+      const reports: ProgramStatusReport[] = [];
+      let offset = watched.offset;
       await new Promise<void>((resolve, reject) => {
         const stream = createReadStream(watched.filePath, {
           start: watched.offset,
@@ -95,9 +102,16 @@ export class TmuxOutputPoller {
         });
         stream.on("data", (chunk) => {
           if (!isCurrent()) return;
-          const output = watched.decoder.write(
-            Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
-          );
+          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          const historicalBytes = Math.min(bytes.length, Math.max(0, watched.liveProgramOutputOffset - offset));
+          offset += bytes.length;
+          let output = "";
+          if (historicalBytes > 0) {
+            output = watched.programStatusStream.write(watched.decoder.write(bytes.subarray(0, historicalBytes)), () => {});
+          }
+          if (historicalBytes < bytes.length) {
+            output += watched.programStatusStream.write(watched.decoder.write(bytes.subarray(historicalBytes)), report => reports.push(report));
+          }
           if (output) {
             appendToScrollbackBuffer(watched.outputBuffer, output);
             if (watched.recordSessionOutput) {
@@ -108,6 +122,11 @@ export class TmuxOutputPoller {
         stream.on("error", reject);
         stream.on("end", resolve);
       });
+      if (reports.length || watched.programStatusRecords.size) {
+        await this.observeProgramStatus(watched, reports, isCurrent);
+      }
+      if (!isCurrent()) return false;
+      this.settleProgramStatus(watched);
       watched.offset = fileStat.size;
       await this.truncateTransportIfDrained(terminalSessionId, watched);
       return true;
@@ -128,6 +147,46 @@ export class TmuxOutputPoller {
       });
       return false;
     }
+  }
+
+  private async observeProgramStatus(watched: WatchedTmuxPane, reports: ProgramStatusReport[], isCurrent: () => boolean): Promise<void> {
+    const pane = await this.tmuxService.readPaneMetadata(watched.target).catch(() => null);
+    if (!isCurrent()) return;
+    const panel = this.findProgramPanel(watched);
+    if (!panel) return;
+    const managed = panel.codexContext;
+    const primary = !managed || (!managed.closed && managed.primaryThreadId === managed.displayedThreadId);
+    const codex = isCodexActiveCommand(pane?.paneCommand ?? null) ||
+      (pane?.paneCommand === "node" && Boolean(managed?.primaryThreadId && !managed.closed));
+    if (!codex || !primary) {
+      watched.programStatusRecords.clear();
+      this.terminalSessionManager.setPanelProgramStatus(panel.id);
+      return;
+    }
+    if (reports.length) {
+      // A new native prompt may have cleared the previous turn's projection.
+      if (!panel.oscProgramStatus) watched.programStatusRecords.clear();
+      for (const report of reports) {
+        updateProgramStatusRecords(watched.programStatusRecords, report);
+        this.terminalSessionManager.setPanelProgramStatus(panel.id, resolveProgramStatus(watched.programStatusRecords));
+      }
+    }
+  }
+
+  private settleProgramStatus(watched: WatchedTmuxPane): void {
+    const panel = this.findProgramPanel(watched);
+    const endedAt = panel?.oscNativeTurnEndedAt;
+    if (!panel || endedAt === undefined || Date.now() - endedAt < NATIVE_SETTLE_GRACE_MS) return;
+    delete panel.oscNativeTurnEndedAt;
+    if (panel.oscProgramStatus?.state === "working" || panel.oscProgramStatus?.state === "blocked") {
+      watched.programStatusRecords.clear();
+      this.terminalSessionManager.setPanelProgramStatus(panel.id);
+    }
+  }
+
+  private findProgramPanel(watched: WatchedTmuxPane) {
+    return this.terminalSessionManager.listPanels(watched.terminalSessionId)
+      .find(item => item.status === "running" && item.tmuxPaneId === watched.target.paneId);
   }
 
   async reconcileSessionLifecycle(watched: WatchedTmuxPane): Promise<boolean> {
@@ -206,6 +265,7 @@ export class TmuxOutputPoller {
         });
         await file.truncate(0);
         watched.offset = 0;
+        watched.liveProgramOutputOffset = 0;
         this.invalidatePaneCursor(watched);
         watched.decoder.end();
         watched.decoder = new StringDecoder("utf8");
@@ -214,6 +274,7 @@ export class TmuxOutputPoller {
 
       await file.truncate(0);
       watched.offset = 0;
+      watched.liveProgramOutputOffset = 0;
       // Draining a transport file is not the end of the byte stream. Preserve a
       // partial UTF-8 character for the next writer append / poll.
     } finally {

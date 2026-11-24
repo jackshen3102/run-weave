@@ -5,7 +5,8 @@ extension TerminalScreen {
   @ToolbarContentBuilder var terminalToolbar: some ToolbarContent {
     ToolbarItem(placement: .principal) {
       TerminalTitleView(title: title, projectName: projectName,
-        connectionName: session.connection?.name ?? "电脑", status: status)
+        connectionName: session.connection?.name ?? "电脑", status: status,
+        programStatus: currentTerminal?.programStatus?.label)
     }
     ToolbarItemGroup(placement: .navigationBarTrailing) {
       Button { tab = "Files" } label: { Image(systemName: "folder") }

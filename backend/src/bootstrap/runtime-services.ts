@@ -3,7 +3,7 @@ import { ScreenRecordingAnalysisRuntime } from "../screen-recording-analysis/run
 import { ScreenRecordingService } from "../screen-recording/service";
 import { SideChatService } from "../side-chat/service";
 import { SideChatStore } from "../side-chat/store";
-import { observeCodexPane } from "../terminal/application/codex-context-sync";
+import { observeCodexPane, publishCodexPanelStatus } from "../terminal/application/codex-context-sync";
 import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
@@ -163,9 +163,9 @@ async function assembleRuntimeServices(
   let terminalStateService: TerminalStateService | null = null;
   let textAttachmentFiles: TerminalTextAttachmentService | null = null;
   let sideChatService: SideChatService | null = null;
-  const terminalSessionManager = new TerminalSessionManager(
-    terminalSessionStore,
+  const terminalSessionManager = new TerminalSessionManager(terminalSessionStore,
     {
+      onPanelProgramStatusChanged: (session, panel) => publishCodexPanelStatus(terminalSessionManager, terminalEventService, session, panel),
       onCompletionAcknowledged: (session) => terminalEventService.record({
         kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
         payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },

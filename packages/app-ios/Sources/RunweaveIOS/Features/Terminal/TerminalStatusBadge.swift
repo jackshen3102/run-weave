@@ -4,10 +4,11 @@ struct TerminalStatusBadge: View {
   let terminal: HomeTerminal
 
   private var state: String {
-    terminal.status == "exited" ? "exited" : terminal.terminalState.state
+    terminal.status == "exited" ? "exited" : terminal.programStatus?.state ?? terminal.terminalState.state
   }
-  private var busy: Bool { terminal.isAgentActive }
+  private var busy: Bool { ["working", "starting", "agent_running", "agent_starting"].contains(state) }
   private var label: String {
+    if state != "exited", let label = terminal.programStatus?.label { return label }
     switch state {
     case "agent_running": return "正在执行"
     case "agent_starting": return "启动中"
@@ -19,9 +20,11 @@ struct TerminalStatusBadge: View {
   }
   private var color: Color {
     switch state {
-    case "agent_running": return .cyan
-    case "agent_starting": return .orange
-    case "agent_idle": return .blue
+    case "working", "agent_running": return .cyan
+    case "starting", "agent_starting", "blocked": return .orange
+    case "idle", "agent_idle": return .blue
+    case "done": return .green
+    case "error": return .red
     default: return .secondary
     }
   }
@@ -68,7 +71,9 @@ struct TerminalGroupStatus: View {
   let bells: Set<String>
   private var unreadCount: Int { terminals.filter(\.hasUnreadCompletion).count }
   private var working: Bool {
-    terminals.contains { $0.status != "exited" && $0.terminalState.state == "agent_running" }
+    terminals.contains {
+      $0.status != "exited" && ($0.programStatus.map { $0.state == "working" } ?? ($0.terminalState.state == "agent_running"))
+    }
   }
   private var hasBell: Bool { terminals.contains { bells.contains($0.id) } }
 

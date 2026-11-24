@@ -10,11 +10,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
-import type { TerminalState } from "@runweave/shared/terminal/state";
+import { aggregateProgramStatus } from "@runweave/shared/terminal/program-status";
 import { Copy, FolderInput, GitFork, Link2, MessageCircle, PanelsTopLeft, Pencil, X } from "lucide-react";
 import { useTerminalProjectsQuery, EMPTY_TERMINAL_PROJECTS } from "../../../features/terminal/queries/workspace";
 import { useForkTerminalAgent } from "../../../features/terminal/use-fork-agent";
 import { formatTerminalSessionName } from "../../../features/terminal/state/session-name";
+import { programStatusLabels } from "../../../features/terminal/state/program-status";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { Button } from "../../ui/button";
 import { ShimmerText } from "../../ui/shimmer-text";
@@ -40,168 +41,7 @@ import {
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 
-function getTerminalStateLabel(
-  session: TerminalSessionListItem,
-  terminalState?: TerminalState,
-): string {
-  if (session.status === "exited") {
-    return "Exited";
-  }
-  if (!terminalState) {
-    return "Status unavailable";
-  }
-  if (terminalState.state === "agent_running") {
-    return "Agent running";
-  }
-  if (terminalState.state === "agent_starting") {
-    return "Agent starting";
-  }
-  if (terminalState.state === "agent_idle") {
-    return "Agent idle";
-  }
-  return "Shell idle";
-}
-
-function getTerminalStateDetail(
-  session: TerminalSessionListItem,
-  terminalState?: TerminalState,
-): string {
-  if (session.status === "exited") {
-    return "Terminal exited";
-  }
-  if (!terminalState) {
-    return "Waiting for state";
-  }
-  if (terminalState.state === "agent_running") {
-    return "Model response in progress";
-  }
-  if (terminalState.state === "agent_starting") {
-    return "Starting agent";
-  }
-  if (terminalState.state === "agent_idle") {
-    return "Waiting for input";
-  }
-  return "Shell ready";
-}
-
-function formatCommandForDisplay(session: TerminalSessionListItem): string {
-  const command = session.activeCommand?.trim() || session.command.trim();
-  if (!command) {
-    return "-";
-  }
-  const args = session.activeCommand?.trim() ? [] : session.args;
-  return [command, ...args].join(" ");
-}
-
-function formatActivityTime(value: string | undefined): string {
-  if (!value) {
-    return "-";
-  }
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return value;
-  }
-  const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (diffSeconds < 60) {
-    return "Just now";
-  }
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) {
-    return `${diffMinutes}m ago`;
-  }
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours}h ago`;
-  }
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
-}
-
-function TerminalTabStateDot({
-  session,
-  terminalState,
-}: {
-  session: TerminalSessionListItem;
-  terminalState?: TerminalState;
-}) {
-  if (session.status === "exited") {
-    return (
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-full border border-slate-600 bg-slate-800"
-      />
-    );
-  }
-  if (!terminalState) {
-    return null;
-  }
-  if (terminalState.state === "agent_running") {
-    return (
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-full border border-cyan-200 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.75)] motion-safe:animate-pulse"
-      />
-    );
-  }
-  if (terminalState.state === "agent_starting") {
-    return (
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-full border border-amber-200 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.55)] motion-safe:animate-pulse"
-      />
-    );
-  }
-  if (terminalState.state === "agent_idle") {
-    return (
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-full bg-sky-500"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="h-2 w-2 shrink-0 rounded-full border border-slate-500 bg-transparent"
-    />
-  );
-}
-
-function TerminalTabStateCard({
-  session,
-  terminalState,
-}: {
-  session: TerminalSessionListItem;
-  terminalState?: TerminalState;
-}) {
-  const stateLabel = getTerminalStateLabel(session, terminalState);
-  const detail = getTerminalStateDetail(session, terminalState);
-  return (
-    <div className="space-y-2 text-xs text-slate-300">
-      <div className="flex items-center gap-2">
-        <TerminalTabStateDot session={session} terminalState={terminalState} />
-        <div className="min-w-0">
-          <div className="font-medium text-slate-100">{stateLabel}</div>
-          <div className="truncate text-slate-400">{detail}</div>
-        </div>
-      </div>
-      <div className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-2 gap-y-1">
-        <span className="text-slate-500">Agent</span>
-        <span className="truncate text-slate-200">
-          {terminalState?.agent ?? "-"}
-        </span>
-        <span className="text-slate-500">Command</span>
-        <span className="truncate text-slate-200">
-          {formatCommandForDisplay(session)}
-        </span>
-        <span className="text-slate-500">Activity</span>
-        <span className="truncate text-slate-200">
-          {formatActivityTime(session.lastActivityAt)}
-        </span>
-      </div>
-    </div>
-  );
-}
+import { TerminalTabStateCard } from "./session-tab-state-card";
 
 export function TerminalSessionTab({
   session,
@@ -233,10 +73,11 @@ export function TerminalSessionTab({
   );
   const { fork, pending: forking } = useForkTerminalAgent(session.terminalSessionId);
   const mutationLoading = useTerminalWorkspaceStore((state) => state.loading);
-  const activePanel = useTerminalWorkspaceStore((state) => {
-    const workspace = state.panelWorkspaceBySessionId[session.terminalSessionId];
-    return workspace?.panels.find((panel) => panel.panelId === workspace.activePanelId);
-  });
+  const workspace = useTerminalWorkspaceStore(state => state.panelWorkspaceBySessionId[session.terminalSessionId]);
+  const activePanel = workspace?.panels.find(panel => panel.panelId === workspace.activePanelId);
+  const programStatus = session.status === "running"
+    ? workspace ? aggregateProgramStatus(workspace.panels) : session.programStatus
+    : undefined;
   const hasBellMarker = useTerminalWorkspaceStore(
     (state) => state.bellMarkers[session.terminalSessionId],
   );
@@ -287,10 +128,13 @@ export function TerminalSessionTab({
   });
   const displayName = sideChat.visible ? `旁聊 · ${originalDisplayName}` : originalDisplayName;
   const [confirmClose, setConfirmClose] = useState(false);
-  const isWorking = terminalState?.state === "agent_running";
+  const isWorking = programStatus ? programStatus.state === "working" : terminalState?.state === "agent_running";
+  const reportStatus = programStatus?.source === "osc" ? programStatus : undefined;
+  const outcome = reportStatus && (reportStatus.state === "blocked" || reportStatus.state === "done" || reportStatus.state === "error")
+    ? reportStatus.state : undefined;
   const disablePanelSplitToggle = panelSplitEnabled && panelCount > 1;
   const showStateDetails =
-    !isMobileMonitor && (Boolean(terminalState) || session.status === "exited");
+    !isMobileMonitor && (Boolean(programStatus || terminalState) || session.status === "exited");
   const openDetails = (): void => {
     if (showStateDetails) {
       const rect = tabRef.current?.getBoundingClientRect();
@@ -339,6 +183,7 @@ export function TerminalSessionTab({
       <button
         type="button"
         aria-label={displayName}
+        aria-description={reportStatus && programStatusLabels[reportStatus.state]}
         data-terminal-session-id={session.terminalSessionId}
         className={[
           "inline-flex h-full min-w-0 max-w-[220px] items-center gap-1.5 py-0 text-xs",
@@ -366,6 +211,11 @@ export function TerminalSessionTab({
         ) : (
           <span className="truncate">{displayName}</span>
         )}
+        {outcome ? (
+          <span className={`shrink-0 text-[10px] ${outcome === "error" ? "text-rose-400" : outcome === "blocked" ? "text-amber-400" : "text-emerald-400"}`}>
+            {programStatusLabels[outcome]}
+          </span>
+        ) : null}
         <span
           aria-hidden="true"
           className={[
@@ -418,7 +268,8 @@ export function TerminalSessionTab({
           >
             <TerminalTabStateCard
               session={session}
-              terminalState={terminalState}
+              terminalState={activePanel && activePanel.panelId !== "default" ? activePanel.terminalState : terminalState}
+              programStatus={activePanel ? activePanel.programStatus : programStatus}
             />
           </div>,
           document.body,

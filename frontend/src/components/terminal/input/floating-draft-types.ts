@@ -21,7 +21,6 @@ export interface UseTerminalFloatingDraftControllerOptions {
   searchOpen: boolean;
   scrollToBottom: () => void;
   sessionStatus: "running" | "exited";
-  showScrollToBottomControl: boolean;
   terminalAtBottom: boolean;
   terminalSessionId: string;
   terminalState?: TerminalState;

@@ -68,18 +68,18 @@ cases:
       - 确认后端明确返回对象不存在，UI 保留列表、清除失效选中并提示用户；选择其他对象后页面恢复，且不会删除 Activity Facts 或其他档案。
 
   - id: TAC-006
-    name: 支持 TUI 离底显示并回底隐藏 Composer
+    name: 支持 TUI 在底部和离底时手动切换输入
     required: true
     description: >
-      验证 eligible 的 Codex、Trae-family 或已识别 TUI 离底后可展开 Floating Composer，回到底部后
-      Composer、打开入口和回底按钮同步隐藏；普通 shell 不会显示 Composer。
+      验证支持草稿镜像的 TUI 在底部和离底时都可手动切换输入，慢回显时焦点仍留在原生终端。
     preconditions:
       - 已使用 `$toolkit:playwright-cli` 打开 Web desktop Terminal。
-      - 存在普通 shell session，以及一个 `floatingComposerEligible=true` 的 supported TUI session。
+      - 存在普通 shell session，以及一个 `floatingComposerEligible=true`、`draftMirrorSupported=true` 的 supported TUI session。
     steps:
       - 在普通 shell 离底超过阈值；确认没有 floating composer textarea，原有 scroll-to-bottom 输入与按钮仍可用。
-      - 在 supported TUI 离底后点击 `Open floating composer`；确认出现 textarea、图标发送按钮和 Composer 上方的回底按钮。
-      - 分别点击回底按钮、使用滚轮或触控板回到底部；确认 terminal 到底，Composer、打开入口与回底按钮同步隐藏，TUI 原输入区重新成为主输入入口。
+      - 在受支持的 TUI 底部输入未提交草稿并延迟终端回显；确认原生输入保持焦点，浮动输入框保持关闭。
+      - 点击「切换到浮动输入框」，确认输入框获得焦点且草稿一致；点击「返回原生终端」，确认焦点回到原生输入，切换入口仍可用。
+      - 向上滚动后再次切换到浮动输入框，确认可编辑草稿且可使用回底按钮。
 
   - id: TAC-007
     name: Composer 与 Native TUI draft 双向同步

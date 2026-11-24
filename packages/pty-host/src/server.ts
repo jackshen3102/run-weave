@@ -202,12 +202,16 @@ export async function startHost(scope: EnvironmentContext, release: string): Pro
             if (ready) { batcher.flush(); sendJson(socket, { type: "resize", terminalSessionId: session.info.terminalSessionId, cols, rows, cursor: session.buffer.cursor }); }
           };
           const launched = (launch: NonNullable<import("@runweave/shared/terminal/pty-host").PtyHostSession["launch"]>) => { if (ready) { batcher.flush(); sendJson(socket, { type: "launch", terminalSessionId: session.info.terminalSessionId, launch }); } };
+          const programStatusChanged = (status?: PtyHostAttachment["session"]["programStatus"]) => {
+            if (ready) sendJson(socket, { type: "program-status", terminalSessionId: session.info.terminalSessionId, status });
+          };
           session.launchListeners.add(launched);
+          session.programStatusListeners.add(programStatusChanged);
           session.outputListeners.add(output);
           session.exitListeners.add(exited);
           session.resizeListeners.add(resized);
           subscriptions.set(session.info.terminalSessionId, { flush: batcher.flush, dispose() {
-            batcher.dispose(); session.launchListeners.delete(launched); session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized);
+            batcher.dispose(); session.launchListeners.delete(launched); session.programStatusListeners.delete(programStatusChanged); session.outputListeners.delete(output); session.exitListeners.delete(exited); session.resizeListeners.delete(resized);
           } });
           const snapshot = await session.snapshot();
           const tail = session.buffer.read(snapshot.cursor);

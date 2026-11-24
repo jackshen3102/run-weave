@@ -3,6 +3,7 @@ import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { PanelBottom, PanelRight, X } from "lucide-react";
 import { Button } from "../../ui/button";
+import { programStatusLabels } from "../../../features/terminal/state/program-status";
 import {
   closeTerminalPanel,
   createTerminalPanel,
@@ -99,7 +100,7 @@ export function TerminalPanelTargetBar({
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-950 px-2 text-xs text-slate-300">
-      <div className="min-w-0 shrink-0 text-slate-500">
+      <div className="min-w-0 max-w-[25%] shrink-0 truncate text-slate-500">
         {activeSession.cwd.split("/").filter(Boolean).at(-1) || "terminal"}
         <span className="px-1 text-slate-700">/</span>
         <span className="text-slate-200">
@@ -133,9 +134,11 @@ export function TerminalPanelTargetBar({
               }}
             >
               <span className="truncate">{formatPanelLabel(panel)}</span>
-              <span className="shrink-0 text-slate-500">
-                {panel.status === "running" ? "" : "exited"}
-              </span>
+              {panel.status === "exited" || panel.programStatus ? (
+                <span className="shrink-0 text-slate-400">
+                  {panel.status === "exited" ? "Exited" : programStatusLabels[panel.programStatus!.state]}
+                </span>
+              ) : null}
             </button>
           );
         })}
