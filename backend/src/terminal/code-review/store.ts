@@ -21,6 +21,7 @@ export interface ReviewRequirements {
 
 export interface SourceBinding {
   terminalId: string; projectId: string; rootPath: string;
+  replyTarget?: { panelId: string | null; threadId: string };
 }
 export interface ReviewRecord {
   run: CodeReviewRun;
@@ -29,6 +30,7 @@ export interface ReviewRecord {
   snapshotId: string | null;
   reviewerTaskId: string;
   reviewerThreadId: string | null;
+  reuseFromReviewId?: string;
   startedAt: number;
   dispatchId: string;
   recovered: boolean;

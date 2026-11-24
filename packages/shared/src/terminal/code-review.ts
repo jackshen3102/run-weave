@@ -12,6 +12,8 @@ export interface CodeReviewExpectedTarget {
 }
 export interface CreateCodeReviewRequest {
   requestId: string;
+  /** CLI completion delivery. An omitted locator requires an unambiguous source. */
+  replyTo?: { panelId?: string; tmuxPaneId?: string };
 }
 export interface CodeReviewSnapshotSide extends TerminalPreviewContentSide {
   /** Null means unavailable, never an invented empty file. */
@@ -80,6 +82,7 @@ export interface CodeReviewReport {
 }
 export interface CodeReviewRun {
   scope?: CodeReviewScope;
+  resultDelivery?: "source_conversation";
   reviewId: string;
   /** One case can contain multiple immutable snapshot/report rounds. */
   caseId: string;

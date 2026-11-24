@@ -9,13 +9,14 @@ import { atomicJson, CodeReviewError, CodeReviewStore, readOwnedFile, type Revie
 import { captureReviewSnapshot, reviewDigest } from "./snapshot";
 import { saveReviewReport } from "./report";
 import { buildCodeReviewPrompt } from "./prompt";
-import { deliverCodeReview, readSourceBinding, shouldDeliverCodeReview } from "./delivery";
+import { bindReviewReply, deliverCodeReview, readSourceBinding, type ReviewReply } from "./delivery";
 import { prepareReviewerLaunch } from "./hooks";
 import { readReviewRequirements } from "./requirements";
 
 const active = (run: CodeReviewRun) => ["preparing", "starting", "reviewing"].includes(run.phase);
 /** One Backend owner, serial ticks and request mutations. UI has no scheduling role. */
 export class CodeReviewService {
+  private readonly replies = new WeakMap<ReviewRecord, ReviewReply>();
   private tail: Promise<unknown> = Promise.resolve();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private unlisten: (() => void) | undefined;
@@ -29,7 +30,7 @@ export class CodeReviewService {
     // A null attempt proves no PTY write was started. Requeue saved reports
     // rejected by the old source-binding checks, without replaying uncertain I/O.
     for (const record of this.store.records.values()) {
-      if (record.run.caseStatus !== "closed" && ["completed", "blocked"].includes(record.run.phase) && record.run.reportId && !record.delivery.attemptedAt &&
+      if (!record.source.replyTarget && record.run.caseStatus !== "closed" && ["completed", "blocked"].includes(record.run.phase) && record.run.reportId && !record.delivery.attemptedAt &&
           ["unavailable", "target_changed"].includes(record.run.delivery)) {
         record.run.delivery = "pending"; record.run.deliveryError = null;
       }
@@ -62,11 +63,22 @@ export class CodeReviewService {
           if (this.closing) break;
           if (record.run.caseStatus === "closed") continue;
           if (!active(record.run) && record.run.delivery !== "pending") continue;
-          try { await this.advance(record); }
+          const wasActive = active(record.run);
+          try {
+            if (wasActive) await this.advance(record);
+            else await this.deliver(record);
+          }
           catch (error) {
+            if (!wasActive) {
+              record.run.delivery = record.delivery.attemptedAt ? "unknown" : "unavailable";
+              record.run.deliveryError = "无法确认结果已回传，请查看 Review 记录";
+              await this.touch(record);
+              continue;
+            }
             record.run.phase = "blocked";
             record.run.error = { code: error instanceof CodeReviewError ? error.code : "review_unavailable",
               message: error instanceof CodeReviewError ? error.message : "Review 自动推进失败，请查看评审终端" };
+            if (record.source.replyTarget) record.run.delivery = "pending";
             await this.touch(record);
           }
         }
@@ -95,33 +107,33 @@ export class CodeReviewService {
       catch (error) { throw new CodeReviewError(409, "target_changed", String(error)); }
       try { source.rootPath = await realpath(source.rootPath); }
       catch { throw new CodeReviewError(400, "workspace_unavailable", "工作区路径无效"); }
+      const reply = request.replyTo ? bindReviewReply(this.manager, this.options, source, request.replyTo,
+        () => this.tasks.hasHumanControlHandoff(terminalId)) : undefined;
+      if (reply) source.replyTarget = reply.target;
       const previous = [...this.store.records.values()].reverse().find((record) => record.source.terminalId === terminalId);
       const continuing = previous?.run.caseStatus === "open" && previous.source.projectId === source.projectId && previous.source.rootPath === source.rootPath;
       if (continuing && active(previous.run)) {
+        if (reply && (reviewDigest(previous.source.replyTarget ?? null) !== reviewDigest(reply.target) || !this.replies.has(previous)))
+          throw new CodeReviewError(409, "review_in_progress", "此终端已有一轮 Review，请在 Review 记录中查看");
         previous.requests.push({ terminalId, request }); await this.touch(previous); return structuredClone(previous.run);
       }
-      if (continuing && ["pending", "writing"].includes(previous.run.delivery))
+      if ((continuing || previous?.source.replyTarget) && ["pending", "writing"].includes(previous.run.delivery))
         throw new CodeReviewError(409, "delivery_pending", "本轮结果尚在回传，请等待回传结束后复审");
       const id = randomUUID(); const now = new Date().toISOString();
-      const candidate = continuing && previous.reviewerThreadId && previous.run.reviewerTerminalId
-        ? await this.tasks.observe(previous.reviewerTaskId).catch(() => null) : null;
-      // A user request authorizes another review, not taking control back from a
-      // human or resuming a lost executor. Keep the case, use a fresh Reviewer then.
-      const reuse = candidate?.availability === "available" && candidate.task.phase === "ready" && candidate.task.control === "supervisor" &&
-        candidate.task.threadId === previous?.reviewerThreadId && candidate.task.terminalSessionId === previous?.run.reviewerTerminalId &&
-        candidate.terminalState?.state === "agent_idle";
       const record: ReviewRecord = { source, requests: [{ terminalId, request }], snapshotId: null,
-        reviewerTaskId: reuse ? previous.reviewerTaskId : `code-review:${id}`, reviewerThreadId: reuse ? previous.reviewerThreadId : null,
+        reviewerTaskId: `code-review:${id}`, reviewerThreadId: null,
+        ...(continuing && previous.reviewerThreadId && previous.run.reviewerTerminalId ? { reuseFromReviewId: previous.run.reviewId } : {}),
         startedAt: Date.now(), dispatchId: `review:${id}`, recovered: false,
         delivery: { deliveryId: `code-review-result:${id}`, reportHash: null, attemptedAt: null },
         run: { reviewId: id, caseId: continuing ? previous.run.caseId : id, caseStatus: "open", round: continuing ? previous.run.round + 1 : 1,
+          ...(reply ? { resultDelivery: "source_conversation" as const } : {}),
           requestId: request.requestId, projectId: source.projectId, phase: "preparing", createdAt: now, updatedAt: now,
-          reviewerTerminalId: reuse ? previous.run.reviewerTerminalId : null, reviewerPanelId: reuse ? previous.run.reviewerPanelId : null,
+          reviewerTerminalId: null, reviewerPanelId: null,
           reportId: null, stale: false, delivery: "not_ready", error: null,
           deliveryError: null, summary: null, findingCount: null } };
+      if (reply) this.replies.set(record, reply);
       this.store.records.set(id, record);
       await this.touch(record); // durable creation intent precedes snapshot or terminal creation
-      await this.store.prepare(id);
       this.wake();
       return structuredClone(record.run);
     });
@@ -171,22 +183,26 @@ export class CodeReviewService {
     if (!artifact) throw new CodeReviewError(404, "artifact_not_found", "产物不存在");
     return { bytes: await readOwnedFile(path.join(this.store.saved(id), "artifacts"), artifact.artifactId, 20 * 1024 * 1024), mimeType: artifact.mimeType };
   }
+  private async deliver(record: ReviewRecord) {
+    if (record.delivery.attemptedAt) {
+      record.run.delivery = "unknown"; record.run.deliveryError = "回传结果不确定，请查看 Review 记录";
+      await this.touch(record); return;
+    }
+    const reply = this.replies.get(record);
+    if (reply?.status() === "busy") return;
+    await deliverCodeReview(this.store, record, record.run.reportId ? await this.store.report(record.run.reviewId) : null,
+      this.manager, this.options, reply);
+    if (record.run.delivery !== "pending") this.replies.delete(record);
+  }
   private async advance(record: ReviewRecord) {
     const { run } = record; const id = run.reviewId;
-    if (run.reportId && ["completed", "blocked"].includes(run.phase) && run.delivery === "pending") {
-      if (record.recovered && record.delivery.attemptedAt) {
-        run.delivery = "unknown"; run.deliveryError = "Backend 重启后未恢复自动回传，请查看已保存报告";
-        await this.touch(record); return;
-      }
-      await deliverCodeReview(this.store, record, await this.store.report(id), this.manager, this.options); return;
-    }
     if (run.phase === "preparing") {
       await this.store.prepare(id);
       const snapshot = record.snapshotId ? await this.store.snapshot(id)
         : await captureReviewSnapshot(record.source.projectId, record.source.rootPath);
       if (!record.snapshotId) {
         if (!snapshot.entries.length) throw new CodeReviewError(409, "no_changes", "当前工作区没有待审查的改动");
-        const requirements = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath);
+        const requirements = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath, record.source.replyTarget);
         await atomicJson(path.join(this.store.input(id), "requirements.json"), requirements);
         await chmod(path.join(this.store.input(id), "requirements.json"), 0o400);
         await atomicJson(path.join(this.store.input(id), "snapshot.json"), snapshot);
@@ -199,6 +215,20 @@ export class CodeReviewService {
       if (record.recovered && !this.tasks.list().some((task) => task.taskId === record.reviewerTaskId) && !run.reviewerTerminalId) {
         // The durable task ledger proves that no terminal/start intent existed.
         record.recovered = false;
+      }
+      const previous = record.reuseFromReviewId ? this.store.records.get(record.reuseFromReviewId) : undefined;
+      if (previous) {
+        // Reuse only an idle Reviewer that still belongs to the observed conversation.
+        const candidate = await this.tasks.observe(previous.reviewerTaskId).catch(() => null);
+        if (candidate?.availability === "available" && candidate.task.phase === "ready" && candidate.task.control === "supervisor" &&
+            candidate.task.threadId === previous.reviewerThreadId && candidate.task.terminalSessionId === previous.run.reviewerTerminalId &&
+            candidate.terminalState?.state === "agent_idle") {
+          record.reviewerTaskId = previous.reviewerTaskId;
+          record.reviewerThreadId = previous.reviewerThreadId;
+          run.reviewerTerminalId = previous.run.reviewerTerminalId;
+          run.reviewerPanelId = previous.run.reviewerPanelId;
+        }
+        delete record.reuseFromReviewId;
       }
       if (record.reviewerThreadId) {
         // Explicit re-review: retain the case's executor, freeze a new snapshot and
@@ -256,6 +286,7 @@ export class CodeReviewService {
     if (turn.status !== "completed") {
       run.phase = turn.status === "interrupted" ? "cancelled" : "failed";
       run.error = { code: `reviewer_${turn.status}`, message: "Reviewer 未正常完成，部分证据保留在评审终端" };
+      if (record.source.replyTarget) run.delivery = "pending";
       await this.touch(record); return;
     }
     const finals = turn.messages.filter((message) => message.role === "assistant" && message.phase === "final" && message.text.trim());
@@ -266,12 +297,13 @@ export class CodeReviewService {
     try { run.stale = (await captureReviewSnapshot(record.source.projectId, record.source.rootPath)).fingerprint !== snapshot.fingerprint; }
     catch { run.stale = true; }
     if (requirements && report.scope === "code_and_goals") {
-      const current = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath);
+      const current = await readReviewRequirements(this.manager, this.options, record.source.terminalId, record.source.rootPath, record.source.replyTarget);
       run.stale ||= current.digest !== requirements.digest;
     }
     run.reportId = id; run.scope = report.scope; run.summary = report.summary; run.findingCount = report.findings.length;
     const unverified = !report.findings.length && !report.coverageComplete;
-    run.phase = unverified ? "blocked" : "completed"; run.delivery = shouldDeliverCodeReview(report) ? "pending" : "skipped";
+    run.phase = unverified ? "blocked" : "completed";
+    run.delivery = record.source.replyTarget || report.findings.some((finding) => finding.basis === "runtime") ? "pending" : "skipped";
     const goalFailed = report.checks.some((check) => check.description.startsWith("目标核验：") && check.status === "failed");
     run.error = unverified ? goalFailed
       ? { code: "review_goal_failed", message: "目标核验发现未达成项，请查看报告中的实际结果与证据" }
@@ -281,7 +313,7 @@ export class CodeReviewService {
     }
     record.delivery.reportHash = reviewDigest(report);
     await this.touch(record);
-    // Reproduced findings are delivered on a following serial tick.
+    // Deliver on a following serial tick, after the result has been persisted.
   }
   async dispose() {
     this.closing = true; if (this.timer) clearTimeout(this.timer); this.unlisten?.();

@@ -4,6 +4,7 @@ import { CodeReviewError } from "../../terminal/code-review/store";
 import type { CodeReviewService } from "../../terminal/code-review/service";
 const createSchema = z.object({ requestId: z.string().min(1).max(100), panelId: z.string().min(1).nullable().optional(),
   expectedTarget: z.object({ projectId: z.string().min(1), threadId: z.string().min(1).nullable(), provider: z.string().min(1).nullable() }).strict().optional(),
+  replyTo: z.object({ panelId: z.string().min(1).max(100).optional(), tmuxPaneId: z.string().regex(/^%\d+$/).max(32).optional() }).strict().optional(),
 }).strict();
 export function registerTerminalCodeReviewRoutes(router: Router, service?: CodeReviewService) {
   const error = (res: Response, caught: unknown) => {

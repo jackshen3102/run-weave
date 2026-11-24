@@ -10,7 +10,7 @@ export async function runTerminalReviewCommand(
   const [action, id, extra] = parsed.positionals;
   if (extra) throw new CliError("Unexpected argument; Review uses the source terminal's frozen requirements, not a positional prompt", 2);
   const allowedOptions = new Set(["json", "plain", "profile", "backend-port", "instance", "config-dir",
-    ...(action === "start" ? ["request-id"] : action === "list" ? ["before"] : action === "wait" ? ["wait-ms"] : []),
+    ...(action === "start" ? ["request-id", "panel-id"] : action === "list" ? ["before"] : action === "wait" ? ["wait-ms"] : []),
   ]);
   for (const option of Object.keys(parsed.options)) {
     if (!allowedOptions.has(option)) throw new CliError(`Unsupported option --${option} for terminal review ${action ?? ""}`, 2);
@@ -21,7 +21,12 @@ export async function runTerminalReviewCommand(
     if (action === "list") return client.listCodeReviews(terminalId, getStringOption(parsed.options, "before"));
     const requestId = requireStringOption(parsed.options, "request-id");
     if (!requestId.trim() || requestId.length > 100) throw new CliError("--request-id must contain 1–100 characters", 2);
-    return client.createCodeReview(terminalId, { requestId });
+    const currentTerminal = terminalId === env.RUNWEAVE_TERMINAL_SESSION_ID;
+    const panelId = getStringOption(parsed.options, "panel-id")?.trim();
+    const tmuxPaneId = currentTerminal ? env.TMUX_PANE?.trim() : undefined;
+    const inheritedPanel = currentTerminal ? env.RUNWEAVE_TERMINAL_PANEL_ID?.trim() : undefined;
+    return client.createCodeReview(terminalId, { requestId,
+      replyTo: panelId ? { panelId } : tmuxPaneId ? { tmuxPaneId } : inheritedPanel ? { panelId: inheritedPanel } : {} });
   }
   if ((action === "show" || action === "wait") && id) {
     if (action === "show") return client.getCodeReview(id);
@@ -52,5 +57,5 @@ export async function runTerminalReviewCommand(
     // Never invent a run when even the first response missed the deadline.
     return { ...(latest ?? { run: null, snapshot: null, report: null }), reviewId: id, waitTimedOut: true };
   }
-  throw new CliError("Usage: rw terminal review <start [terminalSessionId] --request-id ID|list [terminalSessionId] [--before ID]|show <reviewId>|wait <reviewId> [--wait-ms 30000]>", 2);
+  throw new CliError("Usage: rw terminal review <start [terminalSessionId] --request-id ID [--panel-id ID]|list [terminalSessionId] [--before ID]|show <reviewId>|wait <reviewId> [--wait-ms 30000]>", 2);
 }

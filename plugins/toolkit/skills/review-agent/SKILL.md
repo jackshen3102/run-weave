@@ -1,6 +1,6 @@
 ---
 name: review-agent
-description: 在原生 CLI 中通过 @review、@review-agent 或明确的独立代码审查请求，代发给 Runweave 独立 Review Agent，读取状态与真实报告；当前 Agent 已是 Reviewer 时不触发。
+description: 在原生 CLI 中通过 @review、@review-agent 或明确的独立代码审查请求，异步代发给 Runweave 独立 Review Agent，接收本轮结果；当前 Agent 已是 Reviewer 时不触发。
 ---
 
 # 代发独立 Review
@@ -25,35 +25,20 @@ Agent 自己代替审查，也不要启动通用子 Agent 来绕过该流程。�
 
 ```sh
 "${RUNWEAVE_CLI_BIN:-rw}" terminal review start --request-id <本次UUID> --json
-# 外部终端或用户已指定来源时，在 start 后传入 terminalSessionId。
+# 外部终端显式传入 terminalSessionId，多面板来源另加 --panel-id <id>。
 ```
 
-保存响应的 `reviewId`、`caseId`、`round` 和 `reviewerTerminalId`。开始响应可能尚未分配
-Reviewer；用后续查询核对，不能把 `preparing` 说成已经审完。重复请求由 Backend 去重；
-同来源正在执行时沿用当前轮次，新消息不会自动追加进已冻结输入，报告这一点。
+保存 `reviewId`。响应包含 `resultDelivery: "source_conversation"` 时，告知用户请求已受理、结果将回到原会话，
+然后结束当前轮或继续独立工作。无需定期查询或查看 Reviewer 终端。缺少该字段时，说明此版本无法承诺后台交卷，
+提供原编号供手动查阅。相同请求结果未知时先按来源查询，再用原 requestId 恢复。
 
-## 读取与回报
+## 收到结果
 
-```sh
-"${RUNWEAVE_CLI_BIN:-rw}" terminal review wait <reviewId> --wait-ms 30000 --json
-"${RUNWEAVE_CLI_BIN:-rw}" terminal review show <reviewId> --json
-"${RUNWEAVE_CLI_BIN:-rw}" terminal review list --json
-# 历史分页使用 list --before <上页before>；同样可显式指定来源 ID。
-```
+Backend 回传带 `[runweave-code-review-feedback:<reviewId>]` 的本轮结果。按回传内容报告通过、已复现 Bug、
+验收阻塞或运行失败，按需阅读其中的报告引用。需要主动查看进度或完整报告时运行
+`rw terminal review show <reviewId> --json`。结果对应本轮冻结快照，注意过期标记和核验范围。
+覆盖缺口的细节留在完整报告，只把实际复现的问题报告为 Bug。
 
-默认继续读取本轮结果；等待期间简短说明进度。`waitTimedOut` 只表示这一段等待结束，
-不会取消审查；继续查询原 reviewId，不再次 start。用户只要求发起时给出编号与查询方式。
-正数等待期限也约束 HTTP 查询；若到期前尚无首个响应，run/snapshot/report 为 null，使用返回
-的 reviewId 继续查询，不把缺少状态解释为审查失败。wait-ms=0 仅执行一次查询。
-网络结果未知时先 list 查询原 requestId，再用同一 ID 恢复，不换 ID 盲目重发。
-
-读取保存的独立报告和 run 状态，核对范围、快照有效性及回传结果。默认只回报已实际复现的
-Bug：级别、位置、标题、影响和证据。未验证目标、覆盖缺口和 limitations 保留在完整报告，
-不逐项转抄到来源终端；用户明确询问时再解释。零 Bug 不发送问题反馈，也不代表需求已经
-全部验证。原 CLI 报告必须基于保存的报告，不冒充 Reviewer 作答。
-
-Backend 仅自动回传已复现的 Bug；Skill 不再向来源终端 send 一份。没有已复现 Bug 时
-delivery 为 skipped，即使报告仍有验收阻塞。不要自动关闭事项或追着重试失败的 Reviewer。
 独立 Reviewer 只审查、不修改业务代码；来源实现 Agent 收到问题后，按原任务已有授权继续
 修复并验证，不因调用 Review 或收到自动反馈而要求用户重复授权。用户明确要求只审查、
 不修改、等待确认、停止或已人工接管时遵循最新限制；超出原任务范围的操作仍需相应授权。
