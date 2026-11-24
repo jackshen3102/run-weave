@@ -108,29 +108,23 @@ Dots 可通过现有 MCP run_command 调用这些命令并有界等待。command
 ## 原生 CLI 与终端页面独立代码 Review
 
 原生 CLI 的 `review-agent` Skill 将 `@review` 或明确的独立代码审查请求代发到同一 Backend
-Review 服务。当前 Agent 发起和读取结果，并按原任务已有授权处理已复现问题；独立 Reviewer 执行 `review-only` 职责。
+Review 服务。当前 Agent 发起后可结束本轮，Backend 将结果回传原会话；独立 Reviewer 执行 `review-only` 职责。
 这是提交后的 Skill 调用，不增加原生 CLI 的 @ 自动补全，也不要求打开 Runweave 图形界面。
 
 ```sh
-rw terminal review start [terminalSessionId] --request-id <uuid> --json
+rw terminal review start [terminalSessionId] --request-id <uuid> [--panel-id <id>] --json
 rw terminal review list [terminalSessionId] [--before <reviewId>] --json
 rw terminal review show <reviewId> --json
-rw terminal review wait <reviewId> --wait-ms 30000 --json
 ```
 
-start/list 的来源默认取 `RUNWEAVE_TERMINAL_SESSION_ID`；在外部终端调用时须明确指定来源
-及 Backend 连接。范围是来源终端所属项目的当前改动，不是 shell 当前目录，也不支持任意
-PR/分支或文件过滤。请求编号由调用 Agent 生成并保存；未知结果保留原编号查询/恢复，明确
-复审才使用新编号。同来源运行中的请求合并到当前轮次，不追加新提示到已冻结输入。
+start/list 默认使用 `RUNWEAVE_TERMINAL_SESSION_ID`；从外部发起时须指定来源终端和 Backend 连接。
+原会话内按调用者的 tmux pane 或注入面板 ID 绑定。外部指定的终端有多个运行面板时需提供 `--panel-id`。
+来源须有可识别的 Agent 会话。审查范围为来源项目当前改动。相同 requestId 的请求可安全重试，
+同一来源会话的重复发起复用活跃轮次；无法绑定到现有轮次时返回冲突。
 
-start 返回共享 `CodeReviewRun`；list 返回 `CodeReviewPage`；show/wait 返回
-`CodeReviewDetail`（状态、快照摘要、完整结构化报告），并附 CLI connection 信息。
-wait 仅查询，默认 30 秒，允许 0–60000 毫秒；0 表示单次查询，不轮询。正数期限包含 HTTP
-查询及轮询等待，到期取消正在进行的查询，不再发出新查询。阶段在期限内离开 preparing/starting/reviewing 即返回，
-不等待自动回传完成。到期返回 `waitTimedOut: true` 与最后取得的状态，不取消任务；若首个响应
-尚未取得，返回 reviewId 和 null 的 run/snapshot/report，不能推断审查失败。查询成功的退出码
-不表示审查通过。后续使用原 reviewId 继续 wait/show，结合 phase、scope、stale、coverageComplete、
-checks、limitations 和 delivery 判断。Skill 不重复向来源投递报告，也不自动关闭事项。
+start 返回 `CodeReviewRun` 和 `resultDelivery: "source_conversation"`，表示已登记后台交卷。
+list 返回历史，show 返回状态、快照摘要和完整报告。通过、发现 Bug、验收阻塞、启动或运行失败和中断都产生回传。
+已有的 `wait` 命令保留给脚本兼容；交互 Skill 发起后结束当前轮或继续其他工作。
 
 CLI `terminal review` 是发起独立审查，和 `terminal task review` 给任务提交验收结论是不同操作。
 
@@ -146,12 +140,11 @@ Windows 启动要求能解析到 Codex 的 `.exe`，启动前先完成下文的 
 `POST /api/terminal/session/:id/code-reviews` 按 requestId 去重，同来源正在执行的一轮不会重复派发；
 GET 同一路径返回最近 20 条记录和 before 游标；
 `GET /api/terminal/code-reviews/:reviewId` 返回状态、快照摘要和独立报告。
-每轮有独立 reviewId、快照和报告；同一事项共用 caseId。有效报告无 Bug 且覆盖完整时 caseStatus 为 passed，
-事项自动结束、状态条隐藏，delivery 为 skipped，不向来源终端发送消息；有 Bug 时事项保持 open，
-仅回传已复现问题的级别、位置、标题、影响及完整报告路径。目标未达成、目标未验证和核验覆盖缺口保留在完整报告中，不回写来源终端。
-公共反馈明确要求来源实现 Agent 按原任务已有授权核对、修复并验证问题，CLI 和菜单入口使用相同规则，不依赖来源是否加载 Skill。Review 不撤销既有授权，也不要求用户重复授权；用户最新的只读、等待确认、停止或人工接管限制优先。
-问题必须由 Reviewer 实际复现并提供同版检查与证据；静态推断不能进入新报告的问题列表，也不回传旧报告中的静态问题。
-无已复现问题但仍有覆盖或必要验证缺口时，报告保留，事项保持 open、阶段为 blocked，delivery 为 skipped；报告表述为“验收阻塞”，说明原因、未执行项及缺失证据，不据此判定验收不通过、不把疑点作为 Bug 投递。
+每轮有独立 reviewId、快照和报告，同一事项共用 caseId。零 Bug 且覆盖完整时 caseStatus 为 passed。
+有 Bug 时事项保持 open，回传只列已复现问题的级别、位置、标题、影响及完整报告路径。
+来源实现 Agent 按原任务已有授权核对、修复并验证，用户最新的只读、等待确认、停止或人工接管限制优先。
+零 Bug 但有必需验证缺口时，阶段为 blocked，完整报告保留未执行项和缺失证据。
+菜单入口与发送旧请求的客户端回传已复现 Bug，其他结果从 Review 记录读取。
 此时再次点击 Review 会复用该事项的独立 Reviewer，在新快照上执行新一轮全范围审查，保留旧报告。
 仅复用原会话仍可用、空闲且保有自动控制权的 Reviewer；重启后或人工接管时为同一事项新建 Reviewer，不夺回人工控制权。
 `POST /api/terminal/code-reviews/:reviewId/close` 由用户主动结束当前事项，caseStatus 为 closed；
@@ -191,12 +184,13 @@ Backend 管理的白名单目录。文件存在及 JSON 合法不证明语义正
 完成时重新比较范围指纹，漂移则标 stale，原报告仍属于旧快照。用户可在来源状态条打开
 报告或 Reviewer；不会自动切走来源页面。Reviewer 终端与历史报告保留。
 
-发起与自动回传只使用总终端 ID。客户端无需提交 panel、thread 或启动操作编号；后台从该
-终端所属项目捕获代码，报告保存后通过普通终端输入接口直接发回原总终端。Review 不新增
-忙闲、草稿、任务或会话切换判断，不新增设置；排队及输入行为与手动发送相同。界面切换
-到其他终端不会改变回传目标。写入意图先持久化，不确定写入记 unknown，不重放；written
-只说明输入 I/O 接受，不代表来源 Agent 已确认。Backend 重启后只重新排队从未尝试写入
-的已保存报告（包括带目标反馈的 blocked 报告），不恢复通用任务的 supervisor 权限；已尝试且结果不确定的回传记 unknown。
+CLI 回传绑定发起时的面板、会话和执行环境。原 Agent 忙时由 Backend 保留待投递结果，
+空闲后检查原会话和人工输入状态再投递。来源面板的人工输入、无法归属面板的输入、人工接管、
+来源身份变化或 Backend 重启使本轮自动回传失效，
+结果仍可按原 reviewId 查阅。菜单入口的已复现 Bug 继续通过原终端的普通输入路径交付。
+写入意图先持久化，投递结果不确定时保留 unknown 和原编号，不重放。written 仅指输入 I/O 接受，
+原 Agent 是否已消费要查原生会话。
+
 启动等待上限 120 秒，审查观察上限 30 分钟，超时不强杀 Reviewer。
 
 验收入口为 [独立 Review 计划](../testing/terminal/independent-code-review.testplan.yaml)。

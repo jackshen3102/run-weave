@@ -42,6 +42,12 @@ export class TerminalTaskService {
 
   list(): TerminalTask[] { return structuredClone([...this.store.tasks.values()]); }
 
+  hasHumanControlHandoff(terminalId: string): boolean {
+    // Review checks ordinary input for its own bound pane separately.
+    return [...this.store.tasks.values()].some((task) => task.terminalSessionId === terminalId &&
+      task.control === "human" && task.controlReason !== "terminal_input");
+  }
+
   private get(id: string): TerminalTask {
     const task = this.store.tasks.get(id);
     if (!task) throw new TerminalTaskError(404, "task_not_found", "Terminal task not found");

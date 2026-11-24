@@ -15,6 +15,7 @@ interface InputAdmission {
   revision: object;
   /** Actual input changes, excluding Agent state/thread metadata refreshes. */
   inputWriteRevision: object;
+  paneInputWriteRevisions: Map<string | null, object>;
   pendingUserInput: Set<string | null>;
   inputVersion: string;
   edits: Map<string | null, object>;
@@ -39,7 +40,7 @@ export function terminalInputAdmission(
 ): InputAdmission {
   let admission = admissions.get(session);
   if (!admission) {
-    admission = { revision: {}, inputWriteRevision: {}, inputVersion: randomUUID(), pendingUserInput: new Set(), edits: new Map(), submissions: new Map(), writers: 0, returning: false };
+    admission = { revision: {}, inputWriteRevision: {}, paneInputWriteRevisions: new Map(), inputVersion: randomUUID(), pendingUserInput: new Set(), edits: new Map(), submissions: new Map(), writers: 0, returning: false };
     admissions.set(session, admission);
   }
   return admission;
@@ -73,6 +74,7 @@ function recordInputIntent(session: TerminalSessionRecord, paneId: string | null
   const admission = terminalInputAdmission(session);
   inputObservers.get(session)?.();
   admission.inputWriteRevision = {};
+  admission.paneInputWriteRevisions.set(paneId, admission.inputWriteRevision);
   invalidateTerminalInput(session);
   if (intent.kind === "interrupt") return;
   const alreadyPending = admission.pendingUserInput.has(paneId);
@@ -97,6 +99,14 @@ export function clearTerminalDraft(session: TerminalSessionRecord, paneId: strin
 export function hasPendingTerminalInput(session: TerminalSessionRecord, paneId: string | null): boolean {
   const pending = terminalInputAdmission(session).pendingUserInput;
   return pending.has(null) || pending.has(paneId);
+}
+
+/** Capture human input on the fixed pane and any input with an unknown destination. */
+export function captureTerminalPaneInput(session: TerminalSessionRecord, paneId: string | null): () => boolean {
+  const revisions = terminalInputAdmission(session).paneInputWriteRevisions;
+  const paneRevision = revisions.get(paneId);
+  const unknownRevision = revisions.get(null);
+  return () => revisions.get(paneId) !== paneRevision || revisions.get(null) !== unknownRevision;
 }
 
 /** Only the short handoff delivery is exclusive, never the user's assistance. */

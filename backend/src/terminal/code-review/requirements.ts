@@ -60,7 +60,8 @@ export async function captureReviewRequirements(
 }
 
 export function readReviewRequirements(manager: TerminalSessionManager, options: TerminalSessionCreationOptions,
-  terminalId: string, root: string) {
-  return captureReviewRequirements(root, () => readTerminalConversation(manager, terminalId, {},
+  terminalId: string, root: string, target?: { panelId: string | null; threadId: string }) {
+  return captureReviewRequirements(root, () => readTerminalConversation(manager, terminalId,
+    { panelId: target?.panelId ?? undefined, expectedThreadId: target?.threadId },
     AbortSignal.timeout(20_000), options.tmuxService));
 }
