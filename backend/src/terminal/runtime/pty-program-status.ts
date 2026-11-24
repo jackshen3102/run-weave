@@ -7,7 +7,7 @@ import type { PtyRuntime } from "./pty-service";
 /** Only the native foreground Codex, on this particular PTY, owns its reports. */
 function findForegroundCodex(tty: string): string | undefined {
   const rows = execFileSync("ps", ["-t", tty, "-o", "pid=,pgid=,tpgid=,lstart=,comm="], {
-    encoding: "utf8", timeout: 250, env: { ...process.env, LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf8", timeout: 250, env: { LC_ALL: "C" }, stdio: ["ignore", "pipe", "ignore"],
   });
   for (const row of rows.split("\n")) {
     const match = /^\s*(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+\s+\S+\s+\d+\s+\S+\s+\d+)\s+(.+)$/.exec(row);
