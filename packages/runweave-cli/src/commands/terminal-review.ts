@@ -16,12 +16,13 @@ export async function runTerminalReviewCommand(
     if (!allowedOptions.has(option)) throw new CliError(`Unsupported option --${option} for terminal review ${action ?? ""}`, 2);
   }
   if (action === "start" || action === "list") {
-    const terminalId = id ?? env.RUNWEAVE_TERMINAL_SESSION_ID;
+    const callerTerminalId = env.RUNWEAVE_TERMINAL_SESSION_ID;
+    const terminalId = id ?? callerTerminalId;
     if (!terminalId?.trim()) throw new CliError("Specify a source terminalSessionId or run inside a Runweave terminal (RUNWEAVE_TERMINAL_SESSION_ID)", 2);
     if (action === "list") return client.listCodeReviews(terminalId, getStringOption(parsed.options, "before"));
     const requestId = requireStringOption(parsed.options, "request-id");
     if (!requestId.trim() || requestId.length > 100) throw new CliError("--request-id must contain 1–100 characters", 2);
-    const currentTerminal = terminalId === env.RUNWEAVE_TERMINAL_SESSION_ID;
+    const currentTerminal = terminalId === callerTerminalId;
     const panelId = getStringOption(parsed.options, "panel-id")?.trim();
     const tmuxPaneId = currentTerminal ? env.TMUX_PANE?.trim() : undefined;
     const inheritedPanel = currentTerminal ? env.RUNWEAVE_TERMINAL_PANEL_ID?.trim() : undefined;
