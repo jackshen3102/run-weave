@@ -11,6 +11,7 @@
 | 修改官网、快速开始、静态托管与 SEO                    | [官网工程与部署指南](../packages/website/README.md)                                                                                                       |
 | 查看重要架构选择及其取舍背景                           | [adr/README.md](./adr/README.md)                                                                                                                           |
 | 管理定时任务、后台执行与终端恢复                       | [接入边界](../frontend/docs/scheduled-tasks.md)、[CLI、按需运行与后台续接](./cli/scheduled-task-cli.md)、[运行配置](./deployment/overview.md#定时任务运行) |
+| 查看终端程序状态和 OSC 7501 验收                     | [终端状态](./architecture/terminal-state.md#osc-7501-程序状态)、[验收入口](./testing/README.md#osc-7501-终端状态验收) |
 | 查找 tmux / Windows 压力验收与取证预算 | [终端压力验收合同](./testing/README.md#终端压力验收合同) |
 | 查看 Claude Code 正文、生命周期、通知与验收边界        | [配置与能力](./cli/configuration.md#claude-code-原生引用与能力)、[验收入口](./testing/README.md#claude-code-集成验收)                                      |
 | 使用或修改 `rw` CLI、会话搜索、终端快照分享             | [CLI 文档](./cli/README.md) |

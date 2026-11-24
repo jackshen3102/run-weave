@@ -210,18 +210,29 @@ GET /api/app-server/threads/:threadId
 
 这个客户端入口用于排查某个 `threadId` 或 `terminalSessionId` 当前在 App Server projection 中的状态和归属。Backend 的 starting 补偿另受上文身份与新鲜度门禁约束；客户端查询不能替代 `/api/terminal/session/:terminalSessionId/state`，也不能作为 Stop 按钮、handoff 或 App 展示的权威状态源。
 
-## 与完成通知的边界
+## OSC 7501 程序状态
 
-Codex 的 OSC 7501 实时报文驱动 Panel 和会话的可选 `programStatus` 展示。
+Web、Electron 和原生 iOS 使用 Backend 的可选 `programStatus` 展示 Codex 当前轮状态。
 本地 tmux 在每个 Pane 的输出管道被动采集。直连 PTY 根据终端前台进程组识别 Codex。
 Windows PTY Host 核对同一 ConPTY 控制台内唯一的原生 Codex，使用进程 PID 和创建时间区分实例。
 直连与 Host 的默认 Panel 和会话摘要共享会话投影，进程退出后清除旧状态。同一个 shell
 随后启动 Codex 时按新进程接收报告。
 
-实时路径在终端回放和历史记录之前移除 OSC 7501 帧。状态事件只携带状态、来源、观测时间
-和可选等待类型。没有有效 OSC 时使用既有 `TerminalState`，原生证据确认当前轮结束或取消时也可
-解除滞留的工作状态。输入、停止、完成修订和外部通知继续使用既有证据。
-Claude 当前沿用 Hook。其 OSC 探测需要能力应答先于设备属性应答。
+实时路径在终端回放和历史记录之前移除 OSC 7501 帧。状态投影只保留状态、来源、可选观测时间
+和等待类型。能力查询本身不会推进程序状态。没有有效 OSC 时使用既有 `TerminalState`。
+OSC 没有心跳，终端静默不触发回退。原生结束或取消事件须同时匹配已观察到的 Codex thread
+和 turn，才可清除残留的工作或等待状态。手动启动且没有原生轮次身份时，展示依据是当前前台
+Codex 的实时报告。受管 Codex 的原生旁聊不覆盖主会话的 OSC 状态。
+
+单个 Panel 优先展示等待、运行，再读根状态。会话摘要在运行中的 Panel 之间按等待、运行、
+根终态、启动、空闲的顺序选择。根 `done` 与 `error` 分别表示程序报告本轮结束或失败。
+Claude 当前使用 Hook；其 OSC 探测需要在目标终端验证能力应答顺序和后续有效报告。
+按运行时与客户端分开取证，见 [OSC 7501 终端状态验收](../testing/README.md#osc-7501-终端状态验收)。
+
+## 与完成通知的边界
+
+程序展示状态独立于输入、停止、任务监督、完成修订和外部通知。终端显示 `done` 时，
+外部 CI 或后台进程仍可继续。
 
 `TerminalState` 不消费 `/internal/terminal-completion` 或普通 completion feed，也不把完成提醒本身作为状态来源。`/internal/terminal-completion` 只负责“非当前终端里的 AI 任务完成提醒”，例如终端 tab 小绿点。唯一例外是 app-server `agent.completion` 中由 hook bridge 双写出来的 `hook_stop + Stop` 事件：它可以作为丢失直连 agent hook 时的 Stop hook fallback，进入同一个 agent hook processor，而不是绕过状态门禁直接写状态。App Server 的 Codex thread 状态补偿同样生成 `agent.hook` 事件，而不是新增 backend 私有状态写入路径。状态服务在状态变化后会向全局 `TerminalEventService` 记录 `terminal_state_changed` envelope，由 `/ws/terminal-events` 推送给 Web/App；这个推送是状态结果的分发通道，不是状态判定来源。
 
