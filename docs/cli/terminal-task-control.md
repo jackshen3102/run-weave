@@ -124,7 +124,10 @@ start/list 默认使用 `RUNWEAVE_TERMINAL_SESSION_ID`；从外部发起时须�
 
 start 返回 `CodeReviewRun` 和 `resultDelivery: "source_conversation"`，表示已登记后台交卷。
 list 返回历史，show 返回状态、快照摘要和完整报告。通过、发现 Bug、验收阻塞、启动或运行失败和中断都产生回传。
-已有的 `wait` 命令保留给脚本兼容；交互 Skill 发起后结束当前轮或继续其他工作。
+交互 Skill 发起后可结束当前轮或继续其他工作。脚本可用
+`rw terminal review wait <reviewId> [--wait-ms 30000] --json` 查询审查阶段。等待范围为
+0～60000 毫秒，0 表示单次查询。返回 `waitTimedOut: true` 时审查仍可继续，后续用原
+reviewId 查询；审查阶段结束也无需等待自动回传。
 
 CLI `terminal review` 是发起独立审查，和 `terminal task review` 给任务提交验收结论是不同操作。
 

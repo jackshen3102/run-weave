@@ -41,6 +41,16 @@ Daily Record 的[浏览来源接入计划](./skills/daily-record-browser.testpla
 原生 iOS 使用[手机专项计划](./app/ios-development-resources.testplan.yaml)，
 产品边界见[开发资源合同](../architecture/development-resources.md)。
 
+## OSC 7501 终端状态验收
+
+[传输计划](./terminal/runtime/osc-7501-transport.testplan.yaml)覆盖实时帧、历史隔离、Claude
+能力探测、直连 PTY 和 Windows ConPTY。[状态计划](./terminal/runtime/osc-7501-status.testplan.yaml)
+覆盖 Codex Full Access 成功与失败、手动启动、Hook 兜底、多 Panel、桌面与 iOS。
+
+本地 tmux Codex 组合使用 OSCT-001～003、OSCS-001～007。Claude 的目标 tmux 握手与状态验收
+分别见 OSCT-004、OSCS-008。直连 PTY、Windows 及 iOS 分别见 OSCT-005、OSCT-006 和
+OSCS-009。记录实际 CLI、运行时和客户端版本。各路径以真实目标环境的结果为准。
+
 ## Claude Code 集成验收
 
 Claude 的[配置与能力](../cli/configuration.md#claude-code-原生引用与能力)、
