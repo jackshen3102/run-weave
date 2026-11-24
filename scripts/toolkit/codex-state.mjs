@@ -31,7 +31,7 @@ export function codexReleaseInstalled(release, { marketplaceName, pluginName, pu
 
 function sameDirectory(left, right) {
   return typeof left === "string" && (
-    left === right || existsSync(left) && existsSync(right) && realpathSync(left) === realpathSync(right)
+    left === right || existsSync(left) && existsSync(right) && realpathSync.native(left) === realpathSync.native(right)
   );
 }
 
