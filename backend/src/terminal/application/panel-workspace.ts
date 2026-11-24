@@ -39,7 +39,7 @@ import {
   shouldBackfillSessionAgentMetadataToMainPanel,
   syncSinglePanelMetadataToSession,
 } from "./panel-metadata";
-import { toPanelListItem, toPanelWorkspacePayload } from "./payloads";
+import { toDefaultPanelWorkspace, toPanelListItem, toPanelWorkspacePayload } from "./payloads";
 
 const panelLogger = logger.child({ component: "terminal" });
 
@@ -382,26 +382,7 @@ export async function ensureTerminalPanelWorkspace(
   >,
 ) {
   if (!isTmuxBackedSession(session)) {
-    return {
-      terminalSessionId: session.id,
-      activePanelId: "default",
-      panels: [
-        {
-          panelId: "default",
-          terminalSessionId: session.id,
-          alias: "main",
-          role: "main",
-          cwd: session.cwd,
-          activeCommand: session.activeCommand,
-          status: session.status,
-          createdAt: session.createdAt.toISOString(),
-          lastActivityAt: session.lastActivityAt.toISOString(),
-          exitCode: session.exitCode,
-          focused: true,
-        },
-      ],
-      renderMode: "tmux-native" as const,
-    };
+    return toDefaultPanelWorkspace(session);
   }
 
   const tmuxService = requireTmuxSession(session, options.tmuxService);

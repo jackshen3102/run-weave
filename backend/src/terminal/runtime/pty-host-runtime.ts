@@ -106,6 +106,11 @@ async function launchHostedTerminal(options: HostedTerminalOptions, creating: bo
   const fallback = creating ? resolveTerminalFallbackLaunchConfig(session) : null;
   const terminalEnv = buildTerminalRuntimeEnvironment({ terminalSessionId: session.id, projectId: session.projectId, source: session.source });
   const runtime = await createHostedPty({ terminalSessionId: session.id, binding,
+    onProgramStatus: status => {
+      if (terminalSessionManager.getSession(session.id) === session && session.ptyHost === binding) {
+        terminalSessionManager.setSessionProgramStatus(session.id, status);
+      }
+    },
     onLaunch: async launch => {
       if (launch.fallbackReason) logger.warn("terminal.pty-host.fallback.activated", { terminalSessionId: session.id, command: launch.command, reason: launch.fallbackReason });
       await terminalSessionManager.updateSessionLaunch(session.id, { command: launch.command, args: launch.args });

@@ -1,8 +1,22 @@
 import type { TerminalEventService } from "../state/terminal-event-service";
 import { recordPanelEvent, syncSinglePanelMetadataToSession } from "./panel-metadata";
-import type { TerminalPanelRecord, TerminalSessionManager } from "../manager/manager";
+import type { TerminalPanelRecord, TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
 import { readCodexContext } from "../runtime/codex-context";
 import { invalidateTerminalInput } from "../runtime/input-admission";
+import { toDefaultPanelWorkspace, toPanelListItem } from "./payloads";
+
+export function publishCodexPanelStatus(manager: TerminalSessionManager, events: TerminalEventService, session: TerminalSessionRecord, panel?: TerminalPanelRecord): void {
+  if (!panel) {
+    const workspace = toDefaultPanelWorkspace(session);
+    events.record({
+      kind: "terminal_panel_updated", terminalSessionId: session.id, projectId: session.projectId,
+      payload: { panel: workspace.panels[0]!, workspace },
+    });
+    return;
+  }
+  const activePanelId = manager.getPanelWorkspace(session.id)?.activePanelId ?? null;
+  recordPanelEvent(manager, events, session, "terminal_panel_updated", { panel: toPanelListItem(panel, activePanelId) });
+}
 
 /** Called by the existing pane reconciliation loop; no second runtime or polling owner. */
 export async function syncCodexContext(manager: TerminalSessionManager, panel: TerminalPanelRecord): Promise<boolean> {
@@ -40,5 +54,5 @@ export async function observeCodexPane(manager: TerminalSessionManager, events: 
   if (!session || !panel || !(await syncCodexContext(manager, panel))) return;
   if (panels.filter((candidate) => candidate.status === "running").length === 1)
     await syncSinglePanelMetadataToSession(manager, session, manager.getPanel(panel.id) ?? panel);
-  recordPanelEvent(manager, events, session, "terminal_panel_updated", {});
+  publishCodexPanelStatus(manager, events, session, manager.getPanel(panel.id) ?? panel);
 }

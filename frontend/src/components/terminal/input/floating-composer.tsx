@@ -26,7 +26,6 @@ export interface TerminalFloatingComposerDiagnostics {
   bufferType: "normal" | "alternate" | undefined;
   draftMirrorSupported: boolean;
   eligible: boolean;
-  inputLagFallbackActive: boolean;
   sessionStatus: string | null;
   terminalAgent: string | null;
   terminalAtBottom: boolean;
@@ -151,9 +150,6 @@ export function TerminalFloatingComposer({
       diagnostics.draftMirrorSupported,
     ),
     "data-floating-composer-eligible": String(diagnostics.eligible),
-    "data-floating-composer-input-lag-fallback-active": String(
-      diagnostics.inputLagFallbackActive,
-    ),
     "data-floating-composer-scroll-button-mode": scrollButtonMode,
     "data-floating-composer-session-status": diagnostics.sessionStatus ?? "",
     "data-floating-composer-terminal-agent": diagnostics.terminalAgent ?? "",
@@ -202,14 +198,6 @@ export function TerminalFloatingComposer({
               正在发送…
             </p>
           ) : null}
-          {diagnostics.inputLagFallbackActive ? (
-            <div
-              role="status"
-              className="pointer-events-none rounded-full border border-amber-400/25 bg-slate-950/90 px-2.5 py-1 text-[11px] text-amber-100 shadow-lg shadow-slate-950/30"
-            >
-              Terminal busy · input buffered locally
-            </div>
-          ) : null}
           {scrollButtonMode === "floating" ? (
             <ScrollButton onClick={onScrollToBottom} />
           ) : null}
@@ -221,8 +209,8 @@ export function TerminalFloatingComposer({
           >
             <button
               type="button"
-              aria-label="Close floating composer"
-              title="Close composer"
+              aria-label="返回原生终端"
+              title="返回原生终端"
               className="grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900/70 text-slate-400 transition hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300 active:bg-slate-800"
               onPointerDown={(event) => event.preventDefault()}
               onClick={onClose}
@@ -286,8 +274,8 @@ export function TerminalFloatingComposer({
           {showTrigger ? (
             <button
               type="button"
-              aria-label="Open floating composer"
-              title="Open composer"
+              aria-label="切换到浮动输入框"
+              title="切换到浮动输入框"
               className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full border border-slate-600 bg-slate-950/95 text-slate-100 shadow-lg shadow-slate-950/40 backdrop-blur transition hover:border-cyan-400/45 hover:bg-slate-900 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-slate-800"
               onPointerDown={(event) => event.preventDefault()}
               onClick={onOpen}

@@ -2,6 +2,7 @@ import type { TerminalProjectListItem } from "../project";
 import type { ScheduledTaskSource } from "../../scheduled-tasks/types";
 import type { TerminalAgentKind, TerminalState } from "./state";
 import type { TerminalAgentRecoveryTarget } from "./agent-preparation";
+import type { TerminalProgramStatus } from "./program-status";
 
 export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
 
@@ -93,6 +94,7 @@ export interface TerminalSessionListItem {
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;
+  programStatus?: TerminalProgramStatus;
   completionRevision: number;
   acknowledgedCompletionRevision: number;
   tmuxSessionName?: string;

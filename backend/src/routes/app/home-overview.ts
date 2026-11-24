@@ -15,6 +15,7 @@ import {
   type TerminalStateService,
 } from "../../terminal/state/terminal-state-service";
 import {
+  toPanelWorkspacePayload,
   toProjectPayload,
   toSessionListItem,
 } from "../../terminal/application/payloads";
@@ -272,8 +273,9 @@ export async function buildAppHomeOverviewPayload(
       );
 
       const conversation = homeConversation(terminalSessionManager, session);
+      const state = resolveEffectiveTerminalState(terminalSessionManager, terminalStateService, session);
       return {
-        ...toSessionListItem(session),
+        ...toSessionListItem(session, state, toPanelWorkspacePayload(terminalSessionManager, session.id)),
         threadId: resolveEffectiveThreadId(session),
         preview: resolveEffectivePreview(session, codexThreadSnapshot),
         title: buildSessionTitle(session),
@@ -281,11 +283,7 @@ export async function buildAppHomeOverviewPayload(
         conversationKey: conversation.key,
         ...buildDisplayStatus(
           session,
-          resolveEffectiveTerminalState(
-            terminalSessionManager,
-            terminalStateService,
-            session,
-          ),
+          state,
           codexThreadSnapshot,
         ),
       };

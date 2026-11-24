@@ -36,6 +36,25 @@ struct TerminalState: Codable, Equatable {
   var agent: String?
 }
 
+struct TerminalProgramStatus: Codable, Equatable {
+  let state: String
+  let source: String
+  let observedAt: String?
+  let kind: String?
+
+  var label: String? {
+    switch state {
+    case "starting": return "启动中"
+    case "working": return "正在执行"
+    case "idle": return "等待输入"
+    case "blocked": return "需要输入"
+    case "done": return "本轮结束"
+    case "error": return "本轮失败"
+    default: return nil
+    }
+  }
+}
+
 struct HomeTerminal: Codable, Identifiable, Equatable {
   let terminalSessionId: String
   var projectId: String
@@ -54,6 +73,7 @@ struct HomeTerminal: Codable, Identifiable, Equatable {
   var displayStatus: String
   var displayStatusLabel: String
   var terminalState: TerminalState
+  var programStatus: TerminalProgramStatus? = nil
   var completionRevision: Int?
   var acknowledgedCompletionRevision: Int?
   let lastActivityAt: String
@@ -62,8 +82,9 @@ struct HomeTerminal: Codable, Identifiable, Equatable {
     (completionRevision ?? 0) > (acknowledgedCompletionRevision ?? 0)
   }
   var isAgentActive: Bool {
-    status != "exited"
-      && (terminalState.state == "agent_running" || terminalState.state == "agent_starting")
+    guard status != "exited" else { return false }
+    if let programStatus { return ["working", "starting", "blocked"].contains(programStatus.state) }
+    return terminalState.state == "agent_running" || terminalState.state == "agent_starting"
   }
 
   var relativeTime: String {

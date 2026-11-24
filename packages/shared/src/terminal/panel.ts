@@ -2,6 +2,7 @@ import type { CodexConversationContext } from "./codex-context";
 import type { PiAgentContext } from "./pi-agent";
 import type { TerminalLastThreadStatus } from "./runtime/session";
 import type { TerminalAgentKind, TerminalState } from "./runtime/state";
+import type { TerminalProgramStatus } from "./runtime/program-status";
 
 export type TerminalPanelRole = string;
 
@@ -43,6 +44,7 @@ export interface TerminalPanelListItem {
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;
+  programStatus?: TerminalProgramStatus;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;

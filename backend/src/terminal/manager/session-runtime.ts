@@ -2,6 +2,7 @@ import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent"
 import { invalidateTerminalInput } from "../runtime/input-admission";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type { TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
 import type {
   TerminalAgentKind,
   TerminalState,
@@ -16,6 +17,15 @@ import { getAgentForCommand } from "../state/terminal-state-service";
 import { TerminalManagerAgentActivityRuntime } from "./agent-activity-runtime";
 
 export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityRuntime {
+  setSessionProgramStatus(terminalSessionId: string, status?: Omit<TerminalProgramStatus, "source">): void {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session || session.runtimeKind !== "pty" || session.status !== "running") return;
+    const previous = session.oscProgramStatus;
+    if (previous?.state === status?.state && previous?.kind === status?.kind) return;
+    session.oscProgramStatus = status && { ...status, source: "osc", observedAt: status.observedAt ?? new Date().toISOString() };
+    this.observer.onPanelProgramStatusChanged?.(session);
+  }
+
   markExited(terminalSessionId: string, exitCode?: number): void {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {

@@ -65,6 +65,7 @@ export async function createHostedPty(options: {
   binding: PtyHostBinding;
   create?: PtyHostCreateSession;
   onLaunch?: (launch: NonNullable<PtyHostSession["launch"]>) => Promise<void>;
+  onProgramStatus?: (status?: PtyHostSession["programStatus"]) => void;
 }): Promise<PtyRuntime> {
   const control = await getPtyHost();
   if (control.descriptor.hostInstanceId !== options.binding.hostInstanceId) {
@@ -114,12 +115,14 @@ export async function createHostedPty(options: {
   let earlyBytes = 0, earlyDroppedOutput = false;
   let earlyGrid: { cols: number; rows: number } | undefined;
   let earlyLaunch: PtyHostSession["launch"];
+  let earlyProgramStatus: { status?: PtyHostSession["programStatus"] } | undefined;
   const receive: Parameters<typeof client.events.add>[0] = event => {
     if (event.terminalSessionId !== options.terminalSessionId) return;
     if (initializing) {
       if (event.type === "exit") exited = event.exitCode;
       if (event.type === "resize") earlyGrid = { cols: event.cols, rows: event.rows };
       if (event.type === "launch") earlyLaunch = event.launch;
+      if (event.type === "program-status") earlyProgramStatus = event;
       if (event.type === "output") {
         early.push(event);
         earlyBytes += Buffer.byteLength(event.data);
@@ -131,6 +134,7 @@ export async function createHostedPty(options: {
       return;
     }
     if (event.type === "launch" && options.onLaunch) void options.onLaunch(event.launch).catch(error => notifyFailure("launch", error));
+    if (event.type === "program-status") options.onProgramStatus?.(event.status);
     if (event.type === "output") emitFrame(event);
     if (event.type === "resize") { grid = { cols: event.cols, rows: event.rows }; for (const listener of resizeListeners) listener(event.cols, event.rows); }
     if (event.type === "exit" && exited === undefined) { exited = event.exitCode; for (const listener of exitListeners) listener({ exitCode: exited }); }
@@ -159,6 +163,7 @@ export async function createHostedPty(options: {
     for (const frame of attached.frames) emitFrame(frame);
   }
   initializing = false;
+  options.onProgramStatus?.(earlyProgramStatus ? earlyProgramStatus.status : attached.session.programStatus);
   for (const event of early) receive(event);
   early.length = 0;
   earlyBytes = 0;
@@ -244,7 +249,7 @@ export async function createHostedPty(options: {
     },
     resize(cols, rows) { void client.request("resize", { ...target, cols, rows }).catch(error => notifyFailure("resize", error)); },
     signal(signal) { void client.request("signal", { ...target, signal }).catch(error => notifyFailure("signal", error)); },
-    dispose() { disposed = true; pendingData = undefined; rawInput = ""; rawInputBytes = 0; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); },
+    dispose() { disposed = true; pendingData = undefined; rawInput = ""; rawInputBytes = 0; client.events.delete(receive); client.disconnected.delete(disconnected); client.close(); options.onProgramStatus?.(); },
     hosted: {
       get grid() { return grid; },
       output: { get cursor() { return cursor; }, read: position => client.request<TerminalOutputReplay>("readOutput", { ...target, cursor: position }) },

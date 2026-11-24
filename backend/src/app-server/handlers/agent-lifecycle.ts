@@ -30,6 +30,8 @@ export async function handleAgentLifecycleEvent(
     event.payload,
     "observedStatus",
   );
+  const observedLifecycle = readAppServerPayloadString(event.payload, "observedLifecycle");
+  const turnId = readAppServerPayloadString(event.payload, "turnId");
   if (
     !terminalSessionId ||
     !threadId ||
@@ -56,7 +58,19 @@ export async function handleAgentLifecycleEvent(
     (provider !== "codex" || Boolean(currentThreadId) || !lastThreadId || lastThreadId === threadId);
   const currentThreadIdentityMatched =
     currentThreadId === threadId && currentProvider === provider;
-  const foregroundResult = shouldUpdateForeground
+  // A normal Stop clears the active thread binding but retains the last one.
+  const sameStoppedThread = !currentThreadId && lastThreadId === threadId &&
+    lastOwner.lastThreadProvider === provider && lastOwner.lastThreadStatus === "idle";
+  const startsTurn = observedStatus === "running" && observedLifecycle === "rollout:task_started";
+  const endsTurn = observedStatus === "idle" && (currentThreadIdentityMatched || sameStoppedThread) &&
+    (observedLifecycle === "rollout:task_complete" || observedLifecycle === "rollout:turn_aborted");
+  const codexNativeTurn = provider === "codex" && turnId && (startsTurn || endsTurn)
+    ? { phase: startsTurn ? "start" as const : "end" as const, turnId }
+    : undefined;
+  const activeTurn = (panel ?? session).codexNativeTurn;
+  const staleCodexEnd = codexNativeTurn?.phase === "end" &&
+    activeTurn?.threadId === threadId && activeTurn.turnId !== codexNativeTurn.turnId;
+  const foregroundResult = shouldUpdateForeground && !staleCodexEnd
     ? await processTerminalAgentHook(
         options,
         {
@@ -77,7 +91,10 @@ export async function handleAgentLifecycleEvent(
           panelId: event.scope?.terminalPanelId,
           tmuxPaneId: event.scope?.terminalTmuxPaneId,
         },
-        { currentThreadIdentityMatched, lifecycleObservation: true },
+        {
+          currentThreadIdentityMatched, lifecycleObservation: true,
+          codexNativeTurn,
+        },
       )
     : null;
 
@@ -114,16 +131,13 @@ export async function handleAgentLifecycleEvent(
         panelId: panel?.id,
         tmuxPaneId: event.scope?.terminalTmuxPaneId ?? undefined,
         threadId,
-        turnId:
-          readAppServerPayloadString(event.payload, "turnId") ?? undefined,
+        turnId: turnId ?? undefined,
       },
       correlationId: threadId,
       payload: {
         provider,
         observedStatus,
-        observedLifecycle:
-          readAppServerPayloadString(event.payload, "observedLifecycle") ??
-          "unknown",
+        observedLifecycle: observedLifecycle ?? "unknown",
         detailStatus:
           readAppServerPayloadString(event.payload, "detailStatus") ??
           observedStatus,

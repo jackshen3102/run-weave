@@ -1,0 +1,66 @@
+version: 1
+name: OSC 7501 终端传输验证
+description: >
+  验证正常终端输出中的 OSC 传输、真实 CLI 能力和历史输出。每例独立运行，记录实际 CLI 和运行时版本，
+  使用隔离终端。受控报文和真实模型轮次分别取证。
+
+cases:
+  - id: OSCT-001
+    name: 常见分片下的 OSC 与终端文本都完整
+    required: true
+    description: OSC 分片和同一批的多帧均可读，普通终端输出与其他控制码保持正常。
+    preconditions:
+      - 独立本地 tmux 可运行受控发射程序，可查看原始输出和有效状态。
+    steps:
+      - 分两次写出一份 ST 结尾报告，再一次写入两份 BEL 结尾报告，穿插中文文本和终端颜色序列。
+      - 确认状态按顺序更新，相邻文本与颜色正常，终端界面无 OSC 文本残留。
+
+  - id: OSCT-002
+    name: 本地 tmux 被动接收真实 Codex 状态
+    required: true
+    description: Codex 在没有 Runweave 主动应答的本地 tmux 中仍能提供有效状态。
+    preconditions:
+      - 隔离本地 tmux 使用已登录 Codex 0.164.0 或更高版本，候选路径只被动接收。
+    steps:
+      - 启动 Full Access Codex 并提交一轮简短任务，记录真实输出和 Pane 收到的输入。
+      - 确认获得 working 和 done 报告，没有 Runweave OSC 应答进入该 Pane。
+
+  - id: OSCT-003
+    name: 历史和导出保留普通输出并过滤 OSC
+    required: true
+    description: 状态帧文本只经过内部协议处理，历史、导出和状态接口中没有明文或编码载荷。
+    preconditions:
+      - 隔离会话可发出带已知合成 msg 和 title 的合法报告，可读取历史、导出、状态事件与诊断日志。
+    steps:
+      - 发送含 Base64 合成标记的合法报告，前后打印可辨认的普通文本；确认状态更新与普通文本可见。
+      - 检查历史 API、导出、事件和诊断日志，普通文本仍在历史和导出中，明文和编码标记均未出现。
+
+  - id: OSCT-004
+    name: 真实 Claude 在目标 tmux 中收到能力应答
+    required: true
+    description: 真实 Claude 完成能力协商后在目标链路发出有效状态，后到的应答本身不能形成通过证据。
+    preconditions:
+      - 隔离的目标 tmux 有已登录的 Claude，可以记录查询、设备属性应答、OSC 应答及状态报告。
+    steps:
+      - 通过正常入口独立启动 Claude 三次，各提交一轮简短请求，记录两类应答到达顺序及实际状态报告。
+      - 确认发起探测的 Claude 收到规范应答、产生有效状态，且实际接受的请求内容与提交文本一致。只有查询和后到的应答时，该路径继续使用 Hook。
+
+  - id: OSCT-005
+    name: 直连 PTY 的两个连续 CLI 实例分别归属
+    required: true
+    description: 同一 shell 内退出并再次启动 Codex 时，默认 Panel 随当前真实前台进程更新。
+    preconditions:
+      - 隔离直连 PTY 可以从 shell 启动真实 Full Access Codex 并读取默认 Panel 和会话摘要。
+    steps:
+      - 启动 Codex 并完成一轮，退出后在同一个 shell 再启动一次，记录两次前台进程身份。
+      - 确认第二次启动没有继承前一次完成状态，两轮报告均归属同一个默认 Panel 下各自的当前进程。
+
+  - id: OSCT-006
+    name: Windows ConPTY 的两个连续 CLI 实例分别归属
+    required: true
+    description: 真实 Windows Host 能接收 Codex 报告，并区分同一个 shell 下启动的两个 CLI。
+    preconditions:
+      - 独立 Windows 实例使用真实 ConPTY 和独立 Host，可读取 Host 标识、前台 CLI 身份和有效状态。
+    steps:
+      - 在同一个 shell 连续运行两次真实 Full Access Codex，每次提交短任务并退出 CLI。
+      - 核对 Host 未变化、CLI 实例已变化，两轮状态正确归属，新 CLI 没有继承上一轮终态。

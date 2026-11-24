@@ -161,6 +161,7 @@ export class TmuxSessionService extends TmuxProcess {
     target: TmuxTarget,
     cwd: string,
     launchCommand: TmuxLaunchCommand,
+    beforeCommandLaunch?: () => Promise<void>,
   ): Promise<TmuxLaunchCommand & { fallbackReason?: string }> {
     const fallback = this.shellFallback(launchCommand);
     await this.runTmux(
@@ -179,12 +180,18 @@ export class TmuxSessionService extends TmuxProcess {
         cwd,
         // A bounded staging process keeps the pane alive while its startup
         // retention is installed; no user shell or queued input runs here.
-        ...(fallback ? ["/bin/sleep", "30"] : [formatShellCommand(launchCommand)]),
+        ...(fallback || beforeCommandLaunch ? ["/bin/sleep", "30"] : [formatShellCommand(launchCommand)]),
       ],
       target,
     );
-    if (!fallback) return launchCommand;
     try {
+      if (!fallback) {
+        if (beforeCommandLaunch) {
+          await beforeCommandLaunch();
+          await this.runTmux(["respawn-pane", "-k", "-t", target.sessionName, "-c", cwd, formatShellCommand(launchCommand)], target);
+        }
+        return launchCommand;
+      }
       const pane = await this.runTmux(["display-message", "-p", "-t", target.sessionName, "#{pane_id}"], target);
       return await this.startShellInPane({ ...target, paneId: pane.stdout.trim() }, cwd, launchCommand, fallback);
     } catch (error) {

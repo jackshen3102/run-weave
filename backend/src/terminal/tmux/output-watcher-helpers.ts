@@ -1,4 +1,5 @@
 import { StringDecoder } from "node:string_decoder";
+import type { ProgramStatusReport, ProgramStatusStream } from "@runweave/shared/terminal/program-status";
 import type { TerminalSessionRecord } from "../manager/manager";
 import { createTerminalRuntimeRecorder } from "../runtime/recorder";
 import type { ScrollbackBuffer } from "../scrollback/scrollback-buffer";
@@ -11,6 +12,9 @@ export interface WatchedTmuxPane {
   filePath: string;
   generation: number;
   offset: number;
+  liveProgramOutputOffset: number;
+  programStatusStream: ProgramStatusStream;
+  programStatusRecords: Map<string, ProgramStatusReport>;
   outputBuffer: ScrollbackBuffer;
   polling: Promise<boolean> | null;
   recordSessionOutput: boolean;

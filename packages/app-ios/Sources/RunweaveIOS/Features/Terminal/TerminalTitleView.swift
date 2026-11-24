@@ -5,6 +5,7 @@ struct TerminalTitleView: View {
   let projectName: String
   let connectionName: String
   let status: String
+  var programStatus: String? = nil
 
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
@@ -15,6 +16,9 @@ struct TerminalTitleView: View {
           .frame(width: 5, height: 5)
         Text("\(connectionName) · \(status)")
           .font(.caption2).foregroundColor(.secondary).lineLimit(1)
+        if let programStatus {
+          Text("· \(programStatus)").font(.caption2).foregroundColor(.secondary).lineLimit(1)
+        }
       }
     }
     .accessibilityElement(children: .combine)

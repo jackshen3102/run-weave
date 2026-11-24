@@ -16,10 +16,12 @@ import {
 import type { PtyRuntime, PtyService } from "./pty-service";
 import type { TerminalRuntimeRegistry } from "./registry";
 import { createTerminalRuntimeRecorder } from "./recorder";
+import { createPtyProgramStatus } from "./pty-program-status";
 import type { TmuxService, TmuxTarget } from "../tmux/service";
 import type { TmuxOutputWatcher } from "../tmux/output-watcher";
 import { TmuxRebuildLimitError } from "../tmux/service";
 import { resolveAgentThreadToResume } from "./recovery-policy";
+import { isCodexActiveCommand } from "../state/terminal-state-service";
 export { resolveAgentThreadToResume } from "./recovery-policy";
 import {
   buildTerminalRuntimeEnvironment,
@@ -256,6 +258,7 @@ async function ensureTerminalRuntimeInternal(
       }
 
       if (!hasSession) {
+        const startingSession = currentSession;
         const terminalEnvironment = buildTerminalRuntimeEnvironment({
           terminalSessionId: currentSession.id,
           projectId: currentSession.projectId,
@@ -270,6 +273,9 @@ async function ensureTerminalRuntimeInternal(
             args: currentSession.args,
             env: terminalEnvironment,
           },
+          options.tmuxOutputWatcher && isCodexActiveCommand(currentSession.command)
+            ? () => options.tmuxOutputWatcher!.watchSession(startingSession)
+            : undefined,
         );
         if (actualLaunch.fallbackReason) {
           currentSession = (await options.terminalSessionManager.updateSessionLaunch(currentSession.id, actualLaunch)) ?? currentSession;
@@ -281,6 +287,7 @@ async function ensureTerminalRuntimeInternal(
           await options.tmuxService!.waitForPaneReady(target);
         }
         if (agentThreadToResume) {
+          await options.tmuxOutputWatcher?.watchSession(currentSession);
           await options.tmuxService!.sendInput(
             target,
             buildAgentResumeCommand({
@@ -395,7 +402,9 @@ async function ensureTerminalRuntimeInternal(
       );
     },
   });
-  options.runtimeRegistry.createRuntime(options.session.id, runtime);
+  options.runtimeRegistry.createRuntime(options.session.id, runtime, {
+    programStatus: createPtyProgramStatus(options.terminalSessionManager, options.session.id, runtime),
+  });
   options.runtimeRegistry.ensureRecorder(
     options.session.id,
     createTerminalRuntimeRecorder(

@@ -41,6 +41,7 @@ interface RuntimeEntry {
   recorderExit?: { exitCode: number; signal?: number };
   outputRecovery?: TerminalOutputSource;
   outputScreen?: Pick<TerminalOutputScreen, "snapshot" | "dispose">;
+  programStatus?: { write(data: string): string; dispose(): void };
   idleTimer?: NodeJS.Timeout;
   cols: number;
   rows: number;
@@ -55,7 +56,7 @@ export class TerminalRuntimeRegistry {
   createRuntime(
     terminalSessionId: string,
     runtime: PtyRuntime,
-    options: { recoverableOutput?: boolean; runtimeId?: string } = {},
+    options: { recoverableOutput?: boolean; runtimeId?: string; programStatus?: RuntimeEntry["programStatus"] } = {},
   ): void {
     const runtimeId = options.runtimeId ?? terminalSessionId;
     const entry: RuntimeEntry = {
@@ -68,6 +69,7 @@ export class TerminalRuntimeRegistry {
       terminalModeSequenceTail: "",
       subscribers: new Set<RuntimeSubscriber>(),
       recorderAttached: false,
+      programStatus: options.programStatus,
       recorderBacklog: runtimeId === terminalSessionId ? new TerminalOutputRecoveryBuffer() : undefined,
       cols: 80,
       rows: 24,
@@ -119,6 +121,10 @@ export class TerminalRuntimeRegistry {
 
     runtime.onData((data) => {
       if (this.runtimes.get(runtimeId) !== entry) return;
+      if (entry.programStatus) {
+        data = entry.programStatus.write(data);
+        if (!data) return;
+      }
       if (entry.recorderBacklog) Array.from(entry.recorderBacklog.append(data));
       const modeData = `${entry.terminalModeSequenceTail}${data}`;
       BRACKETED_PASTE_MODE_PATTERN.lastIndex = 0;
@@ -163,6 +169,7 @@ export class TerminalRuntimeRegistry {
 
     runtime.onExit((event) => {
       if (this.runtimes.get(runtimeId) !== entry) return;
+      entry.programStatus?.dispose();
       if (entry.recorderBacklog) entry.recorderExit = event;
       for (const subscriber of entry.subscribers) {
         subscriber.onExit(event);
@@ -294,6 +301,7 @@ export class TerminalRuntimeRegistry {
     this.idle.delete(runtimeId);
     if (entry.idleTimer) clearTimeout(entry.idleTimer);
     this.outputClients.forget(runtimeId);
+    entry.programStatus?.dispose();
     entry.outputScreen?.dispose();
     entry.runtime.dispose();
   }

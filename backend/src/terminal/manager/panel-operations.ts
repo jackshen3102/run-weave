@@ -1,6 +1,7 @@
 import { invalidateTerminalInput } from "../runtime/input-admission";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
 import {
   toPersistedPanel,
   toPersistedPanelWorkspace,
@@ -11,6 +12,20 @@ import { TerminalManagerSessionRuntime } from "./session-runtime";
 import type { TerminalReplySnapshot } from "../store/store";
 
 export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntime {
+  setPanelProgramStatus(panelId: string, status?: Pick<TerminalProgramStatus, "state" | "kind">): void {
+    const panel = this.panels.get(panelId);
+    const session = panel && this.getSession(panel.terminalSessionId);
+    if (!panel || !session || panel.status !== "running" || session.status !== "running") return;
+    const previous = panel.oscProgramStatus;
+    if (previous?.state === status?.state && previous?.kind === status?.kind) return;
+    if (status) {
+      panel.oscProgramStatus = { ...status, source: "osc", observedAt: new Date().toISOString() };
+    } else {
+      delete panel.oscProgramStatus;
+    }
+    this.observer.onPanelProgramStatusChanged?.(session, panel);
+  }
+
   async updateLatestReply(
     terminalSessionId: string,
     panelId: string | null,
@@ -266,12 +281,16 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
 
     const inputSession = this.getSession(panel.terminalSessionId);
     if (inputSession) invalidateTerminalInput(inputSession);
+    const previousAgent = panel.terminalState?.agent;
     panel.terminalState = terminalState;
     await this.sessionStore.updatePanelTerminalState({
       panelId,
       terminalState,
     });
     this.notifyPanelMutation(panel, { operationId });
+    if (inputSession && (previousAgent === "codex" || terminalState.agent === "codex")) {
+      this.observer.onPanelProgramStatusChanged?.(inputSession, panel);
+    }
     return panel;
   }
 

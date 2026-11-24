@@ -165,6 +165,7 @@ export async function createTerminalPanelSplit(
       panelIds: [...(previousWorkspace?.panelIds ?? []), provisionalPanel.id],
       renderMode: "tmux-native",
     });
+    await options.tmuxOutputWatcher?.watchPane(session, splitTarget);
     if (!params.skipPaneReadyWait) {
       await tmuxService.waitForPaneReady(splitTarget);
       const metadata = await tmuxService.readPaneMetadata(splitTarget, splitTarget.launch?.command ?? command);

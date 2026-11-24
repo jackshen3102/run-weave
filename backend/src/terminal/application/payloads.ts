@@ -7,6 +7,7 @@ import type {
   TerminalSessionStatusResponse,
   TerminalState,
 } from "@runweave/shared/terminal-protocol";
+import { aggregateProgramStatus, type TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
 import type { TerminalSessionManager } from "../manager/manager";
 import { resolveHostedAgentRecovery } from "../runtime/recovery-policy";
 import { supportsHostedAgentRecovery } from "../runtime/pty-host-client";
@@ -22,6 +23,40 @@ type TerminalSession = NonNullable<
 type TerminalPanel = NonNullable<
   ReturnType<TerminalSessionManager["getPanel"]>
 >;
+
+function hookProgramStatus(state?: TerminalState, observedAt?: string): TerminalProgramStatus | undefined {
+  if (!state || state.state === "shell_idle") return undefined;
+  const value = { agent_starting: "starting", agent_running: "working", agent_idle: "idle" } as const;
+  return { state: value[state.state], source: "hook", observedAt };
+}
+
+function sessionProgramStatus(session: TerminalSession, terminalState?: TerminalState) {
+  return session.status === "running"
+    ? session.oscProgramStatus ?? hookProgramStatus(terminalState)
+    : undefined;
+}
+
+export function toDefaultPanelWorkspace(session: TerminalSession, terminalState = session.terminalState): TerminalPanelWorkspace {
+  return {
+    terminalSessionId: session.id,
+    activePanelId: "default",
+    panels: [{
+      panelId: "default",
+      terminalSessionId: session.id,
+      alias: "main",
+      role: "main",
+      cwd: session.cwd,
+      activeCommand: session.activeCommand,
+      programStatus: sessionProgramStatus(session, terminalState),
+      status: session.status,
+      createdAt: session.createdAt.toISOString(),
+      lastActivityAt: session.lastActivityAt.toISOString(),
+      exitCode: session.exitCode,
+      focused: true,
+    }],
+    renderMode: "tmux-native",
+  };
+}
 
 export function toProjectPayload(
   project: TerminalProject,
@@ -72,6 +107,9 @@ export function toSessionListItem(
   panelWorkspace?: TerminalPanelWorkspace | null,
 ): TerminalSessionListItem {
   const agentRecovery = supportsHostedAgentRecovery() ? resolveHostedAgentRecovery(session, terminalState) : null;
+  const programStatus = session.status === "running"
+    ? (panelWorkspace && aggregateProgramStatus(panelWorkspace.panels)) ?? sessionProgramStatus(session, terminalState)
+    : undefined;
   return {
     ...(agentRecovery ? { agentRecovery } : {}),
     source: session.source,
@@ -91,6 +129,7 @@ export function toSessionListItem(
     cwd: session.cwd,
     activeCommand: session.activeCommand,
     ...(terminalState ? { terminalState } : {}),
+    ...(programStatus ? { programStatus } : {}),
     completionRevision: session.completionRevision,
     acknowledgedCompletionRevision: session.acknowledgedCompletionRevision,
     tmuxSessionName: session.tmuxSessionName,
@@ -127,6 +166,9 @@ export function toPanelListItem(
   panel: TerminalPanel,
   activePanelId: string | null,
 ): TerminalPanelListItem {
+  const programStatus = panel.status === "running"
+    ? panel.oscProgramStatus ?? hookProgramStatus(panel.terminalState, panel.lastThreadUpdatedAt?.toISOString())
+    : undefined;
   return {
     codexContext: panel.codexContext,
     panelId: panel.id,
@@ -144,6 +186,7 @@ export function toPanelListItem(
     cwd: panel.cwd,
     activeCommand: panel.activeCommand,
     ...(panel.terminalState ? { terminalState: panel.terminalState } : {}),
+    ...(programStatus ? { programStatus } : {}),
     status: panel.status,
     createdAt: panel.createdAt.toISOString(),
     lastActivityAt: panel.lastActivityAt.toISOString(),

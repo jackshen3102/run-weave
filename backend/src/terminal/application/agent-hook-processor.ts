@@ -51,6 +51,7 @@ export interface ProcessTerminalAgentHookInput {
 interface ProcessTerminalAgentHookContext {
   currentThreadIdentityMatched?: boolean;
   lifecycleObservation?: boolean;
+  codexNativeTurn?: { phase: "start" | "end"; turnId: string };
 }
 
 export type ProcessTerminalAgentHookResult =
@@ -317,6 +318,19 @@ async function processTerminalAgentHookUnlocked(
     };
   }
 
+  if (effectiveAgent === "codex") {
+    const turn = context.codexNativeTurn;
+    if (turn?.phase === "start" && hookThreadId) {
+      currentThreadOwner.codexNativeTurn = { threadId: hookThreadId, turnId: turn.turnId };
+    } else if (!context.lifecycleObservation && (input.hookEvent === "UserPromptSubmit" || input.hookEvent === "SessionStart")) {
+      delete currentThreadOwner.codexNativeTurn;
+      if (panel) delete panel.oscNativeTurnEndedAt;
+    }
+  }
+  const activeCodexTurn = currentThreadOwner.codexNativeTurn;
+  const verifiedCodexTurnEnd = effectiveAgent === "codex" && context.codexNativeTurn?.phase === "end" &&
+    activeCodexTurn?.threadId === hookThreadId && activeCodexTurn.turnId === context.codexNativeTurn.turnId;
+
   let stateHookEvent = input.hookEvent;
   if (input.agent === "claude" && isClaudeAgentContext(input.claude)) {
     const result = await recordClaudeHookContext(options.terminalSessionManager, session, panel ?? null, input.claude);
@@ -403,6 +417,19 @@ async function processTerminalAgentHookUnlocked(
       panelTerminalState,
       input.operationId,
     );
+    if (effectiveAgent === "codex") {
+      if (input.hookEvent === "UserPromptSubmit") {
+        delete panel.oscNativeTurnEndedAt;
+        if (panel.oscProgramStatus && ["idle", "done", "error"].includes(panel.oscProgramStatus.state)) {
+          options.terminalSessionManager.setPanelProgramStatus(panel.id);
+        }
+      } else if (verifiedCodexTurnEnd && panel.codexNativeTurn === activeCodexTurn) {
+        delete panel.codexNativeTurn;
+        if (panel.oscProgramStatus?.state === "working" || panel.oscProgramStatus?.state === "blocked") {
+          panel.oscNativeTurnEndedAt = Date.now();
+        }
+      }
+    }
     terminalState = aggregatePanelTerminalState(
       options.terminalSessionManager.listPanels(session.id),
     );
@@ -421,6 +448,26 @@ async function processTerminalAgentHookUnlocked(
         reason: "agent_hook",
       },
     );
+    if (effectiveAgent === "codex" && session.runtimeKind === "pty") {
+      const status = session.oscProgramStatus;
+      if (input.hookEvent === "UserPromptSubmit") {
+        if (status?.state === "idle" || status?.state === "done" || status?.state === "error") {
+          options.terminalSessionManager.setSessionProgramStatus(session.id);
+        }
+      } else if (verifiedCodexTurnEnd && session.codexNativeTurn === activeCodexTurn) {
+        delete session.codexNativeTurn;
+        if (status?.state === "working" || status?.state === "blocked") {
+          const { terminalSessionManager, terminalStateService } = options;
+          const target = session;
+          setTimeout(() => {
+            if (terminalSessionManager.getSession(target.id)?.oscProgramStatus === status &&
+              terminalStateService.getCurrent(target.id, target).state === "agent_idle") {
+              terminalSessionManager.setSessionProgramStatus(target.id);
+            }
+          }, 750).unref();
+        }
+      }
+    }
   }
   if (hookThreadId) {
     session =

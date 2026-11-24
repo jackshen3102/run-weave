@@ -9,6 +9,7 @@ import { TerminalOutputRecoveryBuffer, type TerminalOutputFrame } from "./output
 import { TerminalOutputScreen } from "./output-screen";
 import { TERMINAL_CLIENT_SCROLLBACK_LINES } from "@runweave/shared/terminal-limits";
 import { reportHostDiagnostic, writeHostDiagnostic } from "./diagnostics";
+import { HostProgramStatusStream } from "./program-status";
 
 const requireNative = createRequire(fileURLToPath(import.meta.url));
 export class HostSession {
@@ -21,6 +22,7 @@ export class HostSession {
   readonly exitListeners = new Set<(exitCode: number) => void>();
   readonly resizeListeners = new Set<(cols: number, rows: number) => void>();
   readonly launchListeners = new Set<(launch: NonNullable<PtyHostSession["launch"]>) => void>();
+  readonly programStatusListeners = new Set<(status?: PtyHostSession["programStatus"]) => void>();
   degraded = false;
   private terminal!: IPty;
   private fallbackActivated = false;
@@ -29,6 +31,7 @@ export class HostSession {
   private outputPaused = false;
   private processGeneration = 0;
   private startupDeadline = 0;
+  private programStatus?: HostProgramStatusStream;
 
   constructor(hostInstanceId: string, private readonly options: PtyHostCreateSession, private readonly prepareEnv: (token: string, sessionId: string) => Record<string, string | undefined>) {
     this.createDigest = createHash("sha256").update(JSON.stringify(options)).digest("hex");
@@ -79,13 +82,23 @@ export class HostSession {
     this.startupDeadline = this.options.fallback && isInteractiveShellLaunch(this.options) ? Date.now() + 1000 : 0;
     this.processGeneration++;
     this.terminal = terminal;
+    this.programStatus?.dispose();
+    this.programStatus = process.platform === "win32" ? new HostProgramStatusStream(
+      requireNative.resolve("node-pty"), () => terminal.pid, status => {
+        this.info.programStatus = status;
+        for (const listener of this.programStatusListeners) listener(status);
+      },
+    ) : undefined;
     if (this.outputPaused) terminal.pause();
     this.info.pid = terminal.pid;
     this.info.launch = { command: launch.command, args: [...launch.args], ...(fallbackReason ? { fallbackReason } : {}) };
     for (const listener of this.launchListeners) listener(this.info.launch);
-    terminal.onData(data => { if (this.terminal === terminal) this.emitOutput(data); });
+    terminal.onData(data => {
+      if (this.terminal === terminal) this.emitOutput(this.programStatus?.write(data) ?? data);
+    });
     terminal.onExit(event => {
       if (this.terminal !== terminal) return;
+      this.programStatus?.dispose();
       if (event.exitCode > 0 && Date.now() - started < 1000) {
         try { if (this.activateFallback(`Shell exited with code ${event.exitCode}`)) return; }
         catch (error) { this.emitOutput(`[Runweave: system shell failed to start: ${String(error)}]\r\n`); }

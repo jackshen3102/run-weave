@@ -6,6 +6,7 @@ import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalReplySnapshot } from "../store/store";
 import type { TerminalState } from "@runweave/shared/terminal/state";
+import type { TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
@@ -38,6 +39,11 @@ export interface TerminalProjectRecord {
 export interface TerminalProjectContextRecord
   extends TerminalProjectRecord,
     TerminalProjectContextListItem {}
+
+interface CodexNativeTurn {
+  threadId: string;
+  turnId: string;
+}
 
 export interface TerminalSessionRecord {
   browserBinding?: TerminalBrowserBindingOwner;
@@ -74,6 +80,8 @@ export interface TerminalSessionRecord {
   tmuxUnavailableReason?: string;
   recoverable?: boolean;
   terminalState?: TerminalState;
+  oscProgramStatus?: TerminalProgramStatus;
+  codexNativeTurn?: CodexNativeTurn;
   completionRevision: number;
   acknowledgedCompletionRevision: number;
   panelSplitEnabled: boolean;
@@ -100,6 +108,9 @@ export interface TerminalPanelRecord {
   cwd: string;
   activeCommand: string | null;
   terminalState?: TerminalState;
+  oscProgramStatus?: TerminalProgramStatus;
+  codexNativeTurn?: CodexNativeTurn;
+  oscNativeTurnEndedAt?: number;
   status: "running" | "exited";
   createdAt: Date;
   lastActivityAt: Date;

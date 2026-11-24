@@ -31,6 +31,7 @@ import { WorktreeProjectRegistry } from "../workspace-service/worktree-project-r
 export interface TerminalSessionManagerObserver {
   onCompletionAcknowledged?: (session: TerminalSessionRecord) => void;
   onSessionDeleted?: (sessionId: string) => Promise<void>;
+  onPanelProgramStatusChanged?: (session: TerminalSessionRecord, panel?: TerminalPanelRecord) => void;
   onBell?: (input: {
     terminalSessionId: string;
     projectId: string;

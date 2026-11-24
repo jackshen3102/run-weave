@@ -149,7 +149,6 @@ export function TerminalSurface({
   const restoreSnapshotRequestRef = useRef(0);
   const websocketContentVersionRef = useRef(0);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
-  const floatingComposerOutputReceivedRef = useRef<() => void>(() => undefined);
   const invalidateOutputRecoveryRef = useRef<() => void>(() => undefined);
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [mobileKeybarOpen, setMobileKeybarOpen] = useState(false);
@@ -177,7 +176,6 @@ export function TerminalSurface({
       hasRenderedSnapshotRef,
       lastInputSentAtRef,
       outputSequenceRef,
-      onOutputReceived: () => floatingComposerOutputReceivedRef.current(),
       refreshTerminalViewportRef,
       requiresSnapshotRestoreRef,
       setHasNewOutputBelow: scroll.setHasNewOutputBelow,
@@ -315,11 +313,6 @@ export function TerminalSurface({
     terminalState,
     token,
   });
-
-  useEffect(() => {
-    floatingComposerOutputReceivedRef.current =
-      floatingComposer.handleOutputReceived;
-  }, [floatingComposer.handleOutputReceived]);
 
   useLayoutEffect(() => {
     activeRef.current = active;
