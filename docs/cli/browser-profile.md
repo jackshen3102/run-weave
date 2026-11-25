@@ -164,9 +164,11 @@ CDP，包括持久 Cookie 的分区键。现有 Profile 会自动持久化普通
 
 ## WebMCP 网页工具（实验能力）
 
-在启动 Electron 前设置 `RUNWEAVE_BROWSER_WEBMCP=1`，仅为新建的 Terminal Browser
-`WebContentsView` 启用原生 WebMCP；不为桌面主窗口开启。开发验证仍通过 Dev Session planner
-选择环境，例如 `RUNWEAVE_BROWSER_WEBMCP=1 pnpm dev:session --json`。关闭开关需重新启动进程。
+通过[实例配置 CLI](./configuration.md#写入)将目标实例的
+`desktop.browser.webMcpEnabled` 设为 `true`。Electron 启动时读取此配置，功能限于该实例新建的
+Terminal Browser `WebContentsView`。开发验证时，让 Dev Session planner 选择环境并使用 Electron
+验收 surface。记录会话 ID，写入该测试实例的配置，再停止并重新启动同一会话，最后打开新的
+Terminal Browser 标签页。恢复默认值后也需重新启动 Electron。
 网站必须注册工具；没有 API 的页面返回 `supported: false`，可以继续使用 Playwright。
 
 ```bash

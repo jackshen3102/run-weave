@@ -20,6 +20,11 @@ playwright-cli run-code --filename=./my-script.js
 The code must be a single function expression, it is wrapped in `(...)` and evaluated.
 import/export/require syntax is not supported.
 
+The script context provides timers, `fetch`, `URL`, `Buffer`, `crypto`,
+`AbortController`, `TextEncoder`, and `TextDecoder`. Use the attached `page`
+for actions that need the browser's Profile, login state, or network settings.
+`process` and Node.js modules are unavailable in the script context.
+
 ## Batch a known form and verify its receipt
 
 Use the attached Runweave session with the intended tab selected. This example
@@ -81,6 +86,14 @@ If the receipt is missing or inconclusive, check the application's saved-record
 view using the submission's identifier. Retry only after confirming the
 operation did not take effect. If the result remains unknown, report it and
 stop that submission.
+
+## Locate in frames and read structured snapshots
+
+Use `locator.visible()` when the intended control is the visible one. Use
+`page.frameLocator()` without a selector when you need to search across frames.
+Select the specific frame when multiple frames match. Use
+`page.ariaSnapshotJSON()` or `locator.ariaSnapshotJSON()` when the script needs
+structured accessibility data.
 
 ## Geolocation
 

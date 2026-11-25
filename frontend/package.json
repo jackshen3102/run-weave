@@ -63,7 +63,7 @@
     "@runweave/browser-annotation": "workspace:*"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.65.1",
     "@types/linkify-it": "^5.0.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.13.10",

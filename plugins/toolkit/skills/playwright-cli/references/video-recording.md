@@ -1,8 +1,12 @@
 # Video Recording
 
-Capture browser automation sessions as video for debugging, documentation, or verification. Produces WebM (VP8/VP9 codec).
+Capture browser automation sessions as VP9 WebM for debugging, documentation, or verification.
 
 ## Basic Recording
+
+In Runweave, start from the [attached session](../SKILL.md#choose-the-browser-target-first)
+and verify that recording works on the target surface. The `open` step below
+applies to standalone sessions.
 
 ```bash
 # Open browser first
@@ -26,6 +30,11 @@ playwright-cli fill e2 "test input"
 # Stop and save
 playwright-cli video-stop
 ```
+
+Use `video-start demo.webm --fps=60 --cursor` for higher-frame-rate Chromium
+recordings with an animated pointer. `--cursor` adds an action delay to animate
+the pointer. For additional annotations, pass CSS declarations to
+`video-show-actions --point-style`, `--highlight-style`, or `--title-style`.
 
 ## Best Practices
 

@@ -192,6 +192,12 @@ failure, observe the page before continuing; do not automatically repeat the
 action through a tool or click. Continue using Playwright for page observation
 and actual UI acceptance, even when a WebMCP tool reports success.
 
+To verify Playwright's WebMCP commands in a Dev Session, enable
+`desktop.browser.webMcpEnabled` for that instance and attach to its
+`terminal-browser` surface after restart. On a test page with a native tool,
+take a `snapshot`, run `webmcp-list`, then use the listed name and schema with
+`webmcp-call <name> --params <json>`. Check the page for the result.
+
 ## Standalone browser quick start
 
 Only outside Runweave and when allowed by the user's browser constraints, the
@@ -251,6 +257,8 @@ playwright-cli find "Sign in"
 playwright-cli find --regex "Sign (in|up)"
 # wrap the regexp in slashes to add flags, e.g. /i for case-insensitive
 playwright-cli find --regex "/sign (in|up)/i"
+playwright-cli find "Add to cart" --max-results=5
+playwright-cli find "Add to cart" --filename=matches.md
 playwright-cli eval "document.title"
 playwright-cli eval "el => el.textContent" e5
 # get element id, class, or any attribute not visible in the snapshot
@@ -353,12 +361,29 @@ playwright-cli unroute "**/*.jpg"
 playwright-cli unroute
 ```
 
+### Media emulation
+
+Use a task-owned tab for media emulation. The corresponding `clear-*` command
+restores the browser default for that preference.
+
+```bash
+playwright-cli set-media print
+playwright-cli clear-media
+playwright-cli set-color-scheme dark
+playwright-cli clear-color-scheme
+```
+
+The same command pairs are available for `contrast`, `forced-colors`, and
+`reduced-motion`.
+
 ### DevTools
 
 ```bash
 playwright-cli console
 playwright-cli console warning
+playwright-cli console --all
 playwright-cli requests
+playwright-cli requests --all
 playwright-cli request 5
 playwright-cli run-code "async page => await page.context().grantPermissions(['geolocation'])"
 playwright-cli run-code --filename=script.js
@@ -385,6 +410,11 @@ playwright-cli highlight e5 --style="outline: 3px dashed red"
 playwright-cli highlight e5 --hide
 playwright-cli highlight --hide
 ```
+
+`console --all` and `requests --all` include retained entries from earlier
+navigations in the selected tab. For a user demonstration on an attached tab,
+use `recording-start`, let the user perform the actions, then use
+`recording-stop` to print the generated Playwright code.
 
 ## Raw output
 
