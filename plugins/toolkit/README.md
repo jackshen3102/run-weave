@@ -12,7 +12,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 ## 已包含的 Skills
 
-- [`acceptance`](./skills/acceptance/SKILL.md)：统一手机验收材料入口，默认图文，按判断需要提供视频或原始录屏；共用采集、预览与检查流程。
+- [`acceptance`](./skills/acceptance/SKILL.md)：日常验收统一入口。按口头或书面目标核对最终结果，按需用截图、流程图、视频或数据对照交付。
 
 - [`agent-device`](./skills/agent-device/SKILL.md)：iOS 模拟器和真机上的 Agent 交互验收，包含设备预检、独立会话及证据记录。
 - [`update-runweave-ios`](./skills/update-runweave-ios/SKILL.md)：通过统一 CLI 更新 Runweave 到 iPhone，自动递增产品版本和构建号并核对安装和启动；也可脱离 Agent 直接执行命令。
@@ -54,7 +54,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 
 - [youtube-reading](./skills/youtube-reading/SKILL.md)：YouTube 字幕与本机识别、保守校对翻译，交付导读与完整中文正文。
 
-原 [`acceptance-gallery`](./skills/acceptance-gallery/SKILL.md)、[`acceptance-video`](./skills/acceptance-video/SKILL.md) 和 [`recorded-browser-mcp-verification`](./skills/recorded-browser-mcp-verification/SKILL.md) 仅作为显式兼容入口；实现与规则统一维护在 `acceptance/`，已有脚本路径继续转发。
+原 `acceptance-gallery`、`acceptance-video` 和 `recorded-browser-mcp-verification` 已统一为 `acceptance`。旧命令分别改用 `skills/acceptance/scripts/gallery.py`、`video.py` 和 `capture.py`（均位于同一 scripts 目录）。
 
 ## 随记
 

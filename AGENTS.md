@@ -29,10 +29,17 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 
 ## 操作路由
 
+- 面对有多种合理解释的需求，先结合用户原话和项目现状判断。若选错会改变用户看到的结果或造成明显返工，
+  使用 `$toolkit:ask-first` 对齐关键取舍。目标已清楚时，在计划开头用一句话写明使用场景和成功表现；
+  简单改动可直接执行，需要多步实施计划或计划交接时使用 `$toolkit:write-plan`。
+- 实现或修复交付前、按口头或书面约定验收、整理验收材料时，统一使用 `$toolkit:acceptance`。
+  主 Agent 依据用户目标选择验证入口与呈现形式，沿原授权处理验收中发现的问题。
+- 判定验收受阻前，对同一障碍必须实际尝试至少 5 种不同的解决方案，全部失败并有证据才可报告受阻。
+  任一方案奏效即继续原任务；重复同一操作只算一种。详见[受阻判定](plugins/toolkit/skills/acceptance/references/criteria.md#受阻判定)。
 - 新服务器初始化 Pi、补装扩展或迁移 Pi 环境：读
   [Pi 环境初始化](docs/deployment/pi-agent-setup.md)，按需补齐并执行对应的真实搜索或子 Agent 验证。
 - 浏览器页面复现、修改或验收：使用 `$toolkit:playwright-cli`，按其规则附着正确页面。
-  承诺的 UI 验收必须实际执行；未执行则记录阻塞，不得用静态检查、代码阅读或普通截图冒充。
+  承诺的 UI 验收必须实际执行；未执行时写明缺少哪一步，报告受阻须满足上述判定条件。
 - iOS 日常交互排查与修复验收：使用 `$toolkit:agent-device`；固定 XCTest 套件仍按包入口执行。
 - 更新原生 Mac 远控 Host（RemoteDesk）：读 [Host 规则](packages/remote-desktop-host/AGENTS.md)
   和 [更新流程](packages/remote-desktop-host/README.md)，统一运行 `pnpm host:update`。
