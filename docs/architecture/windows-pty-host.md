@@ -109,7 +109,8 @@ Windows 使用 `active-release.json`，内容是相对 releases 路径、发行�
 
 普通更新不替换全局 CLI，也不更新正在运行的兼容 Host。Host bundle 与原生 DLL 保留在不可变旧发行目录。
 `rw server host status` 分别显示运行和已安装发行目录；`host stop`、`host update` 有活跃终端时拒绝。
-Windows 系统服务、Host 自身热更新、tmux 分屏和 Fork 不在当前范围。
+当前空闲的 Codex PTY 支持[分叉到新终端](./terminal-state.md#codex-会话分叉)。
+Windows 系统服务、Host 自身热更新和 tmux 分屏不在当前范围。
 
 ## 验证边界
 

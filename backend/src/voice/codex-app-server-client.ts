@@ -3,6 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveProviderBinary } from "../evolution/providers/launch";
 import { logger } from "../logging/index";
 
 interface CodexRpcSuccess {
@@ -293,6 +294,10 @@ export function resolveCodexLaunchPlan(
 ): CodexLaunchPlan {
   const args = provider === "codex" ? buildCodexAppServerArgs() : ["app-server"];
   const configured = (provider === "codex" ? settingText("agents.codex.binary") : settingText("agents.traex.binary"))?.trim();
+  if (provider === "codex" && process.platform === "win32") {
+    const command = resolveProviderBinary("codex", configured || "codex", env);
+    return { command, args, description: command };
+  }
   if (configured && isExecutableFile(configured)) {
     return {
       command: configured,
@@ -336,13 +341,16 @@ export function buildCodexProcessEnv(
   launchPlan: CodexLaunchPlan,
 ): NodeJS.ProcessEnv {
   const launchDir = path.dirname(launchPlan.command);
-  const currentPath = env.PATH ?? "";
+  const pathKey = process.platform === "win32"
+    ? Object.keys(env).sort().find((key) => key.toUpperCase() === "PATH") ?? "PATH"
+    : "PATH";
+  const currentPath = env[pathKey] ?? "";
   const pathEntries = [launchDir, ...currentPath.split(path.delimiter)]
     .map((entry) => entry.trim())
     .filter(Boolean);
   return {
     ...env,
-    PATH: Array.from(new Set(pathEntries)).join(path.delimiter),
+    [pathKey]: Array.from(new Set(pathEntries)).join(path.delimiter),
   };
 }
 

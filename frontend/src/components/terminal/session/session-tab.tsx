@@ -90,7 +90,7 @@ export function TerminalSessionTab({
   const forkState = panelCount <= 1
     ? terminalState ?? activePanel?.terminalState ?? session.terminalState
     : activePanel?.terminalState;
-  const canFork = session.status === "running" && Boolean(session.tmuxSessionName) &&
+  const canFork = session.status === "running" &&
     forkState?.agent === "codex" && forkState.state === "agent_idle";
   const isActive = session.terminalSessionId === activeSessionId;
   const hasBell = !isActive && Boolean(hasBellMarker);
@@ -298,7 +298,7 @@ export function TerminalSessionTab({
             <MessageCircle className="size-4" />
             旁聊{sideChat.state.unread ? " · 新回复" : ""}
           </ContextMenuItem>
-          {session.tmuxSessionName && <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
+          {(session.tmuxSessionName || forkState?.agent === "codex") && <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>
             <GitFork className="h-4 w-4" />
