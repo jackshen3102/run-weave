@@ -98,6 +98,17 @@ CDP boundary or browser-version skew. Prove Trace, HAR, screencast, downloads,
 and other advanced capabilities on the exact Runweave surface before claiming
 support; a successful attach or snapshot proves only that exercised path.
 
+## Batch steps on a known page
+
+Use a full `snapshot` when the page structure is unfamiliar. Once you identify
+a unique task region, use `snapshot <selector-or-ref>` to read that region and
+its action refs. Batch a known sequence on the selected tab with `run-code`.
+Check that each action has exactly one matching target before mutating the page,
+and return a visible, operation-specific receipt after submission. If the
+connection drops after a possible submission, recover and reattach to the
+original Profile/Group, select the original tab, and read the receipt or saved
+record before deciding how to continue. See the [form and receipt example](references/running-code.md#batch-a-known-form-and-verify-its-receipt).
+
 ## Remote upgrade acceptance with a temporary terminal
 
 Before checking a cloud desktop or SSH host after an upgrade, record whether its

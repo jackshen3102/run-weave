@@ -1,6 +1,6 @@
 # Running Custom Playwright Code
 
-Use `run-code` to execute arbitrary Playwright code for advanced scenarios not covered by CLI commands.
+Use `run-code` for known multi-step interactions and scenarios that need Playwright APIs.
 
 ## Syntax
 
@@ -19,6 +19,68 @@ playwright-cli run-code --filename=./my-script.js
 
 The code must be a single function expression, it is wrapped in `(...)` and evaluated.
 import/export/require syntax is not supported.
+
+## Batch a known form and verify its receipt
+
+Use the attached Runweave session with the intended tab selected. This example
+uses a form in `#task` and a status element in `#receipt`. Adapt the selectors,
+role names, input values, and exact receipt to the observed page and authorized
+operation. Choose a receipt that identifies this submission. If you still need
+to discover the task region, start with a full snapshot.
+
+```bash
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" snapshot '#task'
+```
+
+Save this function as `submit-record.js`.
+
+<!-- prettier-ignore -->
+```js
+async page => {
+  const name = 'example-record-01';
+  const expectedReceipt = `Saved ${name} (browser)`;
+  const timeout = 3500;
+  const form = page.getByRole('region', { name: 'Create fixture record', exact: true });
+  const record = form.getByRole('textbox', { name: 'Record name', exact: true });
+  const category = form.getByRole('combobox', { name: 'Category', exact: true });
+  const save = form.getByRole('button', { name: 'Save fixture record', exact: true });
+  const receipt = form.getByRole('status').and(page.getByText(expectedReceipt, { exact: true }));
+
+  if (await form.count() !== 1 || await record.count() !== 1 ||
+      await category.count() !== 1 || await save.count() !== 1) {
+    throw new Error('Expected one form and one match for each action');
+  }
+  if (await receipt.count() > 0) {
+    throw new Error('This receipt already exists. Inspect the saved record before continuing.');
+  }
+
+  await record.fill(name, { timeout });
+  await category.selectOption('browser', { timeout });
+  await save.click({ timeout });
+  await receipt.waitFor({ state: 'visible', timeout });
+  return await receipt.innerText({ timeout });
+}
+```
+
+```bash
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" --raw run-code --filename=./submit-record.js
+```
+
+If the submit outcome is unknown, inspect the receipt on the original tab
+before taking another action. If the connection is lost, follow the
+[Runweave recovery steps](../SKILL.md#choose-the-browser-target-first) and
+reattach with a fresh endpoint. Use `tab-list` to identify the original tab
+and select it if needed before reading the receipt.
+
+```bash
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" tab-list
+pnpm exec playwright cli -s="$RW_PLAYWRIGHT_SESSION" snapshot '#receipt'
+```
+
+If the receipt is missing or inconclusive, check the application's saved-record
+view using the submission's identifier. Retry only after confirming the
+operation did not take effect. If the result remains unknown, report it and
+stop that submission.
 
 ## Geolocation
 
