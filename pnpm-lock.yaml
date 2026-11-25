@@ -44,8 +44,8 @@ importers:
         specifier: ^14.1.1
         version: 14.1.1
       playwright:
-        specifier: 1.62.1
-        version: 1.62.1
+        specifier: 1.65.1
+        version: 1.65.1
       prettier:
         specifier: ^3.5.3
         version: 3.8.1
@@ -387,8 +387,8 @@ importers:
         specifier: ^5.0.6
         version: 5.0.6
       "@playwright/test":
-        specifier: 1.62.1
-        version: 1.62.1
+        specifier: 1.65.1
+        version: 1.65.1
       "@types/linkify-it":
         specifier: ^5.0.0
         version: 5.0.0
@@ -4642,10 +4642,10 @@ packages:
       }
     engines: { node: ">=14" }
 
-  "@playwright/test@1.62.1":
+  "@playwright/test@1.65.1":
     resolution:
       {
-        integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==,
+        integrity: sha512-y+NCIRm2LvY4slUVWvGh1nujJ8RF/hEisIsq2mtUPgdQC4L701bq5hZGMhrpeXjACvwvO9tj5dJqhvM6TP9lbw==,
       }
     engines: { node: ">=20" }
     hasBin: true
@@ -10747,18 +10747,18 @@ packages:
         integrity: sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ==,
       }
 
-  playwright-core@1.62.1:
+  playwright-core@1.65.1:
     resolution:
       {
-        integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==,
+        integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==,
       }
     engines: { node: ">=20" }
     hasBin: true
 
-  playwright@1.62.1:
+  playwright@1.65.1:
     resolution:
       {
-        integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==,
+        integrity: sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw==,
       }
     engines: { node: ">=20" }
     hasBin: true
@@ -17403,9 +17403,9 @@ snapshots:
   "@pkgjs/parseargs@0.11.0":
     optional: true
 
-  "@playwright/test@1.62.1":
+  "@playwright/test@1.65.1":
     dependencies:
-      playwright: 1.62.1
+      playwright: 1.65.1
 
   "@protobufjs/aspromise@1.1.2": {}
 
@@ -21295,13 +21295,11 @@ snapshots:
       mlly: 1.8.2
       pathe: 2.0.3
 
-  playwright-core@1.62.1: {}
+  playwright-core@1.65.1: {}
 
-  playwright@1.62.1:
+  playwright@1.65.1:
     dependencies:
-      playwright-core: 1.62.1
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.65.1
 
   plist@3.1.0:
     dependencies:

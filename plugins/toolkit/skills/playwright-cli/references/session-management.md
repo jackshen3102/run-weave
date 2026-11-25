@@ -2,6 +2,9 @@
 
 Run multiple isolated browser sessions concurrently with state persistence.
 
+For Runweave, use the [resolved Profile/Group and detach workflow](../SKILL.md#choose-the-browser-target-first).
+The standalone session examples below apply outside Runweave.
+
 ## Named Browser Sessions
 
 Use `-s` flag to isolate browser contexts:
@@ -17,6 +20,10 @@ playwright-cli -s=public open https://example.com
 playwright-cli -s=auth fill e1 "user@example.com"
 playwright-cli -s=public snapshot
 ```
+
+In a standalone session, `tab-new --isolated-context=<name>` creates or reuses
+a named context within that session. Tabs sharing the name share cookies and
+storage. Each distinct name has its own cookies and storage.
 
 ## Browser Session Isolation Properties
 
@@ -49,6 +56,9 @@ playwright-cli kill-all
 playwright-cli delete-data                # delete default browser data
 playwright-cli -s=mysession delete-data   # delete named browser data
 ```
+
+A standalone headless session closes after an hour without commands by default.
+`open --idle-timeout=<ms>` sets the interval. Use `0` to disable it.
 
 ## Environment Variable
 
