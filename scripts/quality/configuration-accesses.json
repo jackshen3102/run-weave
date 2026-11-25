@@ -2083,9 +2083,17 @@
     "file": "backend/src/voice/codex-app-server-client.ts",
     "kind": "environment",
     "expression": "env.PATH",
-    "count": 3,
+    "count": 2,
     "category": "system",
     "reason": "PATH：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "backend/src/voice/codex-app-server-client.ts",
+    "kind": "environment",
+    "expression": "env[pathKey]",
+    "count": 1,
+    "category": "system",
+    "reason": "Windows 的系统 PATH 键名不区分大小写；读取实际键以保留 Codex 子进程继承的命令搜索路径。"
   },
   {
     "file": "backend/src/voice/codex-app-server-client.ts",
