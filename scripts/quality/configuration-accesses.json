@@ -5672,6 +5672,14 @@
     "reason": "随记 MCP helper 的显式 tokenEnv 客户端授权合同；凭据不复制到 Runweave 主机配置。"
   },
   {
+    "file": "scripts/knowledge-cleanup/delta.py",
+    "kind": "native-or-shell",
+    "expression": "binary = os.environ.get(\"RUNWEAVE_CLI_BIN\") or \"rw\"",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "定时任务优先使用调度进程提供的实例绑定 CLI，随后核对本机 Stable 实例和鉴权状态。"
+  },
+  {
     "file": "scripts/agents/build.mjs",
     "kind": "file-io",
     "expression": "writeFile(path.join(destination, \"runweave.js\"))",
