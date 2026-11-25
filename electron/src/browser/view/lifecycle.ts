@@ -49,6 +49,7 @@ import { attachBrowserPlugins } from "../plugins/host.js";
 import { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 import { validateTerminalBrowserUrl } from "./helpers.js";
 import { attachTerminalBrowserFind } from "../find.js";
+import { navigatePageOpenedTab } from "./page-open-navigation.js";
 
 export { attachTerminalBrowser, detachTerminalBrowser } from "./attachment.js";
 export {
@@ -432,30 +433,7 @@ export function createTerminalBrowserTabFromPageOpen(
     getTerminalBrowserKey(win, profileId, openerTabId),
   )?.targetId;
   attachTerminalBrowser(win, tabId, view);
-  entry.lastKnownUrl = url;
-  const contents = view.webContents;
-  let published = false;
-  const publishTarget = (): void => {
-    if (published || contents.isDestroyed()) return;
-    published = true;
-    contents.removeListener("did-navigate", publishTarget);
-    terminalBrowserEvents.emit("tab-available", {
-      targetId: entry.targetId,
-      profileId,
-      browserGroupId: entry.browserGroupId,
-      url: contents.getURL() || entry.lastKnownUrl,
-      title: contents.getTitle(),
-      openerId: entry.openerId,
-      canAccessOpener: false,
-    });
-  };
-  // Attach after the initial navigation commits, when CDP can initialize its
-  // main frame. A failed load still leaves an available tab.
-  contents.once("did-navigate", publishTarget);
-  void contents.loadURL(url).then(publishTarget, () => {
-    publishTarget();
-    sendTerminalBrowserTabUpdate(win, tabId, entry, false);
-  });
+  navigatePageOpenedTab(win, tabId, entry, url);
 }
 
 export function ensureTerminalBrowserFallback(
