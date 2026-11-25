@@ -48,6 +48,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - [`quality-workflow`](./skills/quality-workflow/SKILL.md)：读取指定 Backend 的增量质量证据、持久化待处理页并更新同一归因台账；每日启用需确认配置。
 - `run-test-cases`
 - `shadcn`
+- [`subagent-split-check`](./skills/subagent-split-check/SKILL.md)：复杂任务中按收益分派可独立交付的子任务，保留可恢复的验收记录。
 - `sync-branch-hard-reset`
 - [`using-rw`](./skills/using-rw/SKILL.md)：Runweave CLI 入口；右侧 Browser、云桌面或 devbox 隧道不可用时，通过 `browser doctor` 诊断和 `browser recover` 恢复，并识别版本缺失及升级入口。
 - `write-plan`
