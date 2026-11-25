@@ -25,6 +25,7 @@ export class ScreenRecordingAnalysisRuntime {
   private timer?: ReturnType<typeof setTimeout>;
   private active?: Promise<void>;
   private controller?: AbortController;
+  private completedWindow?: { deviceID: string; throughMs: number };
   private unregisterConfiguration?: () => void;
   private closed = false;
   private tickStage = 'cleanup';
@@ -32,6 +33,7 @@ export class ScreenRecordingAnalysisRuntime {
   start(): void {
     if (process.platform !== 'darwin') return;
     this.unregisterConfiguration = configuration().register('screenRecording.analysis', snapshot => {
+      this.completedWindow = undefined;
       if (readConfigurationPath(snapshot.value, 'screenRecording.analysis.enabled') !== true) this.controller?.abort();
     });
     this.schedule(0);
@@ -59,12 +61,18 @@ export class ScreenRecordingAnalysisRuntime {
     // The owner persists completion, so restarting cannot start another round.
     const throughMs = dailyAnalysisCutoff(Date.now());
     if (effectiveFrom > throughMs) return;
+    // After the collector confirms completion, wait for the next window
+    // without making the same status request on every maintenance tick.
+    if (this.completedWindow?.deviceID === deviceID && this.completedWindow.throughMs === throughMs) return;
     this.tickStage = 'analysis_status';
     const status = await this.collector.request<AnalysisStatus>('analysisStatus',{});
     if (this.closed || settingText('screenRecording.analysis.enabled') !== 'true') return;
     if (status.deviceID !== deviceID) throw new Error('DEVICE_MISMATCH');
     if (status.dailyScheduleVersion !== 1) throw new Error('UPDATE_REQUIRED');
-    if ((status.lastDailyRunThroughMs ?? 0) >= throughMs) return;
+    if ((status.lastDailyRunThroughMs ?? 0) >= throughMs) {
+      this.completedWindow = { deviceID, throughMs };
+      return;
+    }
     const provider = new AnalysisProvider({ binary: settingText('agents.codex.binary')?.trim() || 'codex',model,effort });
     const started = Date.now();
     this.controller = new AbortController();
@@ -81,6 +89,7 @@ export class ScreenRecordingAnalysisRuntime {
           if (current.windowThroughMs === throughMs && current.windowDrained) {
             this.tickStage = 'complete_day';
             await this.collector.request('completeAnalysisDay',{ expectedDeviceID: deviceID,throughMs },signal);
+            this.completedWindow = { deviceID, throughMs };
             logger.info('screen-analysis.daily.completed',{ throughMs });
           }
           break;

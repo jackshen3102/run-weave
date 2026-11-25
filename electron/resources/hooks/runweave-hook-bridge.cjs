@@ -23,15 +23,14 @@ const {
   normalizeEventName,
   normalizeReason,
   normalizeSource,
-  parseTmuxSocketPath,
   parseArgs,
   parsePayload,
   readHookEvent,
   readNotificationType,
-  readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,
 } = require("./runweave-hook-payload.cjs");
+const { parseTmuxSocketPath, readTmuxPaneContext, readTmuxSessionEnv } = require("./runweave-hook-tmux.cjs");
 const {
   discoverAppServer,
   postAppServerEvent,
@@ -69,59 +68,6 @@ function appendDebugLog(message, details) {
   } catch {
     // Ignore diagnostic logging failures.
   }
-}
-
-function readTmuxSessionEnv() {
-  const sessionName = process.env.RUNWEAVE_TMUX_SESSION_NAME;
-  const socketPath = parseTmuxSocketPath(process.env.TMUX);
-  if (!sessionName || !socketPath) {
-    return { refreshed: false, reason: "missing_tmux_env" };
-  }
-
-  const result = spawnSync(
-    process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
-    ["-S", socketPath, "show-environment", "-t", sessionName],
-    {
-      encoding: "utf8",
-      timeout: 2000,
-      maxBuffer: 256 * 1024,
-    },
-  );
-  if (result.error || result.status !== 0) {
-    return {
-      refreshed: false,
-      reason: "tmux_show_environment_failed",
-      error: result.error instanceof Error ? result.error.message : undefined,
-      status: result.status,
-    };
-  }
-
-  const env = {};
-  for (const line of String(result.stdout || "").split(/\r?\n/)) {
-    if (line.startsWith("-RUNWEAVE_")) {
-      delete process.env[line.slice(1)];
-      continue;
-    }
-    if (!line.startsWith("RUNWEAVE_")) {
-      continue;
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-    env[line.slice(0, separatorIndex)] = line.slice(separatorIndex + 1);
-  }
-
-  for (const [key, value] of Object.entries(env)) {
-    process.env[key] = value;
-  }
-
-  return {
-    refreshed: Object.keys(env).length > 0,
-    sessionName,
-    socketPath,
-    keys: Object.keys(env).sort(),
-  };
 }
 
 function notifyDesktop(source, options = {}) {
@@ -305,8 +251,16 @@ async function main() {
     });
     return;
   }
-  const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv();
+  const expectedTmuxSession = process.env.RUNWEAVE_TMUX_SESSION_NAME;
+  const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv(spawnSync);
   const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
+  if (expectedTmuxSession && tmuxPaneContext.sessionName && tmuxPaneContext.sessionName !== expectedTmuxSession) {
+    appendDebugLog("hook bridge skipped foreign tmux session", {
+      expectedSession: expectedTmuxSession,
+      session: tmuxPaneContext.sessionName,
+    });
+    return;
+  }
   if (tmuxPaneContext.panelId) {
     process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
   } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
