@@ -21,6 +21,7 @@ plugins/toolkit/skills/<skill-name>/SKILL.md
 - `brainstorming`
 - [`ask-first`](./skills/ask-first/SKILL.md)：复杂任务执行前先探索项目，只对齐高返工成本的关键取舍；源自 ByteTech 的 Ask First，支持按需并行探索，沿用已有授权，不强制文档流程。
 - `code-grounded-requirements`
+- [`learn-from-projects`](./skills/learn-from-projects/SKILL.md)：回看以往调研和实际使用记录，对照当前实现，判断外部项目里哪些做法值得借鉴。
 - [`clear-technical-explanations`](./skills/clear-technical-explanations/SKILL.md)：社区 ASD-STE100 skill 的中文适配，保留 Strict / STE-flavored 两种文本改写模式、语义核对与默认纯文本输出。
 - `daily-doc-maintenance`
 - `daily-refactor`
