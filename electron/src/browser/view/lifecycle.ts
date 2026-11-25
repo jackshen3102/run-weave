@@ -67,6 +67,7 @@ export function getOrCreateTerminalBrowserView(
     openerTabId?: string;
     notifyWorkspace?: boolean;
     localPreview?: DesktopLocalPreview;
+    loadInitialBlank?: boolean;
   } = {},
 ): WebContentsView {
   const key = getTerminalBrowserKey(win, profileId, tabId);
@@ -123,8 +124,8 @@ export function getOrCreateTerminalBrowserView(
     //
     // This holds even when the CDP proxy is attached: the page-opened tab
     // inherits the opener's `browserGroupId`, so it stays within the same
-    // proxy control group and a connected client still discovers it via
-    // `Target.targetCreated`. A human clicking a link must always be able to
+    // proxy control group and connected clients can discover or auto-attach
+    // to it. A human clicking a link must always be able to
     // open it, regardless of whether an agent is driving this tab.
     if (disposition === "new-window") {
       return {
@@ -394,14 +395,14 @@ export function getOrCreateTerminalBrowserView(
     void load.catch(() =>
       sendTerminalBrowserTabUpdate(win, tabId, entry, false),
     );
-    terminalBrowserEvents.emit("tab-awakened", {
+    terminalBrowserEvents.emit("tab-available", {
       targetId: entry.targetId,
       profileId,
       browserGroupId: entry.browserGroupId,
       url: dormant.url,
       title: dormant.title,
     });
-  } else {
+  } else if (options.loadInitialBlank !== false) {
     void view.webContents.loadURL("about:blank").catch(() => undefined);
   }
   return view;
@@ -412,12 +413,13 @@ export function createTerminalBrowserTabFromPageOpen(
   profileId: TerminalBrowserProfileId,
   url: string,
   browserGroupId: string,
-  openerTabId?: string,
+  openerTabId: string,
 ): void {
   const tabId = `browser-tab-${randomUUID().slice(0, 8)}`;
   const view = getOrCreateTerminalBrowserView(win, profileId, tabId, {
     browserGroupId,
     openerTabId,
+    loadInitialBlank: false,
   });
   const entry = terminalBrowserRuntime.entries.get(
     getTerminalBrowserKey(win, profileId, tabId),
@@ -426,9 +428,32 @@ export function createTerminalBrowserTabFromPageOpen(
     return;
   }
 
+  entry.openerId = terminalBrowserRuntime.entries.get(
+    getTerminalBrowserKey(win, profileId, openerTabId),
+  )?.targetId;
   attachTerminalBrowser(win, tabId, view);
   entry.lastKnownUrl = url;
-  void view.webContents.loadURL(url).catch(() => {
+  const contents = view.webContents;
+  let published = false;
+  const publishTarget = (): void => {
+    if (published || contents.isDestroyed()) return;
+    published = true;
+    contents.removeListener("did-navigate", publishTarget);
+    terminalBrowserEvents.emit("tab-available", {
+      targetId: entry.targetId,
+      profileId,
+      browserGroupId: entry.browserGroupId,
+      url: contents.getURL() || entry.lastKnownUrl,
+      title: contents.getTitle(),
+      openerId: entry.openerId,
+      canAccessOpener: false,
+    });
+  };
+  // Attach after the initial navigation commits, when CDP can initialize its
+  // main frame. A failed load still leaves an available tab.
+  contents.once("did-navigate", publishTarget);
+  void contents.loadURL(url).then(publishTarget, () => {
+    publishTarget();
     sendTerminalBrowserTabUpdate(win, tabId, entry, false);
   });
 }

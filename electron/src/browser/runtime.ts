@@ -45,6 +45,7 @@ export interface TerminalBrowserEntry {
   attached: boolean;
   visible: boolean;
   targetId: string;
+  openerId?: string;
   browserGroupId: string;
   faviconDataUrl: string | null;
   faviconGeneration: number;
@@ -115,6 +116,7 @@ export interface TerminalBrowserCdpTarget {
   loading: boolean;
   webContents: WebContents;
   openerId?: string;
+  canAccessOpener?: boolean;
 }
 
 export interface TerminalBrowserPopup {

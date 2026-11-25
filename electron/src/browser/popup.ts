@@ -97,7 +97,7 @@ export function configureTerminalBrowserPopupWindow(
       popupWindow.webContents,
     );
   });
-  terminalBrowserEvents.emit("tab-awakened", {
+  terminalBrowserEvents.emit("tab-available", {
     targetId, profileId, browserGroupId: popup.browserGroupId, openerId,
     url: popupWindow.webContents.getURL() || "about:blank", title: popupWindow.webContents.getTitle(),
   });

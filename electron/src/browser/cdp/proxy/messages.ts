@@ -17,7 +17,6 @@ import {
   activateTerminalBrowserTabFromProxy,
   closeTerminalBrowserTabFromProxy,
   createTerminalBrowserTabFromProxy,
-  getTerminalBrowserCdpTargets,
 } from "../../view/index.js";
 import type { CdpProxyConnectionState } from "./types.js";
 import {
@@ -33,8 +32,6 @@ import {
   handleBrowserSessionMessage,
   handleSessionMessage,
 } from "./session-messages.js";
-
-const MAX_AI_TABS = 10;
 
 export async function handleMessage(
   connections: Set<CdpProxyConnectionState>,
@@ -163,6 +160,7 @@ export async function handleMessage(
                 browserContextId: t.browserGroupId,
                 attached: true,
                 openerId: t.openerId,
+                canAccessOpener: t.canAccessOpener,
               });
               sendJson(ws, {
                 method: "Target.attachedToTarget",
@@ -224,7 +222,6 @@ export async function handleMessage(
           return;
         }
 
-        const allTargets = getTerminalBrowserCdpTargets();
         const currentTargets = getScopedTargets(
           conn.scopedProfileId,
           conn.scopedGroupId,
@@ -233,17 +230,6 @@ export async function handleMessage(
           sendJson(
             ws,
             buildCdpError(id, -32602, `Unknown group: ${conn.scopedGroupId}`),
-          );
-          return;
-        }
-        if (allTargets.length >= MAX_AI_TABS) {
-          sendJson(
-            ws,
-            buildCdpError(
-              id,
-              -32000,
-              `Maximum AI tab limit (${MAX_AI_TABS}) reached`,
-            ),
           );
           return;
         }

@@ -66,6 +66,7 @@ export function getCurrentTargetInfos(
       browserContextId: t.browserGroupId,
       attached: sessionManager.isTargetAttached(t.targetId),
       openerId: t.openerId,
+      canAccessOpener: t.canAccessOpener,
     }),
   );
 }
@@ -105,6 +106,7 @@ export function broadcastTargetCreated(
     url: string;
     title: string;
     openerId?: string;
+    canAccessOpener?: boolean;
   },
 ): void {
   for (const conn of connections) {
@@ -129,14 +131,14 @@ export function broadcastTargetCreated(
           browserContextId: target.browserGroupId,
           attached: false,
           openerId: target.openerId,
+          canAccessOpener: target.canAccessOpener,
         }),
       },
     });
   }
 }
 
-/** Restoring a renderer must satisfy both discovery and auto-attach clients. */
-export function broadcastTargetAwakened(
+export function broadcastTargetAvailable(
   connections: Set<CdpProxyConnectionState>,
   target: Parameters<typeof broadcastTargetCreated>[2],
 ): void {
@@ -171,7 +173,7 @@ export function broadcastTargetAwakened(
         },
       });
     } catch (error) {
-      console.warn("[cdp-proxy] auto-attach to awakened target failed", {
+      console.warn("[cdp-proxy] auto-attach to available target failed", {
         targetId: target.targetId,
         error: error instanceof Error ? error.message : String(error),
       });
