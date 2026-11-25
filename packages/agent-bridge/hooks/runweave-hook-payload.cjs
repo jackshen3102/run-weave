@@ -4,6 +4,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { getCommandBasename } = require("./runweave-hook-tmux.cjs");
 
 const STOP_EVENTS = new Set(["stop"]);
 const COMPLETION_REASONS = new Set([
@@ -12,25 +13,6 @@ const COMPLETION_REASONS = new Set([
   "ai_process_exit",
   "manual",
 ]);
-
-function parseTmuxSocketPath(value) {
-  if (!value) {
-    return null;
-  }
-  const socketPath = String(value).split(",")[0]?.trim();
-  return socketPath || null;
-}
-
-function getCommandBasename(command) {
-  const normalized = String(command || "")
-    .trim()
-    .replace(/\\+/g, "/");
-  if (!normalized) {
-    return null;
-  }
-  const basename = normalized.split("/").filter(Boolean).at(-1) || normalized;
-  return basename || null;
-}
 
 function isNestedCodexProcess(spawnSync) {
   // A nested CLI inherits terminal/pane identity. Its hook still belongs to
@@ -66,90 +48,6 @@ function isNestedCodexProcess(spawnSync) {
     pid = entry.parent;
   }
   return false;
-}
-
-function readTmuxPaneContext(spawnSync) {
-  const socketPath = parseTmuxSocketPath(process.env.TMUX);
-  const tmuxPaneId = process.env.TMUX_PANE;
-  if (!socketPath || !tmuxPaneId) {
-    return {
-      commandName: null,
-      panelId: null,
-      resolved: false,
-      reason: "missing_tmux_context",
-    };
-  }
-  const separator = "__RUNWEAVE_METADATA_FIELD__";
-  let result;
-  let attempts = 0;
-  while (attempts < 2) {
-    attempts += 1;
-    result = spawnSync(
-      process.env.RUNWEAVE_RUNTIME_TMUX_BINARY || "tmux",
-      [
-        "-S",
-        socketPath,
-        "display-message",
-        "-p",
-        "-t",
-        tmuxPaneId,
-        [
-          "#{@runweave_agent_prepare_command}",
-          "#{@runweave_agent_prepare_exit}",
-          "#{@runweave_command}",
-          "#{pane_current_command}",
-          "#{@runweave_panel_id}",
-        ].join(separator),
-      ],
-      {
-        encoding: "utf8",
-        timeout: 1000,
-        maxBuffer: 32 * 1024,
-      },
-    );
-    if (!result.error && result.status === 0) {
-      break;
-    }
-  }
-  if (!result || result.error || result.status !== 0) {
-    return {
-      commandName: null,
-      panelId: null,
-      resolved: false,
-      reason: "tmux_display_message_failed",
-      attempts,
-      status: result?.status ?? null,
-      error: result?.error instanceof Error ? result.error.message : null,
-    };
-  }
-  const [
-    agentPrepareCommand = "",
-    agentPrepareExit = "",
-    runweaveCommand = "",
-    paneCommand = "",
-    panelId = "",
-  ] = String(result.stdout || "")
-    .replace(/\r?\n$/, "")
-    .split(separator);
-  const normalizedPaneCommand = getCommandBasename(paneCommand);
-  const paneAtInteractivePrompt = ["bash", "fish", "sh", "zsh"].includes(
-    normalizedPaneCommand,
-  );
-  const pendingAgentCommand =
-    agentPrepareExit.startsWith("pending:") &&
-    (Boolean(runweaveCommand.trim()) || !paneAtInteractivePrompt)
-      ? getCommandBasename(agentPrepareCommand)
-      : null;
-  return {
-    commandName:
-      pendingAgentCommand ||
-      getCommandBasename(runweaveCommand) ||
-      getCommandBasename(paneCommand),
-    panelId: panelId.trim() || null,
-    resolved: true,
-    reason: null,
-    attempts,
-  };
 }
 
 function normalizeSummaryText(value) {
@@ -560,12 +458,10 @@ module.exports = {
   normalizeEventName,
   normalizeReason,
   normalizeSource,
-  parseTmuxSocketPath,
   parseArgs,
   parsePayload,
   readHookEvent,
   readNotificationType,
-  readTmuxPaneContext,
   readThreadId,
   toAgentHookStateEvent,
 };
