@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="runweave-visual-plan" content="1">
+<meta name="color-scheme" content="light">
+<title>Agent 提问，手机接力 · Runweave</title>
+<style>
+:root { --paper:#f5f3e9; --white:#fffef9; --ink:#192b25; --muted:#52635a; --green:#18372d; --dark:#112a22; --mint:#d8eabd; --line:#d5dacf; --terracotta:#a1472e }
+*,*::before,*::after { box-sizing:border-box }
+[hidden] { display:none !important }
+html { scroll-behavior:smooth }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; overflow-wrap:anywhere }
+h1,h2,h3,p { margin:0 }
+a { color:inherit; text-underline-offset:.23em }
+button { font:inherit; color:inherit; cursor:pointer }
+button:disabled { cursor:default }
+:focus-visible { outline:3px solid var(--terracotta); outline-offset:4px }
+.wrap { width:min(1120px,calc(100% - 64px)); margin-inline:auto }
+.masthead { border-bottom:1px solid var(--line) }
+.masthead .wrap,footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px 24px }
+.masthead .wrap { min-height:62px; padding-block:10px }
+.brand { display:flex; align-items:center; gap:9px; font-weight:750 }
+.brand span { display:grid; place-items:center; width:26px; height:26px; border-radius:7px; background:var(--green); color:var(--mint); font-weight:700 }
+nav { display:flex; flex-wrap:wrap; gap:0 20px; align-items:center }
+nav a { display:flex; align-items:center; min-height:44px; text-decoration:none; color:var(--muted) }
+nav a:hover { text-decoration:underline }
+.intro { padding:41px 0 24px }
+h1 { font-size:clamp(2.14rem,5vw,4.2rem); line-height:1.1; letter-spacing:-.05em; font-weight:790; margin-bottom:11px }
+.intro p { color:var(--muted); font-size:1.06rem }
+.flow { background:var(--green); color:#f4faed; border-radius:17px; padding:22px 25px 25px; box-shadow:0 13px 30px #162d2614 }
+.flow header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:3px 15px; margin-bottom:14px }
+.flow h2 { font-size:1.38rem }
+.flow header p { color:#d0e0d3 }
+.steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:18px; margin:0; padding:0; list-style:none }
+.steps li { position:relative; min-width:0; padding:11px; border:1px solid #6c8b79; border-radius:9px; background:#264739 }
+.steps li+li::before { content:"→"; position:absolute; top:50%; left:-16px; transform:translateY(-50%); color:#c5ddc8; font:700 16px/1 system-ui }
+.steps li[aria-current="step"] { color:var(--dark); background:var(--mint); border-color:var(--mint) }
+.steps span,.steps small { display:block; color:#d0e2d3; font-size:.89rem; line-height:1.4 }
+.steps [aria-current="step"] span,.steps [aria-current="step"] small { color:#38513e }
+.flow-branch { color:#d7e8d9; display:flex; flex-wrap:wrap; gap:3px 19px; margin-top:13px; font-size:.92rem }
+.flow-branch strong { color:#f4faed }
+.steps strong { display:block; margin:3px 0; font-size:1.03rem; line-height:1.35 }
+.workbench { display:grid; grid-template-columns:minmax(0,1fr) minmax(265px,355px); align-items:start; gap:20px 32px; padding-block:32px }
+.controls { grid-area:1/1 }
+.trace-wrap { grid-area:2/1 }
+.phone-frame { grid-area:1/2/span 2; min-width:0; border:1px solid var(--line); border-radius:19px; background:#e5e9de; padding:12px }
+h2 { font-size:1.6rem; line-height:1.3; letter-spacing:-.025em }
+.hint { color:var(--muted); margin-top:5px }
+.scenarios { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px }
+.scenario,.reset { min-height:44px; border:1px solid #9daa9d; border-radius:8px; background:var(--white); padding:6px 12px; font-weight:650 }
+.scenario[aria-pressed="true"] { background:var(--dark); border-color:var(--dark); color:#f3faee }
+.reset { margin-top:12px; background:none; color:var(--muted) }
+.trace { min-height:143px; border:1px solid var(--line); border-radius:12px; background:var(--white); padding:13px 16px }
+.trace h3 { font-size:1.06rem; margin-bottom:5px }
+.trace ol { list-style:none; margin:0; padding:0 }
+.trace li { position:relative; color:var(--muted); padding:3px 0 3px 19px }
+.trace li::before { content:""; position:absolute; left:0; top:12px; width:8px; height:8px; border:2px solid #728e79; border-radius:50% }
+.trace li:last-child { color:var(--ink); font-weight:690 }
+.trace li:last-child::before { background:#527452 }
+.phone { display:flex; flex-direction:column; justify-content:space-between; gap:13px; min-height:314px; padding:15px; border-radius:14px; background:var(--dark); color:#f4f9ef }
+.phone-header { display:flex; justify-content:space-between; flex-wrap:wrap; gap:2px 12px }
+.phone-header span { color:#c6d8cc; font-size:.87rem }
+.screen { flex:1 }
+.notice,.question,.outcome { width:100%; border:0; border-radius:10px; background:#f5f8ef; color:var(--ink); padding:12px }
+.notice { text-align:left; margin-top:32px; box-shadow:0 9px 23px #0818104f }
+.notice:hover { background:#fffef9 }
+.notice strong,.notice span { display:block }
+.notice strong { font-size:1.17rem; margin:1px 0 }
+.notice span:first-child,.question-meta { color:var(--muted); font-size:.88rem }
+.notice span:last-child { color:#326343; font-size:.94rem; font-weight:730; margin-top:9px }
+.question h3,.outcome h3 { line-height:1.4; font-size:1.15rem }
+.options { border:0; padding:0; margin:8px 0 }
+.options label { display:flex; align-items:center; gap:8px; min-height:44px; margin-block:5px; padding:5px 6px; border:1px solid #aebfab; border-radius:7px; background:var(--white); cursor:pointer }
+.options label:has(:checked) { border-color:#366247; box-shadow:inset 0 0 0 1px #366247; background:#e5efdc }
+.options input { width:17px; height:17px; accent-color:#315844; flex:none }
+.action { display:block; width:100%; min-height:44px; border:0; border-radius:7px; background:var(--green); color:#f4faef; font-weight:710; padding:6px 10px }
+.action:disabled { background:#d5ded3; color:#394740 }
+.outcome { margin-top:26px; min-height:115px }
+.outcome p { margin-top:6px; color:#405646 }
+.outcome .action { margin-top:11px }
+.outcome[data-kind="offline"] { background:#fbf0df }
+.phone-footer { height:3px; width:70px; margin:auto auto 2px; background:#789788; border-radius:8px }
+.delivery { border-top:1px solid var(--line); padding:23px 0 28px }
+.details { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:13px }
+.details article { background:var(--white); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-width:0 }
+.details h3 { font-size:1.06rem; margin-bottom:4px }
+.details p { color:var(--muted); margin-bottom:7px }
+footer { padding-bottom:25px; color:var(--muted) }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap }
+@media(max-width:850px) {
+  .wrap { width:calc(100% - 40px) }
+  .steps { gap:14px }
+  .steps li { padding-inline:7px }
+  .steps li+li::before { left:-13px; font-size:14px }
+  .workbench { column-gap:18px }
+}
+@media(max-width:650px) {
+  .wrap { width:calc(100% - 28px) }
+  .intro { padding:25px 0 19px }
+  .flow { padding:14px }
+  .steps { grid-template-columns:1fr; gap:13px }
+  .steps li { display:grid; grid-template-columns:minmax(69px,.6fr) minmax(0,1.5fr); gap:1px 6px; padding:7px 8px }
+  .steps li+li::before { content:"↓"; top:-14px; left:13px; transform:none }
+  .steps span { grid-row:1/3; align-self:center }
+  .steps strong { margin:0 }
+  .steps small { grid-column:2 }
+  .workbench { grid-template-columns:1fr; gap:14px; padding-block:23px }
+  .controls { grid-area:1/1 }
+  .phone-frame { grid-area:2/1 }
+  .trace-wrap { grid-area:3/1 }
+  .details { grid-template-columns:1fr }
+}
+@media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto } }
+</style>
+</head>
+<body id="top">
+<header class="masthead">
+  <div class="wrap">
+    <div class="brand"><span aria-hidden="true">↳</span> Runweave 方案</div>
+    <nav aria-label="章节"><a href="#core-flow">核心流程</a><a href="#demo">操作演示</a><a href="#delivery">验证与范围</a></nav>
+  </div>
+</header>
+<main class="wrap">
+  <header class="intro">
+    <h1>Agent 提问，手机接力</h1>
+    <p>离开电脑后，从手机通知直达 Codex 正在等你回答的问题。回答后，原终端继续执行。</p>
+  </header>
+  <section class="flow" id="core-flow" aria-labelledby="flow-title">
+    <header><h2 id="flow-title">核心流程</h2><p>确认原请求后发提醒，打开时再核对一次。</p></header>
+    <ol class="steps">
+      <li id="step-ask"><span>Codex</span><strong>提出问题</strong><small>原任务等待回答</small></li>
+      <li id="step-verify"><span>Backend</span><strong>确认原请求</strong><small>匹配线程、轮次和问题</small></li>
+      <li id="step-notify" aria-current="step"><span>iPhone</span><strong>收到提醒</strong><small>点开进入原问题</small></li>
+      <li id="step-open"><span>Runweave</span><strong>核对当前状态</strong><small>仍待答时展示选项</small></li>
+      <li id="step-resume"><span>原终端</span><strong>收到答案，继续</strong><small>答案写回同一条请求</small></li>
+    </ol>
+    <p class="flow-branch" id="open-branches"><strong>点开时按当前状态处理</strong><span>待答 · 显示选项</span><span>已结束 · 显示状态</span><span>连不上 · 重新检查</span></p>
+  </section>
+
+  <section class="workbench" id="demo" aria-labelledby="demo-title">
+    <div class="controls">
+      <h2 id="demo-title">走一遍接力</h2>
+      <p class="hint">本地模拟。选一种场景，再点手机里的通知。</p>
+      <div class="scenarios" id="scenario-control" role="group" aria-label="演示场景">
+        <button class="scenario" data-scenario="handoff" type="button" aria-pressed="true">手机接手</button>
+        <button class="scenario" data-scenario="desktop" type="button" aria-pressed="false">电脑先答</button>
+        <button class="scenario" data-scenario="offline" type="button" aria-pressed="false">连接中断</button>
+      </div>
+    </div>
+    <div class="phone-frame" id="phone-preview">
+      <div class="phone">
+        <div class="phone-header"><strong>Runweave</strong><span>工作 Mac · 数据迁移</span></div>
+        <div class="screen">
+          <button class="notice" id="open-notification" type="button">
+            <span>Runweave</span><strong>Codex 等你回答</strong><span>数据迁移有一个问题待处理。</span><span>查看问题 →</span>
+          </button>
+          <form class="question" id="question-form" hidden>
+            <p class="question-meta">Codex · 等待回答</p>
+            <h3 id="question-title" tabindex="-1">旧数据要保留兼容吗？</h3>
+            <fieldset class="options">
+              <legend class="sr-only">选择迁移方式</legend>
+              <label><input name="choice" type="radio" value="保留旧格式兼容"> 保留旧格式兼容</label>
+              <label><input name="choice" type="radio" value="直接迁移到新格式"> 直接迁移到新格式</label>
+            </fieldset>
+            <button class="action" id="submit-answer" type="submit" disabled>提交答案</button>
+          </form>
+          <section class="outcome" id="question-result" hidden>
+            <h3 id="result-title" tabindex="-1"></h3>
+            <p id="result-detail"></p>
+            <button class="action" id="retry-check" type="button" hidden>重新检查</button>
+          </section>
+        </div>
+        <div class="phone-footer" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="trace-wrap">
+      <div class="trace" id="flow-events">
+        <h3>这条请求发生了什么</h3>
+        <ol id="events" aria-live="polite" aria-relevant="additions text"></ol>
+      </div>
+      <button class="reset" id="reset-scenario" type="button">重来一次</button>
+    </div>
+  </section>
+  <section class="delivery" id="delivery" aria-labelledby="delivery-title">
+    <h2 id="delivery-title">首版验证</h2>
+    <div class="details">
+      <article id="evidence">
+        <h3>协议已跑通</h3>
+        <p>隔离的 Codex 0.172.0 在提问 30.2 秒后仍能接回原请求。Hook 与原问题身份匹配，电脑先答后的旧提交被拒绝。</p>
+      </article>
+      <article id="pilot-scope">
+        <h3>真机还要跑通两步</h3>
+        <p>App 在后台收到普通通知，点开直达原问题。手机回答后原任务继续，电脑先答时手机只显示结束状态。</p>
+      </article>
+    </div>
+  </section>
+</main>
+<footer class="wrap"><span>首版范围 · 受支持的 macOS Codex 共享执行服务</span><a href="#top">返回顶部 ↑</a></footer>
+<script>
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[href^="#"]');
+  if (!link) return;
+  const fragment = link.getAttribute('href');
+  const section = document.getElementById(fragment.slice(1));
+  if (!section) return;
+  event.preventDefault();
+  section.tabIndex = -1;
+  section.focus({ preventScroll:true });
+  section.scrollIntoView({ block:'start' });
+  try { history.replaceState(null, '', fragment); } catch {}
+});
+
+const notification = document.querySelector('#open-notification');
+const form = document.querySelector('#question-form');
+const outcome = document.querySelector('#question-result');
+const resultTitle = document.querySelector('#result-title');
+const resultDetail = document.querySelector('#result-detail');
+const retry = document.querySelector('#retry-check');
+const submit = document.querySelector('#submit-answer');
+const events = document.querySelector('#events');
+const scenarioButtons = [...document.querySelectorAll('[data-scenario]')];
+const steps = [...document.querySelectorAll('.steps li')];
+let scenario = 'handoff';
+let pendingUpdate;
+
+function focusStep(step) {
+  steps.forEach(element => element.removeAttribute('aria-current'));
+  document.querySelector('#step-' + step).setAttribute('aria-current', 'step');
+}
+
+function log(message) {
+  const item = document.createElement('li');
+  item.textContent = message;
+  events.append(item);
+}
+
+function showResult(kind, title, detail, canRetry = false) {
+  form.hidden = true;
+  outcome.hidden = false;
+  outcome.dataset.kind = kind;
+  resultTitle.textContent = title;
+  resultDetail.textContent = detail;
+  retry.hidden = !canRetry;
+  resultTitle.focus({ preventScroll:true });
+}
+
+function showQuestion() {
+  outcome.hidden = true;
+  form.hidden = false;
+  document.querySelector('#question-title').focus({ preventScroll:true });
+}
+
+function reset(nextScenario) {
+  clearTimeout(pendingUpdate);
+  scenario = nextScenario;
+  scenarioButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scenario === scenario)));
+  events.replaceChildren();
+  log('Codex 发出结构化问题。');
+  log('Backend 找到原轮次的待答请求。');
+  log('iPhone 收到一条对应原问题的通知。');
+  focusStep('notify');
+  notification.hidden = false;
+  form.hidden = true;
+  form.reset();
+  submit.disabled = true;
+  outcome.hidden = true;
+  retry.hidden = true;
+}
+
+document.querySelector('#scenario-control').addEventListener('click', event => {
+  const button = event.target.closest('[data-scenario]');
+  if (button) reset(button.dataset.scenario);
+});
+document.querySelector('#reset-scenario').addEventListener('click', () => reset(scenario));
+
+notification.addEventListener('click', () => {
+  notification.hidden = true;
+  focusStep('open');
+  if (scenario === 'desktop') {
+    log('电脑已先回答，点开时原请求已经结束。');
+    showResult('finished', '问题已结束', '你已在工作 Mac 上处理这条问题。');
+  } else if (scenario === 'offline') {
+    log('点开时连接不可用，暂时无法核对原请求。');
+    showResult('offline', '暂时无法核对', '无法连接工作 Mac。恢复连接后可重新检查。', true);
+  } else {
+    log('核对通过，原问题仍在等待回答。');
+    showQuestion();
+  }
+});
+
+retry.addEventListener('click', () => {
+  log('连接恢复，重新核对后确认原问题仍待答。');
+  showQuestion();
+});
+
+form.addEventListener('change', () => { submit.disabled = false; });
+
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const answer = new FormData(form).get('choice');
+  if (!answer) return;
+  submit.disabled = true;
+  log('答案写回原请求，等待原任务确认。');
+  showResult('sending', '正在确认提交', '等待工作 Mac 返回原请求的状态。');
+  pendingUpdate = setTimeout(() => {
+    focusStep('resume');
+    log('原轮次收到「' + answer + '」，终端继续执行。');
+    showResult('finished', '问题已处理', '可以回到原终端查看任务进展。');
+  }, 350);
+});
+reset(scenario);
+</script>
+</body>
+</html>
