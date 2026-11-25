@@ -6,14 +6,20 @@ import { resolvePanelTarget } from "../application/panel-targets";
 import { resolveReplyThread } from "../completion/reply-preview";
 import { findQuestionExecutor } from "./executor";
 import { QuestionConflict, TerminalQuestionGateway } from "./gateway";
+import type { DeviceSubscriptions } from "../../device-monitor/subscriptions";
+import { TerminalQuestionNotifications } from "./notifications";
+import type { OriginalTerminalQuestion, TerminalQuestionOrigin } from "./origin";
 
 export class TerminalQuestionsService {
   private generation = randomUUID();
   private closed = false;
   private connections = new Map<string, { identity: string; gateway: TerminalQuestionGateway; ready: Promise<void> }>();
-  constructor(private manager: TerminalSessionManager, private tmux: TmuxService) {}
+  readonly notifications?: TerminalQuestionNotifications;
+  constructor(private manager: TerminalSessionManager, private tmux: TmuxService, subscriptions?: DeviceSubscriptions) {
+    if (subscriptions) this.notifications = new TerminalQuestionNotifications(this, subscriptions);
+  }
 
-  private async target(terminalId: string, panelId?: string) {
+  private async target(terminalId: string, panelId?: string, expectedThreadId?: string) {
     const session = this.manager.getSession(terminalId);
     if (!session || session.status !== "running" || session.runtimeKind !== "tmux") return null;
     // Also synchronize the actual selected tmux pane before checking an explicit old panel.
@@ -22,18 +28,54 @@ export class TerminalQuestionsService {
     const { panel, paneTarget } = selected;
     const thread = resolveReplyThread(panel) ?? (this.manager.listPanels(terminalId).length === 1 ? resolveReplyThread(session) : null);
     if (panel.status !== "running" || panel.terminalState?.agent !== "codex" || thread?.provider !== "codex") return null;
+    if (expectedThreadId && thread.id !== expectedThreadId) {
+      return { terminalId, panelId: panel.id, threadId: thread.id, executor: null };
+    }
     const { panePid } = await this.tmux.textAttachmentProcessIdentity(paneTarget);
     const executor = await findQuestionExecutor(panePid);
     return { terminalId, panelId: panel.id, threadId: thread.id, executor };
   }
 
-  async read(terminalId: string, panelId?: string): Promise<TerminalQuestionsResponse> {
+  async readOriginal(origin: TerminalQuestionOrigin): Promise<OriginalTerminalQuestion> {
+    const session = this.manager.getSession(origin.terminalId);
+    const panel = this.manager.getPanel(origin.panelId);
+    if (!session || session.status === "exited" || !panel || panel.status === "exited") {
+      return { status: "closed" } as const;
+    }
+    try {
+      const value = await this.read(origin.terminalId, origin.panelId, origin.threadId);
+      if (value.target && value.target.threadId !== origin.threadId) return { status: "closed" } as const;
+      if (value.capability !== "available" || !value.target) return { status: "unavailable" } as const;
+      const request = value.requests.find((entry) => entry.turnId === origin.turnId && entry.itemId === origin.itemId);
+      return { status: "available", request, value } as const;
+    } catch {
+      // A different selected pane or an unreachable executor can be checked again.
+      return { status: "unavailable" } as const;
+    }
+  }
+
+  isPending(origin: TerminalQuestionOrigin): boolean {
+    const connection = this.connections.get(origin.terminalId);
+    const session = this.manager.getSession(origin.terminalId);
+    const panel = this.manager.getPanel(origin.panelId);
+    const thread = panel && (resolveReplyThread(panel) ??
+      (session && this.manager.listPanels(origin.terminalId).length === 1 ? resolveReplyThread(session) : null));
+    return !!connection && connection.gateway.threadId === origin.threadId &&
+      session?.status === "running" && panel?.status === "running" && thread?.id === origin.threadId &&
+      this.manager.getPanelWorkspace(origin.terminalId)?.activePanelId === origin.panelId &&
+      connection.gateway.isPending(origin.turnId, origin.itemId);
+  }
+
+  async read(terminalId: string, panelId?: string, expectedThreadId?: string): Promise<TerminalQuestionsResponse> {
     for (const [id, connection] of this.connections) if (connection.gateway.disposed) this.invalidate(id);
-    const target = this.closed ? null : await this.target(terminalId, panelId);
+    const target = this.closed ? null : await this.target(terminalId, panelId, expectedThreadId);
     const fallback = (capability: "unsupported" | "disconnected", reason: string): TerminalQuestionsResponse => ({
       capability, reason, generation: this.generation,
       target: target ? { terminalId, panelId: target.panelId, threadId: target.threadId } : null, requests: [],
     });
+    if (target && expectedThreadId && target.threadId !== expectedThreadId) {
+      return fallback("unsupported", "原问题所属任务已变化");
+    }
     if (!target?.executor) {
       this.invalidate(terminalId);
       return fallback("unsupported", "当前终端未使用可确认的共享执行连接。请回原终端手动回复；不会启动替代任务。");
@@ -43,7 +85,12 @@ export class TerminalQuestionsService {
     if (connection && connection.identity !== identity) { this.invalidate(terminalId); connection = undefined; }
     if (!connection) {
       if (this.connections.size >= 128) return fallback("disconnected", "回复辅助连接繁忙，请回终端操作");
-      const gateway = new TerminalQuestionGateway(target.executor.socket, target.threadId);
+      const gateway = new TerminalQuestionGateway(target.executor.socket, target.threadId, (request, state) => {
+        this.notifications?.recordEnd({
+          terminalId, panelId: target.panelId, threadId: target.threadId,
+          turnId: request.turnId, itemId: request.itemId,
+        }, state);
+      });
       connection = { identity, gateway, ready: gateway.join().catch(() => { gateway.dispose(); }) };
       this.connections.set(terminalId, connection);
     }
@@ -53,10 +100,13 @@ export class TerminalQuestionsService {
       return fallback("disconnected", "原执行连接不可用，答案不会自动重发。请回终端核对。");
     }
     // Async discovery/join must not publish another task's requests after a panel switch.
-    const latest = await this.target(terminalId, target.panelId);
+    const latest = await this.target(terminalId, target.panelId, target.threadId);
     if (!latest?.executor || latest.threadId !== target.threadId || latest.executor.pid !== target.executor.pid || latest.executor.socket !== target.executor.socket) {
-      this.invalidate(terminalId); throw new QuestionConflict("任务已变化，请重新打开回复辅助");
+      if (this.connections.get(terminalId) === connection) this.invalidate(terminalId);
+      throw new QuestionConflict("任务已变化，请重新打开回复辅助");
     }
+    if (this.closed || this.connections.get(terminalId) !== connection || !connection.gateway.connected)
+      return fallback("disconnected", "原执行连接不可用，请回终端核对。");
     return { capability: "available", reason: null, generation: connection.gateway.generation,
       target: { terminalId, panelId: target.panelId, threadId: target.threadId }, requests: connection.gateway.requests() };
   }
@@ -77,9 +127,10 @@ export class TerminalQuestionsService {
     this.connections.get(terminalId)?.gateway.dispose();
     this.connections.delete(terminalId);
   }
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.closed = true;
     for (const connection of this.connections.values()) connection.gateway.dispose();
     this.connections.clear();
+    await this.notifications?.dispose();
   }
 }

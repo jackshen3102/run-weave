@@ -1,6 +1,11 @@
 import Foundation
 
 extension APIClient {
+  func terminalQuestionNotification(_ target: TerminalQuestionHandoff) async throws -> TerminalQuestionNotificationResponse {
+    try await authorized("/api/terminal/questions/notifications/\(Self.pathComponent(target.reference))",
+      requestTimeout: 8, additionalHeaders: ["X-Runweave-Installation-ID": target.installation])
+  }
+
   func terminalQuestions(id: String, panelID: String?) async throws -> TerminalQuestionsResponse {
     let query = panelID.map { "?panelId=\(Self.pathComponent($0))" } ?? ""
     return try await authorized("/api/terminal/session/\(Self.pathComponent(id))/questions\(query)")

@@ -1,6 +1,7 @@
 import type {
   PushDeliveryResult,
   PushEnvironment,
+  PushNotificationRequest,
 } from "@runweave/shared/push-notifications";
 export interface Sender {
   hostId: string;
@@ -31,7 +32,7 @@ export interface ProviderNotification {
   title: string;
   body: string;
   occurredAt: string;
-  target?: { resourceType: "scheduled-run"; resourceId: string };
+  target?: PushNotificationRequest["target"];
 }
 export interface Delivery {
   id: string;

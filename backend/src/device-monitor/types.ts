@@ -1,4 +1,6 @@
 import type { PushEnvironment } from "@runweave/shared/push-notifications";
+import type { DeviceNotificationKind } from "@runweave/shared/device-notifications";
+import type { TerminalQuestionEnd, TerminalQuestionOrigin } from "../terminal/questions/origin";
 
 export interface DeviceSubscription {
   id: string;
@@ -8,7 +10,7 @@ export interface DeviceSubscription {
   sessionId: string;
   environment: PushEnvironment;
   /** Missing on older battery subscriptions. */
-  kind?: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply";
+  kind?: DeviceNotificationKind;
   confirmedAt?: string;
   deviceToken: string;
   displayName: string;
@@ -63,6 +65,7 @@ export interface DeviceDelivery {
 }
 
 export interface DeviceMonitorData {
+  terminalQuestions?: Record<string, TerminalQuestionLocation>;
   terminalReplies?: {
     inputs: Record<string, { id: string; hash: string; sessionId: string; subscriptionIds: string[]; expiresAt: number }[]>;
     turns: Record<string, { id: string; startEventId?: string; threadId: string | null; source: string; hash: string; sessionId: string | null; subscriptionIds: string[]; completed: boolean; startedAt: number }>;
@@ -81,4 +84,16 @@ export interface DeviceMonitorData {
   subscriptions: Record<string, DeviceSubscription>;
   deliveries: Record<string, DeviceDelivery>;
   taskDeliveries?: Record<string, ScheduledTaskDelivery>;
+}
+
+export interface TerminalQuestionLocation {
+  eventId: string;
+  origin: TerminalQuestionOrigin;
+  endState?: TerminalQuestionEnd;
+  createdAt: number;
+  expiresAt: number;
+  deliveries: Record<string, Pick<DeviceDelivery, "state" | "attempts" | "nextAttemptAt"> & {
+    subscriptionId: string;
+    sessionId: string;
+  }>;
 }

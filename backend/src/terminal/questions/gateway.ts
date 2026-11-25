@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 import { z } from "zod";
 import type { AnswerTerminalQuestionRequest, TerminalQuestionRequest } from "@runweave/shared/terminal/questions";
+import type { TerminalQuestionEnd } from "./origin";
 
 const questionParams = z.object({
   threadId: z.string(), turnId: z.string(), itemId: z.string(), isBlocking: z.boolean(),
@@ -36,7 +37,11 @@ export class TerminalQuestionGateway {
   disposed = false;
   lastUsed = Date.now();
 
-  constructor(readonly socketPath: string, readonly threadId: string) {
+  constructor(
+    readonly socketPath: string,
+    readonly threadId: string,
+    private readonly onEnded?: (request: TerminalQuestionRequest, state: TerminalQuestionEnd) => void,
+  ) {
     this.socket = new WebSocket(`ws+unix://${socketPath}:/`, { maxPayload: 2 * 1024 * 1024, handshakeTimeout: 4000 });
     this.socket.on("message", (data) => {
       try { this.receive(JSON.parse(data.toString())); } catch { this.dispose(); }
@@ -53,6 +58,15 @@ export class TerminalQuestionGateway {
   }
 
   async join(): Promise<void> {
+    const deadline = setTimeout(() => this.dispose(), 5000);
+    try {
+      await this.joinLoadedThread();
+    } finally {
+      clearTimeout(deadline);
+    }
+  }
+
+  private async joinLoadedThread(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       if (this.socket.readyState === WebSocket.OPEN) { resolve(); return; }
       if (this.socket.readyState !== WebSocket.CONNECTING) { reject(new Error("executor disconnected")); return; }
@@ -115,17 +129,29 @@ export class TerminalQuestionGateway {
       const entry = [...this.entries.values()].find((candidate) => candidate.rawId === event.data.requestId);
       if (entry) {
         // Resolution can mean cleanup or a computer answer; it is not proof our answer won.
-        entry.value.state = entry.operation ? "resolved" : "expired";
+        this.end(entry, entry.operation ? "resolved" : "closed");
       }
     }
     if (message.method === "turn/completed") {
       for (const entry of this.entries.values()) {
-        if (entry.value.turnId === event.data.turn?.id && entry.value.isBlocking && entry.value.state !== "resolved") entry.value.state = "expired";
+        if (entry.value.turnId === event.data.turn?.id && entry.value.isBlocking) this.end(entry, "closed");
       }
     }
   }
 
+  private end(entry: Entry, state: TerminalQuestionEnd): void {
+    const next = state === "resolved" ? "resolved" : "expired";
+    if (entry.value.state === next || entry.value.state === "resolved") return;
+    entry.value.state = next;
+    this.onEnded?.(entry.value, state);
+  }
+
   requests(): TerminalQuestionRequest[] { this.lastUsed = Date.now(); return [...this.entries.values()].map((entry) => ({ ...entry.value })); }
+
+  isPending(turnId: string, itemId: string): boolean {
+    return this.connected && [...this.entries.values()].some(({ value }) =>
+      value.turnId === turnId && value.itemId === itemId && value.state === "pending");
+  }
 
   answer(requestId: string, body: AnswerTerminalQuestionRequest): void {
     this.lastUsed = Date.now();

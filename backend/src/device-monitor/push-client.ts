@@ -115,7 +115,9 @@ export class PushClient {
       displayName: value.displayName,
       version: value.version,
       categories:
-        value.kind === "terminal-reply"
+        value.kind === "terminal-question"
+          ? ["terminal.question"]
+          : value.kind === "terminal-reply"
           ? ["terminal.reply"]
           : value.kind === "terminal-unread"
           ? ["terminal.unread"]

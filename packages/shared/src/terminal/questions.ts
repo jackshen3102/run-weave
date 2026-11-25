@@ -24,6 +24,10 @@ export type TerminalQuestionsResponse = {
   target: { terminalId: string; panelId: string; threadId: string } | null;
   requests: TerminalQuestionRequest[];
 };
+export type TerminalQuestionNotificationResponse =
+  | { status: "pending"; terminalId: string; panelId: string; questions: TerminalQuestionsResponse }
+  | { status: "closed"; terminalId: string; panelId: string; resolved?: true }
+  | { status: "unavailable"; terminalId: string; panelId: string };
 export type AnswerTerminalQuestionRequest = {
   panelId: string;
   generation: string;

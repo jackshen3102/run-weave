@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deviceNotificationKinds } from "@runweave/shared/device-notifications";
 const environment = z.enum(["sandbox", "production"]);
 const level = z.union([z.literal(10), z.literal(20)]);
 const time = z.number().finite().nonnegative();
@@ -10,7 +11,7 @@ const subscription = z
     username: z.string(),
     sessionId: z.string(),
     environment,
-    kind: z.enum(["battery", "scheduled-task", "terminal-unread", "terminal-reply"]).optional(),
+    kind: z.enum(deviceNotificationKinds).optional(),
     confirmedAt: z.string().datetime().optional(),
     deviceToken: z.string(),
     displayName: z.string(),
@@ -24,6 +25,23 @@ const subscription = z
   .passthrough();
 export const deviceMonitorSchema = z
   .object({
+    terminalQuestionSubscriptions: z.record(subscription.extend({
+      kind: z.literal("terminal-question"),
+    })).optional(),
+    terminalQuestions: z.record(z.string().uuid(), z.object({
+      eventId: z.string(),
+      origin: z.object({
+        terminalId: z.string(), panelId: z.string(), threadId: z.string(), turnId: z.string(), itemId: z.string(),
+      }).strict(),
+      endState: z.enum(["closed", "resolved"]).optional(),
+      createdAt: time,
+      expiresAt: time,
+      deliveries: z.record(z.object({
+        subscriptionId: z.string().uuid(), sessionId: z.string(),
+        state: z.enum(["pending", "sending", "accepted", "unknown", "cancelled", "failed"]),
+        attempts: z.number().int().nonnegative(), nextAttemptAt: time,
+      }).strict()),
+    }).strict()).optional(),
     unread: z.object({ revision: z.number().int().positive(), count: z.number().int().nonnegative() }).optional(),
     terminalReplies: z.object({
       inputs: z.record(z.array(z.object({

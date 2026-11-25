@@ -10,6 +10,22 @@ struct TerminalQuestionsResponse: Decodable {
   struct Target: Decodable { let terminalId: String; let panelId: String; let threadId: String }
 }
 
+struct TerminalQuestionNotificationResponse: Decodable {
+  enum Status: String, Decodable { case pending, closed, unavailable }
+  let status: Status
+  let terminalId: String
+  let panelId: String
+  let questions: TerminalQuestionsResponse?
+  let resolved: Bool?
+}
+
+struct TerminalQuestionHandoff: Identifiable {
+  let id = UUID()
+  let reference: String
+  let installation: String
+  let connectionScope: String
+}
+
 struct TerminalQuestionRequest: Decodable, Identifiable {
   var id: String { requestId }
   let requestId: String

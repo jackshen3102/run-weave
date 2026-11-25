@@ -36,10 +36,34 @@ WebSocket；不接受或拒绝其他审批，也不改变模型、模式、工�
 切换 Backend 或退出登录清空问题草稿，迟到请求不会更新新页面。问题草稿不写入终端草稿、
 附件或队列。收到正式的问题后按 panel/thread 保持绑定，原任务 turn 的正常推进不会使页面误失效。
 
+## iPhone 待答通知
+
+受鉴权的 Codex `PreToolUse` 经终端 Agent Hook 上报 thread、turn 和工具调用 ID。Backend 在后台最多等待
+5 秒，确认所选面板的原执行服务仍有对应待答请求。每个已确认且保持登录的安装最多投递一份
+`terminal.question`。通知只显示「Codex 等你回答」和通用提示，`terminal-question` 目标只携带 UUID 引用。
+Backend 按原问题和安装持久化定位与投递状态。明确可重试时沿用原事件和载荷，结果未知时保留投递记录。
+已确认的原生结束事件会写入定位记录，Codex 退出或 Backend 重启后仍可核对。
+
+iOS 通过 `questions=1` 协商 `terminal-question` 订阅。点击通知先选择来源电脑，再用当前安装的
+`X-Runweave-Installation-ID` 调用 `GET /api/terminal/questions/notifications/:questionRef`。
+只有绑定该安装的已授权登录能读取定位。定位在 15 分钟后结束。连接重建时按原 thread、turn 和 item
+重新核对，面板切换或连接不可用时可重新检查。答复沿用终端问答提交接口。提交状态未确认时保留草稿，
+并暂停再次提交。
+
+部署依次更新 Push Gateway、Backend 和 iOS。回滚前在 Backend 将
+`services.terminalQuestionNotifications.enabled` 改为 `false` 并重载配置。待答订阅与既有订阅在磁盘上
+各自存储，旧版 Backend 可以读取既有订阅并保留待答数据供升级后使用。已发通知仍通过读取接口核对，
+响应不可用时 iOS 提供重新检查。模拟器用捕获网关编码的通知验收系统展示和原生跳转，实际 APNs
+网络送达和真机策略需要单独验证。
+
+如果早期候选版已经保存过待答订阅，先启动新版 Backend 完成存储迁移。曾配置
+`services.pushSender.terminalQuestions` 的实例需移除早期字段，并使用独立的待答通知开关。
+
 ## 代码与验收入口
 
 - [执行服务识别与领域校验](../../backend/src/terminal/questions/service.ts)
 - [借用原连接的 gateway](../../backend/src/terminal/questions/gateway.ts)
+- [待答通知定位与投递](../../backend/src/terminal/questions/notifications.ts)
 - [终端 HTTP 装配](../../backend/src/routes/terminal/questions.ts)
 - [现有回复辅助](../../packages/app-ios/Sources/RunweaveIOS/Features/Terminal/CodexReplyAssistant.swift)
 - [问答验收合同](../testing/app/ios-terminal-questions.testplan.yaml)；历史降级对应

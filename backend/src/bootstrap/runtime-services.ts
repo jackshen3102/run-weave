@@ -271,8 +271,6 @@ async function assembleRuntimeServices(
   await textAttachmentFiles.initialize();
   const textAttachmentDelivery = new TerminalTextAttachmentDelivery(textAttachmentFiles, terminalSessionManager, tmuxService, terminalRuntimeRegistry, ptyService);
   resources.defer("terminal-text-attachment-delivery", () => textAttachmentDelivery.dispose());
-  const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService);
-  resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
   const terminalSnapshotShareService = createTerminalSnapshotShares(resources, terminalSessionManager, tmuxService);
   const workspaceServiceManager = new RuntimeStatusWorkspaceServiceManager(
     terminalSessionManager,
@@ -464,6 +462,8 @@ async function assembleRuntimeServices(
   resources.defer("battery-alerts", () =>
     deviceMonitoring.batteryAlerts?.dispose(),
   );
+  const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService, deviceMonitoring.batteryAlerts?.subscriptions);
+  resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
   let resourceMonitor: ResourceMonitorService | null = null;
   if (deviceMonitoring.deviceMonitor) {
     let resourceStore: ResourceMonitorStore | null = null;
