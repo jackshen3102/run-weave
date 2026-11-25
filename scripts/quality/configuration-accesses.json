@@ -2298,14 +2298,6 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "env[line.slice(0, separatorIndex)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
     "count": 1,
     "category": "runtime-context",
@@ -2362,14 +2354,6 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 3,
     "category": "runtime-context",
@@ -2403,7 +2387,7 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.TMUX",
-    "count": 2,
+    "count": 1,
     "category": "system",
     "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -2414,22 +2398,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[key]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[line.slice(1)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
@@ -2466,14 +2434,6 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 2,
     "category": "runtime-context",
@@ -2490,16 +2450,8 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.TMUX",
-    "count": 1,
-    "category": "system",
-    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.TMUX_PANE",
-    "count": 3,
+    "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -2578,14 +2530,6 @@
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "env[line.slice(0, separatorIndex)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
     "count": 1,
     "category": "runtime-context",
@@ -2642,14 +2586,6 @@
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 3,
     "category": "runtime-context",
@@ -2683,7 +2619,7 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.TMUX",
-    "count": 2,
+    "count": 1,
     "category": "system",
     "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -2694,22 +2630,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[key]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[line.slice(1)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -2770,14 +2690,6 @@
   {
     "file": "electron/resources/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 2,
     "category": "runtime-context",
@@ -2794,16 +2706,8 @@
   {
     "file": "electron/resources/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.TMUX",
-    "count": 1,
-    "category": "system",
-    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.TMUX_PANE",
-    "count": 3,
+    "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -4090,14 +3994,6 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "env[line.slice(0, separatorIndex)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
     "count": 1,
     "category": "runtime-context",
@@ -4154,14 +4050,6 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 3,
     "category": "runtime-context",
@@ -4195,7 +4083,7 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.TMUX",
-    "count": 2,
+    "count": 1,
     "category": "system",
     "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -4206,22 +4094,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[key]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[line.slice(1)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
@@ -4258,14 +4130,6 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 2,
     "category": "runtime-context",
@@ -4282,16 +4146,8 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.TMUX",
-    "count": 1,
-    "category": "system",
-    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.TMUX_PANE",
-    "count": 3,
+    "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -5490,14 +5346,6 @@
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "env[line.slice(0, separatorIndex)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT",
     "count": 1,
     "category": "runtime-context",
@@ -5554,14 +5402,6 @@
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 3,
     "category": "runtime-context",
@@ -5595,7 +5435,7 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.TMUX",
-    "count": 2,
+    "count": 1,
     "category": "system",
     "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -5606,22 +5446,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[key]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
-    "expression": "process.env[line.slice(1)]",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
@@ -5682,14 +5506,6 @@
   {
     "file": "plugins/toolkit/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID",
     "count": 2,
     "category": "runtime-context",
@@ -5706,16 +5522,8 @@
   {
     "file": "plugins/toolkit/hooks/runweave-hook-payload.cjs",
     "kind": "environment",
-    "expression": "process.env.TMUX",
-    "count": 1,
-    "category": "system",
-    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-payload.cjs",
-    "kind": "environment",
     "expression": "process.env.TMUX_PANE",
-    "count": 3,
+    "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
   },
@@ -10633,6 +10441,62 @@
     "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
   },
   {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "env[line.slice(0, separatorIndex)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SESSION_NAME",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX",
+    "count": 2,
+    "category": "system",
+    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX_PANE",
+    "count": 1,
+    "category": "system",
+    "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[line.slice(1)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
@@ -10655,6 +10519,62 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "env[line.slice(0, separatorIndex)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SESSION_NAME",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX",
+    "count": 2,
+    "category": "system",
+    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX_PANE",
+    "count": 1,
+    "category": "system",
+    "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[line.slice(1)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "packages/agent-bridge/codex/launcher.cjs",
@@ -10793,6 +10713,62 @@
     "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
   },
   {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "env[line.slice(0, separatorIndex)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SESSION_NAME",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX",
+    "count": 2,
+    "category": "system",
+    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX_PANE",
+    "count": 1,
+    "category": "system",
+    "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[line.slice(1)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION",
@@ -10815,6 +10791,62 @@
     "count": 1,
     "category": "runtime-state",
     "reason": "读取原生 TUI 快照并在通知、完成及监督前过滤非主会话；该文件是运行状态。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "env[line.slice(0, separatorIndex)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_TMUX_BINARY",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "所属 Backend 发布的启动握手身份或已解析 tmux 路径，Hook 不读取独立持久配置。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SESSION_NAME",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX",
+    "count": 2,
+    "category": "system",
+    "reason": "TMUX：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env.TMUX_PANE",
+    "count": 1,
+    "category": "system",
+    "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-tmux.cjs",
+    "kind": "environment",
+    "expression": "process.env[line.slice(1)]",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "从当前 tmux socket/session 刷新 RUNWEAVE 启动上下文及移除过期值；不发现其他实例配置。"
   },
   {
     "file": "scripts/codex/build-managed.mjs",
