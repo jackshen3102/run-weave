@@ -24,7 +24,7 @@ import type {
 import {
   getTerminalBrowserOwnerWindowId,
   getScopedTargets,
-  broadcastTargetAwakened,
+  broadcastTargetAvailable,
   sendJson,
 } from "./utils.js";
 import { CDP_PROXY_TRACE_ENABLED } from "./logging.js";
@@ -525,12 +525,12 @@ export async function startCdpProxy(
     }
   };
   terminalBrowserEvents.on("tab-closed", onTabClosed);
-  const onTabAwakened = (
-    target: Parameters<typeof broadcastTargetAwakened>[1],
+  const onTabAvailable = (
+    target: Parameters<typeof broadcastTargetAvailable>[1],
   ): void => {
-    broadcastTargetAwakened(connections, target);
+    broadcastTargetAvailable(connections, target);
   };
-  terminalBrowserEvents.on("tab-awakened", onTabAwakened);
+  terminalBrowserEvents.on("tab-available", onTabAvailable);
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -550,7 +550,7 @@ export async function startCdpProxy(
       stopBrowserDownloads();
       clearInterval(heartbeatTimer);
       terminalBrowserEvents.off("tab-closed", onTabClosed);
-      terminalBrowserEvents.off("tab-awakened", onTabAwakened);
+      terminalBrowserEvents.off("tab-available", onTabAvailable);
       for (const conn of connections) {
         conn.sessionManager.cleanup();
         conn.ws.close();

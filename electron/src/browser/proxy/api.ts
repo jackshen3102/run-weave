@@ -43,6 +43,8 @@ export function getTerminalBrowserCdpTargets(): TerminalBrowserCdpTarget[] {
       faviconDataUrl: entry.faviconDataUrl,
       loading: wc.isLoading(),
       webContents: wc,
+      openerId: entry.openerId,
+      canAccessOpener: false,
     });
   }
   for (const popup of terminalBrowserRuntime.popups.values()) {
