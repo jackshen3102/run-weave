@@ -19,6 +19,7 @@ import type { TerminalActivityDependencies } from "../../terminal/runtime/activi
 import type { ActivityEventInput } from "@runweave/shared/activity";
 import crypto from "node:crypto";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
+import type { TerminalQuestionNotifications } from "../../terminal/questions/notifications";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
 const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi"] as const;
@@ -36,6 +37,7 @@ const agentHookStateSchema = z
     terminalSessionId: z.string().trim().min(1),
     projectId: z.string().trim().min(1).optional(),
     threadId: z.string().trim().min(1).optional(),
+    turnId: z.string().trim().min(1).max(256).optional(),
     panelId: z.string().trim().min(1).nullable().optional(),
     tmuxPaneId: z.string().trim().min(1).nullable().optional(),
     commandName: z.string().trim().min(1).nullable().optional(),
@@ -113,6 +115,7 @@ export function createInternalTerminalAgentHookRouter(options: {
   terminalStateService: TerminalStateService;
   hookToken: string | undefined;
   activity?: TerminalActivityDependencies;
+  questionNotifications?: TerminalQuestionNotifications;
 }): Router {
   const router = Router();
   const hookActivityEvents = new Map<string, ActivityEventInput>();
@@ -162,6 +165,12 @@ export function createInternalTerminalAgentHookRouter(options: {
         }
         if (target.panel) await recoverCodexToolConversation(options.terminalSessionManager,
           target.panel, parsed.data.threadId, parsed.data.operationId);
+        const { hookEvent, toolName, threadId, turnId, toolUseId } = parsed.data;
+        if (target.panel && hookEvent === "ToolRequested" && toolName === "request_user_input" && threadId && turnId && toolUseId) {
+          options.questionNotifications?.observe({
+            terminalId: session.id, panelId: target.panel.id, threadId, turnId, itemId: toolUseId,
+          });
+        }
       }
       if (parsed.data.agent === "pi" || parsed.data.agent === "claude") {
         const result = await processTerminalAgentHook(options, {

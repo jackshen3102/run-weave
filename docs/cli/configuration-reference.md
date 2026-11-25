@@ -657,6 +657,24 @@ Cookie 安全标志
 | 约束              | 按字段类型校验                  |
 | 显式迁移来源      | device-monitor/push.json.hostId |
 
+## 终端待答通知
+
+配置域：`services.terminalQuestionNotifications`。
+
+### services.terminalQuestionNotifications.enabled
+
+发送 Codex 终端待答通知
+
+| 属性              | 合同                        |
+| ----------------- | --------------------------- |
+| 类型              | boolean；允许 null 恢复默认 |
+| 默认              | true                        |
+| 所属模块          | backend/terminal/questions  |
+| 生效              | 所属消费者重载              |
+| 敏感 / 远端可修改 | 否 / 是                     |
+| 约束              | 按字段类型校验              |
+| 显式迁移来源      | new-field:no-legacy-source  |
+
 ## 推送网关
 
 配置域：`services.pushGateway`。

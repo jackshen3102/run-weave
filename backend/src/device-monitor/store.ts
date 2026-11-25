@@ -6,7 +6,7 @@ import {
   type BackendProfileLock,
 } from "../server/profile-lock";
 import { deviceMonitorSchema } from "./schema";
-import type { DeviceMonitorData } from "./types";
+import type { DeviceMonitorData, DeviceSubscription } from "./types";
 
 export class DeviceMonitorStore {
   private closing = false;
@@ -28,9 +28,10 @@ export class DeviceMonitorStore {
       const file = path.join(directory, "state.json");
       let data: DeviceMonitorData;
       try {
-        data = deviceMonitorSchema.parse(
+        const { terminalQuestionSubscriptions, ...saved } = deviceMonitorSchema.parse(
           JSON.parse(await readFile(file, "utf8")),
         );
+        data = { ...saved, subscriptions: { ...saved.subscriptions, ...terminalQuestionSubscriptions } };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         data = {
@@ -60,16 +61,26 @@ export class DeviceMonitorStore {
     const work = this.tail
       .catch(() => undefined)
       .then(async () => {
-        const next = structuredClone(this.data);
-        const result = mutate(next);
+        const draft = structuredClone(this.data);
+        const result = mutate(draft);
         const temporary = `${this.file}.${randomUUID()}.tmp`;
         const handle = await open(temporary, "wx", 0o600);
         try {
+          // Older Backends preserve opaque top-level fields but validate each legacy kind.
+          const subscriptions: Record<string, DeviceSubscription> = {};
+          const terminalQuestionSubscriptions: Record<string, DeviceSubscription> = {};
+          for (const [id, value] of Object.entries(draft.subscriptions)) {
+            (value.kind === "terminal-question" ? terminalQuestionSubscriptions : subscriptions)[id] = value;
+          }
+          const next = {
+            ...draft, subscriptions,
+            ...(Object.keys(terminalQuestionSubscriptions).length ? { terminalQuestionSubscriptions } : {}),
+          };
           await handle.writeFile(JSON.stringify(next));
           await handle.sync();
           await handle.close();
           await rename(temporary, this.file);
-          this.data = next;
+          this.data = draft;
           return result;
         } finally {
           await handle.close().catch(() => undefined);

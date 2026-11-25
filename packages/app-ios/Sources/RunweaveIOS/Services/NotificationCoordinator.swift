@@ -11,6 +11,8 @@ public final class NotificationCoordinator: ObservableObject {
   @Published private(set) var refreshFailures: [String: String] = [:]
   @Published var message: String?
   @Published var pendingHostID: String?
+  @Published var questionHandoff: TerminalQuestionHandoff?
+  private var pendingQuestionRef: String?
   private var pendingScheduledRun: (hostID: String, runID: String)?
   private var openingScheduledRun = false
   private let vault = CredentialStore()
@@ -89,6 +91,8 @@ public final class NotificationCoordinator: ObservableObject {
   }
   func consume(in store: ConnectionStore) {
     guard let host = pendingHostID else { return }
+    let questionRef = pendingQuestionRef
+    pendingQuestionRef = nil
     pendingHostID = nil
     let candidates = store.connections.filter { knownHosts[$0.scope] == host }
     let selected =
@@ -100,7 +104,13 @@ public final class NotificationCoordinator: ObservableObject {
       message = "此电脑连接已移除"
       return
     }
-    do { try store.select(selected.id) } catch { message = displayError(error) }
+    do {
+      try store.select(selected.id)
+      if let questionRef {
+        questionHandoff = TerminalQuestionHandoff(reference: questionRef,
+          installation: installation, connectionScope: selected.scope)
+      }
+    } catch { message = displayError(error) }
   }
   func openPendingScheduledRun(in session: AppSession, store: ConnectionStore) async {
     guard !openingScheduledRun, let target = pendingScheduledRun,
@@ -389,7 +399,7 @@ public final class NotificationCoordinator: ObservableObject {
       }
     }
     for (connection, kind) in automaticConnections.flatMap({ connection in
-      [NotificationKind.scheduledTask, .terminalUnread, .terminalReply].map { (connection, $0) }
+      [NotificationKind.scheduledTask, .terminalUnread, .terminalReply, .terminalQuestion].map { (connection, $0) }
     }) {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       let scope = key(connection, kind)
@@ -479,7 +489,9 @@ public final class NotificationCoordinator: ObservableObject {
   public func received(_ info: [AnyHashable: Any], tapped: Bool) -> Bool {
     guard let push = BatteryPush(info) else { return false }
     if tapped {
-      if let runID = push.scheduledRunID { pendingScheduledRun = (push.hostID, runID) }
+      pendingScheduledRun = push.scheduledRunID.map { (push.hostID, $0) }
+      pendingQuestionRef = push.questionRef
+      if push.questionRef == nil { questionHandoff = nil }
       pendingHostID = push.hostID
     }
     guard !seen.contains(push.notificationID) else { return false }

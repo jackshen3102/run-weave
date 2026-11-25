@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  DeviceNotificationKind,
   DeviceNotificationRegistration,
   DeviceNotificationSubscription,
 } from "@runweave/shared/device-notifications";
@@ -76,9 +77,11 @@ export class DeviceSubscriptions {
           : null,
     };
   }
-  status(sessionId: string, includeUnread = false, includeReplies = false) {
-    const supportedKinds = includeUnread ? ["battery", "scheduled-task", "terminal-unread"] : ["battery", "scheduled-task"];
+  status(sessionId: string, includeUnread = false, includeReplies = false, includeQuestions = false) {
+    const supportedKinds: DeviceNotificationKind[] = ["battery", "scheduled-task"];
+    if (includeUnread) supportedKinds.push("terminal-unread");
     if (includeReplies) supportedKinds.push("terminal-reply");
+    if (includeQuestions) supportedKinds.push("terminal-question");
     const owner = this.auth.getActiveAppSession(sessionId);
     if (!owner)
       return {
@@ -118,8 +121,7 @@ export class DeviceSubscriptions {
         ? (this.failure ?? deliveryFailure)
         : "此电脑尚未配置推送服务",
       subscriptions: [...latest.values()].filter((value) =>
-        (includeUnread || value.kind !== "terminal-unread") &&
-        (includeReplies || value.kind !== "terminal-reply"),
+        supportedKinds.includes(value.kind ?? "battery"),
       ).map((value) => this.dto(value)),
     };
   }
@@ -304,7 +306,7 @@ export class DeviceSubscriptions {
   async revoke(
     sessionId: string,
     installationId: string,
-    kind: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply" = "battery",
+    kind: DeviceNotificationKind = "battery",
   ): Promise<boolean> {
     const owner = this.owner(sessionId);
     const values = Object.values(this.store.snapshot().subscriptions).filter(

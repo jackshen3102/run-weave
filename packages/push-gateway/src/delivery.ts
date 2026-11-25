@@ -44,7 +44,7 @@ export async function deliver(
           "notification-v1",
           sender.hostId,
           subscription.installationId,
-          subscription.environment,
+          ...(event.category === "terminal.question" ? [] : [subscription.environment]),
           event.category,
           event.eventId,
         ]),

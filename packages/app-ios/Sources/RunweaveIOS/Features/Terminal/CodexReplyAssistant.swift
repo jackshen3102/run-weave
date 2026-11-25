@@ -101,46 +101,10 @@ struct CodexReplyAssistant: View {
             .foregroundColor(.secondary)
         }
         ForEach(response.requests) { request in
-          VStack(alignment: .leading, spacing: 12) {
-            ForEach(request.questions) { question in
-              Text(question.header).font(.subheadline.bold())
-              Text(question.question).textSelection(.enabled)
-              ForEach(Array((question.options ?? []).enumerated()), id: \.offset) { _, option in
-                Button {
-                  questions.setAnswer(option.label, request: request, questionID: question.id)
-                } label: {
-                  VStack(alignment: .leading, spacing: 4) {
-                    Label(option.label, systemImage: questions.answer(request, questionID: question.id) == option.label ? "checkmark.circle.fill" : "circle")
-                    Text(option.description).font(.caption).foregroundColor(.secondary)
-                  }.frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.bordered)
-                  .disabled(!canEdit(request))
-              }
-              if question.options == nil || question.isOther {
-                if question.isSecret {
-                  SecureField("填写回答", text: answerBinding(request, question))
-                    .textFieldStyle(.roundedBorder).disabled(!canEdit(request))
-                } else {
-                  TextField("填写回答", text: answerBinding(request, question))
-                    .textFieldStyle(.roundedBorder).disabled(!canEdit(request))
-                    .accessibilityIdentifier("codex-question-answer-\(question.id)")
-                }
-              }
-            }
-            if request.state == "pending" && !questions.hasSubmitted(request) {
-              Button("提交给原任务") {
-                guard contextMatches, session.canWrite, let api = session.api else { return }
-                Task { await questions.submit(api: api, terminalID: terminalID, request: request) }
-              }.buttonStyle(.borderedProminent)
-                .disabled(!contextMatches || !session.canWrite || !questions.canSubmit(request))
-                .accessibilityIdentifier("codex-question-submit")
-            } else {
-              Text(request.state == "submitting" || request.state == "pending" ? "已提交，等待原任务处理；请勿重复发送。"
-                : request.state == "resolved" ? "问题已处理，请回原终端查看结果。"
-                : "问题已结束，原答案草稿已保留，请回终端核对。")
-                .foregroundColor(.secondary).accessibilityIdentifier("codex-question-state")
-            }
-          }.padding().background(Color.secondary.opacity(0.08)).cornerRadius(12)
+          TerminalQuestionForm(questions: questions, request: request, canEdit: contextMatches, canWrite: contextMatches && session.canWrite) {
+            guard contextMatches, session.canWrite, let api = session.api else { return }
+            Task { await questions.submit(api: api, terminalID: terminalID, request: request) }
+          }
         }
         Text("选择选项只修改答案草稿。提交不消耗终端输入草稿、附件或排队消息。")
           .font(.caption).foregroundColor(.secondary)
@@ -153,8 +117,57 @@ struct CodexReplyAssistant: View {
     }
   }
 
-  private func canEdit(_ request: TerminalQuestionRequest) -> Bool {
-    contextMatches && questions.error == nil && request.state == "pending" && !questions.submitting && !questions.hasSubmitted(request)
+}
+
+struct TerminalQuestionForm: View {
+  @ObservedObject var questions: TerminalQuestionsModel
+  let request: TerminalQuestionRequest
+  let canEdit: Bool
+  let canWrite: Bool
+  let submit: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      ForEach(request.questions) { question in
+        Text(question.header).font(.subheadline.bold())
+        Text(question.question).textSelection(.enabled)
+        ForEach(Array((question.options ?? []).enumerated()), id: \.offset) { _, option in
+          Button {
+            questions.setAnswer(option.label, request: request, questionID: question.id)
+          } label: {
+            VStack(alignment: .leading, spacing: 4) {
+              Label(option.label, systemImage: questions.answer(request, questionID: question.id) == option.label ? "checkmark.circle.fill" : "circle")
+              Text(option.description).font(.caption).foregroundColor(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+          }.buttonStyle(.bordered)
+            .disabled(!canEditAnswer)
+        }
+        if question.options == nil || question.isOther {
+          if question.isSecret {
+            SecureField("填写回答", text: answerBinding(request, question))
+              .textFieldStyle(.roundedBorder).disabled(!canEditAnswer)
+          } else {
+            TextField("填写回答", text: answerBinding(request, question))
+              .textFieldStyle(.roundedBorder).disabled(!canEditAnswer)
+              .accessibilityIdentifier("codex-question-answer-\(question.id)")
+          }
+        }
+      }
+      if request.state == "pending" && !questions.hasSubmitted(request) {
+        Button("提交给原任务", action: submit).buttonStyle(.borderedProminent)
+          .disabled(!canWrite || !questions.canSubmit(request))
+          .accessibilityIdentifier("codex-question-submit")
+      } else if !questions.notificationSubmissionNeedsCheck {
+        Text(request.state == "submitting" || request.state == "pending" ? "已提交，等待原任务处理；请勿重复发送。"
+          : request.state == "resolved" ? "问题已处理，请回原终端查看结果。"
+          : "问题已结束，原答案草稿已保留，请回终端核对。")
+          .foregroundColor(.secondary).accessibilityIdentifier("codex-question-state")
+      }
+    }.padding().background(Color.secondary.opacity(0.08)).cornerRadius(12)
+  }
+
+  private var canEditAnswer: Bool {
+    canEdit && questions.error == nil && request.state == "pending" && !questions.submitting && !questions.hasSubmitted(request)
   }
   private func answerBinding(_ request: TerminalQuestionRequest, _ question: TerminalQuestion) -> Binding<String> {
     Binding(get: { questions.answer(request, questionID: question.id) },

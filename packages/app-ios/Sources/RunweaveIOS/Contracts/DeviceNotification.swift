@@ -5,6 +5,7 @@ enum NotificationKind: String, Codable, CaseIterable {
   case scheduledTask = "scheduled-task"
   case terminalUnread = "terminal-unread"
   case terminalReply = "terminal-reply"
+  case terminalQuestion = "terminal-question"
 }
 
 struct DeviceNotificationSubscription: Codable {
@@ -35,6 +36,7 @@ struct BatteryPush {
   let hostID: String
   let notificationID: String
   let scheduledRunID: String?
+  let questionRef: String?
   init?(_ info: [AnyHashable: Any]) {
     guard (info["protocolVersion"] as? Int) == 1,
       let host = info["hostId"] as? String, UUID(uuidString: host) != nil,
@@ -43,7 +45,16 @@ struct BatteryPush {
     else { return nil }
     hostID = host
     notificationID = id
-    if let target = info["target"] as? [String: String],
+    let target = info["target"] as? [String: String]
+    if info["category"] as? String == "terminal.question" {
+      guard target?["resourceType"] == "terminal-question",
+        let ref = target?["resourceId"], UUID(uuidString: ref) != nil else { return nil }
+      questionRef = ref
+    } else {
+      guard target?["resourceType"] != "terminal-question" else { return nil }
+      questionRef = nil
+    }
+    if let target,
       target["resourceType"] == "scheduled-run",
       let runID = target["resourceId"], UUID(uuidString: runID) != nil {
       scheduledRunID = runID
@@ -54,7 +65,7 @@ struct BatteryPush {
 }
 extension APIClient {
   func notificationStatus() async throws -> DeviceNotificationStatus {
-    try await authorized("/api/device/notifications/status?unread=1&replies=1")
+    try await authorized("/api/device/notifications/status?unread=1&replies=1&questions=1")
   }
   func registerNotifications(
     installation: String, token: String, environment: String,

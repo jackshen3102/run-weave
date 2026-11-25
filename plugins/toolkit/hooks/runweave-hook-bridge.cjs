@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-/* global __dirname, fetch, process, require, URL */
+/* global __dirname, process, require, URL */
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const { spawn, spawnSync } = require("node:child_process");
-const { setTimeout } = require("node:timers");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { readClaudeContext } = require("./runweave-hook-claude.cjs");
-const { postCompletionHook } = require("./runweave-hook-completion.cjs");
+const { postAgentHook, postCompletionHook } = require("./runweave-hook-completion.cjs");
 const {
   STOP_EVENTS,
   isNestedCodexProcess,
@@ -148,95 +147,6 @@ function readStdin() {
     });
     process.stdin.resume();
   });
-}
-
-async function postAgentHook({
-  endpoint,
-  token,
-  terminalSessionId,
-  agent,
-  hookEvent,
-  threadId,
-  panelId,
-  tmuxPaneId,
-  commandName,
-  rawHookEvent,
-  sessionSource,
-  query,
-  assistantResponse,
-  toolHook,
-  activityEventId,
-  operationId,
-  pi,
-  claude,
-}) {
-  let body = JSON.stringify({
-    activityEventId,
-    ...(pi ? { pi } : {}),
-    ...(claude ? { claude } : {}),
-    ...(operationId ? { operationId } : {}),
-    terminalSessionId,
-    projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
-    ...(threadId ? { threadId } : {}),
-    ...(panelId ? { panelId } : {}),
-    ...(tmuxPaneId ? { tmuxPaneId } : {}),
-    commandName: commandName || null,
-    rawHookEvent: String(rawHookEvent || hookEvent),
-    ...(sessionSource ? { sessionSource } : {}),
-    ...(query ? { query } : {}),
-    ...(assistantResponse ? { response: assistantResponse } : {}),
-    ...(toolHook?.toolUseId ? { toolUseId: toolHook.toolUseId } : {}),
-    ...(toolHook?.toolName ? { toolName: toolHook.toolName } : {}),
-    ...(toolHook?.toolInput !== undefined
-      ? { toolInput: toolHook.toolInput }
-      : {}),
-    ...(toolHook?.toolResult !== undefined
-      ? { toolResult: toolHook.toolResult }
-      : {}),
-    ...(hookEvent === "ToolCompleted" && toolHook?.toolExecution
-      ? { toolExecution: toolHook.toolExecution }
-      : {}),
-    agent,
-    hookEvent,
-  });
-  let lastError;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Runweave-Hook-Token": token,
-        },
-        body,
-      });
-      if (response.status === 400 && attempt === 1 && toolHook?.toolExecution) {
-        const error = await response.json().catch(() => null);
-        if (error?.errors?.formErrors?.includes(
-          "Unrecognized key(s) in object: 'toolExecution'",
-        )) {
-          // Older Backends reject unknown fields. Preserve the tool event and
-          // its content there, leaving the outcome unknown until they upgrade.
-          const legacy = JSON.parse(body);
-          delete legacy.toolExecution;
-          body = JSON.stringify(legacy);
-          continue;
-        }
-      }
-      if (response.ok || response.status < 500 || attempt === 2) {
-        return { ok: response.ok, status: response.status, attempt };
-      }
-      lastError = new Error(`hook_endpoint_${response.status}`);
-    } catch (error) {
-      lastError = error;
-      if (attempt === 2) break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return {
-    ok: false,
-    error: lastError instanceof Error ? lastError.message : String(lastError),
-  };
 }
 
 async function main() {
@@ -418,9 +328,14 @@ async function main() {
       endpoint: stateEndpoint,
       token,
       terminalSessionId,
+      projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
       agent: source,
       hookEvent: stateHookEvent,
       threadId,
+      turnId: source === "codex" && normalizedEvent === "pretooluse"
+        && toolHook?.toolName === "request_user_input" && toolHook.toolUseId
+        && typeof payload.turn_id === "string" && payload.turn_id.length <= 256
+        ? payload.turn_id : undefined,
       panelId: terminalPanelId,
       tmuxPaneId,
       commandName,

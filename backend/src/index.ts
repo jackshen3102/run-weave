@@ -14,9 +14,7 @@ import { initializeBackendConfiguration } from "./bootstrap/configuration";
 import { createConfigurationRouter } from "./routes/configuration";
 import { settingText } from "@runweave/config-node";
 import { createKnowledgeInboxRouter } from "./routes/knowledge-inbox";
-import {
-  attachLocalBrowserWebSocketServer,
-} from "./ws/browser-local-server";
+import { attachLocalBrowserWebSocketServer } from "./ws/browser-local-server";
 import { createExperienceRouter } from "./routes/experience";
 import { createTerminalSnapshotShareRouter } from "./routes/terminal/snapshot-share";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
@@ -188,6 +186,7 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
       hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
       activity: services.terminalActivity,
+      questionNotifications: services.terminalQuestionsService.notifications,
     }),
   );
   app.use(

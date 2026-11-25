@@ -10,6 +10,7 @@ public struct RootView: View {
   @StateObject private var quickInputs = BackendQuickInputModel()
   @StateObject private var codexQuota = CodexQuotaStore()
   @StateObject private var remoteDesktop = RemoteDesktopCoordinator()
+  @StateObject private var questionHandoffModel = TerminalQuestionsModel()
   @ObservedObject private var notifications = NotificationCoordinator.shared
   @State private var managingConnections = false
   @State private var showingSettings = false
@@ -164,6 +165,11 @@ public struct RootView: View {
       RemoteDesktopCover(coordinator: remoteDesktop, presentation: presentation,
         returnLabel: session.terminal != nil ? "返回终端" : "返回")
         .clarityMask().mobileAnalyticsScreen(.remoteDesktop)
+    }
+    .fullScreenCover(item: $notifications.questionHandoff) { handoff in
+      TerminalQuestionHandoffView(session: session, questions: questionHandoffModel, target: handoff) {
+        if notifications.questionHandoff?.id == handoff.id { notifications.questionHandoff = nil }
+      }.id(handoff.id).clarityMask()
     }
     .mobileAnalyticsScreen(session.checking ? .connecting : session.authenticated ? .home : .login)
     .environmentObject(quickInputs)

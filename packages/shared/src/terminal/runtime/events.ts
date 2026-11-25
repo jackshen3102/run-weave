@@ -255,6 +255,7 @@ export interface AgentHookStateRequest {
   terminalSessionId: string;
   projectId?: string;
   threadId?: string;
+  turnId?: string;
   panelId?: string | null;
   tmuxPaneId?: string | null;
   commandName?: string | null;

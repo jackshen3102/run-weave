@@ -6,12 +6,16 @@ final class TerminalQuestionsModel: ObservableObject {
   @Published private(set) var response: TerminalQuestionsResponse?
   @Published private(set) var error: String?
   @Published private(set) var submitting = false
+  @Published private(set) var notificationStatus: TerminalQuestionNotificationResponse.Status?
+  @Published private(set) var notificationResolved = false
+  @Published private(set) var notificationTerminalID: String?
   @Published private var drafts: [String: [String: String]] = [:]
   private var operations: [String: String] = [:]
   private var revision = UUID()
   private var terminalID: String?
   private var conversationKey: String?
   private var pinnedTarget: TerminalQuestionsResponse.Target?
+  private var handoff: TerminalQuestionHandoff?
 
   func reset() {
     revision = UUID(); terminalID = nil; pinnedTarget = nil; response = nil; error = nil; submitting = false
@@ -22,10 +26,77 @@ final class TerminalQuestionsModel: ObservableObject {
     revision = UUID(); self.terminalID = terminalID; self.conversationKey = conversationKey; pinnedTarget = nil; response = nil; error = nil; submitting = false
   }
 
+  func openNotification(_ target: TerminalQuestionHandoff) {
+    close()
+    handoff = target
+    error = nil
+    notificationStatus = nil
+    notificationResolved = false
+    notificationTerminalID = nil
+  }
+
+  func closeNotification(_ target: TerminalQuestionHandoff) {
+    guard handoff?.id == target.id else { return }
+    close()
+    handoff = nil
+  }
+
+  var notificationSubmissionNeedsCheck: Bool {
+    guard let handoff else { return false }
+    return operations[handoff.reference] != nil && !notificationResolved
+      && response?.requests.first?.state != "submitting"
+  }
+
+  func notificationUnavailable(_ target: TerminalQuestionHandoff) {
+    guard handoff?.id == target.id else { return }
+    response = nil
+    notificationStatus = .unavailable
+  }
+
+  func invalidateNotificationTransport(_ target: TerminalQuestionHandoff) {
+    guard handoff?.id == target.id, notificationStatus == .pending else { return }
+    revision = UUID()
+    submitting = false
+    notificationUnavailable(target)
+  }
+
+  func refreshNotification(api: APIClient, target: TerminalQuestionHandoff, afterConflict: Bool = false) async {
+    guard handoff?.id == target.id, !submitting else { return }
+    let epoch = revision
+    do {
+      let location = try await api.terminalQuestionNotification(target)
+      guard epoch == revision, !Task.isCancelled else { return }
+      notificationTerminalID = location.terminalId
+      terminalID = location.terminalId
+      switch location.status {
+      case .pending:
+        guard !afterConflict, let value = location.questions, value.capability == "available",
+          let original = value.target, original.terminalId == location.terminalId,
+          original.panelId == location.panelId, value.requests.count == 1,
+          let request = value.requests.first, request.threadId == original.threadId,
+          request.generation == value.generation, ["pending", "submitting"].contains(request.state)
+        else { notificationUnavailable(target); return }
+        pinnedTarget = original
+        response = value
+        notificationStatus = .pending
+      case .closed:
+        response = nil
+        notificationResolved = location.resolved == true
+        notificationStatus = .closed
+      case .unavailable:
+        notificationUnavailable(target)
+      }
+      error = nil
+    } catch {
+      guard epoch == revision, !Task.isCancelled else { return }
+      notificationUnavailable(target)
+    }
+  }
+
   func close() { revision = UUID(); response = nil; terminalID = nil; pinnedTarget = nil; submitting = false }
 
   private func key(_ request: TerminalQuestionRequest) -> String {
-    [terminalID ?? "", pinnedTarget?.panelId ?? "", request.generation, request.requestId].joined(separator: "/")
+    handoff?.reference ?? [terminalID ?? "", pinnedTarget?.panelId ?? "", request.generation, request.requestId].joined(separator: "/")
   }
 
   func answer(_ request: TerminalQuestionRequest, questionID: String) -> String {
@@ -69,7 +140,9 @@ final class TerminalQuestionsModel: ObservableObject {
   }
 
   func submit(api: APIClient, terminalID: String, request: TerminalQuestionRequest) async {
-    guard self.terminalID == terminalID, canSubmit(request), let target = response?.target else { return }
+    guard self.terminalID == terminalID, canSubmit(request), let target = response?.target,
+      response?.requests.contains(where: { $0.requestId == request.requestId && $0.generation == request.generation }) == true else { return }
+    revision = UUID()
     let epoch = revision
     let draftKey = key(request)
     let operationID = UUID().uuidString
@@ -81,11 +154,21 @@ final class TerminalQuestionsModel: ObservableObject {
       let value = try await api.answerTerminalQuestion(id: terminalID, panelID: target.panelId,
         request: request, operationID: operationID, answers: answers)
       guard epoch == revision, !Task.isCancelled else { return }
-      response = value
+      if let handoff {
+        submitting = false
+        await refreshNotification(api: api, target: handoff)
+      } else {
+        response = value
+      }
+    } catch APIError.http(409) where handoff != nil {
+      guard epoch == revision, !Task.isCancelled, let handoff else { return }
+      submitting = false
+      await refreshNotification(api: api, target: handoff, afterConflict: true)
     } catch {
       guard epoch == revision, !Task.isCancelled else { return }
       // Unknown delivery is not a retry button. The user's original draft stays available.
       self.error = "提交结果未确认，答案草稿已保留。请回原终端核对，不要重复发送。"
+      if let handoff { notificationUnavailable(handoff) }
     }
   }
 }

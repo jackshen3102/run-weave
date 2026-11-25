@@ -169,7 +169,7 @@ export function createTerminalRouter(
   });
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalCodeReviewRoutes(router, options?.codeReviewService);
-  registerTerminalQuestionRoutes(router, options?.terminalQuestionsService);
+  registerTerminalQuestionRoutes(router, options?.terminalQuestionsService, options?.authService);
   registerTerminalAgentForkRoutes(router, new TerminalAgentForkService(terminalSessionManager, options ?? {}));
 
   const agentSettingsUpdateSchema = z.object({

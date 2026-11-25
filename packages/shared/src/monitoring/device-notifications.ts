@@ -1,4 +1,6 @@
 import type { PushEnvironment } from "../push-notifications";
+export const deviceNotificationKinds = ["battery", "scheduled-task", "terminal-unread", "terminal-reply", "terminal-question"] as const;
+export type DeviceNotificationKind = typeof deviceNotificationKinds[number];
 export interface DeviceNotificationRegistration {
   connectionId: string;
   deviceToken: string;
@@ -6,14 +8,14 @@ export interface DeviceNotificationRegistration {
   displayName: string;
   enabled: boolean;
   explicitEnable?: boolean;
-  kind?: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply";
+  kind?: DeviceNotificationKind;
 }
 export interface DeviceNotificationSubscription {
   subscriptionId: string;
   hostId: string;
   installationId: string;
   environment: PushEnvironment;
-  kind: "battery" | "scheduled-task" | "terminal-unread" | "terminal-reply";
+  kind: DeviceNotificationKind;
   state: "enabled" | "pending" | "disabled";
   version: number;
   gatewayURL: string | null;

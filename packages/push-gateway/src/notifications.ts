@@ -44,10 +44,13 @@ export function deliverNotification(
     requireValue(typeof body.target === "object" && body.target !== null && !Array.isArray(body.target));
     const target = body.target as Record<string, unknown>;
     requireValue(Object.keys(target).length === 2 &&
-      target.resourceType === "scheduled-run" &&
+      (body.category === "terminal.question"
+        ? target.resourceType === "terminal-question"
+        : target.resourceType === "scheduled-run") &&
       typeof target.resourceId === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(target.resourceId));
   }
+  requireValue(body.category !== "terminal.question" || body.target !== undefined);
   const age = Date.now() - Date.parse(body.occurredAt);
   requireValue(age >= -30_000 && age <= 300_000, 422, "Stale event");
   const event = body as unknown as PushNotificationRequest;
