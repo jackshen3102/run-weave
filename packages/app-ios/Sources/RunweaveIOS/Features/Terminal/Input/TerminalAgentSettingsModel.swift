@@ -15,13 +15,13 @@ final class TerminalAgentSettingsModel: ObservableObject {
     self.response = initial
   }
 
-  var selectedModel: AgentModelOption? {
-    response?.models.first { $0.id == selectedModelID }
-  }
+  var commitsModelOnSelection: Bool { response?.settings.provider == "agy" }
+
   var summary: String? {
     guard let response else { return nil }
     let label = response.models.first { $0.id == response.settings.model }?.label
       ?? response.settings.model
+    if commitsModelOnSelection { return label }
     return "\(label) · \(Self.effortLabel(response.settings.reasoningEffort))"
   }
 
@@ -94,10 +94,12 @@ final class TerminalAgentSettingsModel: ObservableObject {
     error = nil
   }
 
-  func save(effort: String, session: AppSession, terminalID: String) async {
-    guard !saving, let original = response?.settings, let model = selectedModel,
-      model.reasoningEfforts.contains(effort), let api = session.api,
-      session.terminal?.id == terminalID else { return }
+  func save(modelID: String, effort: String, session: AppSession, terminalID: String) async {
+    guard !saving, let response, let api = session.api, session.terminal?.id == terminalID,
+      let model = response.models.first(where: { $0.id == modelID }),
+      commitsModelOnSelection ? page == .models : page == .efforts && selectedModelID == modelID,
+      model.reasoningEfforts.contains(effort) else { return }
+    let original = response.settings
     let generation = session.generation
     saving = true
     error = nil
@@ -111,18 +113,18 @@ final class TerminalAgentSettingsModel: ObservableObject {
         next.settings.threadId == original.threadId,
         next.settings.provider == original.provider else { return }
       session.agentSettingsCache.store(next, session: session, terminalID: terminalID)
-      response = next
+      self.response = next
       page = .input
       selectedModelID = nil
     } catch {
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID else { return }
       self.error = displayError(error)
-      // Keep the user's model choice visible. A fresh snapshot resolves a stale revision.
+      // A fresh snapshot lets the user retry with the latest revision.
       if let latest = try? await session.agentSettingsCache.refresh(session: session, terminalID: terminalID),
         session.generation == generation, session.api === api,
         session.terminal?.id == terminalID {
-        response = latest
+        self.response = latest
       }
     }
   }

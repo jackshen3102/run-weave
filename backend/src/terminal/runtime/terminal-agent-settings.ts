@@ -104,13 +104,7 @@ async function modelsFor(
     ) {
       fail(503, "agent_settings_unavailable", "当前账号的模型目录暂不可用");
     }
-    return catalog.models.map((model) => ({
-      id: model.id,
-      label: model.label,
-      description: model.description,
-      defaultReasoningEffort: model.defaultReasoningEffort,
-      reasoningEfforts: model.reasoningEfforts,
-    }));
+    return catalog.models.map((model) => terminalModelOption(provider, model));
   }
   const cached = !options?.forceProbe ? catalogCache.get(provider) : undefined;
   if (cached && cached.expires > Date.now()) return cached.models;
@@ -120,13 +114,7 @@ async function modelsFor(
       : provider === "agy"
         ? await probeAgyCatalog(process.env)
         : await probeTraexCatalog(process.env);
-    const models = catalog.models.map((model) => ({
-      id: model.id,
-      label: model.label,
-      description: model.description,
-      defaultReasoningEffort: model.defaultReasoningEffort,
-      reasoningEfforts: model.reasoningEfforts,
-    }));
+    const models = catalog.models.map((model) => terminalModelOption(provider, model));
     if (!models.length) throw new Error("empty catalog");
     catalogCache.set(provider, { expires: Date.now() + CATALOG_TTL_MS, models });
     return models;
@@ -134,6 +122,18 @@ async function modelsFor(
     // A stale catalog is unsafe for a write. Read-only UI may retry on reopen.
     fail(503, "agent_settings_unavailable", "当前账号的模型目录暂不可用");
   }
+}
+
+function terminalModelOption(
+  provider: TerminalAgentSettingsProvider,
+  { id, label, description, defaultReasoningEffort, reasoningEfforts }: TerminalAgentModelOption,
+): TerminalAgentModelOption {
+  if (provider === "agy") {
+    // The interactive /model command accepts a variant ID, including its effort.
+    const effort = /-(low|medium|high|xhigh|max)$/i.exec(id)?.[1]?.toLowerCase() ?? "default";
+    return { id, label, description, defaultReasoningEffort: effort, reasoningEfforts: [effort] };
+  }
+  return { id, label, description, defaultReasoningEffort, reasoningEfforts };
 }
 
 function normalizedModel(raw: string, models: TerminalAgentModelOption[]): string {
@@ -183,8 +183,19 @@ async function readAgyThread(threadId: string): Promise<ThreadEntry> {
   return { id: threadId, model, reasoningEffort };
 }
 
-async function readThread(provider: TerminalAgentSettingsProvider, threadId: string): Promise<ThreadEntry> {
-  if (provider === "agy") return readAgyThread(threadId);
+async function readThread(
+  target: Target,
+  tmux: TmuxService,
+  models: TerminalAgentModelOption[] | Promise<TerminalAgentModelOption[]>,
+): Promise<ThreadEntry> {
+  const { provider, threadId } = target;
+  if (provider === "agy") {
+    const [screen, options] = await Promise.all([capture(tmux, target.pane).catch(() => ""), models]);
+    const selected = readAgyScreenModel(screen, options);
+    return selected
+      ? { id: threadId, model: selected.id, reasoningEffort: selected.defaultReasoningEffort }
+      : readAgyThread(threadId);
+  }
   const client = provider === "codex" ? codexAppServerClient : traexAppServerClient;
   let cursor: string | null = null;
   for (let page = 0; page < 20; page++) {
@@ -204,10 +215,12 @@ async function readThread(provider: TerminalAgentSettingsProvider, threadId: str
 }
 
 function settingsFor(target: Target, thread: ThreadEntry, models: TerminalAgentModelOption[]): TerminalAgentSettings {
-  const model = normalizedModel(thread.model!, models);
-  const reasoningEffort = thread.reasoningEffort;
+  if (!thread.model) fail(503, "agent_settings_unavailable", "当前 Agent 会话设置尚未写入，稍后重试");
+  const agy = target.provider === "agy" ? findAgyModel(models, thread.model) : undefined;
+  const model = agy?.id ?? normalizedModel(thread.model, models);
+  const reasoningEffort = agy?.defaultReasoningEffort ?? thread.reasoningEffort;
   const revision = createHash("sha256")
-    .update(JSON.stringify([target.provider, target.threadId, thread.model, reasoningEffort]))
+    .update(JSON.stringify([target.provider, target.threadId, agy?.id ?? thread.model, reasoningEffort]))
     .digest("hex");
   return {
     terminalSessionId: target.session.id,
@@ -228,9 +241,10 @@ export async function getTerminalAgentSettings(
   catalogService?: AgentModelCatalogService,
 ): Promise<TerminalAgentSettingsResponse> {
   const target = await resolveTarget(manager, tmux, session, panelId);
+  const pendingModels = modelsFor(target.provider, catalogService);
   const [models, thread] = await Promise.all([
-    modelsFor(target.provider, catalogService),
-    readThread(target.provider, target.threadId),
+    pendingModels,
+    readThread(target, tmux, pendingModels),
   ]);
   const latest = await resolveTarget(manager, tmux, session, target.panelId);
   if (latest.threadId !== target.threadId || latest.provider !== target.provider) {
@@ -272,6 +286,62 @@ async function press(tmux: TmuxService, pane: TmuxPaneTarget, key: string): Prom
 
 async function typeText(tmux: TmuxService, pane: TmuxPaneTarget, value: string): Promise<void> {
   await tmux.sendKeySequence(pane, [{ type: "literal", value, delayAfterMs: 250 }]);
+}
+
+function findAgyModel(models: TerminalAgentModelOption[], value: string): TerminalAgentModelOption | undefined {
+  const name = value.toLowerCase();
+  return models.find((model) => model.id.toLowerCase() === name || model.label.toLowerCase() === name);
+}
+
+function agyModelReplies(screen: string): string[] {
+  const startup = Array.from(screen.matchAll(/^ *Antigravity CLI \d/gm)).at(-1)?.index ?? 0;
+  const recent = screen.slice(startup);
+  return recent.split(/^> \/model[ \t]*$/m).slice(1).map((reply) =>
+    /^\n +⎿ +Model (?:already )?set to\b([^\n]*(?:\n {5}\S[^\n]*)*)/u.exec(reply)?.[1]
+      ?.trim().replace(/\s+/g, " ") ?? "",
+  );
+}
+
+function readAgyScreenModel(screen: string, models: TerminalAgentModelOption[]): TerminalAgentModelOption | undefined {
+  const footer = /^\? for shortcuts[ \t]+(?:(?:accept-edits|plan) · )?(.+) · (low|medium|high|xhigh|max) *$/m.exec(screen);
+  const visible = footer && findAgyModel(models, `${footer[1]} (${footer[2]})`);
+  return visible || findAgyModel(models, agyModelReplies(screen).filter(Boolean).at(-1) ?? "");
+}
+
+function agyComposer(screen: string): string | undefined {
+  const frame = screen.split(/^─+[ \t]*$/m).at(-2)?.trim();
+  return frame?.startsWith(">") ? frame.slice(1).trim() : undefined;
+}
+
+async function selectAgyModel(tmux: TmuxService, target: Target, model: TerminalAgentModelOption): Promise<void> {
+  const initial = await capture(tmux, target.pane);
+  const draft = agyComposer(initial)?.replace(/\s+/g, " ");
+  if (!/^\? for shortcuts(?:\s|$)/m.test(initial) ||
+    (draft !== "" &&
+      draft !== "Accept-edits mode: file edits auto-approved (shift+tab to cycle)" &&
+      draft !== "Plan mode: research & plan only (shift+tab to cycle)")) {
+    fail(409, "terminal_busy", "请先清空 AGY 输入框并等待终端空闲");
+  }
+  if (!/^[a-z0-9][a-z0-9._-]+$/i.test(model.id)) {
+    fail(409, "model_unavailable", "所选 AGY 模型不可用");
+  }
+  // An iOS scroll can leave this pane in tmux history mode.
+  await tmux.cancelCopyMode(target.pane, { strict: true });
+  await typeText(tmux, target.pane, `/model ${model.id}`);
+  const composer = agyComposer(await capture(tmux, target.pane));
+  const typedModel = composer?.match(/^\/model\s+([\s\S]+)$/)?.[1];
+  // AGY wraps the visible command in narrow panes, even with capture-pane -J.
+  if (typedModel?.replace(/[ \t]*\n[ \t]*/g, "") !== model.id) {
+    fail(409, "settings_unconfirmed", "AGY 未识别模型切换命令");
+  }
+  await press(tmux, target.pane, "Enter");
+  const deadline = Date.now() + MENU_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const screen = await capture(tmux, target.pane);
+    if (agyComposer(screen) === "" && agyModelReplies(screen).at(-1) === model.label) return;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  fail(504, "settings_unconfirmed", "AGY 尚未确认模型设置，请刷新后核对");
 }
 
 function menuRows(text: string): { number: number; label: string; selected: boolean }[] {
@@ -338,19 +408,6 @@ async function chooseModelAndEffort(
   try {
     await typeText(tmux, target.pane, "/model");
     await press(tmux, target.pane, "Enter");
-    if (target.provider === "agy") {
-      const menu = await waitForEitherMenu(tmux, target.pane, ["Select Model", "Model"]);
-      const names = [model.id, model.label].map((name) => name.toLowerCase());
-      await selectRow(
-        tmux,
-        target.pane,
-        menu,
-        (label) => names.some((name) => label.toLowerCase().includes(name)),
-        false,
-      );
-      submitted = true;
-      return;
-    }
     if (target.provider === "traex") {
       // TraeX first confirms the slash-command completion, then opens its menu.
       const prompt = await waitForEitherMenu(tmux, target.pane,
@@ -414,9 +471,10 @@ export async function updateTerminalAgentSettings(
   try {
     const target = await resolveTarget(manager, tmux, session, request.panelId ?? undefined);
     if (target.threadId !== request.threadId) fail(409, "settings_changed", "Agent 会话已切换，请刷新设置");
+    const pendingModels = modelsFor(target.provider, catalogService, { requireFresh: true });
     const [initialModels, thread] = await Promise.all([
-      modelsFor(target.provider, catalogService, { requireFresh: true }),
-      readThread(target.provider, target.threadId),
+      pendingModels,
+      readThread(target, tmux, pendingModels),
     ]);
     let models = initialModels;
     let model = models.find((option) => option.id === request.model);
@@ -430,21 +488,33 @@ export async function updateTerminalAgentSettings(
     if (!model.reasoningEfforts.includes(request.reasoningEffort)) {
       fail(400, "reasoning_unsupported", "该模型不支持所选推理强度");
     }
-    if (current.model === model.id && current.reasoningEffort === request.reasoningEffort) {
+    if (target.provider !== "agy" &&
+      current.model === model.id && current.reasoningEffort === request.reasoningEffort) {
       return { settings: current, models };
     }
     const latest = await resolveTarget(manager, tmux, session, target.panelId);
     if (latest.threadId !== target.threadId || latest.provider !== target.provider) {
       fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
     }
-    const latestThread = await readThread(target.provider, target.threadId);
+    const latestThread = await readThread(latest, tmux, models);
     if (settingsFor(target, latestThread, models).revision !== current.revision) {
       fail(409, "settings_changed", "模型设置已变化，请刷新后重试");
+    }
+    if (target.provider === "agy") {
+      await selectAgyModel(tmux, target, model);
+      const confirmed = await resolveTarget(manager, tmux, session, target.panelId);
+      if (confirmed.threadId !== target.threadId || confirmed.provider !== target.provider) {
+        fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
+      }
+      const settings = settingsFor(confirmed, {
+        id: confirmed.threadId, model: model.id, reasoningEffort: model.defaultReasoningEffort,
+      }, models);
+      return { settings, models };
     }
     await chooseModelAndEffort(tmux, target, model, request.reasoningEffort);
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline) {
-      const next = await readThread(target.provider, target.threadId);
+      const next = await readThread(target, tmux, models);
       const settings = settingsFor(target, next, models);
       if (settings.model === model.id && settings.reasoningEffort === request.reasoningEffort) {
         return { settings, models };

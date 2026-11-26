@@ -16,10 +16,12 @@ struct TerminalAgentSettingsView: View {
       }, set: { id in
         if let id { model.selectModel(id) } else { model.back() }
       }),
+      commitsModelOnSelection: model.commitsModelOnSelection,
       saving: model.saving, error: model.error, identifierPrefix: "terminal-agent",
       onClose: { model.exit() },
-      onSelect: { _, effort in
-        if let effort { Task { await model.save(effort: effort, session: session, terminalID: terminalID) } }
+      onSelect: { id, effort in
+        guard let effort else { return }
+        Task { await model.save(modelID: id, effort: effort, session: session, terminalID: terminalID) }
       }
     )
     .frame(height: height)

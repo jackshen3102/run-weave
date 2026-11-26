@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Selection stays local until the second step commits a model/effort pair.
+/// Models with a fixed effort can be committed directly from the list.
 struct AgentModelSelectionView: View {
   let models: [AgentModelOption]
   let currentModelID: String?
@@ -8,6 +8,7 @@ struct AgentModelSelectionView: View {
   @Binding var selectedModelID: String?
   var allowedEfforts: [String]? = nil
   var allowDefaultEffort = false
+  var commitsModelOnSelection = false
   var saving = false
   var error: String? = nil
   var identifierPrefix = "model-picker"
@@ -50,7 +51,10 @@ struct AgentModelSelectionView: View {
                 .font(.caption).foregroundColor(.secondary).padding(.vertical, 6)
             }
             ForEach(models) { option in
-              Button { selectedModelID = option.id } label: {
+              Button {
+                if commitsModelOnSelection { onSelect(option.id, option.defaultReasoningEffort) }
+                else { selectedModelID = option.id }
+              } label: {
                 HStack(spacing: 8) {
                   VStack(alignment: .leading, spacing: 2) {
                     Text(option.label).font(.subheadline.weight(.medium))
@@ -59,8 +63,11 @@ struct AgentModelSelectionView: View {
                     }
                   }
                   Spacer(minLength: 4)
-                  Image(systemName: currentModelID == option.id ? "checkmark" : "chevron.right")
-                    .accessibilityHidden(true)
+                  if currentModelID == option.id {
+                    Image(systemName: "checkmark").accessibilityHidden(true)
+                  } else if !commitsModelOnSelection {
+                    Image(systemName: "chevron.right").accessibilityHidden(true)
+                  }
                 }
                 .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading).contentShape(Rectangle())
               }
