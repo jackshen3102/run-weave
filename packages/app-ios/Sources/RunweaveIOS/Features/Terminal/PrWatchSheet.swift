@@ -18,9 +18,9 @@ struct PrWatchSheet: View {
           Text("\(watch.statusTitle) · 纯评论唤醒 \(watch.commentWakeCount)/10 · 连续读取失败 \(watch.consecutiveReadFailures)/8")
           if let summary = watch.lastSummary { Text(summary) }
           if watch.status == "watching" { Button("暂停值守") { change("pause", watch) } }
-          if watch.status == "paused" && watch.pauseReason != "thread_changed" {
+          if (watch.status == "paused" && watch.pauseReason != "thread_changed") || watch.status == "error" {
             let draft = watch.pauseReason == "draft_unconfirmed"
-            Button(draft ? "确认输入框为空并发送" : "恢复值守") {
+            Button(draft ? "确认输入框为空并发送" : watch.status == "error" ? "已核实面板，恢复值守" : "恢复值守") {
               change(draft ? "confirm_empty_draft_and_deliver" : "resume", watch)
             }
           }

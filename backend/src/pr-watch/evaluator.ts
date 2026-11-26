@@ -47,9 +47,7 @@ export function evaluate(pr: PrSnapshot, previous?: Baseline) {
       pr.mergeable === "UNKNOWN" ? (previous?.conflict ?? false) : pr.conflict,
     ids: [...[...ids].filter((id) => !seen.has(id)), ...seen].slice(-200),
   };
-  const changed =
-    previous?.head !== pr.head ||
-    JSON.stringify(previous.checks) !== JSON.stringify(checks);
+  const headChanged = previous !== undefined && previous.head !== pr.head;
   const lines: string[] = [];
   if (previous) {
     for (const c of pr.checks) {
@@ -99,7 +97,7 @@ export function evaluate(pr: PrSnapshot, previous?: Baseline) {
   }
   return {
     baseline,
-    changed,
+    headChanged,
     wake: lines.length ? { commentsOnly, lines: lines.slice(0, 20) } : null,
   };
 }

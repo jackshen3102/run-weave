@@ -27,6 +27,7 @@ export type DeliverPrompt = (
   text: string,
   operationId: string,
   valid: () => void,
+  beforeWrite?: () => void,
 ) => Promise<void>;
 const now = () => new Date().toISOString();
 const changed = () =>
@@ -312,7 +313,7 @@ export class PrWatchService {
     );
     r.baseline = result.baseline;
     s.headSha = snap.head;
-    if (result.changed) s.commentWakeCount = 0;
+    if (result.headChanged) s.commentWakeCount = 0;
     if (
       confirming &&
       terminalInputAdmission(session).inputVersion !== confirming.version
@@ -369,21 +370,62 @@ export class PrWatchService {
       return;
     }
     const wake = r.pending;
-    // Reserve before crossing the terminal I/O boundary. Unknown writes never replay after restart.
-    r.pending = null;
-    s.status = "error";
-    s.pauseReason = null;
-    s.lastSummary = "投递结果待核实，请检查原面板。";
-    this.save(r);
+    let crossedBoundary = false;
     const valid = () => {
       if (!this.current(r) || !this.target(r).idle) throw changed();
     };
-    await this.deliver(
-      live.target,
-      prompt(s.prUrl, snap.head, wake),
-      randomUUID(),
-      valid,
-    );
+    // Reserve right before crossing the terminal I/O boundary. Unknown writes never replay after restart.
+    const reserve = () => {
+      if (crossedBoundary) return;
+      crossedBoundary = true;
+      r.pending = null;
+      s.status = "error";
+      s.pauseReason = null;
+      s.lastSummary = "投递结果待核实，请检查原面板。";
+      this.save(r);
+    };
+    try {
+      await this.deliver(
+        live.target,
+        prompt(s.prUrl, snap.head, wake),
+        randomUUID(),
+        valid,
+        reserve,
+      );
+    } catch {
+      if (!this.current(r)) return;
+      if (crossedBoundary) {
+        if (confirming)
+          throw new SupervisionError(
+            s.lastSummary ?? "投递结果待核实，请检查原面板。",
+          );
+        return;
+      }
+      if (confirming) throw changed();
+      const currentSession = this.manager.getSession(id);
+      if (!currentSession) return;
+      try {
+        this.target(r);
+      } catch {
+        this.pause(
+          r,
+          "thread_changed",
+          "原面板或 Agent 会话已变化，请重新绑定。",
+        );
+        return;
+      }
+      if (hasPendingTerminalInput(currentSession, pane)) {
+        r.inputVersion = terminalInputAdmission(currentSession).inputVersion;
+        this.pause(
+          r,
+          "draft_unconfirmed",
+          "请检查原面板，确认输入框为空后发送。",
+        );
+      } else {
+        this.save(r);
+      }
+      return;
+    }
     if (!this.current(r)) return;
     s.status = "watching";
     s.lastWakeAt = now();
@@ -414,17 +456,19 @@ export class PrWatchService {
       await this.poll(id, { revision: req.expectedRevision, version });
     } else if (
       req.action === "resume" &&
-      r.state.status === "paused" &&
-      r.state.pauseReason !== "draft_unconfirmed"
+      ((r.state.status === "paused" &&
+        r.state.pauseReason !== "draft_unconfirmed") ||
+        r.state.status === "error")
     ) {
       this.target(r);
+      const wasError = r.state.status === "error";
       if (r.state.pauseReason === "wake_limit_reached")
         r.state.commentWakeCount = 0;
       Object.assign(r.state, {
         status: "watching",
         pauseReason: null,
         consecutiveReadFailures: 0,
-        lastSummary: "已恢复值守。",
+        lastSummary: wasError ? "已核实面板并恢复值守。" : "已恢复值守。",
       });
       this.save(r);
     } else throw changed();

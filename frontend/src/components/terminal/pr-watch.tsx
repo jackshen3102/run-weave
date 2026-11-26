@@ -114,23 +114,26 @@ export function TerminalPrWatch({ sessionId }: { sessionId: string }) {
                 暂停值守
               </Button>
             )}
-            {watch.status === "paused" &&
-              watch.pauseReason !== "thread_changed" && (
-                <Button
-                  disabled={edit.isPending}
-                  onClick={() =>
-                    change(
-                      watch.pauseReason === "draft_unconfirmed"
-                        ? "confirm_empty_draft_and_deliver"
-                        : "resume",
-                    )
-                  }
-                >
-                  {watch.pauseReason === "draft_unconfirmed"
-                    ? "确认输入框为空并发送"
+            {((watch.status === "paused" &&
+              watch.pauseReason !== "thread_changed") ||
+              watch.status === "error") && (
+              <Button
+                disabled={edit.isPending}
+                onClick={() =>
+                  change(
+                    watch.pauseReason === "draft_unconfirmed"
+                      ? "confirm_empty_draft_and_deliver"
+                      : "resume",
+                  )
+                }
+              >
+                {watch.pauseReason === "draft_unconfirmed"
+                  ? "确认输入框为空并发送"
+                  : watch.status === "error"
+                    ? "已核实面板，恢复值守"
                     : "恢复值守"}
-                </Button>
-              )}
+              </Button>
+            )}
             <Button
               disabled={edit.isPending}
               onClick={() => edit.mutate({ method: "DELETE" })}

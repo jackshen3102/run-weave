@@ -64,7 +64,7 @@ export async function createTerminalTaskServices(
   );
   resources.defer("terminal-tasks", () => tasks.dispose());
   await tasks.initialize();
-  const deliver: DeliverPrompt = async (target, text, operationId, valid) => {
+  const deliver: DeliverPrompt = async (target, text, operationId, valid, beforeWrite) => {
     valid();
     const { session, panel } = resolveSupervisionTarget(manager, target.terminalSessionId, target.panelId);
     if (panel && !options.tmuxService)
@@ -81,6 +81,7 @@ export async function createTerminalTaskServices(
             valid();
             if (terminalInputAdmission(session).revision !== inputRevision)
               throw new Error("用户输入已变化，未发送旧续接。");
+            beforeWrite?.();
           },
         },
         session,

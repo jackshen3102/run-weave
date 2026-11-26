@@ -51,7 +51,7 @@ async function run(cwd: string, program: string, args: string[]) {
 
 const name = "[A-Za-z0-9_.-]+";
 const remotePattern = new RegExp(
-  `^(?:https://github\\.com/|git@github\\.com:|ssh://git@github\\.com/)(${name}/${name})/?$`,
+  `^(?:https://(?:[^@/]+@)?github\\.com/|git@github\\.com:|ssh://(?:[^@/]+@)?(?:ssh\\.)?github\\.com(?::\\d+)?/)(${name}/${name})/?$`,
   "i",
 );
 const urlPattern = new RegExp(
