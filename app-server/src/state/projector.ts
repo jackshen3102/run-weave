@@ -1,3 +1,4 @@
+import { isAgyAgentContext, isNewerAgyContext, agyHookStatus } from "@runweave/shared/terminal/agy-agent";
 import { isClaudeAgentContext, isNewerClaudeContext, claudeHookStatus } from "@runweave/shared/terminal/claude-agent";
 import { isPiAgentContext, isNewerPiContext } from "@runweave/shared/terminal/pi-agent";
 import type {
@@ -19,6 +20,7 @@ export interface AppServerProjectionResult {
 }
 
 const AGENT_KINDS = new Set<AppServerAgentKind>([
+  "agy",
   "claude",
   "codex",
   "trae",
@@ -51,8 +53,20 @@ export class AppServerStateProjector {
 
     const previous = this.stateStore.getThread(projection.threadId);
     if (previous && previous.agent !== projection.agent &&
-        (previous.agent === "claude" || projection.agent === "claude")) {
+        (previous.agent === "claude" || projection.agent === "claude" || previous.agent === "agy" || projection.agent === "agy")) {
       return { threadChange: null };
+    }
+    if (projection.agent === "agy") {
+      const native = projection.agy;
+      if (native) {
+        const status = agyHookStatus(native);
+        if (native.conversationId !== projection.threadId || !isNewerAgyContext(native, previous?.agy) ||
+            ((!previous?.agy || previous.agy.instanceId !== native.instanceId) &&
+              native.event !== "sessionstart" && status !== "running")) return { threadChange: null };
+        projection.status = status ?? previous?.status ?? "unknown";
+      } else if (previous?.agy) {
+        return { threadChange: null };
+      }
     }
     if (projection.agent === "claude") {
       const native = projection.claude;
@@ -78,7 +92,7 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
   const agent = readAgent(payload);
   // Legacy Claude events are identity-only. Native contexts are ordered above;
   // raw Stop and completion text never prove that the TUI settled.
-  const status = agent === "claude" ? "unknown" :
+  const status = agent === "claude" || agent === "agy" ? "unknown" :
     event.kind === "agent.hook"
       ? readHookStatus(payload)
       : event.kind === "agent.completion"
@@ -106,6 +120,7 @@ function buildProjection(event: AppServerEventEnvelope): StateRefUpdate | null {
 
   return {
     agent,
+    ...(event.kind === "agent.hook" && isAgyAgentContext(payload.agy) ? { agy: payload.agy } : {}),
     ...(event.kind === "agent.hook" && isClaudeAgentContext(payload.claude) ? { claude: payload.claude } : {}),
     ...(isPiAgentContext(payload.pi) ? { pi: payload.pi } : {}),
     status,
@@ -228,6 +243,7 @@ function readCompletionReason(
 
 function readAgent(payload: Record<string, unknown>): AppServerAgentKind {
   if (readString(payload, "source") === "claude" || readString(payload, "agent") === "claude") return "claude";
+  if (readString(payload, "source") === "agy" || readString(payload, "agent") === "agy") return "agy";
   const commandAgent = readAgentFromCommand(readString(payload, "commandName"));
   if (commandAgent) {
     return commandAgent;

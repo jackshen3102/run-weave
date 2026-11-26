@@ -4,7 +4,7 @@ import { getCompletionSourceForCommand } from "../../terminal/completion/source-
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
 
 const TERMINAL_AGENT_KINDS = new Set<TerminalAgentKind>([
-  "codex", "trae", "traecli", "traex", "pi",
+  "codex", "trae", "traecli", "traex", "pi", "agy",
 ]);
 
 export function resolveAppServerTerminalAgent(options: {

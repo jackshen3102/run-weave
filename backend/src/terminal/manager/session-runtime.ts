@@ -1,3 +1,4 @@
+import type { AgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { invalidateTerminalInput } from "../runtime/input-admission";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
@@ -278,6 +279,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     provider: TerminalAgentKind | null = null,
     pi?: PiAgentContext,
     claude?: ClaudeAgentContext,
+    agy?: AgyAgentContext,
   ): Promise<TerminalSessionRecord | undefined> {
     const session = this.sessions.get(terminalSessionId);
     if (!session) {
@@ -291,7 +293,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
         (session.threadId === nextThreadId ? "codex" : undefined))
       : undefined;
     if (
-      !pi && !claude && session.threadId === nextThreadId &&
+      !pi && !claude && !agy && session.threadId === nextThreadId &&
       session.threadProvider === nextProvider
     ) {
       return session;
@@ -299,6 +301,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
 
     if (pi) session.pi = pi;
     if (claude) session.claude = claude;
+    if (agy) session.agy = agy;
     invalidateTerminalInput(session);
     if (nextThreadId) {
       session.threadId = nextThreadId;
@@ -313,6 +316,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
       provider: nextProvider ?? null,
       ...(pi ? { pi } : {}),
       ...(claude ? { claude } : {}),
+      ...(agy ? { agy } : {}),
     });
     return session;
   }

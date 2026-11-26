@@ -185,8 +185,73 @@ function claudeRow(row: Row, state: NativeSessionState, location: NativeRecordLo
   return result;
 }
 
+function stripAgyPromptTags(text: string): string {
+  const userRequestMatch = /<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/.exec(text);
+  const base = userRequestMatch ? userRequestMatch[1]! : text;
+  return base
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, "")
+    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, "")
+    .trim();
+}
+
+function agyRow(row: Row, state: NativeSessionState, location: NativeRecordLocation): NativeParseResult {
+  if (!state.threadId) {
+    const match = /[\\/]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})[\\/]\.system_generated[\\/]logs[\\/]transcript\.jsonl$/i.exec(location.path);
+    if (match?.[1]) state.threadId = match[1];
+  }
+  const source = string(row.source), type = string(row.type), at = timestamp(row.timestamp);
+  const baseId = string(row.id) || String(location.byteOffset);
+  if (source === "USER_EXPLICIT" && type === "USER_INPUT") {
+    const text = stripAgyPromptTags(string(row.content));
+    if (!text) return { records: [] };
+    observeInput(state, text);
+    return {
+      records: [{
+        id: baseId, nodeId: null, kind: "user", text,
+        callId: null, toolName: null, occurredAt: at, location,
+      }],
+    };
+  }
+  if (source === "MODEL" && type === "PLANNER_RESPONSE") {
+    const records: ParsedNativeRecord[] = [];
+    const text = string(row.content).trim();
+    if (text) {
+      records.push({
+        id: baseId, nodeId: null, kind: "assistant", text,
+        callId: null, toolName: null, occurredAt: at, location,
+      });
+    }
+    if (Array.isArray(row.tool_calls)) {
+      for (const [i, rawCall] of row.tool_calls.entries()) {
+        const call = object(rawCall);
+        const toolName = string(call.name) || null;
+        const callId = string(call.id) || null;
+        records.push({
+          id: `${baseId}:tool:${i}`, nodeId: null, kind: "request",
+          text: nativeText(call.args ?? call.arguments ?? call.input ?? ""),
+          callId, toolName, occurredAt: at, location,
+        });
+      }
+    }
+    return { records };
+  }
+  if (source === "MODEL" && type === "GENERIC") {
+    const text = nativeText(row.content).trim();
+    if (!text) return { records: [] };
+    return {
+      records: [{
+        id: baseId, nodeId: null, kind: "result", text,
+        callId: string(row.call_id) || null, toolName: string(row.name) || null,
+        occurredAt: at, location,
+      }],
+    };
+  }
+  return { records: [] };
+}
+
 export function parseNativeRow(provider: SessionSearchProvider, row: Row, state: NativeSessionState, location: NativeRecordLocation): NativeParseResult {
   if (provider === "codex") return codexRow(row, state, location);
   if (provider === "pi") return piRow(row, state, location);
+  if (provider === "agy") return agyRow(row, state, location);
   return claudeRow(row, state, location);
 }

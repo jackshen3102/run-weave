@@ -41,13 +41,14 @@ export async function runProviderProcess(params: {
     params.request.workingDirectory,
     "last-message.json",
   );
+  const isAgy = params.provider === "agy";
   const child = spawn(
     resolveProviderBinary(params.provider, params.binary, params.env ?? process.env),
-    [...params.args, "--output-last-message", outputFile, "-"],
+    isAgy ? params.args : [...params.args, "--output-last-message", outputFile, "-"],
     {
       cwd: params.request.workingDirectory,
       env: providerEnvironment(params.env ?? process.env, params.request),
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: [isAgy ? "ignore" : "pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
       windowsHide: true,
     },
@@ -61,7 +62,7 @@ export async function runProviderProcess(params: {
   timeout.unref();
   const onAbort = (): void => termination("provider_cancelled");
   params.request.signal?.addEventListener("abort", onAbort, { once: true });
-  child.stdin.end(params.request.prompt);
+  if (!isAgy) child.stdin?.end(params.request.prompt);
 
   try {
     const [exit, captured] = await Promise.all([waitForExit(child), output]);
@@ -75,10 +76,12 @@ export async function runProviderProcess(params: {
         captured.stderr,
       );
     }
-    const parsed = await readProviderOutput(
-      outputFile,
-      params.request.maxOutputBytes,
-    );
+    const parsed = isAgy
+      ? parseAgyStdoutJson(captured.stdout)
+      : await readProviderOutput(
+          outputFile,
+          params.request.maxOutputBytes,
+        );
     return {
       provider: params.provider,
       durationMs: Date.now() - startedAt,
@@ -89,6 +92,18 @@ export async function runProviderProcess(params: {
     clearTimeout(timeout);
     params.request.signal?.removeEventListener("abort", onAbort);
   }
+}
+
+function parseAgyStdoutJson(stdout: string): unknown {
+  const trimmed = stdout.trim();
+  if (!trimmed) throw new Error("provider_output_invalid_json");
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "result" in parsed) {
+    const result = (parsed as { result?: unknown }).result;
+    if (typeof result === "string") return JSON.parse(result) as unknown;
+    if (result && typeof result === "object") return result;
+  }
+  return parsed;
 }
 
 function providerEnvironment(

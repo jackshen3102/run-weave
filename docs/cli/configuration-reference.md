@@ -1101,6 +1101,38 @@ Claude 原生配置目录的外部引用；会话根为其 projects 子目录，
 | 约束              | 按字段类型校验                                                                                  |
 | 显式迁移来源      | CLAUDE_CONFIG_DIR                                                                               |
 
+## Antigravity CLI
+
+配置域：`agents.agy`。
+
+### agents.agy.binary
+
+Antigravity CLI (agy) 可执行文件；仅限程序名或绝对路径，不接受命令参数
+
+| 属性              | 合同                                                         |
+| ----------------- | ------------------------------------------------------------ |
+| 类型              | string；允许 null 恢复默认                                   |
+| 默认              | 使用当前 Backend 的 PATH 查找 agy；不改变现有默认 provider。 |
+| 所属模块          | backend+app-server                                           |
+| 生效              | 所属进程重启                                                 |
+| 敏感 / 远端可修改 | 否 / 否                                                      |
+| 约束              | 按字段类型校验                                               |
+| 显式迁移来源      | AGY_BIN、RUNWEAVE_AGY_BIN                                    |
+
+### agents.agy.configDirectory
+
+Antigravity CLI 原生配置目录的外部引用；会话根为其 brain 子目录，不复制凭据
+
+| 属性              | 合同                                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 类型              | string；允许 null 恢复默认                                                                                                             |
+| 默认              | 显式实例目录优先，否则引用外部 AGY_CONFIG_DIR / RUNWEAVE_AGY_CONFIG_DIR 或操作系统用户目录下 .gemini/antigravity-cli；必须为绝对路径。 |
+| 所属模块          | backend+app-server                                                                                                                     |
+| 生效              | 所属进程重启                                                                                                                           |
+| 敏感 / 远端可修改 | 否 / 否                                                                                                                                |
+| 约束              | 按字段类型校验                                                                                                                         |
+| 显式迁移来源      | AGY_CONFIG_DIR、RUNWEAVE_AGY_CONFIG_DIR                                                                                                |
+
 ## 伴随窗口
 
 配置域：`agents.companion`。

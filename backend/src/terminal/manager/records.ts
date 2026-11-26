@@ -1,3 +1,4 @@
+import type { AgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { CodexConversationContext } from "@runweave/shared/terminal/codex-context";
@@ -55,6 +56,7 @@ export interface TerminalSessionRecord {
   alias: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   preview?: string;
@@ -96,6 +98,7 @@ export interface TerminalPanelRecord {
   role: string | null;
   threadId?: string;
   threadProvider?: TerminalAgentKind;
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   piLastCompletionKey?: string;
@@ -186,6 +189,7 @@ export function buildSessionRecord(
     pinnedAt: persisted.pinnedAt ?? null,
     threadId: persisted.threadId,
     pi: persisted.pi,
+    agy: persisted.agy,
     claude: persisted.claude,
     threadProvider:
       persisted.threadProvider ?? (persisted.threadId ? "codex" : undefined),
@@ -274,6 +278,7 @@ export function toPersistedSession(
     threadId: session.threadId,
     threadProvider: session.threadProvider,
     pi: session.pi,
+    agy: session.agy,
     claude: session.claude,
     preview: session.preview,
     latestReply: session.latestReply,
@@ -318,6 +323,7 @@ export function buildPanelRecord(
     role: persisted.role ?? null,
     threadId: persisted.threadId,
     pi: persisted.pi,
+    agy: persisted.agy,
     claude: persisted.claude,
     piLastCompletionKey: persisted.piLastCompletionKey,
     threadProvider:
@@ -357,6 +363,7 @@ export function toPersistedPanel(
     threadId: panel.threadId,
     threadProvider: panel.threadProvider,
     pi: panel.pi,
+    agy: panel.agy,
     claude: panel.claude,
     piLastCompletionKey: panel.piLastCompletionKey,
     preview: panel.preview,

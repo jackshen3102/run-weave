@@ -11,7 +11,7 @@ import { toRaceError } from "../race/race-service";
 
 const workerSchema = z
   .object({
-    agent: z.enum(["codex", "traex"]),
+    agent: z.enum(["codex", "traex", "agy"]),
     model: z.string().trim().max(200),
   })
   .strict();

@@ -80,7 +80,7 @@ const resizeTerminalPanelSchema = z
 
 const prepareTerminalAgentSchema = z
   .object({
-    agent: z.enum(["codex", "traex", "pi"]),
+    agent: z.enum(["codex", "traex", "pi", "agy"]),
     prompt: z.string().trim().min(1).max(8_000),
     panelId: z.string().trim().min(1).optional(),
     cwd: z.string().trim().min(1).optional(),

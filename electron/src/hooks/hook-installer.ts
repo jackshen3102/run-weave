@@ -14,6 +14,7 @@ import { constants as fsConstants } from "node:fs";
 import { buildLauncherScript } from "./hook-launcher-script";
 import {
   cleanupTraeTomlHookBlock,
+  mergeAgyHooksJson,
   mergeJsonHookEntry,
   pruneSupersededCodexHooks,
   stripLegacyCodexNotifyKey,
@@ -22,6 +23,7 @@ import {
 export { buildLauncherScript } from "./hook-launcher-script";
 export {
   cleanupTraeTomlHookBlock,
+  mergeAgyHooksJson,
   mergeJsonHookEntry,
   pruneSupersededCodexHooks,
   stripLegacyCodexNotifyKey,
@@ -85,6 +87,7 @@ export async function installAllHooks(
   // Claude notifications use native idle confirmation, independently of its
   // still-unavailable state/preparation adapter.
   await installClaudeHooks(context);
+  await installAgyHooks(context);
   await installCodexHooks(context);
   await installTraeHooks(context);
   await installPiExtension(context);
@@ -151,7 +154,7 @@ export async function writeLauncherScript(
       path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
-  for (const asset of ["runweave-hook-claude.cjs", "runweave-hook-completion.cjs", "runweave-hook-tmux.cjs", "runweave-task-supervision.cjs", FEISHU_SCRIPT_BASENAME]) {
+  for (const asset of ["runweave-hook-claude.cjs", "runweave-hook-agy.cjs", "runweave-hook-completion.cjs", "runweave-hook-tmux.cjs", "runweave-task-supervision.cjs", FEISHU_SCRIPT_BASENAME]) {
     const source = await resolveHookAssetPath(context, asset);
     if (await fileExists(source)) {
       const target = path.join(launcherDir, asset);
@@ -191,6 +194,22 @@ export async function installClaudeHooks(
 
   existing.hooks = hooks;
   await writeJsonFile(settingsPath, existing);
+}
+
+export async function installAgyHooks(options: HookInstallerOptions = {}): Promise<void> {
+  const context = resolveHookInstallerContext(options);
+  const agyCliDir = getAgyCliDir(context.homeDir);
+  const agyConfigDir = getAgyConfigDir(context.homeDir);
+  if (!(await directoryExists(agyCliDir)) && !(await directoryExists(agyConfigDir))) return;
+  const hooksPath = path.join(agyConfigDir, "hooks.json");
+  const existingResult = await readJsonObjectFile(hooksPath);
+  if (existingResult.status === "invalid") return;
+  const existing = existingResult.status === "valid" ? existingResult.value : {};
+  const next = mergeAgyHooksJson(existing, launcherCommand(context));
+  if (JSON.stringify(next) === JSON.stringify(existing)) return;
+  await mkdir(agyConfigDir, { recursive: true });
+  await backupFile(hooksPath);
+  await writeJsonFile(hooksPath, next);
 }
 
 export async function installCodexHooks(
@@ -492,11 +511,15 @@ function getTraeDir(homeDir: string): string {
   return path.join(homeDir, ".trae");
 }
 
+const getAgyCliDir = (homeDir: string) => path.join(homeDir, ".gemini", "antigravity-cli");
+const getAgyConfigDir = (homeDir: string) => path.join(homeDir, ".gemini", "config");
+
 async function hasAnyConfigDir(
   context: HookInstallerContext,
 ): Promise<boolean> {
   // Install only for providers already configured on the host.
   if (await directoryExists(getClaudeDir(context.homeDir))) return true;
+  if (await directoryExists(getAgyCliDir(context.homeDir)) || await directoryExists(getAgyConfigDir(context.homeDir))) return true;
   if (await directoryExists(getCodexDir(context.homeDir))) {
     return true;
   }

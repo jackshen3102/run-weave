@@ -1,4 +1,4 @@
-export type AgentModelProvider = "codex" | "traex";
+export type AgentModelProvider = "codex" | "traex" | "agy";
 
 export interface AgentCatalogModel {
   id: string;

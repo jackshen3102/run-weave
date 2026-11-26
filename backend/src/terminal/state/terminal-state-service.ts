@@ -22,6 +22,7 @@ const AGENT_COMMANDS: Record<TerminalAgentKind, ReadonlySet<string>> = {
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),
   traex: new Set(["traex"]),
+  agy: new Set(["agy"]),
 };
 
 interface TerminalStatePublishContext {

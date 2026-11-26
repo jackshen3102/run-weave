@@ -12,6 +12,7 @@ const allowedActiveCommandsBySource: Partial<
   trae: new Set(["trae"]),
   traecli: new Set(["traecli"]),
   traex: new Set(["traex"]),
+  agy: new Set(["agy"]),
 };
 
 const legacyAllowedActiveCommandsBySource: Partial<

@@ -304,7 +304,7 @@ function isMatchingAgent(agent: string, current: string | null): boolean {
 function isPreparationAgent(
   value: string,
 ): value is TerminalAgentPreparationAgent {
-  return value === "codex" || value === "traex" || value === "pi";
+  return value === "codex" || value === "traex" || value === "pi" || value === "agy";
 }
 
 function isValidAgentName(value: string): boolean {

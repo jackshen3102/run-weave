@@ -1,3 +1,4 @@
+import { isAgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import { isClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
 import { recoverCodexToolConversation } from "../../terminal/application/codex-tool-conversation";
@@ -22,10 +23,11 @@ import { processTerminalAgentHook } from "../../terminal/application/agent-hook-
 import type { TerminalQuestionNotifications } from "../../terminal/questions/notifications";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
-const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi"] as const;
+const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi", "agy"] as const;
 
 const agentHookStateSchema = z
   .object({
+    agy: z.custom<import("@runweave/shared/terminal/agy-agent").AgyAgentContext>(isAgyAgentContext).optional(),
     claude: z.custom<import("@runweave/shared/terminal/claude-agent").ClaudeAgentContext>(isClaudeAgentContext).optional(),
     pi: z
       .custom<
@@ -172,10 +174,10 @@ export function createInternalTerminalAgentHookRouter(options: {
           });
         }
       }
-      if (parsed.data.agent === "pi" || parsed.data.agent === "claude") {
+      if (parsed.data.agent === "pi" || parsed.data.agent === "claude" || parsed.data.agent === "agy") {
         const result = await processTerminalAgentHook(options, {
           ...parsed.data,
-          hookEvent: parsed.data.agent === "claude" ? parsed.data.hookEvent : "AgentMetadata",
+          hookEvent: parsed.data.agent === "claude" || parsed.data.agent === "agy" ? parsed.data.hookEvent : "AgentMetadata",
         });
         if (
           result.status !== "recorded" &&

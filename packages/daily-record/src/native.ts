@@ -1,3 +1,4 @@
+import { lstatSync, readFileSync } from "node:fs";
 import { readdir, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -61,6 +62,7 @@ function injected(value: string) {
 async function filesIn(
   root: string,
   receipt: DailySourceReceipt,
+  provider?: DailyProvider,
 ): Promise<string[]> {
   const files: string[] = [];
   async function visit(directory: string) {
@@ -73,8 +75,18 @@ async function filesIn(
         continue;
       }
       if (entry.isDirectory()) await visit(file);
-      else if (entry.isFile() && entry.name.endsWith(".jsonl"))
-        files.push(file);
+      else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+        if (provider === "agy") {
+          if (
+            entry.name === "transcript.jsonl" &&
+            file.endsWith(`${path.sep}.system_generated${path.sep}logs${path.sep}transcript.jsonl`)
+          ) {
+            files.push(file);
+          }
+        } else {
+          files.push(file);
+        }
+      }
     }
   }
   await visit(root);
@@ -102,6 +114,14 @@ export function nativeRoots(home: string, useEnvironment: boolean) {
       "projects",
     ),
     trae: path.join(home, ".trae/cli/sessions"),
+    agy: path.join(
+      useEnvironment
+        ? (process.env.RUNWEAVE_AGY_CONFIG_DIR ??
+          process.env.AGY_CONFIG_DIR ??
+          path.join(home, ".gemini/antigravity-cli"))
+        : path.join(home, ".gemini/antigravity-cli"),
+      "brain",
+    ),
   };
 }
 
@@ -145,7 +165,7 @@ export async function collectNative(options: {
     let files: string[];
     try {
       receipt.root = await realpath(root);
-      files = await filesIn(receipt.root, receipt);
+      files = await filesIn(receipt.root, receipt, provider);
     } catch (error) {
       receipt.status = "unavailable";
       receipt.issues.push(`${root}: ${String(error)}`);
@@ -372,6 +392,48 @@ export async function collectNative(options: {
                 ? payload.items
                 : [])
                 response(object(item), row.timestamp, locator);
+            }
+            if (provider === "agy") {
+              if (!threadId) {
+                const match = /[\\/]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})[\\/]\.system_generated[\\/]logs[\\/]transcript\.jsonl$/i.exec(file);
+                if (match?.[1]) threadId = match[1];
+              }
+              if (!cwd) {
+                const metaPath = path.resolve(path.dirname(file), "../..", ".runweave-agy-meta.json");
+                try {
+                  const metaStat = lstatSync(metaPath);
+                  if (metaStat.isFile() && !metaStat.isSymbolicLink()) {
+                    const meta = object(JSON.parse(readFileSync(metaPath, "utf8")));
+                    if (typeof meta.cwd === "string" && path.isAbsolute(meta.cwd)) cwd = meta.cwd;
+                  }
+                } catch {
+                  // Ignore missing metadata.
+                }
+              }
+              if (row.source === "USER_EXPLICIT" && row.type === "USER_INPUT") {
+                const raw = string(row.content);
+                const userMatch = /<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/.exec(raw);
+                const clean = (userMatch ? userMatch[1]! : raw)
+                  .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, "")
+                  .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, "")
+                  .trim();
+                add(row, "user", clean, row.timestamp, locator, string(row.id));
+              } else if (row.source === "MODEL" && row.type === "PLANNER_RESPONSE") {
+                const content = string(row.content).trim();
+                if (content) add(row, "assistant", content, row.timestamp, locator, string(row.id));
+                if (Array.isArray(row.tool_calls)) {
+                  for (const [i, rawCall] of row.tool_calls.entries()) {
+                    const call = object(rawCall);
+                    const name = string(call.name);
+                    const input = redact(typeof call.args === "string" ? call.args : JSON.stringify(call.args ?? ""));
+                    add(row, "tool", `工具：${name}\n参数：${input}`, row.timestamp, locator, `${string(row.id) || locator.byteOffset}:tool:${i}`);
+                  }
+                }
+              } else if (row.source === "MODEL" && row.type === "GENERIC") {
+                const output = redact(typeof row.content === "string" ? row.content : JSON.stringify(row.content ?? ""));
+                if (output.trim()) add(row, "tool", `结果：\n${output}`, row.timestamp, locator, string(row.id));
+              }
+              return;
             }
             if (provider === "pi" && row.type === "message") {
               const message = object(row.message);

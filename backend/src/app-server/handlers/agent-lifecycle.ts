@@ -1,3 +1,4 @@
+import { isAgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import { isPiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import type { AppServerEventEnvelope } from "@runweave/shared/app-server-events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
@@ -13,6 +14,7 @@ const TERMINAL_AGENTS = new Set<TerminalAgentKind>([
   "traecli",
   "traex",
   "pi",
+  "agy",
 ]);
 
 export async function handleAgentLifecycleEvent(
@@ -79,6 +81,15 @@ export async function handleAgentLifecycleEvent(
           hookEvent: observedStatus === "running" ? "UserPromptSubmit" : "Stop",
           threadId,
           operationId: readAppServerPayloadString(event.payload, "operationId"),
+          ...(isAgyAgentContext((event.payload as Record<string, unknown>)?.agy)
+            ? {
+                agy: (
+                  event.payload as {
+                    agy: import("@runweave/shared/terminal/agy-agent").AgyAgentContext;
+                  }
+                ).agy,
+              }
+            : {}),
           ...(isPiAgentContext((event.payload as Record<string, unknown>)?.pi)
             ? {
                 pi: (

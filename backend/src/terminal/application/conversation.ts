@@ -64,7 +64,7 @@ export async function readTerminalConversation(
     const before = await resolveReadingTarget(manager, sessionId, query.panelId, tmux);
     if (query.expectedThreadId && before.target?.threadId !== query.expectedThreadId) changed();
     const target = before.target;
-    const supported = ["codex", "claude", "pi", "trae", "traecli", "traex"];
+    const supported = ["codex", "claude", "pi", "trae", "traecli", "traex", "agy"];
     if (!target || !supported.includes(target.provider)) return {
       target, availability: (target || (before.agent && !supported.includes(before.agent)))
         ? "provider_unsupported" : "no_thread",

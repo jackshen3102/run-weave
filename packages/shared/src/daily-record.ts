@@ -1,5 +1,5 @@
 /** Local Agent evidence exchanged between the collector, the Skill and renderer. */
-export type DailyProvider = "codex" | "pi" | "claude" | "trae";
+export type DailyProvider = "codex" | "pi" | "claude" | "trae" | "agy";
 
 export interface DailyProject {
   /** git:<canonical common directory>, or unclassified; shared across worktrees. */

@@ -6,7 +6,7 @@
     "name": "Runweave"
   },
   "keywords": ["runweave", "codex", "skills"],
-  "hooks": "./hooks.json",
+  "hooks": "./hooks/hooks.json",
   "skills": "./skills/",
   "interface": {
     "displayName": "Runweave Toolkit",

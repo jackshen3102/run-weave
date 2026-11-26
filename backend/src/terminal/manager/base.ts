@@ -543,6 +543,6 @@ function isTerminalAgentKind(value: string): value is TerminalAgentKind {
     value === "claude" ||
     value === "trae" ||
     value === "traecli" ||
-    value === "pi" || value === "traex"
+    value === "pi" || value === "traex" || value === "agy"
   );
 }

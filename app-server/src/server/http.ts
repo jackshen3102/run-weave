@@ -106,6 +106,7 @@ const eventRequestSchema = z
           "traecli",
           "traex",
           "pi",
+          "agy",
           "unknown",
         ].includes(String(payload.source))
       ) {
@@ -320,7 +321,7 @@ export function createHttpApp(options: {
   app.get("/threads/:threadId/conversation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const query = z.object({
-      provider: z.enum(["claude", "codex", "trae", "traecli", "traex", "pi", "unknown"]).optional(),
+      provider: z.enum(["claude", "codex", "trae", "traecli", "traex", "pi", "agy", "unknown"]).optional(),
     }).strict().safeParse(req.query);
     if (!query.success) {
       res.status(400).json({ code: "INVALID_REQUEST", message: "无效会话来源参数" }); return;

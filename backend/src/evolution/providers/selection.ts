@@ -32,7 +32,7 @@ export function selectEvolutionProviders(params: {
     ];
     return assignments.slice(0, count);
   }
-  if (params.policy === "codex" || params.policy === "trae") {
+  if (params.policy === "codex" || params.policy === "trae" || params.policy === "agy") {
     if (!available.has(params.policy)) {
       throw new Error(`evolution_provider_${params.policy}_unavailable`);
     }

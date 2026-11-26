@@ -2,13 +2,13 @@ import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completi
 import type { AgentHookStateEvent } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 
-const AGENT_SOURCES = new Set(["claude", "codex", "trae", "traecli", "traex", "pi"]);
+const AGENT_SOURCES = new Set(["claude", "codex", "trae", "traecli", "traex", "pi", "agy"]);
 const HOOK_SOURCES = new Set([
   "claude",
   "codex",
   "trae",
   "traecli",
-  "traex", "pi",
+  "traex", "pi", "agy",
   "unknown",
 ]);
 const STOP_EVENTS = new Set(["stop", "subagent_stop", "subagentstop"]);

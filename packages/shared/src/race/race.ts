@@ -40,4 +40,5 @@ export interface RaceAgentCatalogEntry {
 export interface RaceAgentCatalog {
   codex: RaceAgentCatalogEntry;
   traex: RaceAgentCatalogEntry;
+  agy: RaceAgentCatalogEntry;
 }

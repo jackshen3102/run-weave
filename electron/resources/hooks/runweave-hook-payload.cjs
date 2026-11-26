@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { getCommandBasename } = require("./runweave-hook-tmux.cjs");
+const { stripAgyPromptTags } = require("./runweave-hook-agy.cjs");
 
 const STOP_EVENTS = new Set(["stop"]);
 const COMPLETION_REASONS = new Set([
@@ -103,7 +104,7 @@ function readTranscriptReply(payload) {
   if (Array.isArray(payload?.transcript))
     return lastAssistantReply(payload.transcript);
   const sessionId = readThreadId(payload);
-  const candidates = [payload?.transcript_path];
+  const candidates = [payload?.transcript_path, payload?.transcriptPath];
   if (sessionId && /^[A-Za-z0-9_-]+$/.test(sessionId)) {
     candidates.push(
       path.join(
@@ -149,6 +150,14 @@ function readTranscriptReply(payload) {
 function lastAssistantReply(records) {
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index];
+    if (record?.source === "USER_EXPLICIT" && record?.type === "USER_INPUT") {
+      return null;
+    }
+    if (record?.source === "MODEL" && record?.type === "PLANNER_RESPONSE") {
+      const normalized = normalizeSummaryText(record.content);
+      if (normalized) return normalized;
+      continue;
+    }
     if (record?.type === "event_msg") {
       if (record.payload?.type === "task_complete") {
         const completed = normalizeSummaryText(
@@ -180,28 +189,27 @@ function lastAssistantReply(records) {
 }
 
 function extractUserPrompt(payload) {
-  for (const key of [
-    "prompt",
-    "query",
-    "user_prompt",
-    "userPrompt",
-    "message",
-  ]) {
-    const normalized = normalizeSummaryText(payload?.[key]);
+  for (const key of ["prompt", "query", "user_prompt", "userPrompt", "lastUserInput", "last_user_input", "message"]) {
+    const raw = payload?.[key];
+    const cleaned = typeof raw === "string" && (key === "lastUserInput" || key === "last_user_input")
+      ? stripAgyPromptTags(raw)
+      : raw;
+    const normalized = normalizeSummaryText(cleaned);
     if (normalized) return normalized.slice(0, 8000);
   }
   return null;
 }
 
 function extractToolHook(payload) {
+  const toolCall = payload?.toolCall && typeof payload.toolCall === "object" ? payload.toolCall : null;
   const toolUseId =
-    payload?.tool_use_id ?? payload?.toolUseId ?? payload?.tool_call_id;
-  const toolName = payload?.tool_name ?? payload?.toolName ?? payload?.name;
+    payload?.tool_use_id ?? payload?.toolUseId ?? payload?.tool_call_id ?? toolCall?.id;
+  const toolName = payload?.tool_name ?? payload?.toolName ?? payload?.name ?? toolCall?.name;
   const toolResult = payload?.tool_response ?? payload?.tool_result ?? payload?.output;
   // Read provider metadata only. Text output (including JSON-looking text) is
   // untrusted tool content and cannot establish execution success or failure.
   const exitCode = payload?.exit_code ?? toolResult?.exit_code;
-  const isError = payload?.is_error ?? toolResult?.is_error;
+  const isError = payload?.is_error ?? toolResult?.is_error ?? (typeof payload?.error === "string" && payload.error.length > 0 ? true : undefined);
   const toolExecution = {
     ...(Number.isSafeInteger(exitCode) ? { exitCode } : {}),
     ...(typeof isError === "boolean" ? { isError } : {}),
@@ -213,7 +221,7 @@ function extractToolHook(payload) {
         : null,
     toolName:
       typeof toolName === "string" && toolName.trim() ? toolName.trim() : null,
-    toolInput: payload?.tool_input ?? payload?.input,
+    toolInput: payload?.tool_input ?? payload?.input ?? toolCall?.args,
     toolResult,
     ...(Object.keys(toolExecution).length ? { toolExecution } : {}),
   };
@@ -278,6 +286,8 @@ function readThreadId(payload) {
   const raw =
     payload.threadId ??
     payload.thread_id ??
+    payload.conversationId ??
+    payload.conversation_id ??
     payload.sessionId ??
     payload.session_id;
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
@@ -299,7 +309,9 @@ function normalizeSource(raw) {
     source === "codex" ||
     source === "trae" ||
     source === "traecli" ||
-    source === "pi" || source === "traex"
+    source === "pi" ||
+    source === "traex" ||
+    source === "agy"
   ) {
     return source;
   }
@@ -343,7 +355,9 @@ function toAgentHookStateEvent(normalizedEvent) {
   }
   if (
     normalizedEvent === "userpromptsubmit" ||
-    normalizedEvent === "user_prompt_submit"
+    normalizedEvent === "user_prompt_submit" ||
+    normalizedEvent === "preinvocation" ||
+    normalizedEvent === "pre_invocation"
   ) {
     return "UserPromptSubmit";
   }
@@ -375,6 +389,7 @@ function buildCompletionHookBody({
     source,
     ...(payload.feishuNotificationOnly ? { feishuNotificationOnly: true } : {}),
     ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
+    ...(source === "agy" && payload.agy ? { agy: payload.agy } : {}),
     completionReason,
     commandName: commandName || null,
     rawHookEvent: String(rawEvent || "Stop"),
@@ -429,6 +444,7 @@ function buildAppServerBaseEvent({
     payload: {
       source,
       ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
+    ...(source === "agy" && payload.agy ? { agy: payload.agy } : {}),
       ...(source === "claude" && payload.claude ? { claude: payload.claude } : {}),
       threadId,
       rawHookEvent: String(rawEvent || "Unknown"),

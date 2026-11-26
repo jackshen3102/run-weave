@@ -1,3 +1,4 @@
+import type { AgyAgentContext } from "../../terminal/agy-agent";
 import type { ClaudeAgentContext } from "../../terminal/claude-agent";
 import type { PiAgentContext } from "../pi-agent";
 import type { DeviceStatusSnapshot } from "../../monitoring/device-status";
@@ -248,6 +249,7 @@ export type AgentHookStateEvent =
   | "AgentMetadata";
 
 export interface AgentHookStateRequest {
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   activityEventId?: string;

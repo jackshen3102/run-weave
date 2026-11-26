@@ -1,3 +1,4 @@
+import type { AgyAgentContext } from "../terminal/agy-agent";
 import type { ClaudeAgentContext } from "../terminal/claude-agent";
 import type { PiAgentContext } from "../terminal/pi-agent";
 export { formatThreadPreviewText } from "./thread-preview";
@@ -70,7 +71,9 @@ export type AppServerHookSource =
   | "codex"
   | "trae"
   | "traecli"
-  | "traex" | "pi"
+  | "traex"
+  | "pi"
+  | "agy"
   | "unknown";
 
 export type AppServerCompletionReason =
@@ -84,7 +87,9 @@ export type AppServerAgentKind =
   | "codex"
   | "trae"
   | "traecli"
-  | "traex" | "pi"
+  | "traex"
+  | "pi"
+  | "agy"
   | "unknown";
 
 export type AppServerAgentRunStatus =
@@ -128,6 +133,7 @@ export interface AppServerThreadDetail {
 }
 
 export interface AppServerThreadRef {
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   threadId: string;

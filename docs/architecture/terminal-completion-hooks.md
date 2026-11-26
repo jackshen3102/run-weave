@@ -58,8 +58,8 @@ App Server 的地址与认证信息由 Backend 在发现、校验并建立连接
 Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI 配置目录时安装 Runweave hook：
 
 - Claude：安装器迁移 `~/.claude/settings.json` 中的受管 Hook，飞书通知使用原生空闲确认路径。
-- Codex：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.codex/hooks.json` 只保留为历史全局配置的兼容/清理层
-- Trae/Coco：Toolkit 插件根目录 `hooks.json` 是主入口；`~/.trae/traecli.toml` 只保留为历史全局配置的兼容/清理层
+- Codex：Toolkit 插件 `hooks/hooks.json` 是主入口；`~/.codex/hooks.json` 只保留为历史全局配置的兼容/清理层
+- Trae/Coco：Toolkit 插件 `hooks/hooks.json` 是主入口；`~/.trae/traecli.toml` 只保留为历史全局配置的兼容/清理层
 
 安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
 

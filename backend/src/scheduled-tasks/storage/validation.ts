@@ -8,7 +8,7 @@ import { validateSchedule } from "../schedule";
 
 const text = z.string().min(1);
 const timestamp = z.string().datetime();
-const provider = z.enum(["codex", "trae", "pi"]);
+const provider = z.enum(["codex", "trae", "pi", "agy"]);
 const schedule = z
   .discriminatedUnion("kind", [
     z.object({ kind: z.literal("daily"), timezone: text, localTime: text }),

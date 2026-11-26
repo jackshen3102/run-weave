@@ -14,7 +14,7 @@ struct SessionSearchView: View {
         }.accessibilityIdentifier("session-search-project")
         Picker("Agent", selection: $model.provider) {
           Text("全部 Agent").tag("")
-          Text("Codex").tag("codex"); Text("Pi").tag("pi"); Text("Claude").tag("claude")
+          Text("Codex").tag("codex"); Text("Pi").tag("pi"); Text("Claude").tag("claude"); Text("AGY").tag("agy")
         }
         Picker("内容", selection: $model.level) {
           Text("对话").tag("chat"); Text("对话与操作").tag("work"); Text("含工具输出").tag("full")

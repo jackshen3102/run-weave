@@ -56,6 +56,38 @@
     "reason": "Reference the native Claude-owned configuration directory only when the instance has no explicit directory; never read or copy credentials."
   },
   {
+    "file": "packages/config-node/src/agy.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_AGY_BIN",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Reference the native agy binary override when the instance has no explicit binary configured."
+  },
+  {
+    "file": "packages/config-node/src/agy.ts",
+    "kind": "environment",
+    "expression": "env.AGY_BIN",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Reference the native agy binary override when the instance has no explicit binary configured."
+  },
+  {
+    "file": "packages/config-node/src/agy.ts",
+    "kind": "environment",
+    "expression": "env.RUNWEAVE_AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Reference the native agy-owned configuration directory only when the instance has no explicit directory; never read or copy credentials."
+  },
+  {
+    "file": "packages/config-node/src/agy.ts",
+    "kind": "environment",
+    "expression": "env.AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Reference the native agy-owned configuration directory only when the instance has no explicit directory; never read or copy credentials."
+  },
+  {
     "file": "electron/src/browser/automation/simulators.ts",
     "kind": "file-io",
     "expression": "readFile(join(base, \"agent-device\", \"observations\", `${udid}.json`))",
@@ -13871,5 +13903,125 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "app-server/src/agy/session-reader.ts",
+    "kind": "file-io",
+    "expression": "readFile(metaPath)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read Runweave-written session workspace metadata alongside agy native transcript to verify cwd attribution."
+  },
+  {
+    "file": "backend/src/scheduled-tasks/providers/agy.ts",
+    "kind": "file-io",
+    "expression": "writeFile(schemaPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Write temporary JSON schema file for agy --json-schema structured output enforcement during scheduled task execution."
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "environment",
+    "expression": "process.env.AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以构建可重建搜索索引，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "backend/src/session-search/scanner.ts",
+    "kind": "file-io",
+    "expression": "readFile(metaPath)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read Runweave-written session workspace metadata alongside agy native transcript to resolve cwd/repositoryId."
+  },
+  {
+    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(brainDirectory, threadId, \".runweave-agy-meta.json\"))",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read agy session metadata to determine active model for live terminal settings readback."
+  },
+  {
+    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(brainDirectory, threadId, \".system_generated\", \"logs\", \"transcript.jsonl\"))",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read agy native transcript to determine active model for live terminal settings readback."
+  },
+  {
+    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "kind": "file-io",
+    "expression": "readFile(path.join(configDirectory, \"settings.json\"))",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read agy native settings.json as fallback for model/effort in live terminal settings."
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-agy.cjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(tmpPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically persist session workspace metadata (.runweave-agy-meta.json) alongside agy transcript."
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-agy.cjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(tmpPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically persist session workspace metadata (.runweave-agy-meta.json) alongside agy transcript."
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-agy.cjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(tmpPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically persist session workspace metadata (.runweave-agy-meta.json) alongside agy transcript."
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-agy.cjs",
+    "kind": "file-io",
+    "expression": "fs.writeFileSync(tmpPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Atomically persist session workspace metadata (.runweave-agy-meta.json) alongside agy transcript."
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "environment",
+    "expression": "process.env.AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以采集日报素材，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_AGY_CONFIG_DIR",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "遵循来源 Agent 自有目录合同，仅定位只读原生会话记录以采集日报素材，不建立 Runweave 配置副本。"
+  },
+  {
+    "file": "packages/daily-record/src/native.ts",
+    "kind": "file-io",
+    "expression": "readFileSync(metaPath)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Read Runweave-written session workspace metadata alongside agy native transcript to resolve cwd."
   }
 ]

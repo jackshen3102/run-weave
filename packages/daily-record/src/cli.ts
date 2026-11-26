@@ -72,8 +72,8 @@ async function main() {
     dayFormatter(timeZone);
     const providers = values.providers?.split(",") as DailyProvider[] | undefined;
     if (providers && (!providers.length || new Set(providers).size !== providers.length ||
-      providers.some((v) => !["codex", "pi", "claude", "trae"].includes(v))))
-      throw new Error("providers 须为不重复的 codex,pi,claude,trae 列表");
+      providers.some((v) => !["codex", "pi", "claude", "trae", "agy"].includes(v))))
+      throw new Error("providers 须为不重复的 codex,pi,claude,trae,agy 列表");
     const { materials, sources, index } = await collectNative({
       from,
       to,

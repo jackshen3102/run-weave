@@ -1,7 +1,7 @@
 import type { TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
 
 const AGENT_COMMAND_PATTERN =
-  /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex|pi)(?:$|\s|-)/i;
+  /(?:^|\/)(codex|claude|opencode|coco|trae|traecli|traex|pi|agy)(?:$|\s|-)/i;
 const SHELL_COMMAND_PATTERN = /(?:^|\/)(zsh|bash|fish|sh)$/i;
 export const AGENT_PROMPT_PATTERN = /(^|\n)\s*[›>]\s+|\bgpt-[\w.-]+.*[~/]/i;
 const SHELL_PROMPT_PATTERN = /(?:^|\n).*(?:[%$#]\s*)$/;

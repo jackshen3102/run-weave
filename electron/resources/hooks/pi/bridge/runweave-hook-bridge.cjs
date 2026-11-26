@@ -7,6 +7,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { readClaudeContext } = require("./runweave-hook-claude.cjs");
+const {
+  readAgyContext,
+  writeAgySessionMeta,
+  writeAgyHookStdout,
+  isAgyCompletionEligible,
+} = require("./runweave-hook-agy.cjs");
 const { postAgentHook, postCompletionHook } = require("./runweave-hook-completion.cjs");
 const {
   STOP_EVENTS,
@@ -49,24 +55,11 @@ function redactEndpoint(endpoint) {
 
 function appendDebugLog(message, details) {
   const logPath = process.env.RUNWEAVE_HOOK_DEBUG_LOG;
-  if (!logPath) {
-    return;
-  }
+  if (!logPath) return;
   try {
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(
-      logPath,
-      `${JSON.stringify({
-        at: new Date().toISOString(),
-        source: "hook-bridge",
-        message,
-        details,
-      })}\n`,
-      "utf8",
-    );
-  } catch {
-    // Ignore diagnostic logging failures.
-  }
+    fs.appendFileSync(logPath, `${JSON.stringify({ at: new Date().toISOString(), source: "hook-bridge", message, details })}\n`, "utf8");
+  } catch { /* Ignore diagnostic logging failures. */ }
 }
 
 function notifyDesktop(source, options = {}) {
@@ -76,7 +69,7 @@ function notifyDesktop(source, options = {}) {
   if (process.platform !== "darwin") {
     return;
   }
-  const labels = { claude: "Claude", codex: "Codex", trae: "Trae" };
+  const labels = { claude: "Claude", codex: "Codex", trae: "Trae", agy: "AGY" };
   const name = source === "pi" ? "Pi" : labels[source] || "AI";
   const notificationType = options.notificationType || null;
   // traex attention notifications ask the user to come back and choose/confirm,
@@ -139,260 +132,299 @@ function readStdin() {
   return new Promise((resolve) => {
     let data = "";
     process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on("end", () => {
-      resolve(data);
-    });
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => resolve(data));
     process.stdin.resume();
   });
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const payload = parsePayload(await readStdin());
-  const rawEvent = readHookEvent(payload);
-  const normalizedEvent = normalizeEventName(rawEvent);
-  // Subagents inherit the parent pane/thread identity, but do not end its turn.
-  if (normalizedEvent === "subagent_stop" || normalizedEvent === "subagentstop") {
-    appendDebugLog("hook bridge skipped subagent stop", {
-      threadId: readThreadId(payload),
-    });
-    return;
-  }
-  const expectedTmuxSession = process.env.RUNWEAVE_TMUX_SESSION_NAME;
-  const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv(spawnSync);
-  const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
-  if (expectedTmuxSession && tmuxPaneContext.sessionName && tmuxPaneContext.sessionName !== expectedTmuxSession) {
-    appendDebugLog("hook bridge skipped foreign tmux session", {
-      expectedSession: expectedTmuxSession,
-      session: tmuxPaneContext.sessionName,
-    });
-    return;
-  }
-  if (tmuxPaneContext.panelId) {
-    process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
-  } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
-    delete process.env.RUNWEAVE_TERMINAL_PANEL_ID;
-  }
-  const commandName = args.commandName || tmuxPaneContext.commandName;
-  const normalizedCommandName = process.platform === "win32"
-    ? String(commandName || "").trim().replace(/\\/g, "/")
-      .split("/").at(-1).toLowerCase().replace(/\.(exe|cmd|bat)$/i, "")
-    : String(commandName || "").toLowerCase();
   let source = normalizeSource(args.source);
-  if (source === "unknown") {
-    if (["codex", "claude", "trae", "traecli", "traex"].includes(normalizedCommandName)) {
-      source = normalizedCommandName;
+  let normalizedEvent = "unknown";
+  try {
+    const payload = parsePayload(await readStdin());
+    const rawEvent = readHookEvent(payload);
+    normalizedEvent = normalizeEventName(rawEvent);
+    // Subagents inherit the parent pane/thread identity, but do not end its turn.
+    if (normalizedEvent === "subagent_stop" || normalizedEvent === "subagentstop") {
+      appendDebugLog("hook bridge skipped subagent stop", {
+        threadId: readThreadId(payload),
+      });
+      return;
     }
-  }
-  const completionReason = normalizeReason(args.reason);
-  const threadId = readThreadId(payload);
-  payload.runweaveHookEventId = crypto.randomUUID();
-  if (source === "claude") payload.claude = readClaudeContext(payload, payload.runweaveHookEventId);
-  const stateHookEvent = source === "claude"
-    ? (payload.claude ? toAgentHookStateEvent(normalizedEvent) || "AgentMetadata" : null)
-    : ["pi", "codex", "trae", "traecli", "traex"].includes(source)
-      ? toAgentHookStateEvent(normalizedEvent)
-      : null;
-  // Compaction continues the turn; child CLIs do not own the parent terminal.
-  if (
-    source === "codex" &&
-    ((stateHookEvent === "SessionStart" && payload.source === "compact") ||
-      isNestedCodexProcess(spawnSync))
-  ) {
-    appendDebugLog("hook bridge skipped codex hook", {
-      threadId,
-      reason: payload.source === "compact" ? "compaction" : "nested_codex",
-    });
-    return;
-  }
-  const toolHook = extractToolHook(payload);
-  // Preserve Traex's existing completion/desktop attention behavior. Other
-  // structured attention events below send only Feishu, without a completion.
-  const notificationType =
-    normalizedEvent === "notification" ? readNotificationType(payload) : null;
-  const isTraexAttentionNotification =
-    (source === "trae" || source === "traex" || source === "traecli") &&
-    (notificationType === "permission_prompt" ||
-      notificationType === "idle_prompt");
-  const effectiveCompletionReason = isTraexAttentionNotification
-    ? "notify"
-    : completionReason;
-  // Claude Stop is only a candidate; its notification adapter waits for native
-  // idle confirmation and publishes through the Backend's canonical feed.
-  const shouldRecordCompletion = source !== "claude" && (source !== "pi" || payload.pi?.outcome === "completed") && (
-    isTraexAttentionNotification ||
-    effectiveCompletionReason !== "hook_stop" ||
-    STOP_EVENTS.has(normalizedEvent));
-
-  // The managed TUI owns the primary/side relationship. Never let child or
-  // unclassified events enter completion, Activity, notification or supervision paths.
-  if (source === "codex" && process.env.RUNWEAVE_CODEX_CONTEXT_PATH) {
-    let context;
-    try { context = JSON.parse(fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH, "utf8")); }
-    catch { return; }
-    const sameLaunch = context.generation === process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION &&
-      context.operationId === process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID;
-    const initialPrimary = normalizedEvent === "sessionstart" && payload.source === "startup" && context.revision === 0;
-    if (!sameLaunch || context.closed || (!initialPrimary && context.primaryThreadId !== threadId)) return;
-  }
-
-  const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
-  const stateEndpoint = deriveAgentHookEndpoint(endpoint);
-  const completionEndpoint =
-    process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT ||
-    deriveCompletionEndpoint(endpoint);
-  const token = process.env.RUNWEAVE_HOOK_TOKEN;
-  const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;
-  const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
-  const tmuxPaneId = process.env.TMUX_PANE || null;
-  appendDebugLog("hook bridge invoked", {
-    rawEvent: String(rawEvent || "Unknown"),
-    normalizedEvent,
-    source,
-    terminalSessionId: terminalSessionId || null,
-    terminalPanelId,
-    tmuxPaneId,
-    tmuxPaneContext,
-    projectId: process.env.RUNWEAVE_PROJECT_ID || null,
-    hasToken: Boolean(token),
-    endpoint: redactEndpoint(endpoint),
-    stateEndpoint: redactEndpoint(stateEndpoint),
-    completionEndpoint: redactEndpoint(completionEndpoint),
-    threadId,
-    stateHookEvent,
-    commandName,
-    notificationType,
-    isTraexAttentionNotification,
-    shouldRecordCompletion,
-    tmuxEnvRefresh,
-  });
-  // Only notify / report for completions inside a Runweave terminal. The hook
-  // can be installed through AI CLI hook config or plugins, so without
-  // this gate every AI CLI stop in any external terminal would trigger desktop
-  // and Feishu notifications.
-  if (!token || !terminalSessionId) {
-    appendDebugLog("hook bridge skipped missing env", {
-      rawEvent: String(rawEvent || "Unknown"),
-      hasToken: Boolean(token),
-      hasTerminalSessionId: Boolean(terminalSessionId),
-      endpoint: redactEndpoint(endpoint),
-      completionEndpoint: redactEndpoint(completionEndpoint),
-    });
-    return;
-  }
-
-  if (normalizedEvent === "stop") {
-    const summary = extractCompletionSummary(payload);
-    if (summary) payload.last_assistant_message = summary;
-  }
-  const appServerClient = await discoverAppServer();
-  if (!appServerClient) {
-    appendDebugLog("hook bridge app-server unavailable", {
-      terminalSessionId,
-    });
-  } else {
-    const result = await postAppServerEvent(
-      appServerClient,
-      buildAppServerBaseEvent({
-        kind: "agent.hook",
-        payload,
-        rawEvent,
-        normalizedEvent,
-        stateHookEvent,
-        source,
-        terminalSessionId,
+    const expectedTmuxSession = process.env.RUNWEAVE_TMUX_SESSION_NAME;
+    const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv(spawnSync);
+    const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
+    if (expectedTmuxSession && tmuxPaneContext.sessionName && tmuxPaneContext.sessionName !== expectedTmuxSession) {
+      appendDebugLog("hook bridge skipped foreign tmux session", {
+        expectedSession: expectedTmuxSession,
+        session: tmuxPaneContext.sessionName,
+      });
+      return;
+    }
+    if (tmuxPaneContext.panelId) {
+      process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
+    } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
+      delete process.env.RUNWEAVE_TERMINAL_PANEL_ID;
+    }
+    const commandName = args.commandName || tmuxPaneContext.commandName;
+    const normalizedCommandName = process.platform === "win32"
+      ? String(commandName || "").trim().replace(/\\/g, "/")
+        .split("/").at(-1).toLowerCase().replace(/\.(exe|cmd|bat)$/i, "")
+      : String(commandName || "").toLowerCase();
+    if (source === "unknown") {
+      if (["codex", "claude", "trae", "traecli", "traex", "agy"].includes(normalizedCommandName)) {
+        source = normalizedCommandName;
+      }
+    }
+    const completionReason = normalizeReason(args.reason);
+    const threadId = readThreadId(payload);
+    payload.runweaveHookEventId = crypto.randomUUID();
+    if (source === "claude") payload.claude = readClaudeContext(payload, payload.runweaveHookEventId);
+    if (source === "agy") {
+      payload.agy = readAgyContext(payload, payload.runweaveHookEventId);
+      writeAgySessionMeta(payload);
+    }
+    const stateHookEvent = source === "claude"
+      ? (payload.claude ? toAgentHookStateEvent(normalizedEvent) || "AgentMetadata" : null)
+      : source === "agy"
+        ? (payload.agy ? toAgentHookStateEvent(normalizedEvent) || "AgentMetadata" : null)
+        : ["pi", "codex", "trae", "traecli", "traex"].includes(source)
+          ? toAgentHookStateEvent(normalizedEvent)
+          : null;
+    // Compaction continues the turn; child CLIs do not own the parent terminal.
+    if (
+      source === "codex" &&
+      ((stateHookEvent === "SessionStart" && payload.source === "compact") ||
+        isNestedCodexProcess(spawnSync))
+    ) {
+      appendDebugLog("hook bridge skipped codex hook", {
         threadId,
-        commandName,
-        dedupePrefix: "hook",
-      }),
-    );
-    appendDebugLog("hook bridge posted app-server hook event", {
-      terminalSessionId,
-      ...result,
+        reason: payload.source === "compact" ? "compaction" : "nested_codex",
+      });
+      return;
+    }
+    const toolHook = extractToolHook(payload);
+    // Preserve Traex's existing completion/desktop attention behavior. Other
+    // structured attention events below send only Feishu, without a completion.
+    const notificationType =
+      normalizedEvent === "notification" ? readNotificationType(payload) : null;
+    const isTraexAttentionNotification =
+      (source === "trae" || source === "traex" || source === "traecli") &&
+      (notificationType === "permission_prompt" ||
+        notificationType === "idle_prompt");
+    const effectiveCompletionReason = isTraexAttentionNotification
+      ? "notify"
+      : completionReason;
+    // Claude Stop is only a candidate; its notification adapter waits for native
+    // idle confirmation and publishes through the Backend's canonical feed.
+    const agyCompletionEligible =
+      source !== "agy" || isAgyCompletionEligible(payload, normalizedEvent);
+    const shouldRecordCompletion =
+      source !== "claude" &&
+      agyCompletionEligible &&
+      (source !== "pi" || payload.pi?.outcome === "completed") &&
+      (isTraexAttentionNotification ||
+        effectiveCompletionReason !== "hook_stop" ||
+        STOP_EVENTS.has(normalizedEvent));
+
+    // The managed TUI owns the primary/side relationship. Never let child or
+    // unclassified events enter completion, Activity, notification or supervision paths.
+    if (source === "codex" && process.env.RUNWEAVE_CODEX_CONTEXT_PATH) {
+      let context;
+      try { context = JSON.parse(fs.readFileSync(process.env.RUNWEAVE_CODEX_CONTEXT_PATH, "utf8")); }
+      catch { return; }
+      const sameLaunch = context.generation === process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION &&
+        context.operationId === process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID;
+      const initialPrimary = normalizedEvent === "sessionstart" && payload.source === "startup" && context.revision === 0;
+      if (!sameLaunch || context.closed || (!initialPrimary && context.primaryThreadId !== threadId)) return;
+    }
+
+    const endpoint = process.env.RUNWEAVE_HOOK_ENDPOINT;
+    const stateEndpoint = deriveAgentHookEndpoint(endpoint);
+    const completionEndpoint =
+      process.env.RUNWEAVE_COMPLETION_HOOK_ENDPOINT ||
+      deriveCompletionEndpoint(endpoint);
+    const token = process.env.RUNWEAVE_HOOK_TOKEN;
+    const terminalSessionId = process.env.RUNWEAVE_TERMINAL_SESSION_ID;
+    const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
+    const tmuxPaneId = process.env.TMUX_PANE || null;
+    appendDebugLog("hook bridge invoked", {
+      rawEvent: String(rawEvent || "Unknown"),
+      normalizedEvent,
+      source,
+      terminalSessionId: terminalSessionId || null,
+      terminalPanelId,
+      tmuxPaneId,
+      tmuxPaneContext,
+      projectId: process.env.RUNWEAVE_PROJECT_ID || null,
+      hasToken: Boolean(token),
+      endpoint: redactEndpoint(endpoint),
+      stateEndpoint: redactEndpoint(stateEndpoint),
+      completionEndpoint: redactEndpoint(completionEndpoint),
+      threadId,
+      stateHookEvent,
+      commandName,
+      notificationType,
+      isTraexAttentionNotification,
+      shouldRecordCompletion,
+      tmuxEnvRefresh,
     });
-    if (!result.ok) {
-      appendDebugLog("hook bridge app-server post failed", {
+    // Only notify / report for completions inside a Runweave terminal. The hook
+    // can be installed through AI CLI hook config or plugins, so without
+    // this gate every AI CLI stop in any external terminal would trigger desktop
+    // and Feishu notifications.
+    if (!token || !terminalSessionId) {
+      appendDebugLog("hook bridge skipped missing env", {
+        rawEvent: String(rawEvent || "Unknown"),
+        hasToken: Boolean(token),
+        hasTerminalSessionId: Boolean(terminalSessionId),
+        endpoint: redactEndpoint(endpoint),
+        completionEndpoint: redactEndpoint(completionEndpoint),
+      });
+      return;
+    }
+
+    if (normalizedEvent === "stop") {
+      const summary = extractCompletionSummary(payload);
+      if (summary) payload.last_assistant_message = summary;
+    }
+    const appServerClient = await discoverAppServer();
+    if (!appServerClient) {
+      appendDebugLog("hook bridge app-server unavailable", {
         terminalSessionId,
-        kind: "agent.hook",
+      });
+    } else {
+      const result = await postAppServerEvent(
+        appServerClient,
+        buildAppServerBaseEvent({
+          kind: "agent.hook",
+          payload,
+          rawEvent,
+          normalizedEvent,
+          stateHookEvent,
+          source,
+          terminalSessionId,
+          threadId,
+          commandName,
+          dedupePrefix: "hook",
+        }),
+      );
+      appendDebugLog("hook bridge posted app-server hook event", { terminalSessionId, ...result });
+      if (!result.ok) appendDebugLog("hook bridge app-server post failed", { terminalSessionId, kind: "agent.hook", ...result });
+    }
+
+    if (stateHookEvent && stateEndpoint) {
+      const activityEventId = payload.runweaveHookEventId;
+      const result = await postAgentHook({
+        endpoint: stateEndpoint,
+        token,
+        terminalSessionId,
+        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
+        agent: source,
+        hookEvent: stateHookEvent,
+        threadId,
+        turnId: source === "codex" && normalizedEvent === "pretooluse"
+          && toolHook?.toolName === "request_user_input" && toolHook.toolUseId
+          && typeof payload.turn_id === "string" && payload.turn_id.length <= 256
+          ? payload.turn_id : undefined,
+        panelId: terminalPanelId,
+        tmuxPaneId,
+        commandName,
+        rawHookEvent: rawEvent,
+        sessionSource:
+          payload.source === "startup" || payload.source === "resume"
+            ? payload.source
+            : undefined,
+        query:
+          stateHookEvent === "UserPromptSubmit"
+            ? extractUserPrompt(payload)
+            : undefined,
+        assistantResponse:
+          normalizedEvent === "stop"
+            ? extractCompletionSummary(payload)
+            : undefined,
+        toolHook:
+          stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted"
+            ? toolHook
+            : undefined,
+        activityEventId,
+        ...(source === "pi" ? { pi: payload.pi } : {}),
+        ...(source === "claude" ? { claude: payload.claude } : {}),
+        ...(source === "agy" ? { agy: payload.agy } : {}),
+        operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
+      });
+      appendDebugLog("hook bridge posted agent hook", {
+        terminalSessionId,
+        hookEvent: stateHookEvent,
+        endpoint: redactEndpoint(stateEndpoint),
         ...result,
       });
     }
-  }
 
-  if (stateHookEvent && stateEndpoint) {
-    const activityEventId = payload.runweaveHookEventId;
-    const result = await postAgentHook({
-      endpoint: stateEndpoint,
-      token,
-      terminalSessionId,
-      projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
-      agent: source,
-      hookEvent: stateHookEvent,
-      threadId,
-      turnId: source === "codex" && normalizedEvent === "pretooluse"
-        && toolHook?.toolName === "request_user_input" && toolHook.toolUseId
-        && typeof payload.turn_id === "string" && payload.turn_id.length <= 256
-        ? payload.turn_id : undefined,
-      panelId: terminalPanelId,
-      tmuxPaneId,
-      commandName,
-      rawHookEvent: rawEvent,
-      sessionSource:
-        payload.source === "startup" || payload.source === "resume"
-          ? payload.source
-          : undefined,
-      query:
-        stateHookEvent === "UserPromptSubmit"
-          ? extractUserPrompt(payload)
-          : undefined,
-      assistantResponse:
-        normalizedEvent === "stop"
-          ? extractCompletionSummary(payload)
-          : undefined,
-      toolHook:
-        stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted"
-          ? toolHook
-          : undefined,
-      activityEventId,
-      ...(source === "pi" ? { pi: payload.pi } : {}),
-      ...(source === "claude" ? { claude: payload.claude } : {}),
-      operationId: process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID || null,
-    });
-    appendDebugLog("hook bridge posted agent hook", {
-      terminalSessionId,
-      hookEvent: stateHookEvent,
-      endpoint: redactEndpoint(stateEndpoint),
-      ...result,
-    });
-  }
-
-  if (source === "claude") {
-    const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
-      payload, source, completionReason, rawEvent, commandName });
-    if (result.accepted) notifyFeishu({ ...payload, hook_event_name: "Stop",
-      last_assistant_message: result.summary || "任务需要你确认或处理，请回到对应终端。",
-      feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
-    return;
-  }
-
-  if (isFeishuAttentionHook(payload, source) && !shouldRecordCompletion && completionEndpoint) {
-    const attentionPayload = { ...payload, feishuNotificationOnly: true, last_assistant_message: "任务需要你确认或处理，请回到对应终端。" };
-    const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
-      payload: attentionPayload, source, completionReason: "notify", rawEvent, commandName });
-    if (result.accepted) {
-      notifyFeishu({ ...attentionPayload, hook_event_name: "Stop", feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+    if (source === "claude") {
+      const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
+        payload, source, completionReason, rawEvent, commandName });
+      if (result.accepted) notifyFeishu({ ...payload, hook_event_name: "Stop",
+        last_assistant_message: result.summary || "任务需要你确认或处理，请回到对应终端。",
+        feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+      return;
     }
-  }
 
-  if (shouldRecordCompletion && completionEndpoint) {
-    if (source !== "pi") {
-      notifyDesktop(source, { notificationType });
+    if (isFeishuAttentionHook(payload, source) && !shouldRecordCompletion && completionEndpoint) {
+      const attentionPayload = { ...payload, feishuNotificationOnly: true, last_assistant_message: "任务需要你确认或处理，请回到对应终端。" };
+      const result = await postCompletionHook({ endpoint: completionEndpoint, token, terminalSessionId,
+        payload: attentionPayload, source, completionReason: "notify", rawEvent, commandName });
+      if (result.accepted) {
+        notifyFeishu({ ...attentionPayload, hook_event_name: "Stop", feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+      }
     }
-    if (appServerClient) {
-      const completionBody = buildCompletionHookBody({
+
+    if (shouldRecordCompletion && completionEndpoint) {
+      if (source !== "pi") {
+        notifyDesktop(source, { notificationType });
+      }
+      if (appServerClient) {
+        const completionBody = buildCompletionHookBody({
+          terminalSessionId,
+          payload,
+          source,
+          completionReason: effectiveCompletionReason,
+          rawEvent,
+          commandName,
+        });
+        const completionEvent = buildAppServerBaseEvent({
+          kind: "agent.completion",
+          payload,
+          rawEvent,
+          normalizedEvent,
+          stateHookEvent,
+          source,
+          terminalSessionId,
+          threadId,
+          commandName,
+          dedupePrefix: "completion",
+        });
+        completionEvent.payload = {
+          ...(completionBody.pi ? { pi: completionBody.pi } : {}),
+          ...(completionBody.agy ? { agy: completionBody.agy } : {}),
+          source: completionBody.source,
+          completionReason: completionBody.completionReason,
+          commandName: completionBody.commandName,
+          rawHookEvent: completionBody.rawHookEvent,
+          hookEvent: completionBody.hookEvent,
+          cwd: completionBody.cwd,
+          summary: completionBody.summary,
+          operationId: completionBody.operationId,
+        };
+        const result = await postAppServerEvent(appServerClient, completionEvent);
+        appendDebugLog("hook bridge posted app-server completion event", { terminalSessionId, ...result });
+        if (!result.ok) appendDebugLog("hook bridge app-server post failed", { terminalSessionId, kind: "agent.completion", ...result });
+      }
+      const result = await postCompletionHook({
+        endpoint: completionEndpoint,
+        token,
         terminalSessionId,
         payload,
         source,
@@ -400,64 +432,23 @@ async function main() {
         rawEvent,
         commandName,
       });
-      const completionEvent = buildAppServerBaseEvent({
-        kind: "agent.completion",
-        payload,
-        rawEvent,
-        normalizedEvent,
-        stateHookEvent,
-        source,
+      if (source === "pi" && result.accepted) {
+        notifyDesktop(source, { notificationType });
+      }
+      if (result.accepted) {
+        notifyFeishu({ ...payload, ...(isTraexAttentionNotification ? { hook_event_name: "Stop", last_assistant_message: "任务需要你确认或处理，请回到对应终端。" } : {}), feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
+      }
+      appendDebugLog("hook bridge posted completion hook", {
         terminalSessionId,
-        threadId,
-        commandName,
-        dedupePrefix: "completion",
-      });
-      completionEvent.payload = {
-        ...(completionBody.pi ? { pi: completionBody.pi } : {}),
-        source: completionBody.source,
-        completionReason: completionBody.completionReason,
-        commandName: completionBody.commandName,
-        rawHookEvent: completionBody.rawHookEvent,
-        hookEvent: completionBody.hookEvent,
-        cwd: completionBody.cwd,
-        summary: completionBody.summary,
-        operationId: completionBody.operationId,
-      };
-      const result = await postAppServerEvent(appServerClient, completionEvent);
-      appendDebugLog("hook bridge posted app-server completion event", {
-        terminalSessionId,
+        rawEvent: String(rawEvent || "Stop"),
+        endpoint: redactEndpoint(completionEndpoint),
         ...result,
       });
-      if (!result.ok) {
-        appendDebugLog("hook bridge app-server post failed", {
-          terminalSessionId,
-          kind: "agent.completion",
-          ...result,
-        });
-      }
     }
-    const result = await postCompletionHook({
-      endpoint: completionEndpoint,
-      token,
-      terminalSessionId,
-      payload,
-      source,
-      completionReason: effectiveCompletionReason,
-      rawEvent,
-      commandName,
-    });
-    if (source === "pi" && result.accepted) {
-      notifyDesktop(source, { notificationType });
+  } finally {
+    if (source === "agy") {
+      writeAgyHookStdout(normalizedEvent);
     }
-    if (result.accepted) {
-      notifyFeishu({ ...payload, ...(isTraexAttentionNotification ? { hook_event_name: "Stop", last_assistant_message: "任务需要你确认或处理，请回到对应终端。" } : {}), feishuNotificationId: result.notificationId }, source, terminalSessionId, terminalPanelId);
-    }
-    appendDebugLog("hook bridge posted completion hook", {
-      terminalSessionId,
-      rawEvent: String(rawEvent || "Stop"),
-      endpoint: redactEndpoint(completionEndpoint),
-      ...result,
-    });
   }
 }
 
