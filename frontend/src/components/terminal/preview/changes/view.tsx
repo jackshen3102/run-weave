@@ -1,9 +1,13 @@
 import { useMemoizedFn } from "ahooks";
 import { Suspense, type ReactNode } from "react";
 import type {
+  TerminalPreviewBranchChangesResponse,
+  TerminalPreviewBranchCommitsResponse,
   TerminalPreviewChangeKind,
+  TerminalPreviewChangeScope,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewGitChangesResponse,
+  TerminalPreviewWritableChangeKind,
 } from "@runweave/shared/terminal/preview";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalChangesViewMode } from "../../../../features/terminal/preview/store";
@@ -32,6 +36,18 @@ interface ChangesQueryState {
   loading: boolean;
 }
 
+interface BranchChangesQueryState {
+  data: TerminalPreviewBranchChangesResponse | null;
+  error: string | null;
+  loading: boolean;
+}
+
+interface BranchCommitsQueryState {
+  data: TerminalPreviewBranchCommitsResponse | null;
+  error: string | null;
+  loading: boolean;
+}
+
 interface DiffQueryState {
   data: TerminalPreviewFileDiffResponse | null;
   error: string | null;
@@ -39,8 +55,11 @@ interface DiffQueryState {
 }
 
 interface ChangesSelection {
+  scope: TerminalPreviewChangeScope;
   kind?: TerminalPreviewChangeKind;
   path?: string;
+  baseOid?: string;
+  commitOid?: string;
   viewMode: TerminalChangesViewMode;
 }
 
@@ -61,14 +80,18 @@ interface ChangesCommands {
   reloadDiff: (path: string, kind: TerminalPreviewChangeKind) => void;
   requestDelete: (path: string) => void;
   requestRename: (path: string) => void;
-  requestReset: (path: string, kind: TerminalPreviewChangeKind) => void;
+  requestReset: (path: string, kind: TerminalPreviewWritableChangeKind) => void;
   select: (path: string, kind: TerminalPreviewChangeKind) => void;
+  selectScope: (scope: TerminalPreviewChangeScope) => void;
+  selectCommit: (commitOid: string) => void;
   setViewMode: (mode: TerminalChangesViewMode) => void;
 }
 
 interface TerminalPreviewChangesViewProps {
   activeProject: TerminalProjectListItem;
   changes: ChangesQueryState;
+  branchChanges: BranchChangesQueryState;
+  branchCommits: BranchCommitsQueryState;
   commands: ChangesCommands;
   diff: DiffQueryState;
   markdownReference: ChangesMarkdownReference;
@@ -78,6 +101,8 @@ interface TerminalPreviewChangesViewProps {
 export function TerminalPreviewChangesView({
   activeProject,
   changes,
+  branchChanges,
+  branchCommits,
   commands,
   diff,
   markdownReference,
@@ -87,7 +112,9 @@ export function TerminalPreviewChangesView({
   const fileDiffMatchesSelection =
     diff.data !== null &&
     diff.data.path === selection.path &&
-    diff.data.changeKind === selection.kind;
+    diff.data.changeKind === selection.kind &&
+    (selection.kind !== "branch" || diff.data.baseOid === selection.baseOid) &&
+    (selection.kind !== "commit" || diff.data.commitOid === selection.commitOid);
   const selectedChangePending =
     Boolean(selection.path && selection.kind) && !fileDiffMatchesSelection;
   const showDiffLoading = diff.loading || (selectedChangePending && !diff.error);
@@ -117,7 +144,18 @@ export function TerminalPreviewChangesView({
     }
     if (isImage) {
       if (!side && currentFileDiff.status === "deleted") return renderPreviewEmpty("服务器尚不支持已删除图片的版本预览");
-      const label = side?.source === "index" ? "暂存版本" : side?.source === "head" ? "已提交版本" : "工作区版本";
+      const label =
+        side?.source === "index"
+          ? "暂存版本"
+          : side?.source === "head"
+            ? "已提交版本"
+            : side?.source === "merge-base"
+              ? "主分支共同祖先版本"
+              : side?.source === "commit-parent"
+                ? "提交前版本"
+                : side?.source === "commit"
+                  ? "该提交版本"
+                  : "工作区版本";
       return (
         <div className="flex h-full min-h-0 flex-col">
           <div className="px-3 py-1 text-xs text-slate-400">
@@ -128,11 +166,16 @@ export function TerminalPreviewChangesView({
           <div className="min-h-0 flex-1">
             <Suspense fallback={renderPreviewEmpty("Loading image preview...")}>
               <TerminalImagePreview
-                key={`${currentFileDiff.changeKind}:${displayPath}:${side?.version ?? "legacy"}`}
+                key={`${currentFileDiff.changeKind}:${currentFileDiff.baseOid ?? currentFileDiff.commitOid ?? ""}:${displayPath}:${side?.version ?? "legacy"}`}
                 apiBase={apiBase} token={token} projectId={activeProject.projectId}
                 path={displayPath} refreshKey={0} onAuthExpired={onAuthExpired}
-                change={side?.version ? { kind: currentFileDiff.changeKind,
-                  side: currentFileDiff.status === "deleted" ? "old" : "new", version: side.version } : undefined}
+                change={side?.version ? {
+                  kind: currentFileDiff.changeKind,
+                  side: currentFileDiff.status === "deleted" ? "old" : "new",
+                  version: side.version,
+                  baseOid: currentFileDiff.baseOid,
+                  commitOid: currentFileDiff.commitOid,
+                } : undefined}
                 onReload={() => commands.reloadDiff(currentFileDiff.path, currentFileDiff.changeKind)}
               />
             </Suspense>
@@ -175,13 +218,19 @@ export function TerminalPreviewChangesView({
       const version = side?.version;
       if (!version) return renderPreviewEmpty("HTML 版本不可用，请重新加载");
       return <TerminalHtmlPreview
-        key={`${currentFileDiff.changeKind}:${currentFileDiff.path}:${version}`}
+        key={`${currentFileDiff.changeKind}:${currentFileDiff.baseOid ?? currentFileDiff.commitOid ?? ""}:${currentFileDiff.path}:${version}`}
         apiBase={apiBase} token={token} projectId={activeProject.projectId}
         path={currentFileDiff.path} content={previewContent} savedContent={previewContent}
         mtimeMs={0} refreshKey={0} editable={false}
         lineReferencePath={currentFileDiff.absolutePath}
         onContentChange={ignoreContentChange}
-        change={{ kind: currentFileDiff.changeKind, version }} previewOnly
+        change={{
+          kind: currentFileDiff.changeKind,
+          version,
+          baseOid: currentFileDiff.baseOid,
+          commitOid: currentFileDiff.commitOid,
+        }}
+        previewOnly
       />;
     }
     return (
@@ -227,36 +276,148 @@ export function TerminalPreviewChangesView({
   } else if (showDiffLoading) {
     content = renderPreviewEmpty("Loading diff...");
   } else if (!diff.data) {
-    content = renderPreviewEmpty("Select a changed file");
+    if (
+      selection.scope === "working" &&
+      changes.data &&
+      changes.data.staged.length === 0 &&
+      changes.data.working.length === 0
+    ) {
+      content = renderPreviewEmpty(
+        "当前工作区没有未提交改动。若 Agent 已提交修改，可切换到顶部「相对主分支」或「本分支提交」只读审阅本分支改动。",
+      );
+    } else if (
+      selection.scope === "branch" &&
+      branchChanges.data?.state === "unavailable"
+    ) {
+      content = renderPreviewEmpty("当前仓库状态不可对比主分支，请查看左侧原因说明");
+    } else if (
+      selection.scope === "commits" &&
+      branchCommits.data?.state === "unavailable"
+    ) {
+      content = renderPreviewEmpty("当前仓库状态不可读取本分支提交，请查看左侧原因说明");
+    } else {
+      content = renderPreviewEmpty("Select a changed file");
+    }
   } else {
     content = renderFileDiffContent(diff.data, diff.data.path);
   }
 
-  if (!changes.error && changes.data?.repoRoot === null) {
+  if (
+    selection.scope === "working" &&
+    !changes.error &&
+    changes.data?.repoRoot === null
+  ) {
     return renderPreviewEmpty(
       "This project is not a Git repository. Use Explorer to browse files.",
     );
   }
 
+  const workingCount = changes.data
+    ? changes.data.staged.length + changes.data.working.length
+    : undefined;
+  const branchBaseLabel =
+    branchChanges.data?.baseRef ??
+    branchCommits.data?.baseRef ??
+    (activeProject.mainBranch ? `origin/${activeProject.mainBranch}` : "主分支");
+  const branchCount =
+    branchChanges.data?.state === "ready"
+      ? branchChanges.data.files.length
+      : undefined;
+  const commitsCount =
+    branchCommits.data?.state === "ready"
+      ? branchCommits.data.commits.length
+      : undefined;
+
   return (
-    <div
-      className="grid h-full min-h-0"
-      style={{ gridTemplateColumns: "auto minmax(0, 1fr)" }}
-    >
-      <TerminalPreviewChangeTree
-        changes={changes.data}
-        changesLoading={changes.loading}
-        changesError={changes.error}
-        selectedChangePath={selection.path}
-        selectedChangeKind={selection.kind}
-        onRequestRenameFile={commands.requestRename}
-        onRequestDeleteFile={commands.requestDelete}
-        onRequestResetChange={commands.requestReset}
-        onSelectChange={commands.select}
-        onReloadDiff={commands.reloadDiff}
-        onOpenModeFile={commands.openFileMode}
-      />
-      <div className="min-h-0">{content}</div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-2.5 py-1.5 text-xs">
+        <div
+          className="inline-flex rounded-md border border-slate-800 bg-slate-900/80 p-0.5"
+          role="tablist"
+          aria-label="Review changes scope"
+        >
+          <button
+            type="button"
+            role="tab"
+            data-testid="changes-scope-working"
+            aria-selected={selection.scope === "working"}
+            onClick={() => commands.selectScope("working")}
+            className={[
+              "rounded px-2 py-0.5 text-xs transition-colors",
+              selection.scope === "working"
+                ? "bg-slate-700 font-medium text-white"
+                : "text-slate-400 hover:text-slate-200",
+            ].join(" ")}
+          >
+            未提交{workingCount !== undefined ? ` (${workingCount})` : ""}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            data-testid="changes-scope-branch"
+            aria-selected={selection.scope === "branch"}
+            onClick={() => commands.selectScope("branch")}
+            className={[
+              "rounded px-2 py-0.5 text-xs transition-colors",
+              selection.scope === "branch"
+                ? "bg-slate-700 font-medium text-white"
+                : "text-slate-400 hover:text-slate-200",
+            ].join(" ")}
+          >
+            相对 {branchBaseLabel}
+            {branchCount !== undefined ? ` (${branchCount})` : ""}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            data-testid="changes-scope-commits"
+            aria-selected={selection.scope === "commits"}
+            onClick={() => commands.selectScope("commits")}
+            className={[
+              "rounded px-2 py-0.5 text-xs transition-colors",
+              selection.scope === "commits"
+                ? "bg-slate-700 font-medium text-white"
+                : "text-slate-400 hover:text-slate-200",
+            ].join(" ")}
+          >
+            本分支提交
+            {commitsCount !== undefined
+              ? ` (${commitsCount}${branchCommits.data?.truncated ? "+" : ""})`
+              : ""}
+          </button>
+        </div>
+        {selection.scope !== "working" ? (
+          <span className="text-[11px] text-slate-500">只读审阅视图</span>
+        ) : null}
+      </div>
+      <div
+        className="grid min-h-0 flex-1"
+        style={{ gridTemplateColumns: "auto minmax(0, 1fr)" }}
+      >
+        <TerminalPreviewChangeTree
+          scope={selection.scope}
+          changes={changes.data}
+          changesLoading={changes.loading}
+          changesError={changes.error}
+          branchChanges={branchChanges.data}
+          branchChangesLoading={branchChanges.loading}
+          branchChangesError={branchChanges.error}
+          branchCommits={branchCommits.data}
+          branchCommitsLoading={branchCommits.loading}
+          branchCommitsError={branchCommits.error}
+          selectedChangePath={selection.path}
+          selectedChangeKind={selection.kind}
+          onSelectScope={commands.selectScope}
+          onSelectCommit={commands.selectCommit}
+          onRequestRenameFile={commands.requestRename}
+          onRequestDeleteFile={commands.requestDelete}
+          onRequestResetChange={commands.requestReset}
+          onSelectChange={commands.select}
+          onReloadDiff={commands.reloadDiff}
+          onOpenModeFile={commands.openFileMode}
+        />
+        <div className="min-h-0">{content}</div>
+      </div>
     </div>
   );
 }

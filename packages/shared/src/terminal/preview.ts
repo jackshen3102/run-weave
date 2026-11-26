@@ -1,4 +1,53 @@
-export type TerminalPreviewChangeKind = "staged" | "working";
+export type TerminalPreviewChangeScope = "working" | "branch" | "commits";
+export type TerminalPreviewWritableChangeKind = "staged" | "working";
+export type TerminalPreviewChangeKind =
+  | TerminalPreviewWritableChangeKind
+  | "branch"
+  | "commit";
+
+export type TerminalPreviewComparisonUnavailableReason =
+  | "not-repository"
+  | "shallow-repository"
+  | "base-unavailable"
+  | "no-merge-base";
+
+export interface TerminalPreviewBranchCommitItem {
+  oid: string;
+  shortOid: string;
+  subject: string;
+  authorName: string;
+  committedAt: string;
+}
+
+export interface TerminalPreviewBranchChangesResponse {
+  kind: "git-branch-changes";
+  projectId: string;
+  projectPath: string;
+  repoRoot: string | null;
+  state: "ready" | "unavailable";
+  reason?: TerminalPreviewComparisonUnavailableReason;
+  baseRef?: string;
+  baseOid?: string;
+  mergeBaseOid?: string;
+  headOid?: string;
+  files: TerminalPreviewChangeFile[];
+}
+
+export interface TerminalPreviewBranchCommitsResponse {
+  kind: "git-branch-commits";
+  projectId: string;
+  projectPath: string;
+  repoRoot: string | null;
+  state: "ready" | "unavailable";
+  reason?: TerminalPreviewComparisonUnavailableReason;
+  baseRef?: string;
+  mergeBaseOid?: string;
+  headOid?: string;
+  truncated: boolean;
+  commits: TerminalPreviewBranchCommitItem[];
+  selectedCommitOid: string | null;
+  files: TerminalPreviewChangeFile[];
+}
 export type TerminalPreviewGitStatus =
   | "added"
   | "modified"
@@ -111,6 +160,8 @@ export interface CreateTerminalHtmlPreviewTicketRequest {
   path: string;
   changeKind?: TerminalPreviewChangeKind;
   version?: string;
+  baseOid?: string;
+  commitOid?: string;
 }
 
 export interface TerminalPreviewFileSearchResponse {
@@ -186,14 +237,14 @@ export interface TerminalPreviewRenameFileRequest {
 
 export interface TerminalPreviewResetChangeRequest {
   path: string;
-  kind: TerminalPreviewChangeKind;
+  kind: TerminalPreviewWritableChangeKind;
 }
 
 export interface TerminalPreviewResetChangeResponse {
   kind: "git-change-reset";
   projectId: string;
   path: string;
-  changeKind: TerminalPreviewChangeKind;
+  changeKind: TerminalPreviewWritableChangeKind;
 }
 
 export interface TerminalPreviewChangeFile {
@@ -213,7 +264,7 @@ export interface TerminalPreviewGitChangesResponse {
 }
 
 export interface TerminalPreviewContentSide {
-  source: "head" | "index" | "working";
+  source: "head" | "index" | "working" | "merge-base" | "commit-parent" | "commit";
   path: string;
   state: "ready" | "missing" | "too-large" | "unsupported" | "read-failed";
   contentKind?: "text" | "image" | "binary";
@@ -223,12 +274,21 @@ export interface TerminalPreviewContentSide {
   version?: string;
 }
 
+export interface TerminalPreviewFileDiffRequest {
+  path: string;
+  kind: TerminalPreviewChangeKind;
+  baseOid?: string;
+  commitOid?: string;
+}
+
 export interface TerminalPreviewFileDiffResponse {
   kind: "file-diff";
   projectId: string;
   projectPath: string;
   repoRoot: string;
   changeKind: TerminalPreviewChangeKind;
+  baseOid?: string;
+  commitOid?: string;
   path: string;
   absolutePath: string;
   status: TerminalPreviewGitStatus;

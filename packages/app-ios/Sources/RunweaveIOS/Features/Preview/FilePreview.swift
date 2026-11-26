@@ -156,12 +156,13 @@ struct FilePreview: View {
           if relatedChange != nil {
             Button("查看变更") { showingChange = true }
           }
-          if let kind = file.changeKind {
+          if let kind = file.changeKind, kind == "staged" || kind == "working" {
             Button(kind == "staged" ? "Reset · 取消暂存" : "Reset · 丢弃修改", role: .destructive) {
               mutation = .reset(path: file.path, kind: kind, status: file.changeStatus)
             }.disabled(model.mutating)
           }
-          if file.changeStatus != "deleted", payload?.base != "filesystem", payload?.readonly != true, !file.readonly, !loading, failure == nil {
+          if (file.changeKind == nil || file.changeKind == "staged" || file.changeKind == "working"),
+             file.changeStatus != "deleted", payload?.base != "filesystem", payload?.readonly != true, !file.readonly, !loading, failure == nil {
             Button("删除文件", role: .destructive) {
               mutation = .delete(path: file.path, mtimeMs: payload?.mtimeMs)
             }.disabled(model.mutating)
@@ -251,7 +252,14 @@ struct FilePreview: View {
     do {
       if let kind = file.changeKind {
         let value = try await session.withConnection {
-          try await $0.diff(projectID: projectID, path: file.path, kind: kind, force: true)
+          try await $0.diff(
+            projectID: projectID,
+            path: file.path,
+            kind: kind,
+            baseOid: file.baseOid,
+            commitOid: file.commitOid,
+            force: true
+          )
         }
         guard !Task.isCancelled else { return }
         diff = value
@@ -259,8 +267,15 @@ struct FilePreview: View {
           if isImage {
             if let side = value.previewSide, let version = side.version {
               let data = try await session.withConnection {
-                try await $0.changeAsset(projectID: projectID, path: file.path, kind: kind,
-                  side: value.status == "deleted" ? "old" : "new", version: version)
+                try await $0.changeAsset(
+                  projectID: projectID,
+                  path: file.path,
+                  kind: kind,
+                  side: value.status == "deleted" ? "old" : "new",
+                  version: version,
+                  baseOid: file.baseOid,
+                  commitOid: file.commitOid
+                )
               }
               guard !Task.isCancelled else { return }
               guard let decoded = UIImage(data: data) else {
@@ -289,8 +304,14 @@ struct FilePreview: View {
                 return
               }
               let ticket = try await session.withConnection {
-                try await $0.htmlPreviewTicket(projectID: projectID, path: file.path,
-                  changeKind: kind, version: version)
+                try await $0.htmlPreviewTicket(
+                  projectID: projectID,
+                  path: file.path,
+                  changeKind: kind,
+                  version: version,
+                  baseOid: file.baseOid,
+                  commitOid: file.commitOid
+                )
               }
               guard !Task.isCancelled else { return }
               if let api = session.api {

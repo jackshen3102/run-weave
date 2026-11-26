@@ -192,18 +192,19 @@ Web/Electron 的文件名搜索、文本正文和 Diff 查询在没有观察者�
 - 切换文件、刷新、关闭或改变任务时，涉及丢弃未保存草稿的动作须走现有确认流程。
 - 原生 iOS 的普通文件预览提供独立[编辑页](../../packages/app-ios/Sources/RunweaveIOS/Features/Preview/FileEditor.swift)，复用相同保存接口与 1 MiB 限制。保存、重新读取与覆盖均由用户显式触发；取消有未保存修改时确认丢弃，失败保留当前编辑页草稿。编辑固定读取时的连接与会话，连接变化后禁止保存；不承诺强制退出后的草稿恢复。保存请求不自动重放，响应不确定时提示先核对磁盘。
 - 删除、重命名只针对项目内支持的普通文件；不扩展到目录、项目外路径或批量操作。
-- Review changes 分 Staged / Working 两组，先读索引，再按选择懒加载单文件 diff；Diff Editor 只读。
-- 变更预览由 `file-diff` 的内容能力与两侧状态决定；图片直接预览，Markdown/SVG 保留 Diff/Preview，
+- Review changes 支持三档范围切换：`working`（默认，分 Staged / Working 两组）、`branch`（对比项目主分支共同祖先 `merge-base` 到当前工作区的净文件变更，包含已提交与未提交改动并抵消先增后还原文件）以及 `commits`（列出 `mergeBaseOid..HEAD` 最近最多 50 个本分支独占提交，按所选提交对比 `commit^1 → commit`）。所有模式均先读列表，再按选择懒加载单文件 diff；Diff Editor 只读。
+- `branch` 与 `commits` 复用所属父项目的 `mainBranch` 设置与本地远端跟踪引用解析，切换范围不自动执行联网 `git fetch`。非 Git 目录、浅克隆、无远端基准或无共同历史（`no-merge-base`）显式返回 `state: "unavailable"` 与具体原因，不伪造“0 个变更”。
+- 变更预览由 `file-diff` 的内容能力与两侧状态决定；图片直接预览，Markdown/SVG/HTML 保留 Diff/Preview，
   普通文本默认 Diff。空文件、无文本变化、不支持格式、超限和读取失败分别展示，不用空字符串隐去错误。
 - 原生 iOS 的[文本 Diff 渲染器](../../packages/app-ios/Sources/RunweaveIOS/Features/Preview/DiffView.swift)
   对服务端返回的文本按行比较。大文件也保留未变更上下文和对应的新旧行号，连续的未变更区段会折叠中间行。
-- Staged 比较 HEAD → index，Working 比较 index → 工作区；重命名保留原路径。图片使用鉴权
-  `preview/change-asset`，参数限于 path、kind、side、version，默认新侧，删除时展示旧侧并标注版本。
-  version 为响应字节摘要，变化返回 409 供重新加载；不会用磁盘图片冒充暂存版本。旧 Backend 缺少能力字段时，
+- Staged 比较 HEAD → index，Working 比较 index → 工作区，`branch` 比较 `mergeBaseOid → 工作区`（携带必传 `baseOid`），`commit` 比较 `commitOid^1 → commitOid`（携带必传 `commitOid`）；重命名保留原路径。读取期间若 rebase 或 amend 导致 `mergeBaseOid` 变化或 `commitOid` 脱离当前分支窗口，返回 `409`（`terminal_preview_stale_diff`）并触发最多一次列表协调刷新。图片使用鉴权
+  `preview/change-asset`，参数限于 path、kind、side、version（及对应的 `baseOid` / `commitOid`），默认新侧，删除时展示旧侧并标注版本。
+  version 为响应字节摘要，变化返回 409 供重新加载；不会用磁盘图片冒充暂存或历史版本。旧 Backend 缺少能力字段时，
   新客户端的图片回退必须标注工作区版本，已删除图片提示服务端不支持。
 - Git 图片按原始字节读取，文本限制 1 MiB，图片限制 5 MiB；不支持的二进制、冲突索引和特殊文件显式降级。
-  读取期间文件变化不返回拼接内容，Git status 禁用可选索引写入。既有取消暂存、丢弃修改与删除确认语义不变。
-- 单文件 Reset Changes 需要确认：staged 执行 unstage，working 丢弃该文件工作区改动，untracked 普通文件删除。
+  读取期间文件变化不返回拼接内容，Git status 与只读 diff 禁用可选索引写入（`GIT_OPTIONAL_LOCKS=0`）。既有取消暂存、丢弃修改与删除确认语义不变。
+- 单文件 Reset Changes、删除与重命名仅在 `scope=working`（`staged` / `working`）下暴露；`branch` 与 `commits` 全程只读，后端 `POST /git-change/reset` 硬性校验 `kind: "staged" | "working"`。staged 执行 unstage，working 丢弃该文件工作区改动，untracked 普通文件删除。
   这不授权 stage、commit、checkout 或批量 reset。语义以 [Git service](../../backend/src/terminal/preview/git.ts) 为准。
 
 ## 内容渲染

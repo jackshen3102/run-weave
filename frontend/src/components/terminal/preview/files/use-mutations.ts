@@ -3,6 +3,7 @@ import { useState } from "react";
 import type {
   TerminalPreviewChangeKind,
   TerminalPreviewFileResponse,
+  TerminalPreviewWritableChangeKind,
 } from "@runweave/shared/terminal/preview";
 import { useTerminalPreviewStore } from "../../../../features/terminal/preview/store";
 import { useTerminalRuntime } from "../../../../features/terminal/queries/provider";
@@ -19,7 +20,7 @@ export interface PreviewFileMutationTarget {
 
 export interface PreviewChangeResetTarget {
   path: string;
-  kind: TerminalPreviewChangeKind;
+  kind: TerminalPreviewWritableChangeKind;
 }
 
 interface PreviewMutationEditorPort {
@@ -108,7 +109,7 @@ export function useTerminalPreviewFileMutations({
   });
 
   const requestReset = useMemoizedFn(
-    (path: string, kind: TerminalPreviewChangeKind): void => {
+    (path: string, kind: TerminalPreviewWritableChangeKind): void => {
       if (!projectId || !editor.confirmDiscard()) {
         return;
       }

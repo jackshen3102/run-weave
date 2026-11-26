@@ -1,6 +1,24 @@
-import type { CreateTerminalVideoPreviewTicketResponse } from "@runweave/shared/terminal/preview";
+import type {
+  CreateTerminalVideoPreviewTicketResponse,
+  TerminalPreviewBranchChangesResponse,
+  TerminalPreviewBranchCommitsResponse,
+  TerminalPreviewChangeKind,
+  TerminalPreviewDeleteFileRequest,
+  TerminalPreviewDeleteFileResponse,
+  TerminalPreviewDirectoryResponse,
+  TerminalPreviewContentSearchResponse,
+  TerminalPreviewFileDiffResponse,
+  TerminalPreviewFileResponse,
+  TerminalPreviewFileSearchResponse,
+  TerminalPreviewFolderSearchResponse,
+  TerminalPreviewGitChangesResponse,
+  TerminalPreviewRenameFileRequest,
+  TerminalPreviewResetChangeRequest,
+  TerminalPreviewResetChangeResponse,
+  TerminalPreviewSaveFileRequest,
+  TerminalPreviewSaveFileResponse,
+} from "@runweave/shared/terminal/preview";
 import type { TerminalFileLinkRequest, TerminalFileLinkResponse } from "@runweave/shared/terminal/file-link";
-import type { TerminalPreviewChangeKind, TerminalPreviewDeleteFileRequest, TerminalPreviewDeleteFileResponse, TerminalPreviewDirectoryResponse, TerminalPreviewContentSearchResponse, TerminalPreviewFileDiffResponse, TerminalPreviewFileResponse, TerminalPreviewFileSearchResponse, TerminalPreviewFolderSearchResponse, TerminalPreviewGitChangesResponse, TerminalPreviewRenameFileRequest, TerminalPreviewResetChangeRequest, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileRequest, TerminalPreviewSaveFileResponse } from "@runweave/shared/terminal/preview";
 import { requestBlob, requestJson, requestVoid } from "../http";
 
 export async function searchTerminalProjectPreviewFiles(
@@ -195,9 +213,22 @@ export async function getTerminalProjectPreviewAsset(
   token: string,
   projectId: string,
   filePath: string,
-  change?: { kind: TerminalPreviewChangeKind; side: "old" | "new"; version: string },
+  change?: {
+    kind: TerminalPreviewChangeKind;
+    side: "old" | "new";
+    version: string;
+    baseOid?: string;
+    commitOid?: string;
+  },
 ): Promise<Blob> {
-  const query = new URLSearchParams({ path: filePath, ...change });
+  const query = new URLSearchParams({ path: filePath });
+  if (change) {
+    query.set("kind", change.kind);
+    query.set("side", change.side);
+    query.set("version", change.version);
+    if (change.baseOid) query.set("baseOid", change.baseOid);
+    if (change.commitOid) query.set("commitOid", change.commitOid);
+  }
   const resource = change ? "change-asset" : "asset";
   return requestBlob(
     apiBase,
@@ -226,16 +257,61 @@ export async function getTerminalProjectPreviewGitChanges(
   );
 }
 
+export async function getTerminalProjectPreviewGitBranchChanges(
+  apiBase: string,
+  token: string,
+  projectId: string,
+): Promise<TerminalPreviewBranchChangesResponse> {
+  return requestJson<TerminalPreviewBranchChangesResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/git-branch-changes`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export async function getTerminalProjectPreviewGitBranchCommits(
+  apiBase: string,
+  token: string,
+  projectId: string,
+  params?: { commitOid?: string },
+): Promise<TerminalPreviewBranchCommitsResponse> {
+  const query = new URLSearchParams();
+  if (params?.commitOid) {
+    query.set("commitOid", params.commitOid);
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<TerminalPreviewBranchCommitsResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(projectId)}/preview/git-branch-commits${suffix}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
 export async function getTerminalProjectPreviewFileDiff(
   apiBase: string,
   token: string,
   projectId: string,
-  params: { path: string; kind: TerminalPreviewChangeKind },
+  params: {
+    path: string;
+    kind: TerminalPreviewChangeKind;
+    baseOid?: string;
+    commitOid?: string;
+  },
 ): Promise<TerminalPreviewFileDiffResponse> {
   const query = new URLSearchParams({
     path: params.path,
     kind: params.kind,
   });
+  if (params.baseOid) query.set("baseOid", params.baseOid);
+  if (params.commitOid) query.set("commitOid", params.commitOid);
   return requestJson<TerminalPreviewFileDiffResponse>(
     apiBase,
     `/api/terminal/project/${encodeURIComponent(projectId)}/preview/file-diff?${query.toString()}`,

@@ -45,16 +45,31 @@ export const terminalQueryKeys = {
     ] as const,
   previewChanges: (scope: string, projectId: string) =>
     [...terminalQueryKeys.preview(scope, projectId), "changes"] as const,
+  previewBranchChanges: (scope: string, projectId: string) =>
+    [...terminalQueryKeys.preview(scope, projectId), "branch-changes"] as const,
+  previewBranchCommits: (input: {
+    scope: string;
+    projectId: string;
+    commitOid?: string;
+  }) =>
+    [
+      ...terminalQueryKeys.preview(input.scope, input.projectId),
+      "branch-commits",
+      input.commitOid ?? "",
+    ] as const,
   previewDiff: (input: {
     scope: string;
     projectId: string;
     path: string;
     kind: TerminalPreviewChangeKind;
+    baseOid?: string;
+    commitOid?: string;
   }) =>
     [
       ...terminalQueryKeys.preview(input.scope, input.projectId),
       "diff",
       input.kind,
+      input.baseOid ?? input.commitOid ?? "",
       input.path,
     ] as const,
 };

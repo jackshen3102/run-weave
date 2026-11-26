@@ -1,0 +1,74 @@
+version: 1
+name: Review changes 相对主分支与本分支提交只读审阅验收
+description: >
+  验证桌面与原生 iOS 的 Review changes 在保持原有未提交工作区语义不变的前提下，能够只读审阅相对项目主分支共同祖先的净变更与本分支最近提交，
+  并在目标漂移、浅克隆或非法引用时给出明确状态且不产生任何 Git 写操作。
+
+cases:
+  - id: BRDIFF-001
+    name: 相对主分支视图计算共同祖先到当前工作区的净变更
+    required: true
+    description: >
+      验证 Agent 已提交改动且工作区干净时，相对主分支视图仍完整展示相对 merge-base 的净变更，
+      同时排除分叉后远端主分支新增的他人提交及本分支先增后还原抵消的文件。
+    preconditions:
+      - 隔离测试环境拥有独立 Git 仓库与远端基准 origin/main，项目已登记至测试 Backend。
+      - 当前分支从 origin/main 分叉后提交了修改文件 A、新增后又还原回原样的文件 B，且分叉后 origin/main 另有独立提交修改了文件 C，当前工作区干净。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开桌面端 Review changes，确认默认未提交视图显示 0 个变更，再切换到相对主分支视图；确认列表仅显示文件 A，不包含已抵消的 B 和远端他人提交的 C。
+      - 点击文件 A 查看 Diff；确认左侧为 merge-base 版本内容，右侧为当前工作区内容，且界面不显示单文件 Reset、删除或重命名入口。
+      - 在工作区追加未提交文件 D 后刷新相对主分支视图；确认列表同时包含已提交的 A 与未提交的 D，核对仓库 refs 与 index 未发生任何写入。
+
+  - id: BRDIFF-002
+    name: 本分支提交视图按序展示独占提交并隔离各提交 Diff
+    required: true
+    description: >
+      验证本分支提交视图只列出 merge-base 到 HEAD 之间的提交，并在切换不同提交时展示对应单次提交的真实前后内容。
+    preconditions:
+      - 隔离 Git 项目在当前分支相对 origin/main 依次包含两次内容可区分的提交 C1 与 C2。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在桌面端切换到本分支提交视图；确认按时间倒序展示 C2 与 C1 的短 SHA、标题、作者与时间，不包含 origin/main 历史提交。
+      - 分别点击 C2 与 C1 并打开同一路径文件；确认各自展示对应提交前后的单步差异，切换提交不会混用上一次提交的缓存正文，且无 Reset 或删除操作入口。
+
+  - id: BRDIFF-003
+    name: 基准或提交漂移时返回只读陈旧冲突并有界恢复
+    required: true
+    description: >
+      验证列表读取后若外部 rebase 或 amend 改变了 mergeBaseOid 或使选中 commitOid 脱离当前分支，单文件读取返回 409 陈旧冲突且最多触发一次列表协调刷新。
+    preconditions:
+      - 隔离 Git 项目在相对主分支与本分支提交视图中已有可查看的变更列表。
+    steps:
+      - 先加载本分支提交列表并记录旧提交 SHA，随后在外部终端执行 commit --amend 生成新 SHA；在页面点击旧提交下的文件，确认接口返回 409 terminal_preview_stale_diff，页面自动刷新一次列表并切换到有效状态而不进入死循环。
+      - 检查后端日志与 Git 状态；确认本次 409 被分类为只读读取冲突而非修改冲突，工作区与索引保持原样。
+
+  - id: BRDIFF-004
+    name: 浅克隆与无共同历史明确报告不可比较而不伪造零变更
+    required: true
+    description: >
+      验证浅克隆仓库、无远端基准或无共同祖先分支请求分支对比时返回明确的不可用原因，界面不展示空变更假象。
+    preconditions:
+      - 测试 Backend 分别登记了一个浅克隆 Git 项目与一个使用 orphan 分支无共同祖先的 Git 项目。
+    steps:
+      - 分别请求两个项目的相对主分支与本分支提交接口并在桌面端打开对应视图；确认响应 state 为 unavailable 且携带 shallow-repository 或 no-merge-base 原因，界面展示明确提示而非“暂无变更”。
+
+  - id: BRDIFF-005
+    name: 分支与提交接口严格遵守认证、项目子目录裁剪与哈希白名单
+    required: true
+    description: >
+      验证新接口拒绝未认证请求、非法 Git 选项注入、非当前分支可达的游离 SHA 及项目子目录外的仓库文件。
+    preconditions:
+      - 测试项目路径指向同一 Git 仓库的子目录 subapp，仓库根外部目录另有已提交改动和独立脱节分支提交。
+    steps:
+      - 未携带登录凭证调用 `/git-branch-changes` 与 `/git-branch-commits`；确认返回 401。
+      - 携带有效凭证分别传入以连字符开头的伪造参数、脱节分支的合法格式 SHA 以及指向仓库根外层文件的路径；确认全部被 400、403 或 409 拒绝，且正常响应列表只包含 subapp 内的相对路径。
+
+  - id: BRDIFF-006
+    name: 原生 iOS 支持三档变更范围只读审阅且禁用历史写操作
+    required: true
+    description: >
+      验证原生 iOS ChangesView 可切换未提交、相对主分支与本分支提交并正确渲染 DiffView，非未提交模式下不暴露破坏性菜单。
+    preconditions:
+      - 共享或独占 iOS 模拟器已安装当前候选 Debug App 并登录隔离测试 Backend，目标项目已有已提交分支改动与一张变更图片。
+    steps:
+      - 使用 `$toolkit:agent-device` 进入目标项目的变更页，切换到相对主分支与本分支提交；确认文本文件在原生 DiffView 正常展示新旧行号，图片直接展示对应历史版本。
+      - 长按相对主分支与本分支提交列表中的文件；确认不出现 Reset 或删除文件菜单项，切回未提交视图后原有 Reset 确认流程保持正常。

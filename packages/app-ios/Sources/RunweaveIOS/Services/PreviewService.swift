@@ -39,6 +39,16 @@ extension APIClient {
   func changes(projectID: String, force: Bool = false) async throws -> PreviewChanges {
     try await cachedPreview(previewPath(projectID, "git-changes"), force: force)
   }
+  func branchChanges(projectID: String, force: Bool = false) async throws -> PreviewBranchChanges {
+    try await cachedPreview(previewPath(projectID, "git-branch-changes"), force: force)
+  }
+  func branchCommits(projectID: String, commitOid: String? = nil, force: Bool = false) async throws
+    -> PreviewBranchCommits
+  {
+    var query: [String: String] = [:]
+    if let commitOid { query["commitOid"] = commitOid }
+    return try await cachedPreview(previewPath(projectID, "git-branch-commits", query), force: force)
+  }
   func file(projectID: String, path: String, force: Bool = false) async throws -> PreviewFile {
     try await cachedPreview(previewPath(projectID, "file", ["path": path]), force: force)
   }
@@ -57,20 +67,27 @@ extension APIClient {
     try await authorized(previewPath(projectID, "video-ticket"), method: "POST", body: ["path": path])
   }
   func htmlPreviewTicket(projectID: String, path: String, changeKind: String? = nil,
-                         version: String? = nil) async throws -> HtmlPreviewTicket {
+                         version: String? = nil, baseOid: String? = nil, commitOid: String? = nil) async throws -> HtmlPreviewTicket {
     var body = ["path": path]
     if let changeKind, let version {
       body["changeKind"] = changeKind
       body["version"] = version
+      if let baseOid { body["baseOid"] = baseOid }
+      if let commitOid { body["commitOid"] = commitOid }
     }
     return try await authorized(previewPath(projectID, "html-ticket"), method: "POST", body: body)
   }
-  func diff(projectID: String, path: String, kind: String, force: Bool = false) async throws -> PreviewDiff {
-    try await cachedPreview(previewPath(projectID, "file-diff", ["path": path, "kind": kind]), force: force)
+  func diff(projectID: String, path: String, kind: String, baseOid: String? = nil, commitOid: String? = nil, force: Bool = false) async throws -> PreviewDiff {
+    var query = ["path": path, "kind": kind]
+    if let baseOid { query["baseOid"] = baseOid }
+    if let commitOid { query["commitOid"] = commitOid }
+    return try await cachedPreview(previewPath(projectID, "file-diff", query), force: force)
   }
-  func changeAsset(projectID: String, path: String, kind: String, side: String, version: String) async throws -> Data {
-    try await cachedPreview(previewPath(projectID, "change-asset",
-      ["path": path, "kind": kind, "side": side, "version": version]), decode: { $0 })
+  func changeAsset(projectID: String, path: String, kind: String, side: String, version: String, baseOid: String? = nil, commitOid: String? = nil) async throws -> Data {
+    var query = ["path": path, "kind": kind, "side": side, "version": version]
+    if let baseOid { query["baseOid"] = baseOid }
+    if let commitOid { query["commitOid"] = commitOid }
+    return try await cachedPreview(previewPath(projectID, "change-asset", query), decode: { $0 })
   }
 
   func asset(projectID: String, path: String) async throws -> Data {

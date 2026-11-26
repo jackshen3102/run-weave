@@ -30,7 +30,12 @@ interface Props {
   onInsertSelection?: (text: string) => void;
   initialRevealPosition?: { line: number; column: number; key: string };
   onContentChange: (content: string) => void;
-  change?: { kind: TerminalPreviewChangeKind; version: string };
+  change?: {
+    kind: TerminalPreviewChangeKind;
+    version: string;
+    baseOid?: string;
+    commitOid?: string;
+  };
   previewOnly?: boolean;
 }
 
@@ -42,6 +47,8 @@ export function TerminalHtmlPreview(props: Props) {
     onAuthExpired: props.onAuthExpired });
   const changeKind = props.change?.kind;
   const changeVersion = props.change?.version;
+  const changeBaseOid = props.change?.baseOid;
+  const changeCommitOid = props.change?.commitOid;
   const [mode, setMode] = useState<"preview" | "source">(props.initialRevealPosition ? "source" : "preview");
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +62,14 @@ export function TerminalHtmlPreview(props: Props) {
       props.apiBase,
       `/api/terminal/project/${encodeURIComponent(props.projectId)}/preview/html-ticket`,
       { method: "POST", headers: { Authorization: `Bearer ${props.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ path: props.path,
-        ...(changeKind && changeVersion ? { changeKind, version: changeVersion } : {}) }) },
+        ...(changeKind && changeVersion
+          ? {
+              changeKind,
+              version: changeVersion,
+              ...(changeBaseOid ? { baseOid: changeBaseOid } : {}),
+              ...(changeCommitOid ? { commitOid: changeCommitOid } : {}),
+            }
+          : {}) }) },
     ).then((ticket) => {
       if (active) setUrl(`${props.apiBase.replace(/\/$/, "")}${ticket.path}`);
     }).catch((reason: unknown) => {
@@ -63,7 +77,7 @@ export function TerminalHtmlPreview(props: Props) {
     });
     return () => { active = false; };
   }, [mode, props.apiBase, props.token, props.projectId, props.path, props.mtimeMs, props.refreshKey,
-    changeKind, changeVersion, revision]);
+    changeKind, changeVersion, changeBaseOid, changeCommitOid, revision]);
 
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 px-2 py-1 text-xs">

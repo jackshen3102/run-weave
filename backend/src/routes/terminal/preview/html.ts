@@ -9,11 +9,19 @@ import { TerminalPreviewError } from "../../../terminal/preview/paths";
 import type { CreateTerminalHtmlPreviewTicketResponse } from "@runweave/shared/terminal/preview";
 
 const TTL_MS = 15 * 60 * 1000;
+const gitOidSchema = z.string().regex(/^[0-9a-f]{40,64}$/);
 const requestSchema = z.object({
   path: z.string().min(1).max(4096),
-  changeKind: z.enum(["staged", "working"]).optional(),
+  changeKind: z.enum(["staged", "working", "branch", "commit"]).optional(),
   version: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-}).refine((value) => Boolean(value.changeKind) === Boolean(value.version));
+  baseOid: gitOidSchema.optional(),
+  commitOid: gitOidSchema.optional(),
+}).refine((value) => {
+  if (Boolean(value.changeKind) !== Boolean(value.version)) return false;
+  if (value.changeKind === "branch") return Boolean(value.baseOid) && !value.commitOid;
+  if (value.changeKind === "commit") return Boolean(value.commitOid) && !value.baseOid;
+  return !value.baseOid && !value.commitOid;
+});
 
 export function registerTerminalHtmlPreviewRoutes(router: Router, manager: TerminalSessionManager, authService?: AuthService): void {
   router.post("/project/:id/preview/html-ticket", async (req, res) => {
@@ -26,24 +34,46 @@ export function registerTerminalHtmlPreviewRoutes(router: Router, manager: Termi
     const session = bearer ? authService.verifyAccessToken(bearer) : null;
     if (!session) { res.status(401).json({ message: "Unauthorized" }); return; }
     try {
+      const mainBranch = manager.getProject(manager.resolveParentProjectId(project.id))?.mainBranch ?? null;
       const change = parsed.data.changeKind && parsed.data.version
-        ? { kind: parsed.data.changeKind, version: parsed.data.version } : null;
+        ? {
+            kind: parsed.data.changeKind,
+            version: parsed.data.version,
+            baseOid: parsed.data.baseOid,
+            commitOid: parsed.data.commitOid,
+          }
+        : null;
       const htmlPath = change
         ? (await resolveHtmlChangePreview({
           projectId: project.id, projectPath: project.path, requestedPath: parsed.data.path,
           changeKind: change.kind, version: change.version,
+          mainBranch, baseOid: change.baseOid, commitOid: change.commitOid,
         })).htmlPath
         : await resolveHtmlPreviewEntry(project.path, parsed.data.path);
+      const changeSpec = change
+        ? change.kind === "branch"
+          ? `branch:${change.baseOid}:${change.version}`
+          : change.kind === "commit"
+            ? `commit:${change.commitOid}:${change.version}`
+            : `${change.kind}:${change.version}`
+        : undefined;
       const ticket = authService.issueTemporaryToken({
         sessionId: session.sessionId,
         tokenType: "html-preview",
         resource: { projectId: project.id, htmlPath,
-          ...(change ? { htmlChange: `${change.kind}:${change.version}` } : {}) },
+          ...(changeSpec ? { htmlChange: changeSpec } : {}) },
         ttlMs: TTL_MS,
       });
       const encodedPath = Buffer.from(htmlPath, "utf8").toString("base64url");
+      const changeSegment = change
+        ? change.kind === "branch"
+          ? `change/branch/${change.baseOid}/${change.version}/`
+          : change.kind === "commit"
+            ? `change/commit/${change.commitOid}/${change.version}/`
+            : `change/${change.kind}/${change.version}/`
+        : "";
       const payload: CreateTerminalHtmlPreviewTicketResponse = {
-        path: `/html-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodedPath}/${change ? `change/${change.kind}/${change.version}/` : ""}${encodeURIComponent(path.basename(htmlPath))}`,
+        path: `/html-preview/${encodeURIComponent(ticket.token)}/${encodeURIComponent(project.id)}/${encodedPath}/${changeSegment}${encodeURIComponent(path.basename(htmlPath))}`,
         expiresIn: ticket.expiresIn,
       };
       res.json(payload);

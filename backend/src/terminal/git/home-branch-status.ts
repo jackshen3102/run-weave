@@ -4,6 +4,135 @@ import { promisify } from "node:util";
 import type { AppHomeBranchStatus } from "@runweave/shared/terminal/session";
 
 import { BRANCH_UPDATES_LIMIT, type BranchUpdatesResponse, type BranchUpdatesTarget, type BranchUpdatesSnapshot } from "@runweave/shared/terminal/branch-updates";
+import type { TerminalPreviewComparisonUnavailableReason } from "@runweave/shared/terminal/preview";
+
+export type LocalBaseComparisonResult =
+  | {
+      state: "ready";
+      repoRoot: string;
+      remote: string;
+      baseBranch: string;
+      baseRef: string;
+      baseOid: string;
+      mergeBaseOid: string;
+      headOid: string;
+    }
+  | {
+      state: "unavailable";
+      repoRoot: string | null;
+      reason: TerminalPreviewComparisonUnavailableReason;
+    };
+
+export async function resolveReadonlyLocalBaseComparison(
+  cwd: string,
+  mainBranch: string | null = null,
+): Promise<LocalBaseComparisonResult> {
+  let repoRoot: string;
+  try {
+    repoRoot = await git(cwd, ["rev-parse", "--show-toplevel"]);
+  } catch (error) {
+    if (String((error as { stderr?: string }).stderr).includes("not a git repository")) {
+      return { state: "unavailable", repoRoot: null, reason: "not-repository" };
+    }
+    throw error;
+  }
+  if ((await git(repoRoot, ["rev-parse", "--is-shallow-repository"])) === "true") {
+    return { state: "unavailable", repoRoot, reason: "shallow-repository" };
+  }
+  const remotes = (await git(repoRoot, ["remote"])).split("\n").filter(Boolean);
+  const remote = remotes.includes("origin")
+    ? "origin"
+    : remotes.length === 1
+      ? remotes[0]
+      : undefined;
+  if (!remote) {
+    return { state: "unavailable", repoRoot, reason: "base-unavailable" };
+  }
+  let baseBranch = mainBranch?.trim() || null;
+  if (!baseBranch) {
+    const symref = await git(repoRoot, [
+      "symbolic-ref",
+      "--quiet",
+      "--short",
+      `refs/remotes/${remote}/HEAD`,
+    ]).catch(() => "");
+    const prefix = `${remote}/`;
+    if (symref.startsWith(prefix) && symref.length > prefix.length) {
+      baseBranch = symref.slice(prefix.length);
+    }
+  }
+  if (!baseBranch) {
+    for (const candidate of ["main", "master"]) {
+      const exists = await git(repoRoot, [
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        `refs/remotes/${remote}/${candidate}^{commit}`,
+      ]).catch(() => "");
+      if (exists) {
+        baseBranch = candidate;
+        break;
+      }
+    }
+  }
+  if (!baseBranch) {
+    return { state: "unavailable", repoRoot, reason: "base-unavailable" };
+  }
+  const validFormat = await git(repoRoot, [
+    "check-ref-format",
+    `refs/heads/${baseBranch}`,
+  ])
+    .then(() => true)
+    .catch(() => false);
+  if (!validFormat) {
+    return { state: "unavailable", repoRoot, reason: "base-unavailable" };
+  }
+  const baseOid = await git(repoRoot, [
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `refs/remotes/${remote}/${baseBranch}^{commit}`,
+  ]).catch(() => "");
+  if (!baseOid || !/^[a-f0-9]{40,64}$/.test(baseOid)) {
+    return { state: "unavailable", repoRoot, reason: "base-unavailable" };
+  }
+  const headOid = await git(repoRoot, [
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    "HEAD^{commit}",
+  ]).catch(() => "");
+  if (!headOid || !/^[a-f0-9]{40,64}$/.test(headOid)) {
+    return { state: "unavailable", repoRoot, reason: "no-merge-base" };
+  }
+  let mergeBaseOid: string;
+  try {
+    mergeBaseOid = await git(repoRoot, [
+      "merge-base",
+      "--end-of-options",
+      baseOid,
+      headOid,
+    ]);
+  } catch (error) {
+    if ((error as { code?: number }).code === 1) {
+      return { state: "unavailable", repoRoot, reason: "no-merge-base" };
+    }
+    throw error;
+  }
+  if (!mergeBaseOid || !/^[a-f0-9]{40,64}$/.test(mergeBaseOid)) {
+    return { state: "unavailable", repoRoot, reason: "no-merge-base" };
+  }
+  return {
+    state: "ready",
+    repoRoot,
+    remote,
+    baseBranch,
+    baseRef: `${remote}/${baseBranch}`,
+    baseOid,
+    mergeBaseOid,
+    headOid,
+  };
+}
 
 export class BranchUpdatesTargetChangedError extends Error {
   constructor() { super("Branch updates target changed"); }

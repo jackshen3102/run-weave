@@ -9,6 +9,8 @@ import {
   deletePreviewFile,
   clearPreviewFileSearchCache,
   getPreviewFileDiff,
+  getPreviewGitBranchChanges,
+  getPreviewGitBranchCommits,
   getPreviewGitChanges,
   readPreviewAsset,
   readPreviewFile,
@@ -20,7 +22,6 @@ import {
   searchPreviewFolders,
   TerminalPreviewError,
 } from "../../../terminal/preview/preview";
-
 import { resolveTerminalFileLink } from "../../../terminal/preview/file-link";
 
 const terminalPreviewLogger = logger.child({ component: "terminal-preview" });
@@ -67,15 +68,59 @@ const previewRenameFileSchema = z.object({
   expectedMtimeMs: z.number().finite().optional(),
 });
 
-const previewFileDiffSchema = z.object({
-  path: z.string().min(1),
-  kind: z.enum(["staged", "working"]),
-});
+const gitOidSchema = z.string().regex(/^[0-9a-f]{40,64}$/);
+const previewBranchChangesQuerySchema = z.object({}).strict();
+const previewBranchCommitsQuerySchema = z.object({ commitOid: gitOidSchema.optional() }).strict();
+
+function validateDiffTarget(
+  value: { kind: "staged" | "working" | "branch" | "commit"; baseOid?: string; commitOid?: string },
+  ctx: z.RefinementCtx,
+): void {
+  const valid =
+    value.kind === "branch"
+      ? Boolean(value.baseOid) && value.commitOid === undefined
+      : value.kind === "commit"
+        ? Boolean(value.commitOid) && value.baseOid === undefined
+        : value.baseOid === undefined && value.commitOid === undefined;
+  if (!valid) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid OID parameters for change kind" });
+  }
+}
+
+const previewFileDiffSchema = z
+  .object({
+    path: z.string().min(1),
+    kind: z.enum(["staged", "working", "branch", "commit"]),
+    baseOid: gitOidSchema.optional(),
+    commitOid: gitOidSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDiffTarget);
+
+const previewChangeAssetSchema = z
+  .object({
+    path: z.string().min(1),
+    kind: z.enum(["staged", "working", "branch", "commit"]),
+    baseOid: gitOidSchema.optional(),
+    commitOid: gitOidSchema.optional(),
+    side: z.enum(["old", "new"]),
+    version: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict()
+  .superRefine(validateDiffTarget);
 
 const previewResetChangeSchema = z.object({
   path: z.string().min(1),
   kind: z.enum(["staged", "working"]),
 });
+
+function resolveProjectMainBranch(
+  terminalSessionManager: TerminalSessionManager,
+  projectId: string,
+): string | null {
+  const parentId = terminalSessionManager.resolveParentProjectId(projectId);
+  return terminalSessionManager.getProject(parentId)?.mainBranch ?? null;
+}
 
 function resolveProjectPreviewContext(
   terminalSessionManager: TerminalSessionManager,
@@ -85,9 +130,7 @@ function resolveProjectPreviewContext(
   if (!project) {
     const context = terminalSessionManager.getProjectContext(projectId);
     throw new TerminalPreviewError(
-      context
-        ? "Terminal project context is unavailable"
-        : "Terminal project not found",
+      context ? "Terminal project context is unavailable" : "Terminal project not found",
       context ? 409 : 404,
       context ? "terminal_preview_project_context_unavailable" : undefined,
     );
@@ -118,10 +161,7 @@ function handlePreviewError(req: Request, res: Response, error: unknown) {
     message: "Terminal preview request failed",
     error,
   });
-  res.status(500).json({
-    message: "Terminal preview request failed",
-    error: String(error),
-  });
+  res.status(500).json({ message: "Terminal preview request failed", error: String(error) });
 }
 
 function createRequestAbortScope(req: Request, res: Response): {
@@ -182,26 +222,17 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/files/search", async (req, res) => {
     const parsed = previewFileSearchSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await searchPreviewFiles({
-          projectId: project.id,
-          projectPath: project.path,
-          query: parsed.data.q,
-          limit: parsed.data.limit,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await searchPreviewFiles({
+        projectId: project.id,
+        projectPath: project.path,
+        query: parsed.data.q,
+        limit: parsed.data.limit,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -210,26 +241,17 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/folders/search", async (req, res) => {
     const parsed = previewFileSearchSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await searchPreviewFolders({
-          projectId: project.id,
-          projectPath: project.path,
-          query: parsed.data.q,
-          limit: parsed.data.limit,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await searchPreviewFolders({
+        projectId: project.id,
+        projectPath: project.path,
+        query: parsed.data.q,
+        limit: parsed.data.limit,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -238,28 +260,19 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/content/search", async (req, res) => {
     const parsed = previewFileSearchSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     const abortScope = createRequestAbortScope(req, res);
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await searchPreviewContent({
-          projectId: project.id,
-          projectPath: project.path,
-          query: parsed.data.q,
-          limit: parsed.data.limit,
-          signal: abortScope.signal,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await searchPreviewContent({
+        projectId: project.id,
+        projectPath: project.path,
+        query: parsed.data.q,
+        limit: parsed.data.limit,
+        signal: abortScope.signal,
+      }));
     } catch (error) {
       if (abortScope.signal.aborted) return;
       handlePreviewError(req, res, error);
@@ -270,10 +283,7 @@ export function registerTerminalPreviewRoutes(
 
   router.post("/project/:id/preview/search-index/refresh", (req, res) => {
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
       clearPreviewFileSearchCache(project.id);
       res.status(204).send();
     } catch (error) {
@@ -284,25 +294,16 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/file", async (req, res) => {
     const parsed = previewFileSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await readPreviewFile({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await readPreviewFile({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -311,28 +312,19 @@ export function registerTerminalPreviewRoutes(
   router.put("/project/:id/preview/file", async (req, res) => {
     const parsed = previewSaveFileSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await savePreviewFile({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          content: parsed.data.content,
-          expectedMtimeMs: parsed.data.expectedMtimeMs,
-          overwrite: parsed.data.overwrite,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await savePreviewFile({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        content: parsed.data.content,
+        expectedMtimeMs: parsed.data.expectedMtimeMs,
+        overwrite: parsed.data.overwrite,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -341,26 +333,17 @@ export function registerTerminalPreviewRoutes(
   router.delete("/project/:id/preview/file", async (req, res) => {
     const parsed = previewDeleteFileSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await deletePreviewFile({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          expectedMtimeMs: parsed.data.expectedMtimeMs,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await deletePreviewFile({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        expectedMtimeMs: parsed.data.expectedMtimeMs,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -369,27 +352,18 @@ export function registerTerminalPreviewRoutes(
   router.patch("/project/:id/preview/file/path", async (req, res) => {
     const parsed = previewRenameFileSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await renamePreviewFile({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          nextRequestedPath: parsed.data.nextPath,
-          expectedMtimeMs: parsed.data.expectedMtimeMs,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await renamePreviewFile({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        nextRequestedPath: parsed.data.nextPath,
+        expectedMtimeMs: parsed.data.expectedMtimeMs,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -398,28 +372,17 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/asset", async (req, res) => {
     const parsed = previewFileSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
       const payload = await readPreviewAsset({
         projectId: project.id,
         projectPath: project.path,
         requestedPath: parsed.data.path,
       });
-      res
-        .status(200)
-        .type(payload.mimeType)
-        .set("Cache-Control", payload.cacheControl)
-        .send(payload.content);
+      res.status(200).type(payload.mimeType).set("Cache-Control", payload.cacheControl).send(payload.content);
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -427,31 +390,69 @@ export function registerTerminalPreviewRoutes(
 
   router.get("/project/:id/preview/git-changes", async (req, res) => {
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await getPreviewGitChanges({
-          projectId: project.id,
-          projectPath: project.path,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await getPreviewGitChanges({ projectId: project.id, projectPath: project.path }));
+    } catch (error) {
+      handlePreviewError(req, res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/git-branch-changes", async (req, res) => {
+    const parsed = previewBranchChangesQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      const mainBranch = resolveProjectMainBranch(terminalSessionManager, project.id);
+      res.json(await getPreviewGitBranchChanges({
+        projectId: project.id,
+        projectPath: project.path,
+        mainBranch,
+      }));
+    } catch (error) {
+      handlePreviewError(req, res, error);
+    }
+  });
+
+  router.get("/project/:id/preview/git-branch-commits", async (req, res) => {
+    const parsed = previewBranchCommitsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      const mainBranch = resolveProjectMainBranch(terminalSessionManager, project.id);
+      res.json(await getPreviewGitBranchCommits({
+        projectId: project.id,
+        projectPath: project.path,
+        mainBranch,
+        commitOid: parsed.data.commitOid,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
   });
 
   router.get("/project/:id/preview/change-asset", async (req, res) => {
-    const parsed = previewFileDiffSchema.extend({
-      side: z.enum(["old", "new"]), version: z.string().regex(/^[a-f0-9]{64}$/),
-    }).strict().safeParse(req.query);
+    const parsed = previewChangeAssetSchema.safeParse(req.query);
     if (!parsed.success) { res.status(400).json({ message: "Invalid change asset query" }); return; }
     try {
       const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
-      const payload = await readPreviewChangeAsset({ projectId: project.id, projectPath: project.path,
-        requestedPath: parsed.data.path, changeKind: parsed.data.kind,
-        side: parsed.data.side, version: parsed.data.version });
+      const mainBranch = resolveProjectMainBranch(terminalSessionManager, project.id);
+      const payload = await readPreviewChangeAsset({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        changeKind: parsed.data.kind,
+        mainBranch,
+        baseOid: parsed.data.baseOid,
+        commitOid: parsed.data.commitOid,
+        side: parsed.data.side,
+        version: parsed.data.version,
+      });
       res.type(payload.mimeType).set("Cache-Control", "no-store").send(payload.content);
     } catch (error) { handlePreviewError(req, res, error); }
   });
@@ -459,26 +460,21 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/file-diff", async (req, res) => {
     const parsed = previewFileDiffSchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await getPreviewFileDiff({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          changeKind: parsed.data.kind,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      const mainBranch = resolveProjectMainBranch(terminalSessionManager, project.id);
+      res.json(await getPreviewFileDiff({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        changeKind: parsed.data.kind,
+        mainBranch,
+        baseOid: parsed.data.baseOid,
+        commitOid: parsed.data.commitOid,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -487,26 +483,17 @@ export function registerTerminalPreviewRoutes(
   router.post("/project/:id/preview/git-change/reset", async (req, res) => {
     const parsed = previewResetChangeSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request body",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request body", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await resetPreviewGitChange({
-          projectId: project.id,
-          projectPath: project.path,
-          requestedPath: parsed.data.path,
-          changeKind: parsed.data.kind,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await resetPreviewGitChange({
+        projectId: project.id,
+        projectPath: project.path,
+        requestedPath: parsed.data.path,
+        changeKind: parsed.data.kind,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }
@@ -515,26 +502,17 @@ export function registerTerminalPreviewRoutes(
   router.get("/project/:id/preview/directory", async (req, res) => {
     const parsed = previewDirectorySchema.safeParse(req.query);
     if (!parsed.success) {
-      res.status(400).json({
-        message: "Invalid request query",
-        errors: parsed.error.flatten(),
-      });
+      res.status(400).json({ message: "Invalid request query", errors: parsed.error.flatten() });
       return;
     }
-
     try {
-      const { project } = resolveProjectPreviewContext(
-        terminalSessionManager,
-        req.params.id,
-      );
-      res.json(
-        await listPreviewDirectory({
-          projectId: project.id,
-          projectPath: project.path,
-          relativePath: parsed.data.path,
-          limit: parsed.data.limit,
-        }),
-      );
+      const { project } = resolveProjectPreviewContext(terminalSessionManager, req.params.id);
+      res.json(await listPreviewDirectory({
+        projectId: project.id,
+        projectPath: project.path,
+        relativePath: parsed.data.path,
+        limit: parsed.data.limit,
+      }));
     } catch (error) {
       handlePreviewError(req, res, error);
     }

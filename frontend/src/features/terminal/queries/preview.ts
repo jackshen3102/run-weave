@@ -1,6 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  TerminalPreviewBranchChangesResponse,
+  TerminalPreviewBranchCommitsResponse,
   TerminalPreviewChangeKind,
+  TerminalPreviewChangeScope,
   TerminalPreviewFileDiffResponse,
   TerminalPreviewFileResponse,
   TerminalPreviewGitChangesResponse,
@@ -10,6 +13,8 @@ import { isSupportedTerminalImagePreviewPath, isSupportedTerminalVideoPreviewPat
 import {
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
+  getTerminalProjectPreviewGitBranchChanges,
+  getTerminalProjectPreviewGitBranchCommits,
   getTerminalProjectPreviewGitChanges,
   searchTerminalProjectPreviewFiles,
 } from "../../../services/terminal/preview";
@@ -25,6 +30,8 @@ export function useTerminalPreviewQueries(input: {
   projectId: string | null;
   hasProjectPath: boolean;
   mode: "file" | "changes" | "explorer" | "branch-updates" | null;
+  changesScope?: TerminalPreviewChangeScope;
+  selectedCommitOid?: string;
   query: string;
   selectedFilePath?: string;
   selectedChangePath?: string;
@@ -37,6 +44,7 @@ export function useTerminalPreviewQueries(input: {
     PREVIEW_SEARCH_DEBOUNCE_MS,
   );
   const projectId = input.projectId ?? "";
+  const changesScope = input.changesScope ?? "working";
   const selectedFilePath = input.selectedFilePath ?? "";
   const selectedChangePath = input.selectedChangePath ?? "";
   const selectedChangeKind = input.selectedChangeKind ?? "working";
@@ -58,10 +66,12 @@ export function useTerminalPreviewQueries(input: {
   const changesEnabled =
     Boolean(projectId && input.hasProjectPath) &&
     (input.mode === null || input.mode === "changes");
-  const diffEnabled =
+  const branchChangesEnabled =
     changesEnabled &&
     input.mode === "changes" &&
-    Boolean(input.selectedChangePath && input.selectedChangeKind);
+    (changesScope === "branch" || changesScope === "working");
+  const branchCommitsEnabled =
+    changesEnabled && input.mode === "changes" && changesScope === "commits";
 
   const search = useQuery({
     gcTime: PREVIEW_GC_TIME_MS,
@@ -99,6 +109,47 @@ export function useTerminalPreviewQueries(input: {
       getTerminalProjectPreviewGitChanges(apiBase, token, projectId),
     enabled: changesEnabled,
   });
+  const branchChanges = useQuery({
+    queryKey: terminalQueryKeys.previewBranchChanges(scope, projectId),
+    queryFn: () =>
+      getTerminalProjectPreviewGitBranchChanges(apiBase, token, projectId),
+    enabled: branchChangesEnabled,
+  });
+  const branchCommits = useQuery({
+    queryKey: terminalQueryKeys.previewBranchCommits({
+      scope,
+      projectId,
+      commitOid: input.selectedCommitOid,
+    }),
+    queryFn: () =>
+      getTerminalProjectPreviewGitBranchCommits(apiBase, token, projectId, {
+        commitOid: input.selectedCommitOid,
+      }),
+    enabled: branchCommitsEnabled,
+  });
+
+  const activeBaseOid =
+    selectedChangeKind === "branch"
+      ? branchChanges.data?.state === "ready"
+        ? branchChanges.data.mergeBaseOid
+        : undefined
+      : undefined;
+  const activeCommitOid =
+    selectedChangeKind === "commit"
+      ? branchCommits.data?.state === "ready"
+        ? (branchCommits.data.selectedCommitOid ?? undefined)
+        : undefined
+      : undefined;
+  const diffEnabled =
+    changesEnabled &&
+    input.mode === "changes" &&
+    Boolean(input.selectedChangePath && input.selectedChangeKind) &&
+    (selectedChangeKind === "branch"
+      ? Boolean(activeBaseOid)
+      : selectedChangeKind === "commit"
+        ? Boolean(activeCommitOid)
+        : true);
+
   const diff = useQuery({
     gcTime: PREVIEW_GC_TIME_MS,
     queryKey: terminalQueryKeys.previewDiff({
@@ -106,13 +157,18 @@ export function useTerminalPreviewQueries(input: {
       projectId,
       path: selectedChangePath,
       kind: selectedChangeKind,
+      baseOid: activeBaseOid,
+      commitOid: activeCommitOid,
     }),
     queryFn: () =>
       getTerminalProjectPreviewFileDiff(apiBase, token, projectId, {
         path: selectedChangePath,
         kind: selectedChangeKind,
+        baseOid: activeBaseOid,
+        commitOid: activeCommitOid,
       }),
     enabled: diffEnabled,
+    retry: false,
   });
 
   const setFile = (
@@ -128,9 +184,17 @@ export function useTerminalPreviewQueries(input: {
     path: string,
     kind: TerminalPreviewChangeKind,
     value: TerminalPreviewFileDiffResponse | undefined,
+    options?: { baseOid?: string; commitOid?: string },
   ) => {
     queryClient.setQueryData(
-      terminalQueryKeys.previewDiff({ scope, projectId, path, kind }),
+      terminalQueryKeys.previewDiff({
+        scope,
+        projectId,
+        path,
+        kind,
+        baseOid: options?.baseOid,
+        commitOid: options?.commitOid,
+      }),
       value,
     );
   };
@@ -140,17 +204,44 @@ export function useTerminalPreviewQueries(input: {
       value,
     );
   };
+  const setBranchChanges = (
+    value: TerminalPreviewBranchChangesResponse | undefined,
+  ) => {
+    queryClient.setQueryData(
+      terminalQueryKeys.previewBranchChanges(scope, projectId),
+      value,
+    );
+  };
+  const setBranchCommits = (
+    value: TerminalPreviewBranchCommitsResponse | undefined,
+    commitOid?: string,
+  ) => {
+    queryClient.setQueryData(
+      terminalQueryKeys.previewBranchCommits({
+        scope,
+        projectId,
+        commitOid,
+      }),
+      value,
+    );
+  };
 
   return {
     search,
     searchPending,
     file,
     changes,
+    branchChanges,
+    branchCommits,
+    activeBaseOid,
+    activeCommitOid,
     diff,
     queryClient,
     scope,
     setFile,
     setDiff,
     setChanges,
+    setBranchChanges,
+    setBranchCommits,
   };
 }
