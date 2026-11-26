@@ -1,37 +1,17 @@
 #!/usr/bin/env node
 
 import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
+  cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync,
 } from "node:fs";
-import {
-  bridgeAssets,
-  installPi,
-} from "../../packages/agent-bridge/src/install-pi.mjs";
+import { bridgeAssets, installPi } from "../../packages/agent-bridge/src/install-pi.mjs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
-  assertFile,
-  commandExists,
-  log,
-  readJson,
-  repoRoot,
-  run,
-  runCapture,
-  runOptional,
-  runResult,
+  assertFile, commandExists, log, readJson, repoRoot, run, runCapture, runOptional, runResult,
 } from "./sync-runtime.mjs";
 import { codexReleaseInstalled, collectSessionReferencedCodexVersions } from "./codex-state.mjs";
 import {
-  lockToolkitSync,
-  packageMatches,
-  publishToolkitRelease,
-  toolkitRelease,
+  lockToolkitSync, packageMatches, publishToolkitRelease, toolkitRelease,
 } from "./release.mjs";
 
 const args = new Set(process.argv.slice(2));
@@ -43,10 +23,13 @@ const pluginRelativePath = "plugins/toolkit";
 const marketplaceRelativePath = ".agents/plugins/marketplace.json";
 const pluginDir = path.join(repoRoot, pluginRelativePath);
 const manifestPath = path.join(pluginDir, ".codex-plugin", "plugin.json");
-const hooksConfigPath = path.join(pluginDir, "hooks.json");
+const antigravityManifestPath = path.join(pluginDir, ".antigravity-plugin", "plugin.json");
+const claudeManifestPath = path.join(pluginDir, ".claude-plugin", "plugin.json");
+const hooksConfigPath = path.join(pluginDir, "hooks", "hooks.json");
 const marketplacePath = path.join(repoRoot, marketplaceRelativePath);
 const codexHome = process.env.CODEX_HOME || path.join(homedir(), ".codex");
 const traeHome = path.join(homedir(), ".trae");
+const agyConfigHome = path.join(homedir(), ".gemini", "config");
 const publishRoot = path.join(codexHome, "plugins", "sources", "runweave");
 let publishedPluginDir;
 const syncDisabled = process.env.RUNWEAVE_SKIP_TOOLKIT_PLUGIN_SYNC === "1";
@@ -62,6 +45,8 @@ if (ifStaged && !hasStagedToolkitChanges()) {
 }
 
 assertFile(manifestPath);
+assertFile(antigravityManifestPath);
+assertFile(claudeManifestPath);
 assertFile(hooksConfigPath);
 assertFile(marketplacePath);
 
@@ -76,20 +61,16 @@ if (!marketplaceName || !pluginName) {
 
 log(`Syncing ${pluginName}@${marketplaceName} from ${pluginRelativePath}.`);
 
-const primaryWorktree = packaged ? repoRoot : runCapture(
-  "git",
-  ["worktree", "list", "--porcelain", "-z"],
-  { quiet: true },
-)
-  .split("\0")[0]
-  .slice("worktree ".length);
+const primaryWorktree = packaged
+  ? repoRoot
+  : runCapture("git", ["worktree", "list", "--porcelain", "-z"], { quiet: true })
+      .split("\0")[0]
+      .slice("worktree ".length);
 if (ifStaged && repoRoot !== primaryWorktree) {
   // A linked branch may contain an older Toolkit. A commit must not downgrade the user's global install.
   await buildAgentAssets();
   stageGeneratedAssets();
-  log(
-    "Linked-worktree commit: generated local assets only. Use pnpm toolkit:sync to explicitly publish this branch.",
-  );
+  log("Linked-worktree commit: generated local assets only. Use pnpm toolkit:sync to explicitly publish this branch.");
   process.exit(0);
 }
 
@@ -98,8 +79,7 @@ process.once("exit", releaseLock);
 
 if (!packaged) await buildAgentAssets();
 const piInstallation = await installPi({
-  agentDir:
-    process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"),
+  agentDir: process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"),
   assetsDir: path.join(repoRoot, "plugins", "pi", "dist"),
 });
 log(`Pi integration ${piInstallation.status}.`);
@@ -108,39 +88,17 @@ publishedPluginDir = publishToolkitRelease(publishRoot, marketplace, release);
 log(`Toolkit content release ${release.version}.`);
 
 if (codexReleaseInstalled(release, { marketplaceName, pluginName, publishRoot, cacheRoot: getCodexPluginCacheRoot(pluginName, marketplaceName) })) {
-  log(
-    "Codex already has this exact Toolkit content; leaving its installation and hook approval unchanged.",
-  );
+  log("Codex already has this exact Toolkit content; leaving its installation and hook approval unchanged.");
 } else {
-  const codexCompatibilityVersions = collectCodexCompatibilityVersions(
-    pluginName,
-    marketplaceName,
-  );
-  const codexCacheSnapshot = snapshotCodexCompatibilityCache(
-    pluginName,
-    marketplaceName,
-    codexCompatibilityVersions,
-  );
-
+  const codexCompatibilityVersions = collectCodexCompatibilityVersions(pluginName, marketplaceName);
+  const codexCacheSnapshot = snapshotCodexCompatibilityCache(pluginName, marketplaceName, codexCompatibilityVersions);
   installForCodex(pluginName, marketplaceName);
-  preserveCodexCompatibilityCache(
-    pluginName,
-    marketplaceName,
-    codexCompatibilityVersions,
-    codexCacheSnapshot,
-  );
+  preserveCodexCompatibilityCache(pluginName, marketplaceName, codexCompatibilityVersions, codexCacheSnapshot);
   cleanupCompatibilitySnapshot(codexCacheSnapshot);
 }
 
-if (
-  packageMatches(
-    path.join(getTraePluginCacheRoot(pluginName), release.version),
-    release.files,
-  )
-) {
-  log(
-    "Trae already has this exact Toolkit content; leaving its installation unchanged.",
-  );
+if (packageMatches(path.join(getTraePluginCacheRoot(pluginName), release.version), release.files)) {
+  log("Trae already has this exact Toolkit content; leaving its installation unchanged.");
 } else {
   const traeCacheSnapshot = snapshotTraeCompatibilityCache(pluginName);
   try {
@@ -149,6 +107,12 @@ if (
     preserveTraeCompatibilityCache(pluginName, traeCacheSnapshot);
     cleanupCompatibilitySnapshot(traeCacheSnapshot);
   }
+}
+
+if (packageMatches(getAgyPluginInstallRoot(pluginName), release.files)) {
+  log("Antigravity already has this exact Toolkit content; leaving its installation unchanged.");
+} else {
+  installForAgy(pluginName);
 }
 
 stageGeneratedAssets();
@@ -168,30 +132,17 @@ function stageGeneratedAssets() {
   }
 }
 
-log(
-  "Toolkit plugin sync complete. New Codex/Trae sessions are required to load updated skills.",
-);
+log("Toolkit plugin sync complete. New Codex/Trae/Antigravity sessions are required to load updated skills.");
 
 function hasStagedToolkitChanges() {
   const output = runCapture(
     "git",
-    [
-      "diff",
-      "--cached",
-      "--name-only",
-      "--",
-      pluginRelativePath,
-      "packages/agent-bridge",
-      "scripts/agents",
-      "scripts/toolkit",
-      marketplaceRelativePath,
-    ],
+    ["diff", "--cached", "--name-only", "--", pluginRelativePath, "packages/agent-bridge", "scripts/agents", "scripts/toolkit", marketplaceRelativePath],
     { quiet: true },
   )
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-
   return output.length > 0;
 }
 
@@ -200,59 +151,40 @@ async function buildAgentAssets() {
   await build();
 }
 
-
 function installForCodex(pluginName, marketplaceName) {
   if (!commandExists("codex")) {
     log("codex not found; skipping Codex plugin install.");
     return;
   }
-
   ensureCodexMarketplace(pluginName, marketplaceName);
   run("codex", ["plugin", "add", `${pluginName}@${marketplaceName}`]);
-  const listing = runCapture("codex", ["plugin", "list", "--json"], {
-    quiet: true,
-  });
+  const listing = runCapture("codex", ["plugin", "list", "--json"], { quiet: true });
   if (!listing.includes(`${pluginName}@${marketplaceName}`)) {
-    throw new Error(
-      `Codex plugin list does not include ${pluginName}@${marketplaceName}.`,
-    );
+    throw new Error(`Codex plugin list does not include ${pluginName}@${marketplaceName}.`);
   }
 }
 
 function collectCodexCompatibilityVersions(pluginName, marketplaceName) {
   const versions = new Set();
   addVersion(versions, manifest.version);
-
   const cacheRoot = getCodexPluginCacheRoot(pluginName, marketplaceName);
   for (const entry of listDirectoryNames(cacheRoot)) {
     addVersion(versions, entry);
   }
-  for (const version of collectSessionReferencedCodexVersions(
-    pluginName,
-    marketplaceName,
-    codexHome,
-  )) {
+  for (const version of collectSessionReferencedCodexVersions(pluginName, marketplaceName, codexHome)) {
     addVersion(versions, version);
   }
-
-  const manifestRevisions = packaged ? [] : runCapture(
-    "git",
-    ["log", "--format=%H", "--", path.relative(repoRoot, manifestPath)],
-    { quiet: true },
-  )
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 20);
+  const manifestRevisions = packaged
+    ? []
+    : runCapture("git", ["log", "--format=%H", "--", path.relative(repoRoot, manifestPath)], { quiet: true })
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 20);
   for (const revision of manifestRevisions) {
-    const content = runCapture(
-      "git",
-      ["show", `${revision}:${path.relative(repoRoot, manifestPath)}`],
-      { quiet: true },
-    );
+    const content = runCapture("git", ["show", `${revision}:${path.relative(repoRoot, manifestPath)}`], { quiet: true });
     addVersion(versions, parseJsonVersion(content));
   }
-
   return versions;
 }
 
@@ -485,6 +417,10 @@ function getTraePluginCacheRoot(pluginName) {
   return path.join(traeHome, "plugins", "cache", "local", pluginName);
 }
 
+function getAgyPluginInstallRoot(pluginName) {
+  return path.join(agyConfigHome, "plugins", pluginName);
+}
+
 function listDirectoryNames(directoryPath) {
   if (!existsSync(directoryPath)) {
     return [];
@@ -581,5 +517,24 @@ function installForTrae(pluginName) {
   const listing = runCapture(traeCommand, ["plugin", "list"], { quiet: true });
   if (!listing.includes(`${pluginName}@local`)) {
     throw new Error(`Trae plugin list does not include ${pluginName}@local.`);
+  }
+}
+
+function installForAgy(pluginName) {
+  if (!commandExists("agy")) {
+    log("agy not found; skipping Antigravity plugin install.");
+    return;
+  }
+
+  run("agy", ["plugin", "install", publishedPluginDir]);
+  const listing = runCapture("agy", ["plugin", "list", "--json"], {
+    quiet: true,
+  });
+  const installed = JSON.parse(listing);
+  if (
+    !Array.isArray(installed) ||
+    !installed.some((plugin) => plugin?.name === pluginName)
+  ) {
+    throw new Error(`Antigravity plugin list does not include ${pluginName}.`);
   }
 }

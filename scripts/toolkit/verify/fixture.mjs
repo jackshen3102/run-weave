@@ -21,7 +21,7 @@ const repoRoot = path.resolve(
 const resourcesDir = path.join(repoRoot, "electron", "resources");
 const toolkitDir = path.join(repoRoot, "plugins", "toolkit");
 const toolkitHooksDir = path.join(repoRoot, "plugins", "toolkit", "hooks");
-const toolkitHooksConfigPath = path.join(toolkitDir, "hooks.json");
+const toolkitHooksConfigPath = path.join(toolkitHooksDir, "hooks.json");
 const electronHooksDir = path.join(resourcesDir, "hooks");
 const hookAssets = [
   "app-server-client.cjs",
@@ -46,7 +46,7 @@ const toolkitHookEvents = [
   "PermissionRequest",
 ];
 const toolkitHookCommand =
-  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "__PLUGIN_DIR__" . "${CODEX_PLUGIN_ROOT:-}" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/* "${CLAUDE_PLUGIN_ROOT:-}"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
+  'sh -c \'for root in "${RUNWEAVE_TOOLKIT_PLUGIN_ROOT:-}" "__PLUGIN_DIR__/.." "__PLUGIN_DIR__" . "${CODEX_PLUGIN_ROOT:-}" "$HOME/.codex/plugins/cache/runweave/toolkit/latest" "$HOME/.codex/plugins/cache/runweave/toolkit"/* "${CLAUDE_PLUGIN_ROOT:-}"; do if [ -n "$root" ] && [ -f "$root/hooks/runweave-hook-dispatch.cjs" ]; then exec node "$root/hooks/runweave-hook-dispatch.cjs"; fi; done; exit 0\'';
 
 const toolkitHooksConfig = JSON.parse(
   await readFile(toolkitHooksConfigPath, "utf8"),

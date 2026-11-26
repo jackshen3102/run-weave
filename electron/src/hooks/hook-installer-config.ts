@@ -8,7 +8,7 @@ const RUNWEAVE_HOOK_MARKER = "_runweaveManaged";
 
 // Compatibility cleanup for legacy global Trae CLI hooks in
 // `~/.trae/traecli.toml`. New Trae plugin hooks live in
-// `plugins/toolkit/hooks.json`.
+// `plugins/toolkit/hooks/hooks.json`.
 const RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
   "# >>> runweave-hooks (managed by Runweave) >>>";
 const RUNWEAVE_TRAE_TOML_FENCE_END =

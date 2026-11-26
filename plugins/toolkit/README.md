@@ -141,9 +141,9 @@ codex plugin add "toolkit@$MARKETPLACE_NAME"
 
 Hooks 运行时代码放在 `plugins/toolkit/hooks/`。
 
-- Codex hook 配置由 `plugins/toolkit/.codex-plugin/plugin.json` 的 `hooks` 字段显式指向
-  `plugins/toolkit/hooks.json`，随 `toolkit@runweave` 和 `toolkit@local` 安装进入插件缓存。
-- 不要只在插件根目录放置 `hooks.json` 而不更新 manifest；新启动的 Codex 进程不会因为
+- 插件根目录同时维护 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 与 `.antigravity-plugin/plugin.json`，共用同一套 `skills/`。
+- Codex / Trae / Claude Code 的 hook 配置位于 `plugins/toolkit/hooks/hooks.json`（由 `plugins/toolkit/.codex-plugin/plugin.json` 的 `hooks` 字段显式指向），随 `toolkit@runweave` 和 `toolkit@local` 安装进入插件缓存；Antigravity (`agy`) 原生插件加载器只读取插件根目录 `hooks.json`，因此不会与 `hooks/hooks.json` 冲突（`agy` 的全局生命周期 hook 由 `~/.gemini/config/hooks.json` 受管维护）。
+- 不要只在插件目录放置 `hooks.json` 而不更新 manifest；新启动的 Codex 进程不会因为
   该文件存在就自动执行 hook。
 - Electron 安装器会从同步后的 `electron/resources/hooks/` 运行副本安装 launcher 与
   兼容/清理层，旧的 Codex 全局 hooks 与 Trae 全局 TOML hook 会被去重清理。
@@ -157,9 +157,9 @@ pnpm toolkit:sync:staged
 ```
 
 该命令会同步 toolkit hook 资产到 Electron resources，并将插件安装到 Codex 的
-`toolkit@runweave` 与 Trae CLI 的 `toolkit@local`。分发版本由实际文件内容决定，
+`toolkit@runweave`、Trae CLI 的 `toolkit@local` 与 Antigravity (`agy`) 的 `toolkit`。分发版本由实际文件内容决定，
 与同步时间、工作区路径无关；相同内容跳过重复安装，不改写源码 manifest 的版本。
-插件 `hooks.json` 与 hook 运行副本写回本次提交。需要跳过本机插件安装时，可设置：
+插件 `hooks/hooks.json` 与 hook 运行副本写回本次提交。需要跳过本机插件安装时，可设置：
 
 三个工作区共用 `$CODEX_HOME/plugins/sources/runweave` 下的固定 marketplace 和不可变
 内容版本，同步安装通过本机锁串行执行，不再将全局 marketplace 来回切换到不同工作区。

@@ -71,7 +71,7 @@ before 硬门禁失败时，先判断是否由默认时间窗口内的业务代�
 2. 对默认时间窗口内的 diff 做变更分析：列出受影响文件，过滤非业务代码，判断业务影响面。
 3. 保存 before 架构报告并跑硬门禁；让侦察副 C 或主 C 的独立侦察阶段给出候选。
 4. 只选择一个可验证重构点：优先修复硬违规，其次处理临界文件、新增复杂度热点、状态双源或反向依赖；没有目标则走“无改动”总结。
-5. 重构前从 `docs/testing/command-matrix.md` 选择行为基线并实际执行。实现时应用 `toolkit:karpathy-guidelines`；涉及 React 时再应用 `toolkit:vercel-react-best-practices`，但不要为调用技能扩大范围。
+5. 重构前从 `docs/testing/command-matrix.md` 选择行为基线并实际执行。实现时应用 `toolkit:karpathy-guidelines`；涉及 React 时再应用 `toolkit:react-best-practices`，但不要为调用技能扩大范围。
 6. 完成最小、行为保持的 vertical slice 重构，清理仅由本轮产生的孤儿。
 7. 重跑同一组行为验证，保存 after 架构报告，执行架构报告比较器和下述按范围选择的静态门禁。
 8. 让审查副 C 或主 C 的独立审查阶段检查最终 diff；存在未解决的高风险结论时不发布。

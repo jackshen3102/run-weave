@@ -70,6 +70,18 @@ export function toolkitRelease(root, { packaged = false } = {}) {
   if (!baseVersion) throw new Error("Toolkit manifest version is missing.");
   metadata.version = baseVersion;
   manifest.content = Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`);
+  const companionManifests = files.filter(
+    (file) =>
+      file.name === ".antigravity-plugin/plugin.json" ||
+      file.name === ".claude-plugin/plugin.json",
+  );
+  for (const companion of companionManifests) {
+    const companionMetadata = JSON.parse(companion.content);
+    companionMetadata.version = baseVersion;
+    companion.content = Buffer.from(
+      `${JSON.stringify(companionMetadata, null, 2)}\n`,
+    );
+  }
   const hash = createHash("sha256");
   for (const file of files) {
     hash
@@ -84,6 +96,13 @@ export function toolkitRelease(root, { packaged = false } = {}) {
   const version = `${baseVersion}+codex.${digest}`;
   metadata.version = version;
   manifest.content = Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`);
+  for (const companion of companionManifests) {
+    const companionMetadata = JSON.parse(companion.content);
+    companionMetadata.version = version;
+    companion.content = Buffer.from(
+      `${JSON.stringify(companionMetadata, null, 2)}\n`,
+    );
+  }
   return { files, digest, version };
 }
 
