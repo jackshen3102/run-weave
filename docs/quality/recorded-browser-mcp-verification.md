@@ -3,8 +3,5 @@
 录屏取证已并入[统一验收材料说明](./acceptance-materials.md)和
 [`toolkit:acceptance`](../../plugins/toolkit/skills/acceptance/SKILL.md)。
 
-用户明确要求原始录屏时，统一入口使用[唯一浏览器采集实现](../../plugins/toolkit/skills/acceptance/references/capture.md)，
-保留当前实际操作页面、帧时间、原片和动作记录，不额外要求视频编辑依赖。
-原 Skill 名称仍可显式调用并转发到该流程。
-
-本页仅保留旧链接，不再维护默认开发命令、账号、编码示例或另一份元数据合同。
+用户明确要求原始录屏时，使用统一入口的[浏览器采集流程](../../plugins/toolkit/skills/acceptance/references/capture.md)。
+采集绑定当前实际操作的页面，交付原片、帧时间和动作记录。

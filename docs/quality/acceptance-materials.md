@@ -24,8 +24,8 @@
 - [视频制作](../../plugins/toolkit/skills/acceptance/references/video.md)
 - [预览与检查](../../plugins/toolkit/skills/acceptance/references/delivery.md)
 
-原来的三个 Skill 名称和已有脚本路径保留兼容转发。不要在兼容入口增加业务步骤、
-默认账号、固定开发端口或另一套录屏循环；这些会使同一能力出现多个不同的执行合同。
+原 `acceptance-gallery`、`acceptance-video` 和 `recorded-browser-mcp-verification` 已并入统一入口。
+按[制作与交付流程](../../plugins/toolkit/skills/acceptance/references/materials.md)选择当前脚本和取证方式。
 
 素材和检查记录保存在任务独立的 `artifacts/verification-runs/` 中，默认不进入 Git。
 本文不记录某次报告或某台手机的验证结果；以对应任务的原始证据和回执为准。
