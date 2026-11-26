@@ -4,6 +4,7 @@ import type {
   InboxPage,
   InboxStateChange,
   KnowledgeShareResult,
+  InboxLiveCheckResult,
 } from "@runweave/shared/knowledge-inbox";
 import { requestJson } from "./http";
 export function shareInboxItem(apiBase: string, token: string, item: InboxItem): Promise<KnowledgeShareResult> {
@@ -59,6 +60,19 @@ export function changeInboxState(
       body: JSON.stringify(input),
     },
   );
+}
+export function runInboxLiveCheck(
+  apiBase: string,
+  token: string,
+  item: InboxItem,
+  signal?: AbortSignal,
+): Promise<InboxLiveCheckResult> {
+  return requestJson(apiBase, `/api/knowledge-inbox/items/${encodeURIComponent(item.itemId)}/live-check`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedContentVersion: item.contentVersion }),
+    signal,
+  });
 }
 /** Used only for cache partitioning. The Backend verifies the token on every request. */
 export function inboxAccount(token: string): string {

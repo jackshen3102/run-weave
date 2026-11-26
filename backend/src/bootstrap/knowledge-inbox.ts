@@ -13,8 +13,11 @@ import type { ActivityQueryService } from "../activity/database/service";
 import type { ExperienceService } from "../experience/service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { ResourceScope } from "./resource-scope";
+import { AgentToolchainService } from "../agent-toolchain/service";
+import { HookDiagnosticService } from "../terminal/hook-diagnostics/service";
+import { KnowledgeInboxLiveCheckService } from "../knowledge-inbox/live-check";
 
-export function createKnowledgeInbox(
+export function createKnowledgeInboxRuntime(
   resources: ResourceScope,
   dependencies: {
     evolutionService: EvolutionService;
@@ -24,7 +27,16 @@ export function createKnowledgeInbox(
     experienceService: ExperienceService;
     terminalSessionManager: TerminalSessionManager;
   },
-): KnowledgeInboxService {
+): {
+  knowledgeInboxService: KnowledgeInboxService;
+  agentToolchain: AgentToolchainService;
+  hookDiagnostics: HookDiagnosticService;
+} {
+  const hookDiagnostics = new HookDiagnosticService();
+  const agentToolchain = new AgentToolchainService(
+    dependencies.evolutionService.repositories,
+  );
+  resources.defer("agent-toolchain", () => agentToolchain.dispose());
   const storage = resolveExperienceStorage();
   const home =
     process.env.RUNWEAVE_EXPERIENCE_TEST_MODE === "true"
@@ -32,6 +44,10 @@ export function createKnowledgeInbox(
       : path.join(os.homedir(), ".runweave", "knowledge-inbox");
   // Lazy, operation-scoped SQLite connections isolate initialization failures from terminals.
   const inboxStorage = new InboxStorage(path.join(home, storage.namespace));
+  const liveChecks = new KnowledgeInboxLiveCheckService(
+    agentToolchain,
+    hookDiagnostics,
+  );
   const service = new KnowledgeInboxService(
     inboxStorage,
     dependencies.evolutionService.repositories,
@@ -44,9 +60,10 @@ export function createKnowledgeInbox(
       new ExperienceInboxSource(dependencies.experienceService),
     ],
     () => dependencies.terminalSessionManager.listProjects(),
+    liveChecks,
   );
   service.shares = new KnowledgeShareService(inboxStorage, service, dependencies.evolutionService,
     dependencies.experienceService, dependencies.evolutionService.repositories);
   resources.defer("knowledge-inbox", () => service.dispose());
-  return service;
+  return { knowledgeInboxService: service, agentToolchain, hookDiagnostics };
 }

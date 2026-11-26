@@ -105,6 +105,7 @@ export interface RuntimeServices extends DeviceMonitoringRuntime {
   evolutionRuntime: EvolutionRuntime;
   evolutionService: EvolutionService;
   knowledgeInboxService: KnowledgeInboxService;
+  hookDiagnostics: import("../terminal/hook-diagnostics/service").HookDiagnosticService;
   experienceService: ExperienceService;
   experienceLearning: ExperienceLearningRuntime;
   scheduledTaskRuntime?: import("../scheduled-tasks/runtime").ScheduledTaskRuntime | null;

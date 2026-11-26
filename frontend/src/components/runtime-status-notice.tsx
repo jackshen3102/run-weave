@@ -9,6 +9,7 @@ const CAPABILITY_LABELS: Record<RuntimeStatusCapabilityId, string> = {
   "app-server": "App Server", "workspace-services": "Workspace Services",
   desktop: "Desktop", "background-tasks": "后台任务",
   "research-mcp": "调查 MCP",
+  "agent-toolchain": "Agent 工具链",
 };
 
 export function RuntimeStatusNotice() {

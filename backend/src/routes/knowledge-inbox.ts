@@ -22,6 +22,7 @@ const stateBody = z
     expectedStateVersion: z.number().int().nonnegative(),
   })
   .strict();
+const liveCheckBody = z.object({ expectedContentVersion: id }).strict();
 export function createKnowledgeInboxRouter(
   service: KnowledgeInboxService,
   auth: AuthService,
@@ -114,6 +115,13 @@ export function createKnowledgeInboxRouter(
         id.parse(req.params.itemId),
         stateBody.parse(req.body),
       );
+    }),
+  );
+  router.post(
+    "/items/:itemId/live-check",
+    respond(async (req, username) => {
+      z.object({}).strict().parse(req.query);
+      return service.liveCheck(username, id.parse(req.params.itemId), liveCheckBody.parse(req.body));
     }),
   );
   return router;

@@ -18,6 +18,7 @@ const domains: Readonly<Record<RuntimeStatusCapabilityId, readonly string[]>> = 
   desktop: ["desktop.browser", "desktop.tunnels", "agents.companion"],
   "background-tasks": ["scheduledTasks", "knowledge"],
   "research-mcp": ["backend.tunnelAuth", "desktop.tunnels"],
+  "agent-toolchain": [],
 };
 
 const ownerDomains: Partial<Record<RuntimeStatusReport["source"]["runtime"], readonly string[]>> = {

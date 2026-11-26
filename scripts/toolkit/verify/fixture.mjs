@@ -30,6 +30,7 @@ const hookAssets = [
   "runweave-hook-payload.cjs",
   "runweave-hook-tmux.cjs",
   "runweave-hook-completion.cjs",
+  "runweave-hook-diagnostics.cjs",
   "runweave-hook-claude.cjs",
   "runweave-hook-agy.cjs",
   "runweave-task-supervision.cjs",

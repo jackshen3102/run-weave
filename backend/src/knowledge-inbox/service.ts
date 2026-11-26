@@ -6,6 +6,8 @@ import type {
   InboxRepository,
   InboxSourceStatus,
   InboxStateChange,
+  InboxLiveCheckRequest,
+  InboxLiveCheckResult,
 } from "@runweave/shared/knowledge-inbox";
 import type { EvolutionRepositoryScopes } from "../evolution/repository-scope";
 import {
@@ -21,6 +23,7 @@ import {
 } from "./types";
 import { digest, publicText } from "./projection";
 import type { KnowledgeShareService } from "./shares";
+import type { KnowledgeInboxLiveCheckService } from "./live-check";
 
 type InboxQuery = InboxListQuery & { limit: number };
 interface Snapshot {
@@ -37,6 +40,7 @@ export class KnowledgeInboxService {
     private readonly scopes: EvolutionRepositoryScopes | null,
     private readonly sources: InboxSourceReader[],
     private readonly projects: () => Array<{ id: string; name: string }>,
+    readonly liveChecks?: KnowledgeInboxLiveCheckService,
   ) {}
   async dispose(): Promise<void> {
     this.closed = true;
@@ -131,7 +135,9 @@ export class KnowledgeInboxService {
             )
               return [];
             if (query.state === "pending") {
-              const current = decorate(catalog.item, catalog, states, snapshot);
+              const current = this.decorate(
+                decorate(catalog.item, catalog, states, snapshot),
+              );
               return current.availability === "available" &&
                 !current.processedAt
                 ? [current]
@@ -155,7 +161,7 @@ export class KnowledgeInboxService {
                 latest.contentVersion,
               );
             return version
-              ? [decorate(version, catalog, states, snapshot)]
+              ? [this.decorate(decorate(version, catalog, states, snapshot))]
               : [];
           })
           .sort(compareItems)
@@ -206,6 +212,21 @@ export class KnowledgeInboxService {
       });
     });
   }
+  async liveCheck(
+    username: string,
+    id: string,
+    input: InboxLiveCheckRequest,
+  ): Promise<InboxLiveCheckResult> {
+    if (!this.liveChecks) throw new InboxError(503, "现场复验暂不可用");
+    const item = await this.detail(username, id);
+    if (item.availability !== "available") {
+      throw new InboxError(409, "内容已失效或所属仓库不可用");
+    }
+    if (item.contentVersion !== input.expectedContentVersion) {
+      throw new InboxError(409, "经验内容已更新，请刷新后重新复验");
+    }
+    return this.liveChecks.run(item);
+  }
   private readItem(
     store: InboxDatabase,
     snapshot: Snapshot,
@@ -236,7 +257,12 @@ export class KnowledgeInboxService {
       ? store.processedVersion(username, id, version)
       : catalog.item;
     if (!item) throw new InboxError(404, "成果不存在");
-    return decorate(item, catalog, states, snapshot);
+    return this.decorate(decorate(item, catalog, states, snapshot));
+  }
+  private decorate(item: InboxItem): InboxItem {
+    return (
+      this.liveChecks?.decorate(item, !item.currentContentVersion) ?? item
+    );
   }
 }
 function decorate(

@@ -146,3 +146,17 @@ cases:
       - 在 Companion 未启用、Profile 未使用或 direct mode 时读取报告；确认对应状态为 disabled 且异常数不增加。
       - 启用 Companion；确认启动中为 recovering、ready 后为 healthy；制造连续启动失败超过 30 秒后确认只让 Companion 异常。
       - 占用一个 Profile 的 Whistle 端口并使用该 Profile；确认 15 秒窗口后只有该 Profile 项 unhealthy，其他 Profile 状态不受影响。
+
+  - id: RSP-012
+    name: Backend 报告真实 Agent 工具链且保持脱敏
+    required: true
+    description: >
+      验证 Backend 以真实 Codex Toolkit 和 Hook 归属证据报告
+      agent-toolchain，轮询复用短期结果且不泄露本机敏感信息。
+    preconditions:
+      - 已在真实节点启动 Backend 并安装真实 Codex Toolkit。
+      - 已记录 Codex 子进程启动次数，并设置可识别的测试 token、环境变量、cwd 与路径 marker。
+    steps:
+      - 请求 GET /api/runtime-status；确认 agent-toolchain 包含 Toolkit 内容一致性和 Hook 会话归属项，不包含 Playwright 专项版本检查。
+      - 跨三个普通 polling 周期重复请求；确认稳定 id 不变，Codex 检查没有按每个请求重复启动，结果在有效期后才重新观察。
+      - 检查完整响应；确认只包含版本、来源类型、文件/差异数、Hook 来源和 opaque 指纹，不包含测试 token、环境变量、cwd、绝对路径、完整命令、Terminal 内容或 stack。

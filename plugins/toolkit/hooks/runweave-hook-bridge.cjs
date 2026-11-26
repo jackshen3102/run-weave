@@ -14,6 +14,7 @@ const {
   isAgyCompletionEligible,
 } = require("./runweave-hook-agy.cjs");
 const { postAgentHook, postCompletionHook } = require("./runweave-hook-completion.cjs");
+const { deriveHookDiagnosticsEndpoint, postHookDiagnostic } = require("./runweave-hook-diagnostics.cjs");
 const {
   STOP_EVENTS,
   isNestedCodexProcess,
@@ -157,9 +158,21 @@ async function main() {
     const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv(spawnSync);
     const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
     if (expectedTmuxSession && tmuxPaneContext.sessionName && tmuxPaneContext.sessionName !== expectedTmuxSession) {
+      const diagnostic = await postHookDiagnostic({
+        endpoint: deriveHookDiagnosticsEndpoint(process.env.RUNWEAVE_HOOK_ENDPOINT),
+        token: process.env.RUNWEAVE_HOOK_TOKEN,
+        body: {
+          terminalSessionId: process.env.RUNWEAVE_TERMINAL_SESSION_ID,
+          source: normalizeSource(args.source),
+          reason: "foreign_tmux_session",
+          expectedSession: expectedTmuxSession,
+          actualSession: tmuxPaneContext.sessionName,
+          observedAt: Date.now(),
+        },
+      });
       appendDebugLog("hook bridge skipped foreign tmux session", {
-        expectedSession: expectedTmuxSession,
-        session: tmuxPaneContext.sessionName,
+        reason: "foreign_tmux_session",
+        diagnostic,
       });
       return;
     }

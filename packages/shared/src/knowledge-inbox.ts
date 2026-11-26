@@ -25,6 +25,30 @@ export interface InboxContent {
   avoid?: string[];
   verification?: string[];
 }
+export type InboxLiveCheckState = "passed" | "failed" | "blocked" | "unsupported";
+export interface InboxLiveCheckFact {
+  id: string;
+  label: string;
+  value: string;
+}
+export interface InboxLiveCheckResult {
+  runId: string;
+  state: InboxLiveCheckState;
+  observedAt: number;
+  summary: string;
+  facts: InboxLiveCheckFact[];
+  validForMs: number;
+}
+export interface InboxLiveCheckDescriptor {
+  supported: boolean;
+  mode: "read-only";
+  capabilityId: "agent-toolchain";
+  itemId: string;
+  lastResult?: InboxLiveCheckResult;
+}
+export interface InboxLiveCheckRequest {
+  expectedContentVersion: string;
+}
 export interface InboxItem extends InboxContent {
   itemId: string;
   repositoryId: string;
@@ -45,6 +69,8 @@ export interface InboxItem extends InboxContent {
   availability: "available" | "unavailable" | "unknown";
   /** Present on a processed snapshot when the current content has changed. */
   currentContentVersion?: string;
+  /** Backend-owned, read-only capability. Experience text never supplies executable input. */
+  liveCheck?: InboxLiveCheckDescriptor;
 }
 export interface InboxSourceStatus {
   status: "ok" | "partial";

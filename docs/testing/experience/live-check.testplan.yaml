@@ -1,0 +1,131 @@
+version: 1
+name: Agent 环境体检与经验现场复验验收
+description: >
+  验证真实 macOS、真实 Backend/Desktop、真实 Codex 和 tmux/Hook 进程上的
+  Agent 工具链状态、Hook 归属诊断与知识收件箱现场复验闭环；任何单元测试、模拟器、
+  mock 或 fixture 结果都不能替代本计划的行为结论。
+
+cases:
+  - id: LCHK-001
+    name: 真实节点展示 Agent 工具链健康状态
+    required: true
+    description: >
+      验证 Backend owner 从当前真机的 Toolkit、已登记仓库和 Hook 能力生成脱敏的
+      agent-toolchain 状态，真实 Desktop 页面能展示且普通轮询不会重复启动检查进程。
+    preconditions:
+      - 一台真实 macOS 已启动真实 Runweave Desktop 与 Backend，并已登录。
+      - 当前节点安装了真实 Codex CLI 与 Toolkit，并已创建一个受管 Terminal。
+      - 可观察 Backend 子进程启动次数，并已记录一次正常运行状态基线。
+    steps:
+      - 请求真实 Backend 的 GET /api/runtime-status；确认返回带 validForMs 的报告及 agent-toolchain 能力域下的 Toolkit 和 Hook 归属状态项，每项具有稳定 id 和 observedAt，且不包含 Playwright 专项版本检查。
+      - 使用 `$toolkit:playwright-cli` 附着真实 Desktop renderer 并打开运行状态抽屉；确认显示“Agent 工具链”，其摘要与 Backend 快照一致。
+      - 保持抽屉跨越至少三个普通 polling 周期；确认状态项身份稳定，Toolkit/Codex 检查子进程没有按每个 UI polling 周期重复启动。
+      - 检查完整状态响应与页面；确认不存在 token、环境变量、home/cwd、绝对路径、完整命令、Terminal 内容或错误 stack。
+
+  - id: LCHK-002
+    name: Toolkit 内容差异由真实 Codex 安装检出
+    required: true
+    description: >
+      验证 Toolkit Probe 比较真实 Codex plugin list、marketplace source 与缓存逐文件内容，
+      一致时通过、受控差异时失败，并且检查本身不修改安装。
+    preconditions:
+      - 在专用真机测试账号中使用真实 Codex CLI 安装了一份可恢复的 Toolkit，source 与 cache 初始内容一致。
+      - 已记录 Toolkit 安装版本、source/cache 内容摘要和文件修改时间，测试后可从原 source 恢复 cache。
+      - 真实 Backend 运行在该测试账号中并能报告 Agent 工具链状态。
+    steps:
+      - 触发 Toolkit 现场复验；确认返回 passed，事实只包含安装版本、source 类型、一致性和文件计数，不包含绝对路径或文件内容。
+      - 在专用账号的真实 Toolkit cache 中只修改一个非凭据测试文件，再次触发现场复验；确认返回 failed 并报告一个或明确数量的内容差异。
+      - 比较检查前后的 plugin list、source、除人工修改文件外的 cache 摘要与修改时间；确认 Probe 没有安装、升级、修复或写入任何文件。
+      - 从已记录 source 恢复该测试文件并再次复验；确认真实环境恢复 passed。
+
+  - id: LCHK-003
+    name: foreign tmux Hook 只产生归属诊断
+    required: true
+    description: >
+      验证真实 Hook 在 foreign tmux session 中仍被原门禁拒绝，只新增一条脱敏诊断，
+      不产生 completion、TerminalState、Activity、通知或监督副作用。
+    preconditions:
+      - 真机已启动真实 Backend、Desktop 与一个受管 tmux Terminal，Hook token 和受管 session 环境已由产品生成。
+      - 已准备同一真机上的另一个真实 tmux session，可在保留受管 Terminal 环境标识的条件下触发真实 Agent Hook。
+      - 已记录 completion revision、TerminalState、Activity 条目数、桌面通知数、飞书通知数和监督事件数基线。
+    steps:
+      - 在受管 tmux session 触发一次真实 Hook；确认正常主链行为符合当前合同，运行状态中没有 foreign-session 诊断。
+      - 在另一个真实 tmux session 触发同一 Hook；确认 Hook 结束且运行状态的 Hook 归属项显示一次 foreign-session 异常、来源和最近时间，只显示 opaque 会话指纹。
+      - 在 60 秒内重复相同 foreign-session 触发；确认诊断次数按去重规则不新增独立事件，也不形成重复前台提醒。
+      - 对比所有基线；确认 foreign-session 触发没有改变 completion revision、TerminalState、Activity、桌面/飞书通知或监督事件。
+      - 检查 Backend 响应、日志和 UI；确认原始 expected/actual tmux session 名、Hook token、Terminal 内容与完整命令均未泄漏。
+
+  - id: LCHK-004
+    name: 现场复验只接受条目版本
+    required: true
+    description: >
+      验证现场复验 API 只能由 itemId 和 expectedContentVersion 定位静态 Probe，任何试图提交
+      cwd、路径、命令、URL、环境变量、repositoryId、sourceId 或 probeId 的请求都被拒绝且不启动进程。
+    preconditions:
+      - 真实 Backend 已登录，知识收件箱中存在一个 available 且 supported 的当前经验条目。
+      - 可观察 Probe 子进程启动记录，并已取得该条目的 itemId 与 contentVersion。
+    steps:
+      - 只提交 expectedContentVersion 调用 POST /api/knowledge-inbox/items/:itemId/live-check；确认返回 200 和结构化结果。
+      - 分别在 body 中额外加入 cwd、path、command、args、url、env、repositoryId、sourceId 和 probeId；确认每个请求返回 400。
+      - 使用不存在的 itemId 请求；确认返回 404；使用无效或缺失 Bearer Token 请求；确认返回 401。
+      - 核对进程记录与文件系统；确认所有被拒绝请求均未启动 Probe、未访问请求提供的目标，也未产生写入。
+
+  - id: LCHK-005
+    name: 版本冲突在 Probe 启动前终止
+    required: true
+    description: >
+      验证经验内容变化、来源失效或仓库登记不可用时返回明确冲突，旧页面不能对新内容或错误仓库执行现场检查。
+    preconditions:
+      - 真实 Backend 和知识收件箱中存在一个 supported 的当前经验条目，并已在真实页面加载其旧 contentVersion。
+      - 可通过正常经验发布流程产生该条目的新 contentVersion，且可在另一次执行中让所属仓库登记变为不可用。
+      - 可观察 Probe 子进程启动记录。
+    steps:
+      - 发布该经验的新内容版本后，从未刷新的真实页面用旧 expectedContentVersion 触发复验；确认返回 409，页面提示内容已更新。
+      - 刷新并加载新版本；确认 descriptor 和 itemId 仍由 Backend 重新装饰，使用新 contentVersion 可以开始对应静态 Probe。
+      - 在独立执行中让所属仓库登记不可用，再触发复验；确认返回 409 或结构化 blocked，并明确所属仓库不可用。
+      - 核对进程记录；确认旧版本冲突和仓库不可用分支都没有在未校验路径上启动 Probe。
+
+  - id: LCHK-006
+    name: 同一现场复验单飞且结果不会串项
+    required: true
+    description: >
+      验证同节点同条目同内容版本的并发请求复用一次真实检查，不同条目、内容版本或账号切换后旧结果不能覆盖当前详情。
+    preconditions:
+      - 真实 Backend 已登录，存在两个 supported 的经验条目，至少一个 Probe 的真实运行时间足以发出并发请求。
+      - 已清空该条目的短期 Probe 缓存，并可记录真实子进程启动次数。
+      - 可使用两个已认证账号或刷新同一账号的登录 Token。
+    steps:
+      - 对同一 itemId 和 contentVersion 几乎同时发出两个现场复验请求；确认两者返回同一 runId，且只启动一个真实 Probe 子进程。
+      - 在结果返回前切换到另一经验条目；确认旧请求完成后不会覆盖当前详情，当前条目只显示自己的结果。
+      - 再切换账号或刷新 Token；确认旧账号未完成结果不会写入新账号的页面状态。
+      - 等待 validForMs 过期后再次请求原条目；确认产生新 runId 并重新观察真实环境，而不是无限复用旧结果。
+
+  - id: LCHK-007
+    name: 复验结果脱敏且不自动处理经验
+    required: true
+    description: >
+      验证 passed、failed 和 blocked 结果只包含白名单事实，并且任何结果都不会修改知识收件箱的处理状态。
+    preconditions:
+      - 真实 Backend 中准备三个可恢复环境，分别能让受支持 Probe 得到 passed、failed 和 blocked。
+      - 检查环境中设置了可识别的测试 token、环境变量、home/cwd、绝对路径、命令片段、Terminal marker 和错误 stack marker。
+      - 三个经验条目初始均为 pending，已记录 contentVersion、stateVersion 和 processedAt。
+    steps:
+      - 从真实知识收件箱页面分别执行三个现场复验；确认页面准确显示 passed、failed 和 blocked 的摘要、观察时间、事实和有效期。
+      - 保存三次完整 API 响应并搜索所有测试 marker；确认 token、环境变量、home/cwd、绝对路径、完整命令、Terminal 内容、原始 stdout/stderr 和 stack 全部不存在。
+      - 重新读取三个条目；确认 stateVersion、processedAt 和 pending 状态均未因复验改变。
+      - 仅对其中一个条目点击现有“已处理”按钮；确认只有该条目通过原状态 API 变为 processed，另外两个仍为 pending。
+
+  - id: LCHK-008
+    name: 旧版本组件按加法协议安全降级
+    required: true
+    description: >
+      验证新旧 Hook、Backend 和前端的滚动组合不会破坏既有 Terminal/知识收件箱主链，
+      缺少诊断或 liveCheck 时只表现为 unsupported 或不显示按钮。
+    preconditions:
+      - 已准备可回退的上一稳定版 Hook、Backend/Frontend 和本次实现版本，并在同一真机使用独立数据目录运行。
+      - 两个版本均可创建真实 Terminal、加载知识收件箱并完成一次正常 Agent Hook。
+    steps:
+      - 使用新 Hook 连接旧 Backend 并从 foreign tmux session 触发；确认诊断请求 404 或不可用后 Hook 安全早退，既有 completion/state/notification 主链没有额外事件。
+      - 使用旧 Hook 连接新 Backend；确认正常 Hook 主链不受影响，Hook 归属状态显示 unsupported 或尚无诊断能力，而不是伪造 healthy。
+      - 使用新前端连接旧 Backend；确认缺少 liveCheck 字段时不显示现场复验按钮，列表、详情、复制和状态切换仍可用。
+      - 使用旧前端连接新 Backend；确认新增可选字段不会破坏列表、详情和显式处理状态操作。

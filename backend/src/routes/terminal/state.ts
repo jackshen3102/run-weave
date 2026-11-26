@@ -21,6 +21,10 @@ import type { ActivityEventInput } from "@runweave/shared/activity";
 import crypto from "node:crypto";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
 import type { TerminalQuestionNotifications } from "../../terminal/questions/notifications";
+import type {
+  HookDiagnosticService,
+  HookDiagnosticSource,
+} from "../../terminal/hook-diagnostics/service";
 
 const terminalStateLogger = logger.child({ component: "terminal-state" });
 const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi", "agy"] as const;
@@ -118,9 +122,20 @@ export function createInternalTerminalAgentHookRouter(options: {
   hookToken: string | undefined;
   activity?: TerminalActivityDependencies;
   questionNotifications?: TerminalQuestionNotifications;
+  hookDiagnostics?: HookDiagnosticService;
 }): Router {
   const router = Router();
   const hookActivityEvents = new Map<string, ActivityEventInput>();
+  const recordAcceptedDiagnostic = (
+    terminalSessionId: string,
+    source: HookDiagnosticSource,
+  ): void => {
+    try {
+      options.hookDiagnostics?.recordAccepted(terminalSessionId, source);
+    } catch {
+      // Diagnostic tracking must remain fail-open.
+    }
+  };
 
   router.post("/", async (req, res) => {
     const expectedToken = options.hookToken?.trim();
@@ -187,6 +202,21 @@ export function createInternalTerminalAgentHookRouter(options: {
           return;
         }
       }
+      if (
+        session.status !== "exited" &&
+        (parsed.data.agent === "codex" ||
+          parsed.data.agent === "pi" ||
+          parsed.data.agent === "claude" ||
+          parsed.data.agent === "agy" ||
+          resolveHookPanel(
+            options.terminalSessionManager,
+            session.id,
+            parsed.data.panelId ?? null,
+            parsed.data.tmuxPaneId ?? null,
+          ).ok)
+      ) {
+        recordAcceptedDiagnostic(session.id, parsed.data.agent);
+      }
       recordAgentHookActivity(
         options.activity,
         parsed.data,
@@ -219,6 +249,7 @@ export function createInternalTerminalAgentHookRouter(options: {
       // App Server and the direct hook share Pi sequencing, but only the direct
       // hook carries Activity content. Do not lose it when state arrived first.
       if (result.activityReplayAllowed) {
+        recordAcceptedDiagnostic(result.terminalSessionId, parsed.data.agent);
         recordAgentHookActivity(
           options.activity,
           parsed.data,
@@ -242,6 +273,8 @@ export function createInternalTerminalAgentHookRouter(options: {
       } satisfies AgentHookStateResponse);
       return;
     }
+
+    recordAcceptedDiagnostic(result.terminalSessionId, parsed.data.agent);
 
     terminalStateLogger.info("terminal-state.hook.recorded", {
       message: "Terminal agent hook recorded",

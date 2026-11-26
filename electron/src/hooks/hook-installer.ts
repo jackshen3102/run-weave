@@ -154,7 +154,7 @@ export async function writeLauncherScript(
       path.join(launcherDir, HOOK_PAYLOAD_BASENAME),
     );
   }
-  for (const asset of ["runweave-hook-claude.cjs", "runweave-hook-agy.cjs", "runweave-hook-completion.cjs", "runweave-hook-tmux.cjs", "runweave-task-supervision.cjs", FEISHU_SCRIPT_BASENAME]) {
+  for (const asset of ["runweave-hook-claude.cjs", "runweave-hook-agy.cjs", "runweave-hook-completion.cjs", "runweave-hook-diagnostics.cjs", "runweave-hook-tmux.cjs", "runweave-task-supervision.cjs", FEISHU_SCRIPT_BASENAME]) {
     const source = await resolveHookAssetPath(context, asset);
     if (await fileExists(source)) {
       const target = path.join(launcherDir, asset);

@@ -43,11 +43,7 @@ import { createAgentModelCatalogRouter } from "./routes/agent-model-catalog";
 import { createAgentCapabilitiesRouter } from "./routes/agent-capabilities";
 import { createRaceRouter } from "./routes/race";
 import { registerActivityRoutes } from "./routes/activity/registration";
-import {
-  createInternalTerminalAgentHookRouter,
-  createTerminalStateRouter,
-} from "./routes/terminal/state";
-import { createInternalTerminalCompletionRouter } from "./routes/terminal/completion";
+import { createTerminalStateRouter } from "./routes/terminal/state";
 import { createTerminalRouter } from "./routes/terminal/index";
 import { createTestRouter } from "./routes/test";
 import { createPrototypePreviewRouter } from "./routes/prototype/preview";
@@ -56,6 +52,7 @@ import { createVoiceRouter } from "./routes/voice";
 import { createWorkHistoryRouter } from "./routes/work-history";
 import { createAttentionRouter } from "./routes/attention";
 import { registerMonitoringRoutes } from "./routes/registration/monitoring";
+import { registerInternalTerminalRoutes } from "./routes/registration/internal-terminal";
 import { createEvolutionActivationRouter } from "./routes/evolution/activation";
 import { createEvolutionFoundationRouter } from "./routes/evolution/foundation";
 import { createEvolutionMcpRouter } from "./routes/evolution/mcp";
@@ -178,27 +175,11 @@ function createHttpApp(
     res.json({ ok: true });
   });
 
-  app.use(
-    "/internal/terminal/agent-hook",
+  registerInternalTerminalRoutes(
+    app,
+    services,
     requireTunnelAuth,
-    createInternalTerminalAgentHookRouter({
-      terminalSessionManager: services.terminalSessionManager,
-      terminalStateService: services.terminalStateService,
-      hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
-      activity: services.terminalActivity,
-      questionNotifications: services.terminalQuestionsService.notifications,
-    }),
-  );
-  app.use(
-    "/internal/terminal-completion",
-    requireTunnelAuth,
-    createInternalTerminalCompletionRouter({
-      feishuConnector: services.feishuConnector,
-      completionEventService: services.terminalCompletionEventService,
-      terminalSessionManager: services.terminalSessionManager,
-      hookToken: process.env.RUNWEAVE_HOOK_TOKEN,
-      tmuxService: services.tmuxService,
-    }),
+    process.env.RUNWEAVE_HOOK_TOKEN,
   );
   registerActivityRoutes(app, {
     services,
