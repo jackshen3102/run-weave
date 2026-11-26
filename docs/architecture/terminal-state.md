@@ -41,9 +41,20 @@ macOS/Linux 保持原命令识别规则。终端退出只更新运行状态，�
 
 ## iOS 当前终端模型设置
 
-`GET/PUT /api/terminal/session/:id/agent-settings` 只面向运行中的 tmux Codex / TraeX / AGY 面板。Backend 从当前 panel metadata 核对 provider、threadId 与 pane；一次 turn 完成后，仍在前台的空闲 TUI 可使用同一 panel 的 `lastThreadId/lastThreadProvider`（状态为 idle）。Pi 和普通 shell 不展示入口。读取时 Backend 优先从 `AgentModelCatalogService` 持久缓存立即返回模型目录并在后台按需探测对比更新，手机输入面板也按连接与终端先从本地受保护缓存秒级渲染、再静默请求最新设置并仅在有变更时更新缓存与界面。手机只显示当前 thread 的结构化设置；独立 app-server 的 `thread/list`（或 AGY 会话记录）能读取 TUI 会话写入的 model/reasoningEffort；全局 CLI 配置和终端文本都不是当前设置的权威值。
+`GET/PUT /api/terminal/session/:id/agent-settings` 面向运行中的 tmux Codex、TraeX 和 AGY 面板。
+Backend 从面板元数据核对 provider、threadId 和 pane。仍在前台的空闲 TUI 可使用同一面板的
+`lastThreadId/lastThreadProvider`。Pi 和普通 shell 不展示入口。读设置时，Backend 可先返回持久缓存的
+模型目录并在后台刷新。iOS 按连接和终端读取本地缓存，再请求最新设置。
 
-现有 TUI 持有 thread writer，另一个 app-server 无法对这个已加载 thread 执行 `thread/settings/update`。手机提交时，Backend 在终端输入锁下检查 revision，通过该 pane 的 `/model` 原生菜单按键完成选择，再从相同 provider 的 `thread/list` 回读确认。这个路径同时适用于新旧 TUI 会话，无需改变 CLI 启动方式，也不触及定时任务或语音的启动路径。菜单形态、账号目录或 thread 身份不匹配时返回错误，不宣称成功；不根据终端 placeholder 文案或 Agent 忙闲投影预先拒绝切换；直接尝试原生菜单，并以菜单响应和设置回读判断结果。TraeX 的 Max 模式保持原值，目标模型不支持时拒绝。独立 app-server 的读回可能有短暂延迟，因此确认超时后客户端需重新读取。旧客户端不调用新端点，原有终端输入协议不变。
+提交时，Backend 在终端输入锁内核对面板身份和设置 revision，并验证所选模型及推理强度。
+
+- Codex 和 TraeX 使用 TUI 的 `/model` 菜单切换，从对应 provider 的 `thread/list` 重新读取确认。
+  TraeX 保持原 Max 模式，目标模型不支持时拒绝。
+- AGY 把模型与推理强度作为一个模型变体。空闲且输入框没有用户草稿时，Backend 发送
+  `/model <variant-id>`，等待当前 pane 明确确认所选变体，再核对原会话身份。读取设置优先使用
+  当前 pane 的已选变体，必要时回退到 AGY 原生记录。
+
+无法确认切换时，客户端需要重新读取。此设置接口用于当前交互会话，定时任务和语音仍使用各自的启动配置。
 
 ## 独立消息旁聊
 

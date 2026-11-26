@@ -207,6 +207,10 @@ Web/Electron 的文件名搜索、文本正文和 Diff 查询在没有观察者�
 - 单文件 Reset Changes、删除与重命名仅在 `scope=working`（`staged` / `working`）下暴露；`branch` 与 `commits` 全程只读，后端 `POST /git-change/reset` 硬性校验 `kind: "staged" | "working"`。staged 执行 unstage，working 丢弃该文件工作区改动，untracked 普通文件删除。
   这不授权 stage、commit、checkout 或批量 reset。语义以 [Git service](../../backend/src/terminal/preview/git.ts) 为准。
 
+iOS 连接旧 Backend 时，新增分支或提交列表路由返回 404 会提示升级，仍可使用工作区变更。
+桌面与 iOS 的只读范围、失效刷新和兼容行为见
+[分支与提交 Diff 测试计划](../testing/terminal/branch-and-commit-diff.testplan.yaml)。
+
 ## 内容渲染
 
 | 内容          | 当前视图与边界                                                        |

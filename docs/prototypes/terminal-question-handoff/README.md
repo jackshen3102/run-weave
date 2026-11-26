@@ -12,4 +12,4 @@
 
 桌面验证使用当前 Worktree 的真实原型预览端点。三种场景、流程高亮、重置、章节跳转均已实际操作。390 px 浏览器视口验证了移动布局和交互，页面无横向溢出。指定 iPhone 当前不可达，原生 Files 阅读尚未验收。
 
-2026-11-26 使用当前 Worktree 的 Debug Runweave App 在共享 iOS 模拟器中通过「文件」打开同一 HTML。修复原型的章节跳转并重新打开后，验证了手机提交、电脑先答隐藏提交按钮、断线重新核对，以及章节跳转。这里观察的是 HTML 原型交互。候选功能的系统推送、原生跳转和真实任务结果按 [实施计划](../../plans/2026-11-26-terminal-question-handoff.md) 分别验收。
+2026-11-26 使用当前 Worktree 的 Debug Runweave App 在共享 iOS 模拟器中通过「文件」打开同一 HTML。修复原型的章节跳转并重新打开后，验证了手机提交、电脑先答隐藏提交按钮、断线重新核对，以及章节跳转。这里观察的是 HTML 原型交互。当前实现见[终端结构化问答](../../architecture/terminal-questions.md#iphone-待答通知)，系统推送、原生跳转和原任务结果按 [iOS 问答测试计划](../../testing/app/ios-terminal-questions.testplan.yaml) 分别验收。
