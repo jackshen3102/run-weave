@@ -19,7 +19,7 @@ export class TerminalAgentForkService {
   private operations = new Map<string, Operation>();
   private pendingPanels = new Set<string>();
 
-  constructor(private manager: TerminalSessionManager, private options: TerminalSessionCreationOptions) {}
+  constructor(private manager: TerminalSessionManager, private options: TerminalSessionCreationOptions, private readonly readOnlySource = false) {}
 
   async target(terminalId: string): Promise<TerminalAgentForkTarget> {
     const session = this.manager.getSession(terminalId);
@@ -32,7 +32,16 @@ export class TerminalAgentForkService {
       if (target) return target;
       throw new TerminalPanelError(409, "请等待当前 Codex 会话空闲后再 Fork");
     }
-    const { panel } = await resolvePanelTarget(this.manager, session, this.options, {}, "explicit-or-active");
+    const activeId = this.manager.getPanelWorkspace(terminalId)?.activePanelId;
+    const panel = this.readOnlySource
+      ? activeId && this.manager.getPanel(activeId)
+      : (await resolvePanelTarget(this.manager, session, this.options, {}, "explicit-or-active")).panel;
+    if (!panel || panel.terminalSessionId !== terminalId) throw new TerminalPanelError(409, "来源面板不可用");
+    if (this.readOnlySource) {
+      const tmux = this.options.tmuxService;
+      const selected = tmux && await tmux.readSelectedPane(tmux.buildTarget(terminalId));
+      if (selected !== panel.tmuxPaneId) throw new TerminalPanelError(409, "来源面板已切换");
+    }
     const thread = resolveReplyThread(panel);
     if (panel.status !== "running" || panel.terminalState?.state !== "agent_idle" ||
       panel.terminalState.agent !== "codex" || thread?.provider !== "codex") {

@@ -1,3 +1,5 @@
+import { registerContextHandoffRoutes } from "./context-handoff";
+import { TerminalContextHandoffService } from "../../terminal/application/context-handoff";
 import { registerTerminalCodeReviewRoutes } from "./code-review";
 import type { CodeReviewService } from "../../terminal/code-review/service";
 import { registerTerminalVideoPreviewRoutes } from "./preview/video";
@@ -172,6 +174,7 @@ export function createTerminalRouter(
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalCodeReviewRoutes(router, options?.codeReviewService);
   registerTerminalQuestionRoutes(router, options?.terminalQuestionsService, options?.authService);
+  registerContextHandoffRoutes(router, new TerminalContextHandoffService(terminalSessionManager, options ?? {}, options?.textAttachmentDelivery));
   registerTerminalAgentForkRoutes(router, new TerminalAgentForkService(terminalSessionManager, options ?? {}));
 
   const agentSettingsUpdateSchema = z.object({

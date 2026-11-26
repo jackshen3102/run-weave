@@ -27,6 +27,8 @@ export interface ConversationContent {
   readAt: string;
   partial: boolean;
   turns: ConversationTurn[];
+  /** Optional portable projection, computed before the recent-message transport limit. */
+  handoff?: import("./context-handoff.js").HandoffProjection;
 }
 
 export interface AppServerConversationResponse extends ConversationContent {
@@ -37,6 +39,7 @@ export interface AppServerConversationResponse extends ConversationContent {
 /** Provider identity retained by the caller when the event projection is absent. */
 export interface AppServerConversationQuery {
   provider?: AppServerAgentKind;
+  handoffCwd?: string;
 }
 
 export interface ConversationTarget {

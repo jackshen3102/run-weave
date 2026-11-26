@@ -1,0 +1,70 @@
+version: 1
+name: 跨 Agent 与跨 Worktree 有预算上下文交接验收
+description: >
+  验证从 Codex、Claude Code、Pi 或 TraeX 会话发起跨 Agent 或跨 Worktree 交接时，48 KiB 裁剪器准确保留初始目标与最近净问答、
+  用户新指令完整不截断、受管附件安全注入新终端，且来源终端零写入、零中断。
+
+cases:
+  - id: HANDOFF-001
+    name: 超长历史按 48 KiB 硬预算保留首条任务与末尾问答且永不截断新指令
+    required: true
+    description: >
+      验证来源会话净可见正文超过 48 KiB 时，生成的受管交接文件严格不超过 49,152 UTF-8 字节，包含首条用户任务、省略区间标记和最近轮次，同时附加长新指令仍逐字完整。
+    preconditions:
+      - 隔离测试环境准备了一个可见对话超过 80 KiB（含首轮明确任务约束、中间 30 轮问答、末尾 5 轮最新进展，以及 thinking 和大工具输出）的会话源。
+    steps:
+      - 调用 `GET /handoff-preview` 并随后执行 `POST /handoff`（附带一段 4 KiB 的新 `prompt`）；检查生成的受管交接文件字节数与内容。
+      - 确认受管交接文件字节数 `<= 49152`、文件权限为 `0600`、不包含 thinking 与原始工具大输出，第 1 条用户请求与最后几轮回复完整保留，中间包含准确的省略轮次计数与原 `threadId` 指引，且送达新终端的用户新 `prompt` 4 KiB 逐字未少。
+
+  - id: HANDOFF-002
+    name: 跨 Provider 交接在新终端启动目标 CLI 且来源终端零副作用
+    required: true
+    description: >
+      验证从非 Codex 会话（如 Claude Code）交接到另一家 CLI（如 Codex 或 Pi）时，新终端成功启动目标 CLI 并接收受管上下文引用，原终端不收到任何输入或状态扰动。
+    preconditions:
+      - 隔离测试 Backend 运行一个已有真实多轮问答记录的 Claude Code（或受控会话源）终端，并记录原终端的缓冲区快照、草稿与运行状态。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 从桌面终端菜单打开「交接到新终端」，选择另一个目标 Agent 并填写新指令后提交。
+      - 确认新终端被创建、目标 CLI 启动并收到交接附件路径与新指令；核对原终端的显示缓冲、未发草稿、进程 PID 与会话状态均未发生任何变化，项目 Git 工作区未出现交接临时文件。
+
+  - id: HANDOFF-003
+    name: 跨 Worktree 交接将新终端准确落入同父项目下的目标子目录
+    required: true
+    description: >
+      验证在主目录完成方案讨论后选择同父项目下的子 Worktree 交接时，新终端归属子 projectId 并在子目录运行，同时拒绝跨不同父项目的越权目录请求。
+    preconditions:
+      - 隔离测试环境存在父项目 A（含主目录会话与可用子 Worktree `wt-impl`）及另一个独立父项目 B。
+    steps:
+      - 从父项目 A 主目录终端发起交接，目标选择 `wt-impl`；确认返回的新终端 `projectId` 为 `wt-impl` 规范子 ID，实际 `cwd` 位于 `.worktree/wt-impl`。
+      - 构造请求尝试将父项目 A 的会话交接到父项目 B 的 `projectId`；确认接口返回 403 或 404 且未创建新终端。
+
+  - id: HANDOFF-004
+    name: 同目录空闲 Codex 默认保留原生无损 thread/fork 快路径
+    required: true
+    description: >
+      验证当来源为空闲 Codex 且目标仍选同目录 Codex 时，可走原生无损分叉快路径，且既有 `/agent/fork` 接口兼容性保持不变。
+    preconditions:
+      - 隔离测试 Backend 拥有处于 `agent_idle` 的 Codex 终端会话。
+    steps:
+      - 在交接预览中核对 `canNativeCodexFork=true`，以 `mode="native_fork"` 提交；确认新终端通过 `codex resume <forkedThreadId>` 启动并绑定新 `threadId`。
+
+  - id: HANDOFF-005
+    name: 来源版本变化冲突与幂等未知结果严格禁止重复建终端
+    required: true
+    description: >
+      验证预览后来源会话新增回复时拒绝旧 `expectedSourceRevision` 提交，相同 `operationId` 重放幂等复用同一结果。
+    preconditions:
+      - 隔离测试终端已获取一份 `handoff-preview` 的 `sourceRevision`。
+    steps:
+      - 让来源会话新增一轮可见问答使源记录更新，再使用旧 `expectedSourceRevision` 提交 `POST /handoff`；确认返回 `409 handoff_source_changed` 且未创建新终端。
+      - 刷新取得新 `sourceRevision` 后使用固定 `operationId` 连续提交两次相同请求；确认只创建一个新终端并返回相同 `terminalSessionId`，换用不同参数复用该 `operationId` 返回 409。
+
+  - id: HANDOFF-006
+    name: 原生 iOS 支持预览交接预算并发起跨 Agent 新终端交接
+    required: true
+    description: >
+      验证原生 iOS 可从终端操作入口查看预算占用、选择目标 Agent 与同项目 Worktree 并成功打开交接后的新终端。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，存在一个含多轮对话的终端与可用子 Worktree。
+    steps:
+      - 使用 `$toolkit:agent-device` 打开目标终端的交接面板；确认显示来源会话轮次与字节预算占用，选择目标 Agent 与子 Worktree 后提交，确认自动进入新建的目标终端页。

@@ -1,3 +1,5 @@
+import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { ContextHandoffDialog } from "./context-handoff-dialog";
 import { useSideChat } from "../../../features/side-chat/use-side-chat";
 import { useMemoizedFn } from "ahooks";
 import { useOverlayRef } from "../../../features/overlay/use-overlay-ref";
@@ -66,6 +68,8 @@ export function TerminalSessionTab({
   onMoveSession: (terminalSessionId: string, projectId: string) => Promise<void>;
   onPanelSplitEnabledChange: (enabled: boolean) => void;
 }) {
+  const { scope } = useTerminalRuntime();
+  const [handoff, setHandoff] = useState(false);
   const projects = useTerminalProjectsQuery().data ?? EMPTY_TERMINAL_PROJECTS;
   const moveTargets = projects.filter((project) => project.projectId !== session.projectId);
   const activeSessionId = useTerminalWorkspaceStore(
@@ -282,6 +286,7 @@ export function TerminalSessionTab({
 
   return (
     <>
+      {handoff && <ContextHandoffDialog key={scope + session.terminalSessionId} id={session.terminalSessionId} close={() => setHandoff(false)} />}
       <ContextMenu>
         <ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
@@ -298,6 +303,7 @@ export function TerminalSessionTab({
             <MessageCircle className="size-4" />
             旁聊{sideChat.state.unread ? " · 新回复" : ""}
           </ContextMenuItem>
+          <ContextMenuItem disabled={mutationLoading} onSelect={() => setHandoff(true)}>交接到新终端…</ContextMenuItem>
           {(session.tmuxSessionName || forkState?.agent === "codex") && <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>

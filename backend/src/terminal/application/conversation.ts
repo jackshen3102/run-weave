@@ -47,7 +47,7 @@ export function resolveConversationTarget(manager: TerminalSessionManager, sessi
 
 async function resolveReadingTarget(manager: TerminalSessionManager, sessionId: string, panelId?: string, tmux?: TmuxService) {
   const { session, owner, selectedPanelId } = resolveConversationOwner(manager, sessionId, panelId);
-  if (getTerminalSessionAgent(owner) !== "claude") return resolveConversationTarget(manager, sessionId, panelId);
+  if (owner.status !== "running" || session.status !== "running" || getTerminalSessionAgent(owner) !== "claude") return resolveConversationTarget(manager, sessionId, panelId);
   const panel = selectedPanelId ? manager.getPanel(selectedPanelId) : null;
   const identity = panel && tmux ? await readClaudeConversationIdentity(session, panel, tmux) : null;
   return { agent: "claude", identity, target: identity ? {
@@ -57,7 +57,7 @@ async function resolveReadingTarget(manager: TerminalSessionManager, sessionId: 
 
 export async function readTerminalConversation(
   manager: TerminalSessionManager, sessionId: string,
-  query: { panelId?: string; expectedThreadId?: string }, signal: AbortSignal,
+  query: { panelId?: string; expectedThreadId?: string; handoffCwd?: string }, signal: AbortSignal,
   tmux?: TmuxService,
 ): Promise<TerminalConversationResponse> {
   try {
@@ -73,12 +73,12 @@ export async function readTerminalConversation(
     const connection = await discoverAppServer({ env: process.env });
     if (!connection) throw new Error("App Server unavailable");
     const response = await new AppServerClient(connection).getConversation(target.threadId,
-      AbortSignal.any([signal, AbortSignal.timeout(20_000)]), { provider: target.provider });
+      AbortSignal.any([signal, AbortSignal.timeout(20_000)]), { provider: target.provider, handoffCwd: query.handoffCwd });
     const after = await resolveReadingTarget(manager, sessionId, query.panelId, tmux);
     if (JSON.stringify(before) !== JSON.stringify(after) || response.threadId !== target.threadId ||
       response.provider !== target.provider) changed();
     return { target, availability: response.availability, readAt: response.readAt,
-      partial: response.partial, turns: response.turns };
+      partial: response.partial, turns: response.turns, ...(response.handoff && { handoff: response.handoff }) };
   } catch (error) {
     if (error instanceof TerminalConversationError) throw error;
     if (error instanceof AppServerConversationError && error.status === 409) changed();

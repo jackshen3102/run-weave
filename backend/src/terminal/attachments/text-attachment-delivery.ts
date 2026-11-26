@@ -389,12 +389,13 @@ export class TerminalTextAttachmentDelivery {
     sessionId: string,
     request: SendTerminalInputRequest,
     mobileReplySessionId?: string,
+    handoff?: { validateTarget: () => void; agent: import("@runweave/shared/terminal/context-handoff").HandoffTargetAgent },
   ): Promise<SendTerminalInputResponse> {
     if (
       !request.operationId ||
       !request.panelId ||
       request.mode !== "prompt_replace" ||
-      !request.submit ||
+      (!request.submit && !handoff) ||
       !request.textAttachmentIds?.length
     )
       throw new TextAttachmentError(
@@ -462,14 +463,15 @@ export class TerminalTextAttachmentDelivery {
             textAttachmentLease: true,
             mobileReplySessionId,
             codexInputContext: request.codexInputContext,
-            beforeTextAttachmentWrite: () => this.recheck(target, false),
+            beforeTextAttachmentWrite: () => { this.recheck(target, false); handoff?.validateTarget(); },
+            ...(handoff ? { supervisorInput: true, handoffAgent: handoff.agent, validateSupervisorTarget: handoff.validateTarget } : {}),
           },
           target.session,
           `${request.data}\n\n文本附件，请读取文件内容：\n${references.join("\n")}`,
           "prompt_replace",
           operationId,
           target.kind === "tmux" ? target.pane : undefined,
-          true,
+          request.submit,
           request.submitKey,
         );
         await this.files.finish(sessionId, operationId, "accepted");

@@ -330,3 +330,16 @@ export async function readTerminalTextAttachment(
   if (text.length !== attachment.utf16Length || bytes.length !== attachment.utf8Bytes || hash !== attachment.sha256) throw new Error("附件内容校验失败");
   return text;
 }
+
+export function getHandoffPreview(apiBase: string, token: string, id: string, signal?: AbortSignal) {
+  return requestJson<import("@runweave/shared/terminal/context-handoff").TerminalContextHandoffPreview>(
+    apiBase, `/api/terminal/session/${encodeURIComponent(id)}/agent/handoff-preview`,
+    { headers: { Authorization: `Bearer ${token}` }, signal });
+}
+
+export function createContextHandoff(apiBase: string, token: string, id: string,
+  request: import("@runweave/shared/terminal/context-handoff").CreateTerminalContextHandoffRequest) {
+  return requestJson<import("@runweave/shared/terminal/context-handoff").CreateTerminalContextHandoffResponse>(
+    apiBase, `/api/terminal/session/${encodeURIComponent(id)}/agent/handoff`, { method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
+}
