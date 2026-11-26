@@ -31,12 +31,7 @@ export class AgySessionReader {
   ) {
     const source = await this.locate(threadId);
     if (!source) return null;
-    if (expectedCwd) {
-      const metaCwd = await this.readMetaCwd(source.sessionDir);
-      if (metaCwd && path.resolve(metaCwd) !== path.resolve(expectedCwd)) {
-        throw new ConversationReadError(409, "AGY_SESSION_MISMATCH", "AGY 会话工作目录不匹配");
-      }
-    }
+    await this.validateCwd(source, expectedCwd);
     const signature = sourceSignature(source);
     const result = await scanConversationSource(source.file, consume, signal, async (stat) => {
       await this.validateSource(source, stat);
@@ -44,9 +39,10 @@ export class AgySessionReader {
     return result ? { ...result, file: source.file, signature } : null;
   }
 
-  async isUnchanged(threadId: string, signature: string): Promise<boolean> {
+  async isUnchanged(threadId: string, signature: string, expectedCwd?: string | null): Promise<boolean> {
     const source = await this.locate(threadId);
     if (!source || sourceSignature(source) !== signature) return false;
+    await this.validateCwd(source, expectedCwd);
     const handle = await open(source.file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const stat = await handle.stat();
@@ -59,6 +55,14 @@ export class AgySessionReader {
       );
     } finally {
       await handle.close();
+    }
+  }
+
+  private async validateCwd(source: SessionSource, expectedCwd?: string | null): Promise<void> {
+    if (!expectedCwd) return;
+    const metaCwd = await this.readMetaCwd(source.sessionDir);
+    if (metaCwd && path.resolve(metaCwd) !== path.resolve(expectedCwd)) {
+      throw new ConversationReadError(409, "AGY_SESSION_MISMATCH", "AGY 会话工作目录不匹配");
     }
   }
 

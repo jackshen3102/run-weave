@@ -114,7 +114,9 @@ export async function startAppServer(prepareRuntime?: () => void): Promise<void>
     if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_FIELD_VALUE_INVALID") throw error;
     logInfo("AGY conversation reader unavailable", { reason: "configuration_invalid" });
   }
-  const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader, claudeConversationReader);
+  const threadPreviews = new ThreadPreviewReader(
+    codexRolloutLifecycleReader, traeLifecycleReader, claudeConversationReader, agyConversationReader,
+  );
   const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader), claudeConversationReader, agyConversationReader);
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,

@@ -23,8 +23,8 @@ export function extractAgyUserText(raw: string): string {
 export class AgyConversationReader {
   constructor(private readonly sessions: AgySessionReader) {}
 
-  isSourceUnchanged(threadId: string, signature: string): Promise<boolean> {
-    return this.sessions.isUnchanged(threadId, signature);
+  isSourceUnchanged(threadId: string, signature: string, expectedCwd?: string | null): Promise<boolean> {
+    return this.sessions.isUnchanged(threadId, signature, expectedCwd);
   }
 
   async read(thread: Thread, signal?: AbortSignal) {
