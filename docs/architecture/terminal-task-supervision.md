@@ -183,3 +183,18 @@ Backend 结构化日志中的 `task-supervision.*` 事件记录回复接收、�
 后续判断使用新值。`classificationTimeoutMs` 继续配置时间预算。历史 `backend.taskSupervision.enabled` 字段不再作为开启条件；实际开关由终端监听记录保存。旧 `/internal/task-supervision` 请求兼容返回 allow-stop，不再承担分类或续接，避免重复处理。
 
 受现有认证保护的 `/api/task-supervision` 提供终端发现、开启、查询和 pause / resume / update-context。发现时返回当前终端的开关和当前可见会话身份；没有 Agent 时仍返回已有监听状态，允许关闭。开启不要求手工选择任务起点或填目标，从原会话自动取得用户任务；最终回复触发必要的目标核对与分类。
+
+## 终端 PR 值守
+
+桌面与原生 iOS 可在终端显式绑定当前 Git 工作目录的 GitHub origin 或 upstream PR。Backend 的
+`/api/terminal/session/:id/pr-watch` 提供查询、开启、按 revision 暂停与恢复、草稿确认及删除。
+首次绑定保存快照，日常状态查询仅读取 SQLite；显式探测当前分支才运行 gh。
+每 120 秒最多并行巡检四个终端，每次 gh 调用限时 8 秒。新增失败或取消的 Check、新冲突、
+退出合并队列与他人实质评论可唤醒原面板。已见评论 ID 最多保留 200 个。
+有界摘录以 JSON 字符串显示，提示头尾均标记外部证据及原任务授权边界。
+
+运行中的面板保留待发摘要，空闲后重新读取 PR。投递前核对面板、Agent 代次、线程和输入保护，
+提交前持久化投递占位以避免重启重放。未确认草稿需用户核对并显式补发。
+同一 head 和 CI 状态下纯评论唤醒最多十次，第十一次暂停；连续八次读取失败也暂停。
+上述两种暂停及草稿保护均进入 Attention。更换线程后需重新绑定；PR 合并或关闭后保留终态，
+不再查询 gh。删除终端或关闭值守清除记录。验收见[终端 PR 值守计划](../testing/terminal/pr-bounded-watch.testplan.yaml)。

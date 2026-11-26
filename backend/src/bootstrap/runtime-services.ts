@@ -156,6 +156,7 @@ async function assembleRuntimeServices(
   const terminalEventService = new TerminalEventService();
   let terminalStateService: TerminalStateService | null = null;
   let textAttachmentFiles: TerminalTextAttachmentService | null = null;
+  let prWatchOwner: import("../pr-watch/service").PrWatchService | null = null;
   let sideChatService: SideChatService | null = null;
   const terminalSessionManager = new TerminalSessionManager(terminalSessionStore,
     {
@@ -164,7 +165,9 @@ async function assembleRuntimeServices(
         kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
         payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },
       }),
+      onSessionExited: (id) => prWatchOwner?.remove(id),
       onSessionDeleted: async (id) => {
+        prWatchOwner?.remove(id);
         await Promise.all([textAttachmentFiles?.deleted(id), sideChatService?.deleted(id)]);
       },
       onBell: ({ terminalSessionId, projectId, count }) => {
@@ -317,6 +320,7 @@ async function assembleRuntimeServices(
       terminalEventService, terminalStateService, activity: terminalActivity },
     appServerHistoryGateway, resources, taskSupervisionService,
   );
+  prWatchOwner = terminalTaskServices.prWatchService;
   const scheduledTasks = await createScheduledTasks(resources, {
     browserProfileDir: storagePaths.browserProfileDir,
     terminalSessionManager,
@@ -457,6 +461,7 @@ async function assembleRuntimeServices(
     terminalCompletionEventService,
     terminalStateService,
     terminalQuestionsService,
+    terminalTaskServices.prWatchService,
   );
   let resourceMonitor: ResourceMonitorService | null = null;
   if (deviceMonitoring.deviceMonitor) {
@@ -527,6 +532,7 @@ async function assembleRuntimeServices(
       activity.start(); qualityRuntime.start();
       evolutionRuntime.start(controlPlaneBaseUrl);
       for (const owner of [experienceLearning, terminalTaskServices.codeReviewService]) owner.start();
+      terminalTaskServices.prWatchService.start(terminalEventService);
       scheduledTasks.runtime?.start();
       taskAlerts?.start();
       terminalBadges?.start();

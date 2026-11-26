@@ -57,7 +57,8 @@ export class AttentionService {
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly completionEventService: TerminalCompletionEventService,
     private readonly terminalStateService: TerminalStateService,
-    private readonly terminalQuestionsService: TerminalQuestionsService,
+    private readonly terminalQuestionsService?: Pick<TerminalQuestionsService, "findActivePendingQuestion"> | null,
+    private readonly prWatches?: Pick<import("../pr-watch/service").PrWatchService, "get">,
   ) {}
 
   async snapshot(): Promise<AttentionSnapshot> {
@@ -89,7 +90,7 @@ export class AttentionService {
         panelLabel: panelLabel(panel),
       });
 
-      const question = this.terminalQuestionsService.findActivePendingQuestion(session.id);
+      const question = this.terminalQuestionsService?.findActivePendingQuestion(session.id);
       if (question) {
         const panel = this.terminalSessionManager.getPanel(question.panelId);
         add({
@@ -104,6 +105,31 @@ export class AttentionService {
           targetSurface: "terminal",
           completionRevision: null,
         }, 400);
+      }
+
+      const watch = this.prWatches?.get(session.id);
+      if (
+        watch?.status === "error" ||
+        (watch?.status === "paused" &&
+          watch.pauseReason &&
+          ["wake_limit_reached", "draft_unconfirmed", "read_failed_limit"].includes(watch.pauseReason))
+      ) {
+        const evidence = watch.status === "error" ? "delivery_unconfirmed" : watch.pauseReason!;
+        const watchPanel = this.terminalSessionManager.getPanel(watch.panelId);
+        add({
+          ...base,
+          panelId: watch.panelId,
+          panelLabel: panelLabel(watchPanel),
+          attentionId: `pr-watch:${watch.watchId}:${evidence}`,
+          state: "needs_action",
+          actionKind: "pr_attention",
+          title: watch.status === "error" ? `PR #${watch.prNumber} 值守投递待核实` : `PR #${watch.prNumber} 值守已暂停`,
+          detail: watch.lastSummary ?? evidence,
+          updatedAt: watch.lastCheckedAt ?? session.lastActivityAt.toISOString(),
+          source: { kind: "terminal_session", evidence },
+          targetSurface: "terminal",
+          completionRevision: null,
+        }, 350);
       }
 
       for (const panel of panels) {
