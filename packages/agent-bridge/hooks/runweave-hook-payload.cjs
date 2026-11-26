@@ -104,7 +104,16 @@ function readTranscriptReply(payload) {
   if (Array.isArray(payload?.transcript))
     return lastAssistantReply(payload.transcript);
   const sessionId = readThreadId(payload);
-  const candidates = [payload?.transcript_path, payload?.transcriptPath];
+  const rawTranscriptPaths = [payload?.transcript_path, payload?.transcriptPath];
+  const candidates = [];
+  for (const rawPath of rawTranscriptPaths) {
+    if (typeof rawPath === "string" && rawPath) {
+      if (/[/\\]transcript\.jsonl$/.test(rawPath)) {
+        candidates.push(rawPath.replace(/transcript\.jsonl$/, "transcript_full.jsonl"));
+      }
+      candidates.push(rawPath);
+    }
+  }
   if (sessionId && /^[A-Za-z0-9_-]+$/.test(sessionId)) {
     candidates.push(
       path.join(
@@ -278,7 +287,7 @@ function isFeishuAttentionHook(payload, source) {
   const event = normalizeEventName(readHookEvent(payload));
   return (event === "notification" && ["permission_prompt", "idle_prompt"].includes(readNotificationType(payload))) ||
     (toAgentHookStateEvent(event) === "ToolRequested" &&
-      ["request_user_input", "functions.request_user_input", "AskUserQuestion"].includes(extractToolHook(payload).toolName)) ||
+      ["request_user_input", "functions.request_user_input", "AskUserQuestion", "ask_question"].includes(extractToolHook(payload).toolName)) ||
     (source === "pi" && payload.pi?.event === "ui_prompt_start");
 }
 
