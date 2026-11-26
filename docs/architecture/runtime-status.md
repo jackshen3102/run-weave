@@ -85,6 +85,16 @@ Backend 已启用飞书但未收到 Bridge 报告时表达“尚未收到状态�
 
 扩展状态项时，先在真实 owner 中复用已有生命周期证据，再返回共享 DTO；不要在消费者中复制状态机。
 
+## 知识收件箱现场复验
+
+经验详情只对 Backend 内置登记的条目提供「现场复验」。当前登记覆盖 Codex Toolkit 缓存一致性和
+Hook 会话归属。复验配置来自服务端固定注册表，经验正文与调用方都无法提供命令、参数或探测路径。
+
+受认证的 `POST /api/knowledge-inbox/items/:itemId/live-check` 只接受 `expectedContentVersion`。
+Backend 核对用户可访问的条目、仓库可用性和内容版本。复验只返回观察结果，处理状态由用户另行更新。
+结果按条目与内容版本短期保留在内存中，过期后重新复验。验证入口见
+[现场复验测试计划](../testing/experience/live-check.testplan.yaml)。
+
 ## Agent 消费
 
 `GET /api/runtime-status` 在原始快照上附加 management，复用共享能力聚合并提供候选配置关联与只读诊断操作。

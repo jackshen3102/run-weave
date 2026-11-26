@@ -60,6 +60,9 @@ Electron 启动时会调用 `installHooksIfNeeded()`，在用户已有相关 CLI
 - Claude：安装器迁移 `~/.claude/settings.json` 中的受管 Hook，飞书通知使用原生空闲确认路径。
 - Codex：Toolkit 插件 `hooks/hooks.json` 是主入口；`~/.codex/hooks.json` 只保留为历史全局配置的兼容/清理层
 - Trae/Coco：Toolkit 插件 `hooks/hooks.json` 是主入口；`~/.trae/traecli.toml` 只保留为历史全局配置的兼容/清理层
+- Antigravity CLI：Electron 安装器在检测到 AGY 配置目录时维护 `~/.gemini/config/hooks.json` 的
+  `runweave` 命名块。Backend 按面板核对进程代次与原生会话 ID，忽略子会话与过期进程的停止事件。
+  运行与恢复验收见 [AGY 测试计划](../testing/terminal/runtime/agy-cli.testplan.yaml)。
 
 安装必须保留已有第三方 hook、去重 Runweave launcher hook，并在首次写入前创建 `.runweave-hook-backup` 备份。配置无法安全解析时跳过，避免破坏用户配置。
 
