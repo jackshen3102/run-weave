@@ -6,7 +6,7 @@ const flag = z.enum(["true", "false"]).transform(value => value === "true").opti
 const search = z.object({
   query: z.string().trim().min(1).max(500), projectId: z.string().min(1).max(200).optional(),
   cwd: z.string().min(1).max(4096).optional(), allProjects: flag,
-  provider: z.enum(["codex", "pi", "claude"]).optional(), level: z.enum(["chat", "work", "full"]).optional(),
+  provider: z.enum(["codex", "pi", "claude", "agy"]).optional(), level: z.enum(["chat", "work", "full"]).optional(),
   noUpdate: flag, includeOtherOrigins: flag, from: z.string().datetime({ offset: true }).optional(), to: z.string().datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(), cursor: z.string().max(2000).optional(),
 }).strict().refine(value => value.allProjects ? !value.cwd && !value.projectId : Boolean(value.cwd) !== Boolean(value.projectId), "Specify one project or explicitly allProjects");

@@ -1,5 +1,7 @@
 import { syncAgentThreadMetadata } from "./agent-hook-thread-metadata";
+import { recordAgyHookContext, withAgyHookQueue } from "./agy-hook-lifecycle";
 import { recordClaudeHookContext, withClaudeHookQueue } from "./claude-hook-lifecycle";
+import { isAgyAgentContext, type AgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import { isClaudeAgentContext, type ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import { resolveHookPanel } from "./resolve-hook-panel";
 import { codexHookBelongsToPrimary } from "../runtime/codex-context";
@@ -34,6 +36,7 @@ const agentHookProcessorLogger = logger.child({
 });
 
 export interface ProcessTerminalAgentHookInput {
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   terminalSessionId: string;
@@ -92,7 +95,9 @@ export async function processTerminalAgentHook(
   const processHook = () => processTerminalAgentHookUnlocked(...args);
   return input.agent === "claude"
     ? withClaudeHookQueue(options.terminalSessionManager, input.terminalSessionId, processHook)
-    : processHook();
+    : input.agent === "agy"
+      ? withAgyHookQueue(options.terminalSessionManager, input.terminalSessionId, processHook)
+      : processHook();
 }
 
 async function processTerminalAgentHookUnlocked(
@@ -125,6 +130,14 @@ async function processTerminalAgentHookUnlocked(
 
   // Old Toolkit hooks carry no native process identity and remain non-authoritative.
   if (input.agent === "claude" && (!isClaudeAgentContext(input.claude) || input.claude.sessionId !== input.threadId)) {
+    return {
+      status: "ignored", terminalSessionId: session.id, agent: input.agent,
+      hookEvent: input.hookEvent, activeCommand: session.activeCommand,
+      terminalState: options.terminalStateService.getCurrent(session.id, session),
+      panelId: null, ignoreReason: "agent_lifecycle_unavailable",
+    };
+  }
+  if (input.agent === "agy" && (!isAgyAgentContext(input.agy) || input.agy.conversationId !== input.threadId)) {
     return {
       status: "ignored", terminalSessionId: session.id, agent: input.agent,
       hookEvent: input.hookEvent, activeCommand: session.activeCommand,
@@ -332,6 +345,27 @@ async function processTerminalAgentHookUnlocked(
     activeCodexTurn?.threadId === hookThreadId && activeCodexTurn.turnId === context.codexNativeTurn.turnId;
 
   let stateHookEvent = input.hookEvent;
+  let agyAlreadyRunning = false;
+  if (input.agent === "agy" && isAgyAgentContext(input.agy)) {
+    const result = await recordAgyHookContext(options.terminalSessionManager, session, panel ?? null, input.agy);
+    if (!result.accepted) {
+      return {
+        status: "ignored", terminalSessionId: session.id, agent: input.agent,
+        hookEvent: input.hookEvent, activeCommand: targetActiveCommand,
+        terminalState: currentTargetState, panelId: panel?.id ?? null,
+        ignoreReason: "operation_identity_mismatch", activityReplayAllowed: result.activityReplayAllowed,
+      };
+    }
+    agyAlreadyRunning = result.alreadyRunning;
+    const { status } = result;
+    if (!status) {
+      return {
+        status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
+        hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null,
+      };
+    }
+    stateHookEvent = status === "running" ? "UserPromptSubmit" : "Stop";
+  }
   if (input.agent === "claude" && isClaudeAgentContext(input.claude)) {
     const result = await recordClaudeHookContext(options.terminalSessionManager, session, panel ?? null, input.claude);
     if (!result.accepted) {
@@ -373,12 +407,12 @@ async function processTerminalAgentHookUnlocked(
         event === "ui_prompt_start" ? "Pi 需要你处理" : "Pi 本轮执行失败");
     }
   }
-  if (input.hookEvent === "AgentMetadata" && input.agent !== "claude") {
+  if (input.hookEvent === "AgentMetadata" && input.agent !== "claude" && input.agent !== "agy") {
     return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
       hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
   }
 
-  if (input.hookEvent === "UserPromptSubmit" && !context.lifecycleObservation) {
+  if (input.hookEvent === "UserPromptSubmit" && !context.lifecycleObservation && !(input.agent === "agy" && agyAlreadyRunning)) {
     await options.terminalSessionManager.mobileReplies?.beginTurn(
       session.id, panel?.id ?? null, hookThreadId, effectiveAgent, input.query,
       input.pi?.runId ? `${input.pi.instanceId}:${input.pi.runId}` : input.activityEventId,

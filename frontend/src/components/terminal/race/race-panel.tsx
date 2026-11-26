@@ -32,6 +32,7 @@ import { TerminalRaceObserver } from "./race-observer";
 const EMPTY_AGENT_CATALOG: RaceAgentCatalog = {
   codex: { models: [], custom: true },
   traex: { models: [], custom: true },
+  agy: { models: [], custom: true },
 };
 
 interface DraftWorker extends RaceWorkerConfig {
@@ -446,6 +447,7 @@ export function TerminalRacePanel() {
                     >
                       <option value="codex">codex</option>
                       <option value="traex">traex</option>
+                      <option value="agy">agy</option>
                     </select>
                     <select
                       aria-label={`Worker ${index + 1} model`}

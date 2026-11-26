@@ -23,6 +23,7 @@ import type { TerminalStateService } from "../terminal/state/terminal-state-serv
 import type { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import type { TmuxService } from "../terminal/tmux/service";
 import { RaceRecordStore } from "./race-record-store";
+import { probeAgyCatalog } from "../agent-model-catalog/agy";
 import {
   RaceWorktreeSupply,
   RaceWorktreeSupplyError,
@@ -83,9 +84,9 @@ function modelArgs(worker: RaceWorkerConfig): string[] {
   if (!model) {
     return [];
   }
-  return worker.agent === "codex"
-    ? ["-m", model]
-    : ["-c", `model="${model}"`];
+  if (worker.agent === "codex") return ["-m", model];
+  if (worker.agent === "agy") return ["--model", model];
+  return ["-c", `model="${model}"`];
 }
 
 function errorMessage(error: unknown): string {
@@ -182,9 +183,13 @@ export class RaceService {
 
   async getAgentCatalog(): Promise<RaceAgentCatalog> {
     this.traexModels ??= listTraexModels();
+    const agyModels = await probeAgyCatalog(process.env)
+      .then((catalog) => catalog.models.map((m) => m.id))
+      .catch(() => []);
     return {
       codex: { models: [...CODEX_MODELS], custom: true },
       traex: { models: await this.traexModels, custom: true },
+      agy: { models: agyModels, custom: true },
     };
   }
 

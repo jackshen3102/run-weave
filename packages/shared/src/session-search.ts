@@ -1,5 +1,5 @@
 /** Native Agent transcripts are the only content source. All offsets are UTF-8 bytes. */
-export type SessionSearchProvider = "codex" | "pi" | "claude";
+export type SessionSearchProvider = "codex" | "pi" | "claude" | "agy";
 export type SessionSearchLevel = "chat" | "work" | "full";
 export type SessionSearchOrigin = "interactive" | "background" | "subagent" | "review" | "unknown";
 export type SessionSearchKind = "user" | "assistant" | "request" | "result" | "file_change" | "context";

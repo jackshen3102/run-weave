@@ -18,6 +18,34 @@ const LEGACY_RUNWEAVE_TRAE_TOML_FENCE_BEGIN =
 const LEGACY_RUNWEAVE_TRAE_TOML_FENCE_END =
   "# <<< runweave-hooks (managed by Browser Viewer) <<<";
 
+export function mergeAgyHooksJson(
+  existing: JsonRecord,
+  command: string,
+): JsonRecord {
+  const agyCommand = `${command} --source agy`;
+  return {
+    ...existing,
+    runweave: {
+      enabled: true,
+      SessionStart: [{ type: "command", command: agyCommand, timeout: 10 }],
+      PreInvocation: [{ type: "command", command: agyCommand, timeout: 10 }],
+      PreToolUse: [
+        {
+          matcher: "*",
+          hooks: [{ type: "command", command: agyCommand, timeout: 10 }],
+        },
+      ],
+      PostToolUse: [
+        {
+          matcher: "*",
+          hooks: [{ type: "command", command: agyCommand, timeout: 10 }],
+        },
+      ],
+      Stop: [{ type: "command", command: agyCommand, timeout: 30 }],
+    },
+  };
+}
+
 export function mergeJsonHookEntry(args: {
   existing: Array<unknown>;
   command: string;

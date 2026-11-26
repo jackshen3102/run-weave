@@ -4,7 +4,7 @@ import type {
   ScheduledRunAttempt,
 } from "./continuation";
 
-export type ScheduledTaskProvider = "codex" | "trae" | "pi";
+export type ScheduledTaskProvider = "codex" | "trae" | "pi" | "agy";
 export type ScheduledExecutionPolicy =
   | "sandbox"
   | "auto-review"

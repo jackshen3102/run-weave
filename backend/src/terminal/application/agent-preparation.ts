@@ -476,17 +476,23 @@ function buildAgentLaunchCommand(
     request.agent === "codex"
       ? withCodexSkipUpdateOnStartupArgs(requestedArgs)
       : requestedArgs;
+  const initialPromptArg =
+    skipInitialPrompt || !request.prompt.trim()
+      ? null
+      : request.agent === "agy"
+        ? `-i ${shellQuote(request.prompt)}`
+        : shellQuote(request.prompt);
   const invocation = request.commandLine?.trim()
     ? [
         request.commandLine.trim(),
-        skipInitialPrompt ? null : shellQuote(request.prompt),
+        initialPromptArg,
       ]
         .filter(Boolean)
         .join(" ")
     : [
         shellQuote(command),
         ...args.map(shellQuote),
-        skipInitialPrompt ? null : shellQuote(request.prompt),
+        initialPromptArg,
       ]
         .filter(Boolean)
         .join(" ");

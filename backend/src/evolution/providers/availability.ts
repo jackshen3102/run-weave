@@ -1,3 +1,4 @@
+import { resolveAgyConfiguration } from "@runweave/config-node/agy";
 import { settingText } from "@runweave/config-node";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -34,6 +35,16 @@ export class EvolutionProviderAvailabilityService {
         provider: "trae",
         binary: settingText("agents.traex.binary")?.trim() || "traex",
       },
+      {
+        provider: "agy",
+        binary: (() => {
+          try {
+            return resolveAgyConfiguration(this.env).binary;
+          } catch {
+            return "agy";
+          }
+        })(),
+      },
     ];
     const value = await Promise.all(commands.map((command) => probe(command, this.env)));
     this.cached = { expiresAt: now + CACHE_TTL_MS, value };
@@ -56,6 +67,17 @@ async function probe(
       authenticated: false,
       version: null,
       reason: versionResult.reason,
+      checkedAt,
+    };
+  }
+  if (command.provider === "agy") {
+    return {
+      provider: command.provider,
+      available: true,
+      binaryAvailable: true,
+      authenticated: true,
+      version: firstLine(versionResult.output),
+      reason: null,
       checkedAt,
     };
   }

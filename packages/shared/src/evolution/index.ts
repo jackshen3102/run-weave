@@ -21,7 +21,7 @@ export * from "./activation";
 
 export type AnalysisProfile = "quick" | "standard" | "deep";
 
-export type ProviderPolicy = "auto" | "codex" | "trae" | "mixed";
+export type ProviderPolicy = "auto" | "codex" | "trae" | "agy" | "mixed";
 
 export const EVOLUTION_GLOBAL_SCOPE_ID = "global:runweave";
 
@@ -228,7 +228,7 @@ export interface EvolutionAnalysisReport {
   runId: string;
   attemptNumber: number;
   role: EvolutionAnalystRole;
-  provider: Extract<ProviderPolicy, "codex" | "trae">;
+  provider: Extract<ProviderPolicy, "codex" | "trae" | "agy">;
   summary: string;
   observedFacts: EvolutionObservedFact[];
   assessments: EvolutionAssessment[];
@@ -243,7 +243,7 @@ export interface EvolutionRunAttempt {
   runId: string;
   attemptNumber: number;
   role: EvolutionAnalystRole;
-  provider: Extract<ProviderPolicy, "codex" | "trae">;
+  provider: Extract<ProviderPolicy, "codex" | "trae" | "agy">;
   selectionReason:
     | "explicit_policy"
     | "cross_provider"
@@ -456,7 +456,7 @@ export interface CreateEvolutionRunRequest {
 }
 
 export interface EvolutionProviderAvailability {
-  provider: Extract<ProviderPolicy, "codex" | "trae">;
+  provider: Extract<ProviderPolicy, "codex" | "trae" | "agy">;
   available: boolean;
   binaryAvailable: boolean;
   authenticated: boolean;

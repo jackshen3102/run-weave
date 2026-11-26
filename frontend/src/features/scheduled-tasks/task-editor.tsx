@@ -233,7 +233,9 @@ export function TaskEditor({
                     ? "TraeX"
                     : item.provider === "codex"
                       ? "Codex"
-                      : "Pi"}
+                      : item.provider === "agy"
+                        ? "AGY"
+                        : "Pi"}
                   {item.available ? "" : ` · ${item.reason ?? "暂不可用"}`}
                 </option>
               ))}

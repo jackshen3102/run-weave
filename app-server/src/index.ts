@@ -3,6 +3,8 @@ import path from "node:path";
 import { SupervisionConversationReader } from "./agents/supervision-reader.js";
 import { ConversationReader } from "./agents/conversation-reader.js";
 import { CodexConversationReader } from "./codex/conversation-reader.js";
+import { AgyConversationReader } from "./agy/conversation-reader.js";
+import { AgySessionReader } from "./agy/session-reader.js";
 import { ClaudeConversationReader } from "./claude/conversation-reader.js";
 import { ClaudeSessionReader } from "./claude/session-reader.js";
 import { configuration, acquireConfigurationOwner, ConfigurationError } from "@runweave/config-node";
@@ -105,8 +107,15 @@ export async function startAppServer(prepareRuntime?: () => void): Promise<void>
     if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_FIELD_VALUE_INVALID") throw error;
     logInfo("Claude conversation reader unavailable", { reason: "configuration_invalid" });
   }
+  let agyConversationReader: AgyConversationReader | undefined;
+  try {
+    agyConversationReader = new AgyConversationReader(new AgySessionReader());
+  } catch (error) {
+    if (!(error instanceof ConfigurationError) || error.code !== "CONFIG_FIELD_VALUE_INVALID") throw error;
+    logInfo("AGY conversation reader unavailable", { reason: "configuration_invalid" });
+  }
   const threadPreviews = new ThreadPreviewReader(codexRolloutLifecycleReader, traeLifecycleReader, claudeConversationReader);
-  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader), claudeConversationReader);
+  const conversations = new ConversationReader(new CodexConversationReader(codexRolloutLifecycleReader), piSessionReader, new TraeConversationReader(traeLifecycleReader), new SupervisionConversationReader(codexRolloutLifecycleReader, path.join(config.stateDir, "supervision-cache")), new AnalysisEvidenceReader(codexRolloutLifecycleReader), claudeConversationReader, agyConversationReader);
   const agentThreadStatusReconciler = new AgentThreadStatusReconciler({
     eventCenter,
     sourceInstanceId,

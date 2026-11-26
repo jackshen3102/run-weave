@@ -50,6 +50,11 @@ export class AgentModelCatalogStore {
         isPersistedCatalog(raw.catalogs.traex, "traex")
           ? { traex: structuredClone(raw.catalogs.traex) }
           : {}),
+        ...(isRecord(raw) &&
+        isRecord(raw.catalogs) &&
+        isPersistedCatalog(raw.catalogs.agy, "agy")
+          ? { agy: structuredClone(raw.catalogs.agy) }
+          : {}),
       },
     };
     this.database = database;

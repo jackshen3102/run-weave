@@ -12,6 +12,7 @@ const SUPPORTED_AGENT_COMMANDS = new Set([
   "pi",
   "traecli",
   "claude",
+  "agy",
 ]);
 
 const SUPPORTED_TERMINAL_AGENT_STATES = new Set<TerminalStateValue>([

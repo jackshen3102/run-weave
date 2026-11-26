@@ -38,11 +38,11 @@ export async function recoverTerminalAgent(
   const agent = panel.terminalState?.agent;
   if (
     panel.terminalState?.state !== "agent_idle" ||
-    (agent !== "codex" && agent !== "pi")
+    (agent !== "codex" && agent !== "pi" && agent !== "agy")
   ) {
     throw new TerminalPanelError(
       409,
-      "Only an idle Codex or Pi panel can be recovered",
+      "Only an idle Codex, Pi, or AGY panel can be recovered",
     );
   }
   if (!isInteractiveShellLaunch(session.command, session.args)) {
@@ -115,7 +115,7 @@ function resolveAgentThreadToRecover(
   terminalSessionManager: TerminalSessionManager,
   session: TerminalSessionRecord,
   panel: TerminalPanelRecord,
-  agent: "codex" | "pi",
+  agent: "codex" | "pi" | "agy",
 ): string | null {
   const panelThreadId = readAgentThreadId(panel, agent);
   if (panelThreadId) {
@@ -132,7 +132,7 @@ function readAgentThreadId(
     TerminalPanelRecord | TerminalSessionRecord,
     "threadId" | "threadProvider" | "lastThreadId" | "lastThreadProvider"
   >,
-  agent: "codex" | "pi",
+  agent: "codex" | "pi" | "agy",
 ): string | null {
   if (source.threadProvider === agent && source.threadId?.trim()) {
     return source.threadId.trim();

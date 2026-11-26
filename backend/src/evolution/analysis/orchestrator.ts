@@ -17,6 +17,7 @@ import type {
 import { segmentContextPack } from "../trace-segmenter";
 import { EvolutionToolTokenRegistry } from "../tools/token-registry";
 import { EvolutionProviderAvailabilityService } from "../providers/availability";
+import { AgyEvolutionProvider } from "../providers/agy";
 import { CodexEvolutionProvider } from "../providers/codex";
 import { TraeEvolutionProvider } from "../providers/trae";
 import type {
@@ -75,6 +76,7 @@ export class EvolutionAnalysisOrchestrator {
     this.providers = {
       codex: providers?.codex ?? new CodexEvolutionProvider(),
       trae: providers?.trae ?? new TraeEvolutionProvider(),
+      agy: providers?.agy ?? new AgyEvolutionProvider(),
     };
   }
 

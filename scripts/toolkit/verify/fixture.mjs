@@ -31,6 +31,7 @@ const hookAssets = [
   "runweave-hook-tmux.cjs",
   "runweave-hook-completion.cjs",
   "runweave-hook-claude.cjs",
+  "runweave-hook-agy.cjs",
   "runweave-task-supervision.cjs",
   "feishu_stop_notify.sh",
 ];

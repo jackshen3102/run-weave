@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { EvolutionService } from "../../evolution/service";
 
 const profileSchema = z.enum(["quick", "standard", "deep"]);
-const providerPolicySchema = z.enum(["auto", "codex", "trae", "mixed"]);
+const providerPolicySchema = z.enum(["auto", "codex", "trae", "agy", "mixed"]);
 const runStageSchema = z.enum([
   "queued",
   "snapshotting",

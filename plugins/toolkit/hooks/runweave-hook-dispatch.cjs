@@ -5,7 +5,7 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 
-const SOURCES = new Set(["codex", "trae", "traecli", "traex", "claude"]);
+const SOURCES = new Set(["codex", "trae", "traecli", "traex", "claude", "agy"]);
 
 function normalizeSource(value) {
   const source = String(value || "")

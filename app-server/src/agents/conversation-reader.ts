@@ -2,6 +2,7 @@ import type { AnalysisEvidenceReader } from "./analysis-evidence-reader.js";
 import type { SupervisionConversationReader } from "./supervision-reader.js";
 import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
 import type { AppServerConversationResponse, ConversationTurn } from "@runweave/shared/terminal/conversation";
+import type { AgyConversationReader } from "../agy/conversation-reader.js";
 import type { CodexConversationReader } from "../codex/conversation-reader.js";
 import type { ClaudeConversationReader } from "../claude/conversation-reader.js";
 import type { PiSessionReader } from "../pi/session-reader.js";
@@ -9,7 +10,7 @@ import type { TraeConversationReader } from "../trae/conversation-reader.js";
 import { ConversationReadError } from "./conversation-source.js";
 
 export class ConversationReader {
-  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly trae: TraeConversationReader, private readonly supervision?: SupervisionConversationReader, private readonly analysis?: AnalysisEvidenceReader, private readonly claude?: ClaudeConversationReader) {}
+  constructor(private readonly codex: CodexConversationReader, private readonly pi: PiSessionReader, private readonly trae: TraeConversationReader, private readonly supervision?: SupervisionConversationReader, private readonly analysis?: AnalysisEvidenceReader, private readonly claude?: ClaudeConversationReader, private readonly agy?: AgyConversationReader) {}
 
   async readAnalysis(thread: AppServerThreadRef, cursor?: string) {
     if (thread.agent !== "codex" || !this.analysis) return { events: [],nextCursor: cursor ?? "",coverage: "unavailable" as const,bytes: 0 };
@@ -25,11 +26,13 @@ export class ConversationReader {
   // Claude, Codex and Trae verify controlled sources; Pi needs its registered file context.
   async read(thread: Pick<AppServerThreadRef, "agent" | "threadId" | "pi"> & Partial<Pick<AppServerThreadRef, "cwd">>, signal?: AbortSignal): Promise<AppServerConversationResponse> {
     const isTrae = ["trae", "traecli", "traex"].includes(thread.agent);
-    const supported = thread.agent === "codex" || thread.agent === "pi" || thread.agent === "claude" || isTrae;
+    const supported = thread.agent === "codex" || thread.agent === "pi" || thread.agent === "claude" || thread.agent === "agy" || isTrae;
     if (thread.agent === "claude" && !this.claude) throw new ConversationReadError(503, "CLAUDE_READER_UNAVAILABLE", "Claude 会话读取服务尚未初始化");
+    if (thread.agent === "agy" && !this.agy) throw new ConversationReadError(503, "AGY_READER_UNAVAILABLE", "AGY 会话读取服务尚未初始化");
     const content = thread.agent === "codex" ? await this.codex.read(thread.threadId, signal)
       : thread.agent === "pi" ? await this.pi.readConversation(thread, signal)
       : thread.agent === "claude" ? await this.claude!.read(thread, signal)
+      : thread.agent === "agy" ? await this.agy!.read(thread, signal)
       : isTrae ? await this.trae.read(thread.threadId, signal) : null;
     const response: AppServerConversationResponse = {
       threadId: thread.threadId, provider: thread.agent,

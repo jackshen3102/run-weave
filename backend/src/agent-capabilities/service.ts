@@ -1,4 +1,5 @@
 import os from "node:os";
+import { resolveAgyConfiguration } from "@runweave/config-node/agy";
 import { buildCodexProcessEnv, resolveCodexLaunchPlan } from "../voice/codex-app-server-client";
 import { resolveClaudeConfiguration } from "@runweave/config-node/claude";
 import {
@@ -21,6 +22,7 @@ const ADAPTERS: Record<AgentCapabilityProvider, readonly AgentCapabilityName[]> 
   trae: ["prepare", "conversation", "resume", "queue", "attachments", "liveSettings"],
   pi: ["prepare", "conversation", "resume", "queue", "attachments"],
   claude: [],
+  agy: ["prepare", "conversation", "resume", "attachments", "liveSettings", "background"],
 };
 
 export class AgentCapabilitiesService {
@@ -59,6 +61,7 @@ export class AgentCapabilitiesService {
   private async readProviders(): Promise<AgentCapabilitiesResponse> {
     return { providers: await Promise.all((Object.keys(ADAPTERS) as AgentCapabilityProvider[]).map(async provider => {
       if (provider === "claude") return this.readClaude();
+      if (provider === "agy") return this.readAgy();
       const plan = provider === "pi" ? null : resolveCodexLaunchPlan(this.env, provider === "trae" ? "traex" : "codex");
       const result = await this.probe.run(plan?.command ?? "pi", ["--version"],
         plan ? buildCodexProcessEnv(this.env, plan) : this.env, os.userInfo().homedir);
@@ -93,6 +96,16 @@ export class AgentCapabilitiesService {
     return this.describe("claude", version, state);
   }
 
+  private async readAgy(): Promise<AgentProviderCapabilities> {
+    let native: ReturnType<typeof resolveAgyConfiguration>;
+    try { native = resolveAgyConfiguration(this.env); }
+    catch { return this.describe("agy", null, unavailable("configuration_invalid")); }
+    const versionResult = await this.probe.run(native.binary, ["--version"], this.env, os.userInfo().homedir);
+    if (versionResult.reason) return this.describe("agy", null, unavailable(versionResult.reason));
+    const version = readVersion(versionResult.stdout);
+    return this.describe("agy", version, version ? available() : unavailable("version_unrecognized"));
+  }
+
   private describe(provider: AgentCapabilityProvider, version: string | null, availability: AgentCapabilityState): AgentProviderCapabilities {
     const capabilities = Object.fromEntries(AGENT_CAPABILITY_NAMES.map(name => [name,
       provider === "claude" ? unavailable("integration_unverified")
@@ -107,6 +120,11 @@ export class AgentCapabilitiesService {
       if (process.platform !== "darwin" && process.platform !== "linux") {
         capabilities.sideChat = { status: "unsupported", reason: "platform_unsupported" };
       }
+    }
+    if (provider === "agy") {
+      const background = this.background();
+      capabilities.background = !this.closed && background.enabled && background.providers.some(item => item.provider === "agy" && item.available)
+        ? available() : unavailable("background_unavailable");
     }
     return { provider, version, availability, capabilities };
   }

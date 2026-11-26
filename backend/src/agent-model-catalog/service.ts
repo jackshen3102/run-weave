@@ -8,12 +8,13 @@ import {
   AgentModelCatalogStore,
   type PersistedAgentProviderCatalog,
 } from "./store";
+import { probeAgyCatalog } from "./agy";
 import { probeCodexCatalog } from "./codex";
 import { probeTraexCatalog } from "./traex";
 import type { AgentCatalogProbe } from "./types";
 
 const catalogLogger = logger.child({ component: "agent-model-catalog" });
-const PROVIDERS: readonly AgentModelProvider[] = ["codex", "traex"];
+const PROVIDERS: readonly AgentModelProvider[] = ["codex", "traex", "agy"];
 
 export class AgentModelCatalogService {
   constructor(
@@ -50,7 +51,9 @@ export class AgentModelCatalogService {
       const result =
         provider === "codex"
           ? await probeCodexCatalog(this.env)
-          : await probeTraexCatalog(this.env);
+          : provider === "agy"
+            ? await probeAgyCatalog(this.env)
+            : await probeTraexCatalog(this.env);
       const capturedAt = new Date().toISOString();
       const persisted: PersistedAgentProviderCatalog = {
         schemaVersion: 1,

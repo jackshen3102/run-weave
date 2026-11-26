@@ -1,3 +1,4 @@
+import type { AgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -25,6 +26,7 @@ export interface StateRefIdentity {
 }
 
 export interface StateRefUpdate {
+  agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
   pi?: PiAgentContext;
   agent: AppServerAgentKind;
@@ -124,6 +126,7 @@ export class AppServerStateStore {
     const startsNewTurn = update.agent === "codex" &&
       (update.lastHookEvent === "UserPromptSubmit" || update.lastHookEvent === "SessionStart");
     const current: AppServerThreadRef = {
+      ...(update.agy ?? previous?.agy ? { agy: update.agy ?? previous?.agy } : {}),
       ...(update.claude ?? previous?.claude ? { claude: update.claude ?? previous?.claude } : {}),
       ...(update.pi ?? previous?.pi ? { pi: update.pi ?? previous?.pi } : {}),
       threadId: update.threadId,
@@ -283,6 +286,7 @@ function isStateRef(value: unknown): value is Record<string, unknown> & {
 function isAgentKind(value: unknown): value is AppServerAgentKind {
   return (
     value === "claude" ||
+    value === "agy" ||
     value === "codex" ||
     value === "trae" ||
     value === "traecli" ||

@@ -1,3 +1,6 @@
+import { lstat, realpath } from "node:fs/promises";
+import path from "node:path";
+import { resolveAgyConfiguration } from "@runweave/config-node/agy";
 import { buildAgentResumeArgs } from "@runweave/shared/terminal/agent-resume";
 import { terminalShellName } from "@runweave/shared/terminal/shell";
 import { settingText } from "@runweave/config-node";
@@ -68,6 +71,36 @@ const piAdapter: AgentAdapter = {
   },
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveAgyResumeTarget(threadId: string): Promise<string> {
+  const normalized = threadId.trim();
+  if (!UUID_PATTERN.test(normalized)) {
+    throw new Error("Invalid agy conversation ID");
+  }
+  const { brainDirectory } = resolveAgyConfiguration();
+  const rootReal = await realpath(brainDirectory).catch(() => null);
+  if (!rootReal) {
+    throw new Error("agy brain directory is unavailable");
+  }
+  const sessionDir = path.join(brainDirectory, normalized);
+  const transcriptPath = path.join(sessionDir, ".system_generated", "logs", "transcript.jsonl");
+  const stat = await lstat(transcriptPath).catch(() => null);
+  if (!stat || stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`Saved agy conversation transcript not found: ${normalized}`);
+  }
+  const resolved = await realpath(transcriptPath).catch(() => null);
+  if (!resolved || !resolved.startsWith(`${rootReal}${path.sep}`)) {
+    throw new Error("agy conversation transcript path is outside brain directory");
+  }
+  return normalized;
+}
+
+const agyAdapter: AgentAdapter = {
+  resolveResumeTarget: resolveAgyResumeTarget,
+};
+
 // Static host adapters; provider files and process control remain in Backend.
 const adapters: Record<string, AgentAdapter> = {
   codex: terminalAdapter,
@@ -75,6 +108,7 @@ const adapters: Record<string, AgentAdapter> = {
   traecli: terminalAdapter,
   traex: terminalAdapter,
   pi: piAdapter,
+  agy: agyAdapter,
 };
 export function getAgentAdapter(
   agent: string | null | undefined,
@@ -103,6 +137,8 @@ export function buildAgentResumeCommand(thread: {
   ];
   const configured = thread.provider === "codex"
     ? settingText("agents.codex.binary")?.trim()
+    : thread.provider === "agy"
+      ? settingText("agents.agy.binary")?.trim()
     : ["trae", "traex", "traecli"].includes(thread.provider)
       ? settingText("agents.traex.binary")?.trim()
       : undefined;

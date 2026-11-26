@@ -1,4 +1,4 @@
-export type EvolutionProviderName = "codex" | "trae";
+export type EvolutionProviderName = "codex" | "trae" | "agy";
 
 export interface EvolutionProviderRequest {
   prompt: string;

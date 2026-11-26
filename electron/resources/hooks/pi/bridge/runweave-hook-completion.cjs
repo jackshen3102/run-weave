@@ -24,11 +24,13 @@ async function postAgentHook({
   operationId,
   pi,
   claude,
+  agy,
 }) {
   let body = JSON.stringify({
     activityEventId,
     ...(pi ? { pi } : {}),
     ...(claude ? { claude } : {}),
+    ...(agy ? { agy } : {}),
     ...(operationId ? { operationId } : {}),
     terminalSessionId,
     projectId,

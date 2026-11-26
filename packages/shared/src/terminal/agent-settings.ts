@@ -1,4 +1,4 @@
-export type TerminalAgentSettingsProvider = "codex" | "traex";
+export type TerminalAgentSettingsProvider = "codex" | "traex" | "agy";
 
 export interface TerminalAgentSettings {
   terminalSessionId: string;

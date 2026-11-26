@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { resolveAgyConfiguration } from "@runweave/config-node/agy";
 import type {
   TerminalAgentModelOption,
   TerminalAgentSettings,
@@ -11,6 +14,7 @@ import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
 import { resolvePanelTarget } from "../application/panel-targets";
 import { beginTerminalReturn, TerminalInputBusyError } from "./input-admission";
 import { codexAppServerClient, traexAppServerClient } from "../../voice/codex-app-server-client";
+import { probeAgyCatalog } from "../../agent-model-catalog/agy";
 import { probeCodexCatalog } from "../../agent-model-catalog/codex";
 import { probeTraexCatalog } from "../../agent-model-catalog/traex";
 
@@ -43,6 +47,7 @@ function fail(status: number, code: string, message: string): never {
 
 function normalizeProvider(value: string | null | undefined): TerminalAgentSettingsProvider | null {
   if (value === "codex") return "codex";
+  if (value === "agy") return "agy";
   if (value === "trae" || value === "traex" || value === "traecli") return "traex";
   return null;
 }
@@ -79,7 +84,7 @@ async function resolveTarget(
   const threadId = thread?.id.trim();
   if (!provider || !threadId || panel.status !== "running" ||
     normalizeProvider(panel.terminalState?.agent) !== provider) {
-    fail(409, "agent_settings_unavailable", "当前面板没有可设置的 Codex 或 TraeX 会话");
+    fail(409, "agent_settings_unavailable", "当前面板没有可设置的 Codex、TraeX 或 AGY 会话");
   }
   return { session, pane: paneTarget, panelId: panel.id, provider, threadId };
 }
@@ -90,7 +95,9 @@ async function modelsFor(provider: TerminalAgentSettingsProvider): Promise<Termi
   try {
     const catalog = provider === "codex"
       ? await probeCodexCatalog(process.env)
-      : await probeTraexCatalog(process.env);
+      : provider === "agy"
+        ? await probeAgyCatalog(process.env)
+        : await probeTraexCatalog(process.env);
     const models = catalog.models.map((model) => ({
       id: model.id,
       label: model.label,
@@ -112,7 +119,50 @@ function normalizedModel(raw: string, models: TerminalAgentModelOption[]): strin
   return models.find((model) => model.id.toLowerCase() === name)?.id ?? raw;
 }
 
+async function readAgyThread(threadId: string): Promise<ThreadEntry> {
+  const { brainDirectory, configDirectory } = resolveAgyConfiguration(process.env);
+  let model: string | null = null;
+  let reasoningEffort: string | null = null;
+  try {
+    const transcript = await readFile(
+      path.join(brainDirectory, threadId, ".system_generated", "logs", "transcript.jsonl"),
+      "utf8",
+    );
+    const lines = transcript.trim().split(/\r?\n/);
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      try {
+        const row = JSON.parse(lines[i]!) as { source?: string; type?: string; model?: string };
+        if (row.source === "MODEL" && row.type === "PLANNER_RESPONSE" && typeof row.model === "string" && row.model.trim()) {
+          model = row.model.trim();
+          break;
+        }
+      } catch {
+        // Ignore incomplete trailing lines.
+      }
+    }
+  } catch {
+    // Fallback to metadata or settings.json.
+  }
+  if (!model) {
+    try {
+      const meta = JSON.parse(await readFile(path.join(brainDirectory, threadId, ".runweave-agy-meta.json"), "utf8")) as { modelName?: string };
+      if (typeof meta.modelName === "string" && meta.modelName.trim()) model = meta.modelName.trim();
+    } catch {
+      // Ignore missing meta.
+    }
+  }
+  try {
+    const settings = JSON.parse(await readFile(path.join(configDirectory, "settings.json"), "utf8")) as { model?: string; effort?: string };
+    if (!model && typeof settings.model === "string" && settings.model.trim()) model = settings.model.trim();
+    if (typeof settings.effort === "string" && settings.effort.trim()) reasoningEffort = settings.effort.trim();
+  } catch {
+    // Ignore missing settings.json.
+  }
+  return { id: threadId, model, reasoningEffort };
+}
+
 async function readThread(provider: TerminalAgentSettingsProvider, threadId: string): Promise<ThreadEntry> {
+  if (provider === "agy") return readAgyThread(threadId);
   const client = provider === "codex" ? codexAppServerClient : traexAppServerClient;
   let cursor: string | null = null;
   for (let page = 0; page < 20; page++) {
@@ -265,6 +315,19 @@ async function chooseModelAndEffort(
   try {
     await typeText(tmux, target.pane, "/model");
     await press(tmux, target.pane, "Enter");
+    if (target.provider === "agy") {
+      const menu = await waitForEitherMenu(tmux, target.pane, ["Select Model", "Model"]);
+      const names = [model.id, model.label].map((name) => name.toLowerCase());
+      await selectRow(
+        tmux,
+        target.pane,
+        menu,
+        (label) => names.some((name) => label.toLowerCase().includes(name)),
+        false,
+      );
+      submitted = true;
+      return;
+    }
     if (target.provider === "traex") {
       // TraeX first confirms the slash-command completion, then opens its menu.
       const prompt = await waitForEitherMenu(tmux, target.pane,

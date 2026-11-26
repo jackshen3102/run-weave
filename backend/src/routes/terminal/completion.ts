@@ -1,3 +1,4 @@
+import { isAgyAgentContext } from "@runweave/shared/terminal/agy-agent";
 import { codexHookBelongsToPrimary } from "../../terminal/runtime/codex-context";
 import { feishuNotifyHandler } from "../feishu";
 import type { FeishuBridgeConnector } from "../../feishu/bridge-connector";
@@ -34,11 +35,12 @@ const completionEventSchema = z
       instanceId: z.string().min(1).max(256), eventId: z.string().uuid(),
       notificationType: z.string().max(128).optional(), query: z.string().max(8_000).optional(),
     }).strict().optional(),
+    agy: z.custom<import("@runweave/shared/terminal/agy-agent").AgyAgentContext>(isAgyAgentContext).optional(),
     pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
     feishuNotificationOnly: z.boolean().optional(),
     terminalSessionId: z.string().trim().min(1),
     source: z
-      .enum(["claude", "codex", "trae", "traecli", "traex", "pi", "unknown"])
+      .enum(["claude", "codex", "trae", "traecli", "traex", "pi", "agy", "unknown"])
       .default("unknown"),
     completionReason: completionReasonEnum.optional(),
     commandName: z.string().trim().min(1).nullable().optional(),
@@ -165,6 +167,18 @@ export function createInternalTerminalCompletionRouter(options: {
     const targetPanel = panelId
       ? (options.terminalSessionManager.getPanel(panelId) ?? null)
       : null;
+    if (parsed.data.source === "agy") {
+      const agy = parsed.data.agy;
+      if (!agy || agy.fullyIdle === false || (agy.terminationReason && agy.terminationReason !== "NO_TOOL_CALL")) {
+        res.status(202).json({ event: null, ignored: true, reason: "agy_lifecycle_unverified" });
+        return;
+      }
+      const owner = targetPanel ?? session;
+      if (owner.agy && (owner.agy.instanceId !== agy.instanceId || owner.agy.conversationId !== agy.conversationId)) {
+        res.status(202).json({ event: null, ignored: true, reason: "agy_subagent_or_stale" });
+        return;
+      }
+    }
     if (parsed.data.source === "codex" && targetPanel &&
         !(await codexHookBelongsToPrimary(targetPanel, parsed.data.threadId))) {
       res.status(202).json({ event: null, ignored: true, reason: "codex_context_mismatch" });

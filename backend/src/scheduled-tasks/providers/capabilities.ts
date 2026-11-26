@@ -5,6 +5,8 @@ import type {
   ScheduledExecutionPolicy,
   ScheduledTaskCapabilities,
 } from "@runweave/shared/scheduled-tasks";
+import { resolveAgyConfiguration } from "@runweave/config-node/agy";
+import { AgyScheduledTaskProvider } from "./agy";
 import { CodexScheduledTaskProvider } from "./codex";
 import type { ScheduledProviderAdapter } from "./types";
 
@@ -85,6 +87,37 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
         fullAccessSupported,
       ),
     );
+  let agyAvailable = false;
+  let agyReason: string | undefined;
+  let agyAutoReviewSupported = false;
+  let agyFullAccessSupported = false;
+  let agyContinuationSupported = false;
+  let agyExecutionPolicies: ScheduledExecutionPolicy[] = ["sandbox"];
+  try {
+    const agyBinary = resolveAgyConfiguration(env).binary;
+    await execFileAsync(agyBinary, ["--version"], { timeout: 10_000, env });
+    const { stdout, stderr } = await execFileAsync(agyBinary, ["--help"], { timeout: 10_000, env });
+    const helpOutput = `${stdout ?? ""}\n${stderr ?? ""}`;
+    if (!helpOutput.includes("--json-schema") || !helpOutput.includes("--output-format")) {
+      throw new Error("structured_result_unsupported");
+    }
+    agyAutoReviewSupported = helpOutput.includes("--mode");
+    agyFullAccessSupported = helpOutput.includes("--dangerously-skip-permissions");
+    agyContinuationSupported = helpOutput.includes("--resume");
+    agyExecutionPolicies = [
+      ...(helpOutput.includes("--sandbox") ? (["sandbox"] as const) : []),
+      ...(agyAutoReviewSupported ? (["auto-review"] as const) : []),
+      ...(agyFullAccessSupported ? (["full-access"] as const) : []),
+    ];
+    if (agyExecutionPolicies.length === 0) agyExecutionPolicies = ["sandbox"];
+    agyAvailable = true;
+    adapters.set(
+      "agy",
+      new AgyScheduledTaskProvider(agyBinary, agyAutoReviewSupported, agyFullAccessSupported),
+    );
+  } catch {
+    agyReason = "AGY CLI is unavailable or missing structured result support";
+  }
   return {
     adapters,
     capabilities: [
@@ -94,6 +127,13 @@ export async function probeScheduledProviders(env: NodeJS.ProcessEnv): Promise<{
         executionPolicies,
         continuation: continuationSupported,
         ...(codexReason ? { reason: codexReason } : {}),
+      },
+      {
+        provider: "agy",
+        available: agyAvailable,
+        executionPolicies: agyExecutionPolicies,
+        continuation: agyContinuationSupported,
+        ...(agyReason ? { reason: agyReason } : {}),
       },
       {
         provider: "trae",

@@ -26,7 +26,7 @@ const scheduleSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-const provider = z.enum(["codex", "trae", "pi"]);
+const provider = z.enum(["codex", "trae", "pi", "agy"]);
 const continuationPolicy = z
   .object({ mode: z.enum(["off", "bounded"]) })
   .strict();

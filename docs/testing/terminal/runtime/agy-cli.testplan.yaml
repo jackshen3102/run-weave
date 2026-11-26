@@ -1,0 +1,110 @@
+version: 1
+name: Antigravity CLI (agy) 全链路接入验收
+description: >
+  验证 Antigravity CLI (agy) 在 Runweave 中的受管 Hook 安装、同步 JSON 输出协议、终端生命周期、
+  子 Agent 隔离、受管准备与精确恢复、原生会话阅读、跨端输入、会话搜索、日报采集及自动化执行合同。
+  每例建立独立资源与通知 sink，不使用用户活跃任务，静态检查不替代真实运行证据。
+
+cases:
+  - id: AGY-001
+    name: 受管 Hook 安装只维护 runweave 命名块且不覆盖损坏配置
+    required: true
+    description: >
+      安装器在 ~/.gemini/config/hooks.json 中幂等写入或更新顶层 runweave 块，保留第三方命名 hook，且遇到损坏 JSON 时保留原始字节。
+    preconditions:
+      - 本例使用独立的临时 home 目录，包含 ~/.gemini/antigravity-cli 及带有第三方命名 hook 的 ~/.gemini/config/hooks.json。
+      - 候选 Hook 安装器可在该独立 home 目录运行。
+    steps:
+      - 连续运行候选安装器两次；确认 ~/.gemini/config/hooks.json 中仅有一个顶层 runweave 块，包含 SessionStart、PreInvocation、PreToolUse、PostToolUse 和 Stop，第三方命名块原样保留且首次备份文件存在。
+      - 将独立 home 中的 hooks.json 替换为预先记录哈希的无效 JSON 后再次运行安装器；确认安装器安全跳过，文件哈希与原始字节完全不变。
+
+  - id: AGY-002
+    name: Hook Bridge 对 agy 事件同步输出合法 JSON 且在外部终端静默放行
+    required: true
+    description: >
+      runweave-hook-bridge 在 --source agy 下对 PreToolUse 输出 allow 决策 JSON，对其余事件输出空对象 JSON，缺少 Runweave 环境变量时仍输出合法 JSON 并以 0 退出。
+    preconditions:
+      - 本例已构建候选 runweave-hook-bridge，可在无 RUNWEAVE_* 环境变量和有受控 sink 环境变量两种条件下调用。
+    steps:
+      - 在无 RUNWEAVE_* 环境变量下向 bridge 输入 agy PreToolUse 与 Stop 的 JSON payload；确认 PreToolUse 的 stdout 为包含 decision allow 的合法 JSON，Stop 的 stdout 为空对象 JSON，进程退出码均为 0 且未产生任何网络请求或通知。
+      - 在配置了本例 Backend sink 的环境下输入 PreInvocation 与 Stop payload；确认 stdout 仍返回合法 JSON，且 Backend 收到映射后的生命周期事件。
+
+  - id: AGY-003
+    name: 真实 agy 请求驱动对应面板状态与完成提醒
+    required: true
+    description: >
+      在 Runweave tmux 面板中运行 agy 时，终端标题显示 (agy)，状态随真实调用在 agent_starting、agent_running 与 agent_idle 间准确迁移，正常完成只产生一次提醒。
+    preconditions:
+      - 本例隔离 Dev Session 的 Backend 和 App Server 正常运行，本机 agy 认证与模型可用。
+      - 本例拥有独立 tmux Terminal 和通知 sink，已安装候选 agy Hook。
+    steps:
+      - 在测试面板启动 agy 并等待 SessionStart；确认终端 activeCommand 识别为 agy，会话显示名带 (agy)，状态进入 agent_idle 且记录当前 conversationId。
+      - 提交一条只读请求；确认 PreInvocation 与工具调用期间面板状态为 agent_running，本轮以 NO_TOOL_CALL 且 fullyIdle 结束时回到 agent_idle，completion 与通知 sink 仅记录一次完成。
+
+  - id: AGY-004
+    name: 子 Agent 事件与非正常终止的 Stop 不产生主任务完成提醒
+    required: true
+    description: >
+      同一面板主会话运行期间，子 Agent 会话的 Hook、fullyIdle 为 false 的 Stop，以及 ERROR 或 USER_CANCELED 终止均不能触发主任务成功完成通知。
+    preconditions:
+      - 本例独立面板已绑定主 agy 会话与进程代次 instanceId，通知指向本例 sink。
+    steps:
+      - 投递同一终端下不同 conversationId 的子 Agent PreInvocation 与 Stop 事件，以及主会话 fullyIdle 为 false 的 Stop 事件；确认主面板仍保持原主会话 threadId 与 agent_running，未产生成功 completion。
+      - 投递主会话 terminationReason 为 USER_CANCELED 和 ERROR 的 Stop 事件；确认面板状态回到 agent_idle，但未产生驱动业务成功的完成提醒。
+
+  - id: AGY-005
+    name: 受管 prepare 与精确 recover 校验真实会话且不回退最近会话
+    required: true
+    description: >
+      prepare 使用 agy -i 提交初始提示词，recover 使用 agy --resume 恢复已校验存在的目标 conversationId；目标 transcript 缺失时明确失败。
+    preconditions:
+      - 本例独立测试环境中有两个不同 conversationId 的 agy 会话记录（较早目标会话与最近会话），包含不同唯一 marker。
+    steps:
+      - 调用 prepare 接口在测试面板启动 agy；确认实际启动命令采用 -i 传递初始提示词，面板进入 agent_starting 并在 Hook 确认后绑定新会话。
+      - 退出 agy 后对较早目标 conversationId 执行 recover；确认实际执行 agy --resume <目标ID>，恢复后的会话身份与较早目标一致。
+      - 退出 agy 并移走目标会话的 transcript.jsonl 后再次执行 recover；确认接口返回明确错误，未回退打开最近会话。
+
+  - id: AGY-006
+    name: 原生会话阅读提取真实用户请求与助手回复并拒绝越界路径
+    required: true
+    description: >
+      App Server AgyConversationReader 清洗 USER_REQUEST 系统包装标签并展示 PLANNER_RESPONSE 正文，容忍半行追加，且拒绝符号链接或客户端传入的外部路径。
+    preconditions:
+      - 本例受控 brain 目录下存有带唯一正文 marker、工具调用、SYSTEM_MESSAGE 及尾部半行的 agy transcript.jsonl，以及同目录 .runweave-agy-meta.json。
+    steps:
+      - 请求读取该会话正文；确认返回的用户消息已剥离 <USER_REQUEST> 与 <ADDITIONAL_METADATA> 标签，助手消息顺序与 marker 正确，SYSTEM_MESSAGE 未混入可见对话，半行未破坏已有记录。
+      - 将目标文件替换为指向外部文件的符号链接或修改元数据 cwd 为不匹配路径后再次读取；确认均被拒绝且不泄露外部内容。
+
+  - id: AGY-007
+    name: Web 浮动输入框与 iOS 输入只投递当前 agy 目标面板
+    required: true
+    description: >
+      Web Floating Composer 在 agy 面板启用并完整提交多行草稿，iOS 发送的图文与文本草稿在 Backend 确认接受后才清除。
+    preconditions:
+      - 本例独立 Dev Session 拥有运行 agy 的测试面板，可通过 $toolkit:playwright-cli 附着 Web 页面，并可通过受控输入通道验证 iOS 请求。
+    steps:
+      - 使用 $toolkit:playwright-cli 在 agy 终端打开浮动输入框，输入含中文和换行的多行草稿并提交；确认 agy 面板只收到一次完整草稿，接受后浮动输入框草稿清空。
+      - 从移动端输入接口向当前 agy 面板发送带唯一 marker 的消息；确认仅目标面板收到输入，其他对照面板与未确认草稿不受影响。
+
+  - id: AGY-008
+    name: 会话搜索与日报采集按工作区归属索引 agy 原生记录
+    required: true
+    description: >
+      session-search 与 daily-record 扫描 brain 目录下的 transcript.jsonl，结合会话元数据关联项目 cwd，支持按 chat、work、full 级别检索和按日期采集日报素材。
+    preconditions:
+      - 本例受控 agy brain 目录内有绑定到测试 Git 仓库 cwd 的 transcript.jsonl，含唯一用户提问关键词、助手回复与工具调用记录。
+    steps:
+      - 执行 session-search refresh 并指定测试项目与 provider=agy 搜索关键词；确认 chat 级别命中用户与助手对话，work/full 级别可查到工具调用，且展开上下文时 SHA-256 校验为 verified。
+      - 对该日期范围运行 daily-record 采集（providers 包含 agy）；确认产出的 DailyMaterial 包含正确的 provider=agy、threadId、cwd 与脱敏正文，未重复索引 transcript_full.jsonl。
+
+  - id: AGY-009
+    name: 模型目录、Race 竞速与后台任务执行器按合同运行 agy
+    required: true
+    description: >
+      agent-capabilities 与 model-catalog 正确报告本机 agy 状态与模型，Race 支持启动 agy worker，后台任务通过 agy -p --json-schema 获取结构化结果。
+    preconditions:
+      - 本例隔离 Backend 环境中 agy 可用，已配置专属测试项目和后台任务私有运行目录。
+    steps:
+      - 请求 /api/agent-capabilities 与模型目录接口；确认返回 agy provider 的版本、可用性及支持的模型与 effort 列表。
+      - 在测试项目创建包含 agy worker 的 Race；确认成功创建对应 worktree 终端并以所选模型启动 agy。
+      - 创建并运行一条显式指定 provider=agy 的只读后台任务；确认进程按指定权限策略与 --json-schema 启动，保存真实 conversationId，且仅在输出符合业务 schema 时标记为 succeeded。
