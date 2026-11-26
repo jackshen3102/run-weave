@@ -28,12 +28,10 @@ struct ContextHandoffSheet: View {
             Text("\(preview.handoffBytes) / \(preview.budgetBytes) 字节")
           }
           Section {
-            Picker("目标 Agent", selection: $agent) {
-              ForEach(["codex", "claude", "pi", "traex", "agy"], id: \.self) { Text($0) }
-            }
-            Picker("目标工作区", selection: $project) {
-              ForEach(preview.targetProjects, id: \.projectId) { Text($0.name).tag($0.projectId) }
-            }
+            HandoffChoiceField(title: "目标 Agent", selection: $agent,
+              options: ["codex", "claude", "pi", "traex", "agy"].map { .init(id: $0, name: $0) })
+            HandoffChoiceField(title: "目标工作区", selection: $project,
+              options: preview.targetProjects.map { .init(id: $0.projectId, name: $0.name) })
             Text("附加指令")
             TextEditor(text: $prompt).frame(minHeight: 80)
             Toggle("自动提交首轮", isOn: $submit)
@@ -98,5 +96,46 @@ struct ContextHandoffSheet: View {
     await session.reload()
     guard epoch == session.generation, session.foreground else { return }
     await session.openTerminal(created)
+  }
+}
+
+private struct HandoffChoiceField: View {
+  struct Option: Identifiable { let id, name: String }
+
+  let title: String
+  @Binding var selection: String
+  let options: [Option]
+  @State private var expanded = false
+
+  var body: some View {
+    Button {
+      expanded.toggle()
+    } label: {
+      HStack {
+        Text(title)
+        Spacer()
+        Text(options.first { $0.id == selection }?.name ?? "").foregroundColor(.secondary)
+        Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    if expanded {
+      ForEach(options) { option in
+        Button {
+          selection = option.id
+          expanded = false
+        } label: {
+          HStack {
+            Text(option.name)
+            Spacer()
+            if selection == option.id { Image(systemName: "checkmark") }
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == option.id ? .isSelected : [])
+      }
+    }
   }
 }
