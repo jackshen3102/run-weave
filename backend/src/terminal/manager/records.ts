@@ -100,6 +100,11 @@ export interface TerminalPanelRecord {
   threadProvider?: TerminalAgentKind;
   agy?: AgyAgentContext;
   claude?: ClaudeAgentContext;
+  pendingPermissionRequest?: {
+    hookTimestamp: number;
+    processGeneration: string;
+    sessionId: string;
+  };
   pi?: PiAgentContext;
   piLastCompletionKey?: string;
   preview?: string;

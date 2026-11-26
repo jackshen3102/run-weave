@@ -134,6 +134,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     }
     const inputSession = this.getSession(panel.terminalSessionId);
     if (inputSession) invalidateTerminalInput(inputSession);
+    delete panel.pendingPermissionRequest;
     panel.status = "exited";
     panel.exitCode = exitCode;
     panel.lastActivityAt = new Date();

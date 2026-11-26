@@ -142,6 +142,15 @@ public actor APIClient {
     let _: Verification = try await authorized("/api/auth/verify", requestTimeout: 5)
   }
   func overview() async throws -> HomeOverview { try await authorized("/api/app/home/overview") }
+  func attentionSnapshot() async throws -> AttentionSnapshot {
+    try await authorized("/api/attention/slots")
+  }
+  func focusTerminalPanel(terminalID: String, panelID: String) async throws {
+    let value: AttentionPanelFocusResponse = try await authorized(
+      "/api/terminal/session/\(Self.pathComponent(terminalID))/panels/\(Self.pathComponent(panelID))",
+      method: "PATCH", body: ["focus": true], retryUnauthorized: false)
+    guard value.activePanelId == panelID else { throw APIError.invalidResponse }
+  }
   func homeConversationPreviews(ids: [String]) async throws -> HomeConversationPreviewsResponse {
     var items: [HomeConversationPreviewsResponse.Item] = []
     for start in stride(from: 0, to: ids.count, by: 100) {

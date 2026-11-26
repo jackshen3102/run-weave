@@ -9,6 +9,7 @@ final class TerminalQuestionsModel: ObservableObject {
   @Published private(set) var notificationStatus: TerminalQuestionNotificationResponse.Status?
   @Published private(set) var notificationResolved = false
   @Published private(set) var notificationTerminalID: String?
+  @Published private(set) var requestedTerminalID: String?
   @Published private var drafts: [String: [String: String]] = [:]
   private var operations: [String: String] = [:]
   private var revision = UUID()
@@ -19,7 +20,15 @@ final class TerminalQuestionsModel: ObservableObject {
 
   func reset() {
     revision = UUID(); terminalID = nil; pinnedTarget = nil; response = nil; error = nil; submitting = false
+    requestedTerminalID = nil
     drafts.removeAll(); operations.removeAll()
+  }
+
+  func requestOpen(terminalID: String) { requestedTerminalID = terminalID }
+  func consumeOpen(terminalID: String) -> Bool {
+    guard requestedTerminalID == terminalID else { return false }
+    requestedTerminalID = nil
+    return true
   }
 
   func open(terminalID: String, conversationKey: String?) {

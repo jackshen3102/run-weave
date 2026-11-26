@@ -16,6 +16,7 @@ struct HomeTerminalRow: View, Equatable {
   private let connectionScope: String?
   @StateObject private var state: StateProjection<HomeState.TerminalSnapshot>
   let projectName: String?
+  let attentionSlot: AttentionSlot?
   var branchStatus: HomeBranchStatus? = nil
   let showBranchUpdates: () -> Void
   let rename: () -> Void
@@ -25,10 +26,12 @@ struct HomeTerminalRow: View, Equatable {
   @State private var forkFailure: String?
   private var terminal: HomeTerminal { state.value.terminal ?? initialTerminal }
 
-  init(session: AppSession, terminal: HomeTerminal, projectName: String?, branchStatus: HomeBranchStatus? = nil,
+  init(session: AppSession, terminal: HomeTerminal, projectName: String?, attentionSlot: AttentionSlot? = nil,
+    branchStatus: HomeBranchStatus? = nil,
     showBranchUpdates: @escaping () -> Void, rename: @escaping () -> Void,
     move: @escaping () -> Void, delete: @escaping () -> Void) {
     self.session = session; initialTerminal = terminal; self.projectName = projectName
+    self.attentionSlot = attentionSlot
     self.branchStatus = branchStatus; self.showBranchUpdates = showBranchUpdates
     self.rename = rename; self.move = move; self.delete = delete
     connectionScope = session.connection?.scope
@@ -49,6 +52,7 @@ struct HomeTerminalRow: View, Equatable {
     // read the latest terminal on invocation instead of capturing a row snapshot.
     lhs.session === rhs.session && lhs.record === rhs.record
       && lhs.projectName == rhs.projectName && lhs.branchStatus == rhs.branchStatus
+      && lhs.attentionSlot == rhs.attentionSlot
       && lhs.connectionScope == rhs.connectionScope
   }
   private var pinned: Bool { terminal.pinnedAt != nil }
@@ -79,7 +83,8 @@ struct HomeTerminalRow: View, Equatable {
       Button {
         Task {
           guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
-          await session.openTerminal(current.id)
+          if let attentionSlot { await session.openAttentionSlot(attentionSlot) }
+          else { await session.openTerminal(current.id) }
         }
       } label: {
         VStack(alignment: .leading, spacing: 4) {
@@ -89,6 +94,11 @@ struct HomeTerminalRow: View, Equatable {
             TerminalAttentionBadge(
               unread: terminal.hasUnreadCompletion, bell: state.value.bell,
               showLabel: false)
+            if let actionLabel = attentionSlot?.actionLabel {
+              Text(actionLabel).font(.caption2).fontWeight(.semibold)
+                .foregroundColor(.orange)
+                .accessibilityIdentifier("home-attention-\(attentionSlot?.actionKind ?? "pending")-\(terminal.id)")
+            }
             if pinned {
               Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)
                 .accessibilityLabel("已置顶")

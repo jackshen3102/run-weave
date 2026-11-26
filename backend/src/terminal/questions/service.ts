@@ -13,7 +13,13 @@ import type { OriginalTerminalQuestion, TerminalQuestionOrigin } from "./origin"
 export class TerminalQuestionsService {
   private generation = randomUUID();
   private closed = false;
-  private connections = new Map<string, { identity: string; gateway: TerminalQuestionGateway; ready: Promise<void> }>();
+  private connections = new Map<string, {
+    identity: string;
+    panelId: string;
+    threadId: string;
+    gateway: TerminalQuestionGateway;
+    ready: Promise<void>;
+  }>();
   readonly notifications?: TerminalQuestionNotifications;
   constructor(private manager: TerminalSessionManager, private tmux: TmuxService, subscriptions?: DeviceSubscriptions) {
     if (subscriptions) this.notifications = new TerminalQuestionNotifications(this, subscriptions);
@@ -66,6 +72,33 @@ export class TerminalQuestionsService {
       connection.gateway.isPending(origin.turnId, origin.itemId);
   }
 
+  findActivePendingQuestion(terminalId: string): {
+    panelId: string;
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    updatedAt: string;
+  } | null {
+    const connection = this.connections.get(terminalId);
+    const session = this.manager.getSession(terminalId);
+    const panel = connection && this.manager.getPanel(connection.panelId);
+    const thread = panel && (resolveReplyThread(panel) ??
+      (session && this.manager.listPanels(terminalId).length === 1 ? resolveReplyThread(session) : null));
+    if (this.closed || !connection || connection.gateway.disposed || !connection.gateway.connected ||
+      session?.status !== "running" || panel?.status !== "running" ||
+      this.manager.getPanelWorkspace(terminalId)?.activePanelId !== connection.panelId ||
+      thread?.id !== connection.threadId) return null;
+    const pending = connection.gateway.activePending();
+    if (!pending) return null;
+    return {
+      panelId: connection.panelId,
+      threadId: connection.threadId,
+      turnId: pending.request.turnId,
+      itemId: pending.request.itemId,
+      updatedAt: pending.observedAt,
+    };
+  }
+
   async read(terminalId: string, panelId?: string, expectedThreadId?: string): Promise<TerminalQuestionsResponse> {
     for (const [id, connection] of this.connections) if (connection.gateway.disposed) this.invalidate(id);
     const target = this.closed ? null : await this.target(terminalId, panelId, expectedThreadId);
@@ -91,7 +124,13 @@ export class TerminalQuestionsService {
           turnId: request.turnId, itemId: request.itemId,
         }, state);
       });
-      connection = { identity, gateway, ready: gateway.join().catch(() => { gateway.dispose(); }) };
+      connection = {
+        identity,
+        panelId: target.panelId,
+        threadId: target.threadId,
+        gateway,
+        ready: gateway.join().catch(() => { gateway.dispose(); }),
+      };
       this.connections.set(terminalId, connection);
     }
     await connection.ready;

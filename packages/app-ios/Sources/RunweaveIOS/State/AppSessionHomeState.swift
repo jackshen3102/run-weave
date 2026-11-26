@@ -9,6 +9,10 @@ extension AppSession {
     get { home.overview }
     set { home.replace(newValue) }
   }
+  var attentionSnapshot: AttentionSnapshot? {
+    get { home.attentionSnapshot }
+    set { home.replaceAttention(newValue) }
+  }
   var metadataWrites: Set<String> {
     get { home.metadataWrites }
     set { home.metadataWrites = newValue }

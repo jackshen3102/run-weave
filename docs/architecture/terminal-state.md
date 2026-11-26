@@ -251,10 +251,10 @@ Claude 当前使用 Hook；其 OSC 探测需要在目标终端验证能力应答
 
 Stop、ESC、SIGINT 或 HTTP interrupt 也不直接写 `TerminalState`。控制输入发出后，状态只能由后续 `Stop` hook 或 active command 变化自然校正。这样可以避免前端/App 在用户点击 Stop 后提前隐藏 Stop 按钮，造成状态假成功。
 
-Attention 聚合独立区分“已完成”和“需要处理”：Trae 系列 `Notification + notify` 的未读事件
-显示为 `needs_action`，提示用户打开终端查看确认或输入请求；普通 Stop 完成仍为 `completed`。
-两者沿用 completion revision 的已读确认，均不改写 `TerminalState`。目前没有明确等待事件的
-Agent 不推断为“卡住”或“需要确认”，也不按多久没有输出来猜测。
+Attention 聚合独立区分“已完成”和“需要处理”。Codex 已登记的结构化待答、已校验主进程代次的
+Claude `PermissionRequest`、Pi `ui_prompt_start`、OSC 7501 `blocked` 与 Trae 等待通知统一投影为
+`needs_action`，并保留触发它的 Panel 与 `question | permission | auth | agent_prompt` 原因；普通 Stop
+完成仍为 `completed`。聚合不改写 `TerminalState`，也不从终端文字或静默时长推断等待或失败。
 
 ## 消费方
 

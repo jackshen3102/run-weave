@@ -42,6 +42,7 @@ final class HomeState {
   let projects = Projects()
   let completionQueue = CompletionQueue()
   private(set) var overview: HomeOverview?
+  private(set) var attentionSnapshot: AttentionSnapshot?
   private var terminals: [String: HomeTerminal] = [:]
   private var projectsByID: [String: TerminalProject] = [:]
   private var records: [String: TerminalRecord] = [:]
@@ -73,7 +74,7 @@ final class HomeState {
   func project(_ id: String) -> TerminalProject? { projectsByID[HomeOverview.parentProjectID(id)] }
 
   func resetScope() {
-    overview = nil; terminals = [:]; projectsByID = [:]
+    overview = nil; attentionSnapshot = nil; terminals = [:]; projectsByID = [:]
     metadataWrites.removeAll(); acknowledgementWrites.removeAll(); bellMarkers.removeAll()
     for (id, record) in records { record.replace(snapshot(id)) }
     records.removeAll()
@@ -102,6 +103,12 @@ final class HomeState {
     // connection reusing the same ID must receive a new record object.
     records = records.filter { terminals[$0.key] != nil }
     refreshCompletionQueue()
+    changes.send()
+  }
+
+  func replaceAttention(_ next: AttentionSnapshot?) {
+    guard attentionSnapshot != next else { return }
+    attentionSnapshot = next
     changes.send()
   }
 
