@@ -1,0 +1,71 @@
+version: 1
+name: Attention 待处理阻塞信号收口与 Working 折叠验收
+description: >
+  验证 AttentionService、macOS Desktop Slot Companion 与原生 iOS 首页统一将 Codex 结构化待答、Claude PermissionRequest
+  及 OSC 7501 阻塞态收口为高优先级 needs_action 并精确直达目标面板，同时默认折叠正常运行的 working 项且绝不从普通终端文本猜测告警。
+
+cases:
+  - id: ATTNCONV-001
+    name: Codex 实时待答请求投影为高优 needs_action 并在解决后消退
+    required: true
+    description: >
+      验证受支持 Codex 终端产生待答结构化问题时进入 Attention 顶部 needs_action（actionKind=question），回答或轮次结束后自动移除，且快照轮询不对无关空闲终端建立额外连接。
+    preconditions:
+      - 隔离测试 Backend 存在一个启用共享执行连接的 tmux Codex 终端（多面板中位于非首个面板 Panel 2）及若干空闲终端。
+    steps:
+      - 在 Panel 2 触发一次结构化提问并保持未答；读取 `/api/attention/slots`，确认该 Session 生成唯一 `state=needs_action`、`actionKind=question`、`panelId=Panel 2` 的槽位，且标题与详情不含问题敏感原文。
+      - 提交答案或结束该轮提问后再次读取 `/api/attention/slots`；确认 `needs_action` 槽位已清除，其他无关空闲终端未产生多余网关连接。
+
+  - id: ATTNCONV-002
+    name: Claude PermissionRequest Hook 建立精确面板待授权并在后续事件清除
+    required: true
+    description: >
+      验证主 Claude 进程的 PermissionRequest Hook 生成指向对应 Panel 的 needs_action（actionKind=permission），并在批准执行或取消停止后可靠清除而不残留假告警。
+    preconditions:
+      - 隔离测试 Backend 运行带主进程身份校验的 tmux Claude Code 终端。
+    steps:
+      - 触发 Claude 发出一次 `PermissionRequest` Hook；读取 `/api/attention/slots`，确认生成 `state=needs_action`、`actionKind=permission` 及准确 `panelId` 的槽位，且详情不含原始待执行命令参数。
+      - 分别验证批准继续（产生 `PostToolUse`）与按中断取消（产生 `Stop` 或 `UserPromptSubmit`）两条路径；确认任一路径完成后下一次快照均不再保留该待授权槽位。
+
+  - id: ATTNCONV-003
+    name: OSC 7501 blocked 状态映射细分原因并在 clear 或终态后恢复
+    required: true
+    description: >
+      验证面板输出管道收到完整 OSC 7501 blocked（permission、question、auth）帧时进入 Attention needs_action，收到 clear 或新工作态后解除。
+    preconditions:
+      - 隔离测试 Backend 拥有运行中的终端面板，可在面板内输出受控 OSC 7501 状态序列。
+    steps:
+      - 在面板依次输出 `state=blocked:kind=permission`、`kind=question` 与 `kind=auth` 的完整 OSC 7501 帧；确认 `/api/attention/slots` 均返回 `state=needs_action` 与对应 `actionKind`，且终端可见回放中已剥离控制帧。
+      - 输出同 ID 的 `state=clear` 帧；确认阻塞槽位立即从快照消失。
+
+  - id: ATTNCONV-004
+    name: 桌面托盘默认折叠 working 条目且新阻塞事实即时置顶打断
+    required: true
+    description: >
+      验证桌面端同时存在多个运行中终端与待处理终端时，working 默认收纳于底部折叠分组，点击可本地展开收起，且新增 needs_action 仍即时升级展示。
+    preconditions:
+      - 受管 macOS 桌面实例已启用 Companion，当前连接包含 3 个 `working` 终端与 1 个 `completed` 终端，已通过 `$toolkit:playwright-cli` 附着 desktop CDP。
+    steps:
+      - 展开托盘检查 DOM；确认 `completed` 直接可见，3 个 `working` 终端默认收起在「运行中 (3)」折叠头下，点击折叠头可展开看到全部 3 条并可再次收起。
+      - 保持折叠状态，令其中一个 `working` 终端进入 `needs_action`；确认该终端立即脱离折叠组升至顶部高优提醒，其余 2 个仍保持在「运行中 (2)」折叠组内。
+
+  - id: ATTNCONV-005
+    name: 普通终端输出关键字与静默时长绝不触发假阳性告警
+    required: true
+    description: >
+      验证普通 Shell 或运行中 Agent 输出含 permission、blocked、question、error 文本或长时间无输出时，不会在缺少结构化事实时生成 needs_action 或 blocked。
+    preconditions:
+      - 隔离测试 Backend 同时包含一个 `shell_idle` 终端和一个正常 `agent_running` 但静默等待命令完成的终端。
+    steps:
+      - 向两个终端输出包含 `PermissionRequest`、`Allow command?`、`blocked`、`error` 的普通文本并保持静默；读取 `/api/attention/slots`，确认零条 `needs_action`、`blocked` 或 `failed` 槽位产生。
+
+  - id: ATTNCONV-006
+    name: 原生 iOS 首页置顶展示待处理状态并支持直达目标面板或回复辅助
+    required: true
+    description: >
+      验证原生 iOS 首页识别待处理终端标识，点击 Codex 待答可直接进入对应回复辅助，运行中列表折叠开关不影响跨连接隔离。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录测试 Backend，存在一个 Codex 待答终端与两个正常 `working` 终端。
+    steps:
+      - 使用 `$toolkit:agent-device` 查看首页；确认待答终端显示明确待处理标识并排在普通运行中终端之前，折叠运行中区域后待答终端依然可见。
+      - 点击待答终端的快捷处理入口；确认进入绑定同一终端与面板的回复辅助页面。

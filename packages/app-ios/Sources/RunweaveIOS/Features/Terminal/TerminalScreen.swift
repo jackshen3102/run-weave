@@ -171,6 +171,9 @@ struct TerminalScreen: View {
       if let target = session.requestedConversation, target.terminalSessionId == details.id {
         expectedConversation = target; session.requestedConversation = nil; showingConversation = true
       }
+      if session.terminalQuestions.consumeOpen(terminalID: details.id) {
+        openReplyAssistant()
+      }
       controller.surface.applyTheme(dark: theme != "light")
       connectBrowserIntents()
       controller.openFileRequested = { tap in

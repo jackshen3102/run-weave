@@ -421,11 +421,6 @@ async function assembleRuntimeServices(
       : null,
   );
   resources.defer("evolution-runtime", () => evolutionRuntime.dispose());
-  const attentionService = new AttentionService(
-    terminalSessionManager,
-    terminalCompletionEventService,
-    terminalStateService,
-  );
   const sessionSearch = new SessionSearchService(path.join(storagePaths.browserProfileDir, "session-search", "index.sqlite"),
     id => terminalSessionManager.getProjectContext(id)?.path ?? terminalSessionManager.getProject(id)?.path);
   resources.defer("session-search", () => sessionSearch.dispose());
@@ -457,6 +452,12 @@ async function assembleRuntimeServices(
   );
   const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService, deviceMonitoring.batteryAlerts?.subscriptions);
   resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
+  const attentionService = new AttentionService(
+    terminalSessionManager,
+    terminalCompletionEventService,
+    terminalStateService,
+    terminalQuestionsService,
+  );
   let resourceMonitor: ResourceMonitorService | null = null;
   if (deviceMonitoring.deviceMonitor) {
     let resourceStore: ResourceMonitorStore | null = null;

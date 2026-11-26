@@ -7,6 +7,13 @@ export type AttentionState =
 
 export type AttentionTargetSurface = "terminal";
 
+export type AttentionActionKind =
+  | "question"
+  | "permission"
+  | "auth"
+  | "agent_prompt"
+  | "pr_attention";
+
 export interface AttentionSlot {
   attentionId: string;
   projectId: string;
@@ -19,6 +26,7 @@ export interface AttentionSlot {
   panelId: string | null;
   panelLabel: string | null;
   state: AttentionState;
+  actionKind?: AttentionActionKind;
   title: string;
   detail: string;
   updatedAt: string;

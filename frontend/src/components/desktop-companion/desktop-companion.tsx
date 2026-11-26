@@ -43,7 +43,12 @@ function formatRelativeTime(value: string): string {
 }
 
 function statusLabel(slot: AttentionSlot): string {
-  if (slot.state === "needs_action") return "需要你决定";
+  if (slot.state === "needs_action") {
+    if (slot.actionKind === "question") return "需回答";
+    if (slot.actionKind === "permission") return "需授权";
+    if (slot.actionKind === "auth") return "需认证";
+    return "需要你处理";
+  }
   if (slot.state === "blocked") return "验收受阻";
   if (slot.state === "completed") return "完成待查看";
   if (slot.state === "failed") {
@@ -207,6 +212,7 @@ export function DesktopCompanion(props: {
   const [suppressed, setSuppressed] = useState<Set<string>>(() => new Set());
   const [openedOnce, setOpenedOnce] = useState(false);
   const [openNotice, setOpenNotice] = useState<string | null>(null);
+  const [workingExpanded, setWorkingExpanded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const mousePassthroughRef = useRef<boolean | null>(null);
   const slots = useMemo(
@@ -233,6 +239,8 @@ export function DesktopCompanion(props: {
   );
   const attentionCount =
     counts.needs_action + counts.blocked + counts.failed + counts.completed;
+  const foregroundSlots = slots.filter((slot) => slot.state !== "working");
+  const workingSlots = slots.filter((slot) => slot.state === "working");
   const dominantState = slots[0]?.state ?? "idle";
   const headline = attentionCount
     ? `${attentionCount} 个 Slot 需要关注`
@@ -332,6 +340,29 @@ export function DesktopCompanion(props: {
   });
   const expandTray = useMemoizedFn(() => setCollapsed(false));
   const collapseTray = useMemoizedFn(() => setCollapsed(true));
+  const toggleWorking = useMemoizedFn(() => setWorkingExpanded((value) => !value));
+  const renderSlot = (slot: AttentionSlot) => (
+    <button
+      key={slot.attentionId}
+      className="companion-slot"
+      data-state={slot.state}
+      type="button"
+      onClick={() => void openSlot(slot)}
+    >
+      <span className={`state-dot ${slot.state}`} />
+      <span className="companion-slot-main">
+        <span className="companion-slot-title">
+          <strong>{slot.sessionLabel}</strong>
+          <StatusPill slot={slot} />
+        </span>
+        <span className="companion-slot-task">{slot.title}</span>
+        <span className="companion-slot-path">
+          {slotPath(slot)} · {formatRelativeTime(slot.updatedAt)}
+        </span>
+      </span>
+      <span className="companion-slot-target">↗ {targetLabel()}</span>
+    </button>
+  );
 
   let panel = null;
   let pet;
@@ -429,30 +460,19 @@ export function DesktopCompanion(props: {
           </button>
         </header>
         <div className="companion-slots">
-          {slots.map((slot) => (
+          {foregroundSlots.map(renderSlot)}
+          {workingSlots.length > 0 ? (
             <button
-              key={slot.attentionId}
-              className="companion-slot"
-              data-state={slot.state}
+              className="companion-working-toggle"
               type="button"
-              onClick={() => void openSlot(slot)}
+              aria-expanded={workingExpanded}
+              onClick={toggleWorking}
             >
-              <span className={`state-dot ${slot.state}`} />
-              <span className="companion-slot-main">
-                <span className="companion-slot-title">
-                  <strong>{slot.sessionLabel}</strong>
-                  <StatusPill slot={slot} />
-                </span>
-                <span className="companion-slot-task">{slot.title}</span>
-                <span className="companion-slot-path">
-                  {slotPath(slot)} · {formatRelativeTime(slot.updatedAt)}
-                </span>
-              </span>
-              <span className="companion-slot-target">
-                ↗ {targetLabel()}
-              </span>
+              <span>{workingExpanded ? "▾" : "▸"}</span>
+              运行中 ({workingSlots.length})
             </button>
-          ))}
+          ) : null}
+          {workingExpanded ? workingSlots.map(renderSlot) : null}
         </div>
       </section>
     );

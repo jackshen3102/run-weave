@@ -20,7 +20,7 @@ extension AppSession {
     if reportFailure { error = displayError(failure) }
     if case APIError.credentialsUnavailable = failure {
       authenticated = false
-      overview = nil
+      overview = nil; attentionSnapshot = nil
       events?.stop()
       closeTerminal()
     } else if case APIError.refreshResultUnknown = failure {

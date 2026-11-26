@@ -5,8 +5,12 @@ import type {
 } from "@runweave/shared/attention";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
 import type { TerminalCompletionEventService } from "../terminal/completion/event-service";
-import type { TerminalProjectContextRecord } from "../terminal/manager/records";
+import type {
+  TerminalPanelRecord,
+  TerminalProjectContextRecord,
+} from "../terminal/manager/records";
 import type { TerminalStateService } from "../terminal/state/terminal-state-service";
+import type { TerminalQuestionsService } from "../terminal/questions/service";
 import { resolveEffectiveTerminalState } from "../terminal/application/terminal-state-projection";
 
 const PRIORITY: Record<AttentionState, number> = {
@@ -15,6 +19,11 @@ const PRIORITY: Record<AttentionState, number> = {
   failed: 400,
   completed: 300,
   working: 200,
+};
+
+type SlotCandidate = {
+  slot: AttentionSlot;
+  specificity: number;
 };
 
 function clip(value: string, limit: number): string {
@@ -30,16 +39,28 @@ function sessionLabel(alias: string | null | undefined, contextName: string, act
   return command === "codex" ? `${base}(codex)` : base;
 }
 
+function panelLabel(panel: TerminalPanelRecord | undefined): string | null {
+  return panel ? panel.alias?.trim() || panel.role?.trim() || panel.id.slice(0, 8) : null;
+}
+
+function bestCandidate(candidates: SlotCandidate[]): AttentionSlot | undefined {
+  return candidates.sort((left, right) =>
+    PRIORITY[right.slot.state] - PRIORITY[left.slot.state] ||
+    right.specificity - left.specificity ||
+    right.slot.updatedAt.localeCompare(left.slot.updatedAt) ||
+    left.slot.attentionId.localeCompare(right.slot.attentionId)
+  )[0]?.slot;
+}
+
 export class AttentionService {
   constructor(
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly completionEventService: TerminalCompletionEventService,
     private readonly terminalStateService: TerminalStateService,
+    private readonly terminalQuestionsService: TerminalQuestionsService,
   ) {}
 
   async snapshot(): Promise<AttentionSnapshot> {
-    // The manager returns context records at runtime; its legacy signature is
-    // intentionally broader for existing consumers.
     const contexts = this.terminalSessionManager.listAllProjectContexts() as TerminalProjectContextRecord[];
     const contextById = new Map(contexts.map((context) => [context.id, context]));
     const completions = this.completionEventService
@@ -50,34 +71,102 @@ export class AttentionService {
     for (const session of this.terminalSessionManager.listSessions()) {
       const context = contextById.get(session.projectId);
       if (!context) continue;
+      const panels = this.terminalSessionManager.listPanels(session.id);
       const base = {
         projectId: session.projectId,
         parentProjectId: context.parentProjectId,
-        projectName:
-          contextById.get(context.parentProjectId)?.name ?? context.name,
+        projectName: contextById.get(context.parentProjectId)?.name ?? context.name,
         contextName: context.name,
         branch: context.branch,
         terminalSessionId: session.id,
         sessionLabel: sessionLabel(session.alias, context.name, session.activeCommand),
-        panelId: null,
-        panelLabel: null,
       };
-      const piPanel = this.terminalSessionManager.listPanels(session.id).find((panel) =>
-        panel.status === "running" && panel.terminalState?.agent === "pi" &&
-        (panel.pi?.event === "ui_prompt_start" || panel.pi?.outcome === "failed"));
-      if (piPanel?.pi) {
-        const waiting = piPanel.pi.event === "ui_prompt_start";
-        slots.push({ ...base, panelId: piPanel.id,
-          attentionId: `terminal:${session.id}:pi:${piPanel.pi.instanceId}:${piPanel.pi.sequence}`,
-          state: waiting ? "needs_action" : "failed", title: waiting ? "Pi 需要你处理" : "Pi 本轮执行失败",
-          detail: waiting ? "打开终端完成确认或输入" : "打开终端查看错误并重试",
-          updatedAt: piPanel.lastActivityAt.toISOString(), source: { kind: "terminal_session", evidence: piPanel.pi.event },
-          targetSurface: "terminal", completionRevision: null });
-        continue;
+      const candidates: SlotCandidate[] = [];
+      const add = (slot: AttentionSlot, specificity = 0) => candidates.push({ slot, specificity });
+      const withPanel = (panel: TerminalPanelRecord | undefined) => ({
+        ...base,
+        panelId: panel?.id ?? null,
+        panelLabel: panelLabel(panel),
+      });
+
+      const question = this.terminalQuestionsService.findActivePendingQuestion(session.id);
+      if (question) {
+        const panel = this.terminalSessionManager.getPanel(question.panelId);
+        add({
+          ...withPanel(panel),
+          attentionId: `terminal:${session.id}:question:${question.panelId}:${question.threadId}:${question.turnId}:${question.itemId}`,
+          state: "needs_action",
+          actionKind: "question",
+          title: "Codex 等待你的回答",
+          detail: "打开目标面板完成结构化问答",
+          updatedAt: question.updatedAt,
+          source: { kind: "terminal_session", evidence: "terminal_question" },
+          targetSurface: "terminal",
+          completionRevision: null,
+        }, 400);
       }
+
+      for (const panel of panels) {
+        if (panel.status !== "running") continue;
+        const permission = panel.pendingPermissionRequest;
+        if (permission && panel.claude?.instanceId === permission.processGeneration &&
+          panel.claude.sessionId === permission.sessionId) {
+          const updatedAt = new Date(permission.hookTimestamp).toISOString();
+          add({
+            ...withPanel(panel),
+            attentionId: `terminal:${session.id}:claude-perm:${panel.id}:${permission.sessionId}:${permission.hookTimestamp}`,
+            state: "needs_action",
+            actionKind: "permission",
+            title: "Claude 请求执行权限",
+            detail: "请打开目标面板确认",
+            updatedAt,
+            source: { kind: "terminal_session", evidence: "claude_permission_request" },
+            targetSurface: "terminal",
+            completionRevision: null,
+          }, 300);
+        }
+
+        if (panel.pi?.event === "ui_prompt_start" || panel.pi?.outcome === "failed") {
+          const waiting = panel.pi.event === "ui_prompt_start";
+          add({
+            ...withPanel(panel),
+            attentionId: `terminal:${session.id}:pi:${panel.pi.instanceId}:${panel.pi.sequence}`,
+            state: waiting ? "needs_action" : "failed",
+            ...(waiting ? { actionKind: "agent_prompt" as const } : {}),
+            title: waiting ? "Pi 需要你处理" : "Pi 本轮执行失败",
+            detail: waiting ? "打开目标面板完成确认或输入" : "打开目标面板查看错误并重试",
+            updatedAt: panel.lastActivityAt.toISOString(),
+            source: { kind: "terminal_session", evidence: panel.pi.event },
+            targetSurface: "terminal",
+            completionRevision: null,
+          }, waiting ? 300 : 0);
+        }
+
+        if (panel.oscProgramStatus?.state === "blocked") {
+          const kind = panel.oscProgramStatus.kind;
+          const actionKind = kind ?? "agent_prompt";
+          const updatedAt = panel.oscProgramStatus.observedAt ?? panel.lastActivityAt.toISOString();
+          const title = kind === "permission" ? "终端需要授权"
+            : kind === "question" ? "终端需要回答"
+              : kind === "auth" ? "终端需要认证" : "Agent 需要你处理";
+          add({
+            ...withPanel(panel),
+            attentionId: `terminal:${session.id}:osc-blocked:${panel.id}:${kind ?? "generic"}:${updatedAt}`,
+            state: "needs_action",
+            actionKind,
+            title,
+            detail: "请打开目标面板继续处理",
+            updatedAt,
+            source: { kind: "terminal_session", evidence: `osc7501:blocked:${kind ?? "generic"}` },
+            targetSurface: "terminal",
+            completionRevision: null,
+          }, 200);
+        }
+      }
+
       if (session.status === "exited" && (session.exitCode ?? 0) !== 0) {
-        slots.push({
-          ...base,
+        add({
+          ...withPanel(undefined),
           attentionId: `terminal:${session.id}:exit:${session.lastActivityAt.toISOString()}:${session.exitCode}`,
           state: "failed",
           title: clip(session.preview ?? session.alias ?? context.name, 100),
@@ -87,74 +176,93 @@ export class AttentionService {
           targetSurface: "terminal",
           completionRevision: null,
         });
-        continue;
       }
+
       if (session.completionRevision > session.acknowledgedCompletionRevision) {
-        const event = [...completions]
-          .reverse()
-          .find(
-            (candidate) =>
-              candidate.terminalSessionId === session.id &&
-              candidate.payload.completionRevision === session.completionRevision,
-          );
-        const needsAction =
-          event?.payload.completionReason === "notify" &&
+        const event = [...completions].reverse().find((candidate) =>
+          candidate.terminalSessionId === session.id &&
+          candidate.payload.completionRevision === session.completionRevision
+        );
+        const needsAction = event?.payload.completionReason === "notify" &&
           event.payload.rawHookEvent?.toLowerCase() === "notification" &&
           ["trae", "traex", "traecli"].includes(event.payload.source);
-        slots.push({
-          ...base,
+        const panel = event?.payload.panelId
+          ? this.terminalSessionManager.getPanel(event.payload.panelId)
+          : undefined;
+        add({
+          ...withPanel(panel),
           attentionId: `terminal:${session.id}:completion:${session.completionRevision}`,
-          panelId: event?.payload.panelId ?? null,
           state: needsAction ? "needs_action" : "completed",
+          ...(needsAction ? { actionKind: "agent_prompt" as const } : {}),
           title: clip(event?.payload.summary ?? (needsAction ? "Agent 需要你处理" : session.preview ?? "Agent 已完成本轮工作"), 100),
           detail: needsAction
-            ? "Agent 发出了等待通知，请打开终端查看确认或输入请求"
+            ? "Agent 发出了等待通知，请打开目标面板处理"
             : `${session.terminalState?.agent ?? "Agent"} completion 尚未确认`,
           updatedAt: event?.createdAt ?? session.lastActivityAt.toISOString(),
-          source: { kind: "terminal_session", evidence: `completionRevision=${session.completionRevision}` },
+          source: { kind: "terminal_session", evidence: needsAction ? "trae_notification" : `completionRevision=${session.completionRevision}` },
           targetSurface: "terminal",
           completionRevision: session.completionRevision,
-        });
-        continue;
+        }, needsAction ? 100 : 0);
       }
-      const effectiveTerminalState = resolveEffectiveTerminalState(
-        this.terminalSessionManager,
-        this.terminalStateService,
-        session,
-      );
-      if (
-        session.status === "running" &&
-        (effectiveTerminalState.state === "agent_starting" ||
-          effectiveTerminalState.state === "agent_running")
-      ) {
-        slots.push({
-          ...base,
-          attentionId: `terminal:${session.id}:working:${session.lastActivityAt.toISOString()}`,
+
+      let hasWorkingPanel = false;
+      for (const panel of panels) {
+        const working = panel.status === "running" && (
+          panel.oscProgramStatus?.state === "starting" ||
+          panel.oscProgramStatus?.state === "working" ||
+          panel.terminalState?.state === "agent_starting" ||
+          panel.terminalState?.state === "agent_running"
+        );
+        if (!working) continue;
+        hasWorkingPanel = true;
+        add({
+          ...withPanel(panel),
+          attentionId: `terminal:${session.id}:working:${panel.id}:${panel.lastActivityAt.toISOString()}`,
           state: "working",
-          title: clip(
-            session.preview ??
-              `${effectiveTerminalState.agent ?? "Agent"} 正在执行`,
-            100,
-          ),
-          detail:
-            effectiveTerminalState.state === "agent_starting"
-              ? "Agent 启动中"
-              : "Agent 执行中",
-          updatedAt: session.lastActivityAt.toISOString(),
+          title: clip(panel.preview ?? session.preview ?? `${panel.terminalState?.agent ?? "Agent"} 正在执行`, 100),
+          detail: panel.terminalState?.state === "agent_starting" ? "Agent 启动中" : "Agent 执行中",
+          updatedAt: panel.lastActivityAt.toISOString(),
           source: {
             kind: "terminal_session",
-            evidence: `terminalState=${effectiveTerminalState.state}`,
+            evidence: panel.oscProgramStatus?.state === "working"
+              ? "osc7501:working"
+              : `terminalState=${panel.terminalState?.state ?? "agent_running"}`,
           },
           targetSurface: "terminal",
           completionRevision: null,
         });
       }
+
+      if (!hasWorkingPanel) {
+        const effectiveTerminalState = resolveEffectiveTerminalState(
+          this.terminalSessionManager,
+          this.terminalStateService,
+          session,
+        );
+        if (session.status === "running" &&
+          (effectiveTerminalState.state === "agent_starting" || effectiveTerminalState.state === "agent_running")) {
+          add({
+            ...withPanel(undefined),
+            attentionId: `terminal:${session.id}:working:${session.lastActivityAt.toISOString()}`,
+            state: "working",
+            title: clip(session.preview ?? `${effectiveTerminalState.agent ?? "Agent"} 正在执行`, 100),
+            detail: effectiveTerminalState.state === "agent_starting" ? "Agent 启动中" : "Agent 执行中",
+            updatedAt: session.lastActivityAt.toISOString(),
+            source: { kind: "terminal_session", evidence: `terminalState=${effectiveTerminalState.state}` },
+            targetSurface: "terminal",
+            completionRevision: null,
+          });
+        }
+      }
+
+      const best = bestCandidate(candidates);
+      if (best) slots.push(best);
     }
-    slots.sort(
-      (left, right) =>
-        PRIORITY[right.state] - PRIORITY[left.state] ||
-        right.updatedAt.localeCompare(left.updatedAt) ||
-        left.attentionId.localeCompare(right.attentionId),
+
+    slots.sort((left, right) =>
+      PRIORITY[right.state] - PRIORITY[left.state] ||
+      right.updatedAt.localeCompare(left.updatedAt) ||
+      left.attentionId.localeCompare(right.attentionId)
     );
     return { generatedAt: new Date().toISOString(), slots };
   }

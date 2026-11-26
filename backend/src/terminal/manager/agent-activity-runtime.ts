@@ -24,6 +24,10 @@ export class TerminalManagerAgentActivityRuntime extends TerminalManagerBufferRu
     previousActiveCommand: string | null,
     activeCommand: string | null,
   ): Promise<void> {
+    const panel = this.getPanel(panelId);
+    if (panel?.pendingPermissionRequest && getCompletionSourceForCommand(activeCommand) !== "claude") {
+      delete panel.pendingPermissionRequest;
+    }
     this.recentAgentActivities.delete(
       buildRecentAgentActivityKey(terminalSessionId, null),
     );

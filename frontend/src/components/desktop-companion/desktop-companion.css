@@ -172,6 +172,14 @@ body {
   background: transparent;
 }
 
+.companion-working-toggle { display: flex;
+  width: 100%; align-items: center; gap: 7px;
+  border-radius: 9px; padding: 10px;
+  background: transparent; color: var(--companion-muted) !important;
+  font-size: 10px !important; font-weight: 700 !important; text-align: left;
+}
+.companion-working-toggle:hover { background: rgba(18, 34, 49, 0.86); }
+
 .companion-tray {
   display: flex;
   max-height: 380px;

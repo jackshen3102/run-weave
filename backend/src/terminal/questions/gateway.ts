@@ -17,6 +17,7 @@ export class QuestionConflict extends Error {}
 type Entry = {
   rawId: string | number;
   value: TerminalQuestionRequest;
+  observedAt: string;
   operation?: { id: string; fingerprint: string; };
 };
 
@@ -115,7 +116,11 @@ export class TerminalQuestionGateway {
       if (!parsed.success || parsed.data.threadId !== this.threadId || (typeof message.id !== "string" && typeof message.id !== "number")) return;
       if ([...this.entries.values()].some((entry) => entry.rawId === message.id)) return;
       const requestId = randomUUID();
-      this.entries.set(requestId, { rawId: message.id, value: { ...parsed.data, requestId, generation: this.generation, state: "pending" } });
+      this.entries.set(requestId, {
+        rawId: message.id,
+        value: { ...parsed.data, requestId, generation: this.generation, state: "pending" },
+        observedAt: new Date().toISOString(),
+      });
       // Retain current questions and a bounded set of receipts, never an unbounded history.
       if (this.entries.size > 100) {
         const old = [...this.entries].find(([, entry]) => entry.value.state === "expired" || entry.value.state === "resolved");
@@ -151,6 +156,11 @@ export class TerminalQuestionGateway {
   isPending(turnId: string, itemId: string): boolean {
     return this.connected && [...this.entries.values()].some(({ value }) =>
       value.turnId === turnId && value.itemId === itemId && value.state === "pending");
+  }
+
+  activePending(): { request: TerminalQuestionRequest; observedAt: string } | null {
+    const entry = [...this.entries.values()].find(({ value }) => value.state === "pending");
+    return entry ? { request: { ...entry.value }, observedAt: entry.observedAt } : null;
   }
 
   answer(requestId: string, body: AnswerTerminalQuestionRequest): void {

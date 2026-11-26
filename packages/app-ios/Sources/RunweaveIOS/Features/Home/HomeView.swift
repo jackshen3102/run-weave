@@ -27,6 +27,7 @@ struct HomeView: View {
   @State private var moving: HomeTerminal?
   @State private var initializedGeneration: Int?
   @State private var visibleConversationCounts: [String: Int] = [:]
+  @State private var workingExpanded = false
 
   init(session: AppSession) {
     self.session = session
@@ -37,14 +38,29 @@ struct HomeView: View {
   var groups: [HomeGroup] { session.overview?.groups(matching: query) ?? [] }
 
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  private var attentionSlots: [String: AttentionSlot] {
+    Dictionary(uniqueKeysWithValues: (session.attentionSnapshot?.slots ?? []).map {
+      ($0.terminalSessionId, $0)
+    })
+  }
   private var attention: [HomeTerminal] {
     let online = session.health.status == .online
     let visible = groups.flatMap(\.sessions).filter {
-      $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
+      attentionSlots[$0.id] != nil || $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
         || (attentionRetention.retainedUntil[$0.id].map { $0 > Date() } ?? false)
     }
     let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
-    return attentionRetention.orderedIDs.compactMap { byID[$0] }
+    let slotIDs = session.attentionSnapshot?.slots.map(\.terminalSessionId) ?? []
+    let order = slotIDs + attentionRetention.orderedIDs.filter { !slotIDs.contains($0) }
+    return order.compactMap { byID[$0] }
+  }
+  private var foregroundAttention: [HomeTerminal] {
+    attention.filter { attentionSlots[$0.id]?.state != "working" &&
+      !(attentionSlots[$0.id] == nil && $0.isAgentActive) }
+  }
+  private var workingAttention: [HomeTerminal] {
+    attention.filter { attentionSlots[$0.id]?.state == "working" ||
+      (attentionSlots[$0.id] == nil && $0.isAgentActive) }
   }
 
   private func initializeExpansion() {
@@ -56,6 +72,7 @@ struct HomeView: View {
   private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
     let record = session.home.record(terminal.id)
     return HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
+      attentionSlot: attentionSlots[terminal.id],
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
       showBranchUpdates: {
         guard let value = record.snapshot.terminal else { return }
@@ -105,12 +122,33 @@ struct HomeView: View {
       if !session.loading, session.overview != nil, searching, groups.isEmpty {
         Text("没有找到匹配的项目或终端")
       } else if !session.loading, session.overview?.projects.isEmpty == true { Text("暂无项目") }
-      if !attention.isEmpty {
+      if !foregroundAttention.isEmpty {
         Section("关注") {
-          ForEach(attention) { terminal in
+          ForEach(foregroundAttention) { terminal in
             row(terminal, projectName: session.overview?.projects.first {
               $0.id == HomeOverview.parentProjectID(terminal.projectId)
             }?.name)
+          }
+        }
+      }
+      if !workingAttention.isEmpty {
+        Section {
+          Button {
+            workingExpanded.toggle()
+          } label: {
+            HStack {
+              Image(systemName: workingExpanded ? "chevron.down" : "chevron.right")
+              Text("运行中 (\(workingAttention.count))")
+              Spacer()
+            }
+          }
+          .accessibilityIdentifier("home-working-toggle")
+          if workingExpanded {
+            ForEach(workingAttention) { terminal in
+              row(terminal, projectName: session.overview?.projects.first {
+                $0.id == HomeOverview.parentProjectID(terminal.projectId)
+              }?.name)
+            }
           }
         }
       }
@@ -188,6 +226,15 @@ struct HomeView: View {
         catch { return }
       }
     }
+    .task(id: "attention:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status.rawValue)") {
+      guard session.foreground, session.authenticated, session.health.status == .online,
+        session.terminal == nil else { return }
+      while !Task.isCancelled {
+        await session.refreshAttention()
+        do { try await Task.sleep(nanoseconds: 1_000_000_000) }
+        catch { return }
+      }
+    }
     .onChange(of: session.overview?.projects.map(\.id)) { _ in initializeExpansion() }
     .onChange(of: session.generation) { _ in
       expanded.removeAll()
@@ -200,6 +247,7 @@ struct HomeView: View {
       renaming = nil
       moving = nil
       deleting = nil
+      workingExpanded = false
       initializeExpansion()
     }
     .onChange(of: query) { state.setQuery($0) }

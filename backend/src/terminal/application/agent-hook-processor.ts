@@ -374,6 +374,24 @@ async function processTerminalAgentHookUnlocked(
         terminalState: currentTargetState, panelId: panel?.id ?? null,
         ignoreReason: "operation_identity_mismatch", activityReplayAllowed: result.activityReplayAllowed };
     }
+    if (panel) {
+      const pending = panel.pendingPermissionRequest;
+      const clearPending = pending?.processGeneration === input.claude.instanceId && (
+        ["posttooluse", "pretooluse", "userpromptsubmit", "stop"].includes(input.claude.event) ||
+        (input.claude.event === "notification" && input.claude.notificationType === "idle_prompt")
+      );
+      if (input.claude.event === "permissionrequest") {
+        panel.pendingPermissionRequest = {
+          hookTimestamp: input.claude.observedAt,
+          processGeneration: input.claude.instanceId,
+          sessionId: input.claude.sessionId,
+        };
+        await options.terminalSessionManager.upsertPanel(panel);
+      } else if (clearPending) {
+        delete panel.pendingPermissionRequest;
+        await options.terminalSessionManager.upsertPanel(panel);
+      }
+    }
     const { status } = result;
     if (!status) {
       return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,

@@ -143,7 +143,7 @@ final class AppSession: ObservableObject {
     reconnectingTerminal = false
     openingNextCompletion = false
     authenticated = false
-    overview = nil
+    overview = nil; attentionSnapshot = nil
     attentionRetention.activate(scope: connection?.scope)
     attentionRetention.setForeground(foreground)
     checking = true
@@ -209,7 +209,7 @@ final class AppSession: ObservableObject {
     changingDraftScope = false
     authenticated = false
     metadataWrites.removeAll()
-    overview = nil
+    overview = nil; attentionSnapshot = nil
     loading = false
     writing = false
     if let connection { await NotificationCoordinator.shared.disable(connection, client: api) }

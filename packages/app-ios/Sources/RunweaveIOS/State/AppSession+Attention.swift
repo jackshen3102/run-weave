@@ -1,6 +1,36 @@
 import Foundation
 
 extension AppSession {
+  func refreshAttention() async {
+    guard authenticated, foreground, health.status == .online, terminal == nil, let api else { return }
+    let epoch = generation
+    do {
+      let value = try await api.attentionSnapshot()
+      guard generation == epoch, foreground, terminal == nil, !Task.isCancelled else { return }
+      attentionSnapshot = value
+    } catch {
+      if generation == epoch, !Task.isCancelled { await handle(error, epoch: epoch) }
+    }
+  }
+
+  func openAttentionSlot(_ slot: AttentionSlot) async {
+    guard canWrite, let api else { return }
+    let epoch = generation
+    do {
+      if let panelID = slot.panelId {
+        try await api.focusTerminalPanel(terminalID: slot.terminalSessionId, panelID: panelID)
+        guard await reload() else { return }
+      }
+      if slot.actionKind == "question" {
+        terminalQuestions.requestOpen(terminalID: slot.terminalSessionId)
+      }
+      await openTerminal(slot.terminalSessionId)
+      guard generation == epoch, terminal?.id == slot.terminalSessionId else { return }
+    } catch {
+      if generation == epoch, !Task.isCancelled { await handle(error, epoch: epoch) }
+    }
+  }
+
   var nextCompletionTerminals: [HomeTerminal] {
     let candidates = (overview?.sessions ?? []).filter {
       $0.id != terminal?.id && $0.hasUnreadCompletion && !$0.isAgentActive
