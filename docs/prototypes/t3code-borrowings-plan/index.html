@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="runweave-visual-plan" content="1" />
+    <title>T3 Code 借鉴落地方案细化 · Runweave</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #12192e;
+        --panel-2: #17203a;
+        --panel-3: #0f1527;
+        --border: #263252;
+        --border-strong: #384975;
+        --text: #e6ecff;
+        --muted: #98a6cc;
+        --accent: #5b8cff;
+        --accent-soft: rgba(91, 140, 255, 0.16);
+        --ok: #34d399;
+        --ok-soft: rgba(52, 211, 153, 0.14);
+        --warn: #fbbf24;
+        --warn-soft: rgba(251, 191, 36, 0.15);
+        --danger: #f87171;
+        --danger-soft: rgba(248, 113, 113, 0.15);
+        --skip: #64748b;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.6;
+        overflow-x: hidden;
+      }
+      a {
+        color: #8ab4ff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px 16px 64px;
+      }
+      .hero {
+        background: linear-gradient(160deg, #131c36 0%, #0e1528 100%);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.35;
+      }
+      .hero p {
+        margin: 0 0 14px;
+        color: var(--muted);
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 13px;
+        border: 1px solid var(--border);
+        background: var(--panel-3);
+      }
+      .pill.ok {
+        border-color: rgba(52, 211, 153, 0.4);
+        background: var(--ok-soft);
+        color: #a7f3d0;
+      }
+      .pill.warn {
+        border-color: rgba(251, 191, 36, 0.4);
+        background: var(--warn-soft);
+        color: #fde68a;
+      }
+      .pill.skip {
+        border-color: rgba(100, 116, 139, 0.45);
+        background: rgba(100, 116, 139, 0.16);
+        color: #cbd5e1;
+      }
+      .nav-bar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: rgba(11, 16, 32, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 0;
+        margin-bottom: 22px;
+      }
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .nav-links a {
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 14px;
+      }
+      .nav-links a:hover {
+        border-color: var(--accent);
+        text-decoration: none;
+      }
+      section.block {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 22px;
+      }
+      section.block h2 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      .sublead {
+        margin: 0 0 16px;
+        color: var(--muted);
+      }
+      .table-scroll,
+      .flow-scroll {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel-3);
+        margin-bottom: 16px;
+      }
+      table {
+        width: 100%;
+        min-width: 680px;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 13px;
+        background: rgba(148, 163, 184, 0.14);
+        padding: 1px 6px;
+        border-radius: 5px;
+      }
+      .demo-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(251, 191, 36, 0.08);
+        border: 1px dashed rgba(251, 191, 36, 0.4);
+        margin-bottom: 12px;
+        font-size: 13px;
+      }
+      .demo-label {
+        color: #fde68a;
+        font-weight: 600;
+      }
+      .demo-btn {
+        appearance: none;
+        border: 1px solid var(--border-strong);
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 6px 11px;
+        border-radius: 8px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .demo-btn[aria-pressed="true"] {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: 600;
+      }
+      /* 拟落地产品 UI 框体：内部只放真实产品文案与控件 */
+      .ui-frame {
+        border: 1px solid var(--border-strong);
+        border-radius: 14px;
+        background: #0d1221;
+        overflow: hidden;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        margin-bottom: 16px;
+      }
+      .ui-topbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 14px;
+        background: #141c33;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .seg-group {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        background: #0b1020;
+        padding: 3px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+      }
+      .seg-btn {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .seg-btn.active {
+        background: #24335a;
+        color: #fff;
+        font-weight: 600;
+      }
+      .split-pane {
+        display: grid;
+        grid-template-columns: 270px 1fr;
+        min-height: 250px;
+      }
+      @media (max-width: 760px) {
+        .split-pane {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tree-col {
+        border-right: 1px solid var(--border);
+        padding: 12px;
+        background: #0f1629;
+        font-size: 13px;
+      }
+      @media (max-width: 760px) {
+        .tree-col {
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+      .file-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 7px;
+        margin-bottom: 4px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .file-row.selected {
+        background: rgba(91, 140, 255, 0.18);
+        border: 1px solid rgba(91, 140, 255, 0.45);
+      }
+      .badge-m {
+        color: #fbbf24;
+        font-weight: 700;
+      }
+      .badge-a {
+        color: #34d399;
+        font-weight: 700;
+      }
+      .diff-col {
+        padding: 12px 14px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        overflow-x: auto;
+      }
+      .diff-hdr {
+        color: var(--muted);
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .diff-line {
+        padding: 2px 8px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .diff-add {
+        background: rgba(52, 211, 153, 0.14);
+        color: #bbf7d0;
+      }
+      .diff-del {
+        background: rgba(248, 113, 113, 0.14);
+        color: #fecaca;
+      }
+      .spec-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      @media (max-width: 760px) {
+        .spec-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .spec-card {
+        background: var(--panel-3);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        font-size: 14px;
+      }
+      .spec-card h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+        color: #c7d8ff;
+      }
+      .spec-card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      .spec-card li {
+        margin-bottom: 5px;
+      }
+      .wt-rail {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: #11182d;
+        border-bottom: 1px solid var(--border);
+      }
+      .wt-chip {
+        padding: 5px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        background: #192442;
+        border: 1px solid var(--border);
+      }
+      .wt-chip.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .wt-add {
+        padding: 5px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        border: 1px dashed var(--accent);
+        color: #9dc0ff;
+        background: rgba(91, 140, 255, 0.08);
+      }
+      .modal-box {
+        margin: 14px;
+        padding: 16px;
+        border-radius: 12px;
+        background: #151f38;
+        border: 1px solid var(--border-strong);
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+      @media (max-width: 600px) {
+        .field-row {
+          grid-template-columns: 1fr;
+        }
+      }
+      .fake-input {
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: #0c1222;
+        border: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 13px;
+      }
+      .trust-box {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(251, 191, 36, 0.1);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .attn-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .attn-item:last-child {
+        border-bottom: none;
+      }
+      .attn-tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-right: 6px;
+      }
+      .tag-action {
+        background: var(--warn-soft);
+        color: #fde68a;
+        border: 1px solid rgba(251, 191, 36, 0.45);
+      }
+      .tag-done {
+        background: var(--ok-soft);
+        color: #a7f3d0;
+        border: 1px solid rgba(52, 211, 153, 0.4);
+      }
+      .tag-work {
+        background: rgba(148, 163, 184, 0.15);
+        color: #cbd5e1;
+      }
+      .btn-primary {
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .meter-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: #0a0f1d;
+        border: 1px solid var(--border);
+        overflow: hidden;
+        margin: 8px 0;
+      }
+      .meter-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #34d399 0%, #5b8cff 100%);
+      }
+      .metric-cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        padding: 14px;
+      }
+      @media (max-width: 760px) {
+        .metric-cards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .metric-card {
+        background: #131c34;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .metric-num {
+        font-family: var(--mono);
+        font-size: 20px;
+        font-weight: 700;
+        color: #93c5fd;
+      }
+      .back-top {
+        display: inline-block;
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      svg.flow-svg {
+        display: block;
+        min-width: 760px;
+        width: 100%;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page" id="top">
+      <header class="hero" id="hero">
+        <h1>T3 Code 借鉴落地方案细化（Runweave）</h1>
+        <p>
+          基于 <code>pingdotgg/t3code@5eaff03e</code> 与当前 Runweave 架构基线整理。在保持「真实
+          tmux/PTY 终端 + 原生 Browser + SwiftUI iOS」前提下，细化已选定的 5 项能力边界、接口合同、核心流程与界面示意。
+        </p>
+        <div class="pill-row">
+          <span class="pill skip">机制 1：代码/Diff 行级批注回传 → 不借鉴</span>
+          <span class="pill warn">机制 2：只做第一阶段（只读基准分支 Diff &amp; 本分支提交）</span>
+          <span class="pill ok">机制 3：一键新建 Worktree + 受控 setup</span>
+          <span class="pill ok">机制 4：Attention 待处理收口 + Working 折叠 + PR 值守</span>
+          <span class="pill ok">机制 5：跨 Agent / Worktree 有预算上下文交接</span>
+          <span class="pill ok">机制 6：启动上下文与 MCP 字节预算门禁</span>
+        </div>
+      </header>
+
+      <nav class="nav-bar" aria-label="章节导航">
+        <div class="nav-links">
+          <a href="#scope">范围与顺序</a>
+          <a href="#mech-2">机制2·分支Diff</a>
+          <a href="#mech-3">机制3·建Worktree</a>
+          <a href="#mech-4">机制4·Attention与PR值守</a>
+          <a href="#mech-5">机制5·跨Agent交接</a>
+          <a href="#mech-6">机制6·上下文预算门禁</a>
+        </div>
+      </nav>
+
+      <!-- 0. 范围与推进顺序 -->
+      <section class="block" id="scope">
+        <h2>零、已确认范围与推荐落地批次</h2>
+        <p class="sublead">
+          所有子项彼此解耦，可分 4 个独立 PR 批次推进，每批均可独立验证与回滚。
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>编号</th>
+                <th>决策</th>
+                <th>拟落地核心变化</th>
+                <th>明确不做（非目标）</th>
+                <th>推荐批次</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>机制 1</strong></td>
+                <td>❌ 不借鉴</td>
+                <td>保持现有 Monaco <code>Copy line reference</code> 与 Browser/HTML 评审不变</td>
+                <td>不做代码/Diff 行级评论池与输入框 Context Chips</td>
+                <td>跳过</td>
+              </tr>
+              <tr>
+                <td><strong>机制 2</strong></td>
+                <td>✅ 仅阶段一</td>
+                <td><code>Review changes</code> 新增「相对主分支」与「本分支提交」只读对比（桌面 + iOS）</td>
+                <td>不做隐藏 Git Ref 轮次检查点、不做一键回滚工作区与会话</td>
+                <td>Batch 1</td>
+              </tr>
+              <tr>
+                <td><strong>机制 6</strong></td>
+                <td>✅ 借鉴</td>
+                <td>锁死 <code>AGENTS.md</code>、Toolkit 技能元数据与 <code>runweave-mcp</code> 工具描述字节上限</td>
+                <td>不拦截普通项目源码或业务文档的正常增长</td>
+                <td>Batch 1</td>
+              </tr>
+              <tr>
+                <td><strong>机制 4</strong></td>
+                <td>✅ 借鉴</td>
+                <td>Attention 补齐 Codex 待答 / Claude 权限 / OSC 7501 等待态，Working 默认折叠，新增后台 PR 有界值守</td>
+                <td>不按“多久无输出”猜测卡住；PR 值守不自动强行合并冲突分支</td>
+                <td>Batch 2</td>
+              </tr>
+              <tr>
+                <td><strong>机制 3</strong></td>
+                <td>✅ 借鉴</td>
+                <td>桌面 rail 与 iOS <code>＋</code> 支持一键新建 <code>.worktree/&lt;slug&gt;</code> 并执行已确认版本的 <code>setup</code></td>
+                <td>未经用户确认新 SHA-256 revision 绝不自动执行仓库脚本</td>
+                <td>Batch 3</td>
+              </tr>
+              <tr>
+                <td><strong>机制 5</strong></td>
+                <td>✅ 借鉴</td>
+                <td>支持跨 Provider（Codex / Claude / Pi / TraeX）与跨 Worktree 的 64KB 有预算上下文交接新终端</td>
+                <td>不截断用户新指令、不修改原终端会话、不复制隐藏 thinking 与巨型工具输出</td>
+                <td>Batch 4</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 1. 机制 2（第一阶段） -->
+      <section class="block" id="mech-2">
+        <h2>一、机制 2（第一阶段）：Review changes 相对主分支 Diff 与本分支提交</h2>
+        <p class="sublead">
+          解决 Agent 执行 <code>git commit</code> 后工作区变空、桌面与手机无法继续在应用内审阅本分支完整改动的问题。全程纯只读 Git 查询。
+        </p>
+
+        <div class="demo-bar" role="group" aria-label="机制2演示切换">
+          <span class="demo-label">原型演示切换（非产品按钮）：</span>
+          <button class="demo-btn" id="m2-btn-branch" aria-pressed="true" onclick="setM2('branch')">
+            Agent 已 commit · 看相对主分支 (6)
+          </button>
+          <button class="demo-btn" id="m2-btn-commits" aria-pressed="false" onclick="setM2('commits')">
+            按本分支提交逐条看 (2)
+          </button>
+          <button class="demo-btn" id="m2-btn-working" aria-pressed="false" onclick="setM2('working')">
+            切回未提交工作区 (0)
+          </button>
+        </div>
+
+        <div class="ui-frame" id="ui-mech-2">
+          <div class="ui-topbar">
+            <div>
+              <strong>Preview · Review changes</strong>
+              <span style="color: var(--muted); margin-left: 8px">wt-1 (feat/branch-diff)</span>
+            </div>
+            <div class="seg-group" role="tablist">
+              <button class="seg-btn" id="m2-seg-working" onclick="setM2('working')">未提交 (0)</button>
+              <button class="seg-btn active" id="m2-seg-branch" onclick="setM2('branch')">
+                相对 origin/main (6)
+              </button>
+              <button class="seg-btn" id="m2-seg-commits" onclick="setM2('commits')">本分支提交 (2)</button>
+            </div>
+          </div>
+          <div class="split-pane" id="m2-body"></div>
+        </div>
+
+        <div class="flow-scroll" id="flow-mech-2">
+          <svg class="flow-svg" viewBox="0 0 880 185" xmlns="http://www.w3.org/2000/svg">
+            <rect width="880" height="185" fill="#0f1527" />
+            <g font-family="sans-serif" font-size="12" fill="#e6ecff">
+              <rect x="18" y="45" width="145" height="76" rx="10" fill="#182342" stroke="#5b8cff" />
+              <text x="90" y="74" text-anchor="middle" font-weight="bold">Web / iOS 客户端</text>
+              <text x="90" y="95" text-anchor="middle" fill="#98a6cc">切换 working | branch</text>
+              <text x="90" y="111" text-anchor="middle" fill="#98a6cc">| commits 视图</text>
+
+              <path d="M163 83 L205 83" stroke="#5b8cff" stroke-width="2" marker-end="url(#arr)" />
+
+              <rect x="208" y="35" width="195" height="96" rx="10" fill="#182342" stroke="#384975" />
+              <text x="305" y="62" text-anchor="middle" font-weight="bold">HomeBranchStatusService</text>
+              <text x="305" y="82" text-anchor="middle" fill="#98a6cc">读取项目 mainBranch 设置</text>
+              <text x="305" y="100" text-anchor="middle" fill="#98a6cc">解析 origin/&lt;base&gt; OID</text>
+              <text x="305" y="118" text-anchor="middle" fill="#34d399">复用 10 分钟远端快照缓存</text>
+
+              <path d="M403 83 L445 83" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="448" y="35" width="205" height="96" rx="10" fill="#182342" stroke="#384975" />
+              <text x="550" y="62" text-anchor="middle" font-weight="bold">Preview Git Service (只读)</text>
+              <text x="550" y="82" text-anchor="middle" fill="#98a6cc">git merge-base baseOid HEAD</text>
+              <text x="550" y="100" text-anchor="middle" fill="#98a6cc">diff --name-status -z -M</text>
+              <text x="550" y="118" text-anchor="middle" fill="#fbbf24">GIT_OPTIONAL_LOCKS=0</text>
+
+              <path d="M653 83 L695 83" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="698" y="35" width="164" height="96" rx="10" fill="#182342" stroke="#34d399" />
+              <text x="780" y="62" text-anchor="middle" font-weight="bold">单文件懒加载 Diff</text>
+              <text x="780" y="82" text-anchor="middle" fill="#98a6cc">绑定 mergeBaseOid</text>
+              <text x="780" y="100" text-anchor="middle" fill="#98a6cc">HEAD 漂移返回 409</text>
+              <text x="780" y="118" text-anchor="middle" fill="#34d399">Reset 按钮仅工作区可用</text>
+            </g>
+            <text x="20" y="164" font-family="monospace" font-size="11.5" fill="#98a6cc">
+              异常门禁：浅克隆 / 无共同祖先 / 非 Git 仓库 → 显式返回 unavailable + reason，绝不伪造“0 个文件变更”
+            </text>
+          </svg>
+        </div>
+
+        <div class="spec-grid">
+          <div class="spec-card">
+            <h3>协议与代码落点</h3>
+            <ul>
+              <li><code>packages/shared/src/terminal/preview.ts</code>：新增 <code>scope: "working" | "branch" | "commits"</code>，返回锁定的 <code>baseRef / mergeBaseOid / headOid</code>。</li>
+              <li><code>backend/src/terminal/preview/git.ts</code>：复用 <code>HomeBranchStatusService</code> 的远端基准解析；<code>branch</code> 模式对比 <code>mergeBaseOid → working tree</code>（含未提交与已提交净变更），<code>commits</code> 模式列 <code>mergeBaseOid..HEAD</code> 最多 50 条本地提交。</li>
+              <li><code>frontend/.../preview/changes/</code> 与 <code>packages/app-ios/.../Preview/</code>：顶部分段切换，<code>branch/commits</code> 下隐藏单文件 Reset/Delete 写操作。</li>
+            </ul>
+          </div>
+          <div class="spec-card">
+            <h3>关键边界与验证</h3>
+            <ul>
+              <li><strong>不隐式改状态</strong>：切换 scope 不执行 <code>git fetch</code> 写工作区，仅在手动刷新时更新远端跟踪引用。</li>
+              <li><strong>一致性保护</strong>：点开单文件 Diff 时携带列表返回的 <code>mergeBaseOid</code>（或 <code>commitOid</code>）；期间 rebase 导致 OID 变化返回 <code>409 terminal_preview_stale_diff</code>。</li>
+              <li><strong>无阶段二包袱</strong>：不创建 <code>.git/t3-checkpoint-indexes</code>、不写任何隐藏 Git Ref。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 机制 3 -->
+      <section class="block" id="mech-3">
+        <h2>二、机制 3：一键新建 Worktree 终端 + <code>runweave.json</code> 受控 <code>setup</code></h2>
+        <p class="sublead">
+          将 <code>RaceWorktreeSupply</code> 抽为公共服务，支持在桌面 Worktree Rail 与手机首页「＋」直接拉起新分支 Worktree，并在受控确认后执行初始化脚本。
+        </p>
+
+        <div class="demo-bar" role="group" aria-label="机制3演示切换">
+          <span class="demo-label">原型演示切换：</span>
+          <button class="demo-btn" id="m3-btn-dialog" aria-pressed="true" onclick="setM3('dialog')">
+            1. 新建弹窗与 setup 修订确认
+          </button>
+          <button class="demo-btn" id="m3-btn-running" aria-pressed="false" onclick="setM3('running')">
+            2. tmux 首面板执行 setup 中
+          </button>
+          <button class="demo-btn" id="m3-btn-ready" aria-pressed="false" onclick="setM3('ready')">
+            3. setup 成功并拉起 Codex
+          </button>
+        </div>
+
+        <div class="ui-frame" id="ui-mech-3">
+          <div class="wt-rail">
+            <span class="wt-chip">main (主目录)</span>
+            <span class="wt-chip">wt-1 · feat/suiji</span>
+            <span class="wt-chip active">wt-auth-refactor · 新建中</span>
+            <span class="wt-add">＋ 新建 Worktree</span>
+          </div>
+          <div id="m3-body"></div>
+        </div>
+
+        <div class="flow-scroll" id="flow-mech-3">
+          <svg class="flow-svg" viewBox="0 0 880 190" xmlns="http://www.w3.org/2000/svg">
+            <rect width="880" height="190" fill="#0f1527" />
+            <g font-family="sans-serif" font-size="12" fill="#e6ecff">
+              <rect x="16" y="38" width="152" height="84" rx="10" fill="#182342" stroke="#5b8cff" />
+              <text x="92" y="66" text-anchor="middle" font-weight="bold">桌面 Rail / iOS ＋</text>
+              <text x="92" y="86" text-anchor="middle" fill="#98a6cc">输入名称、基准分支</text>
+              <text x="92" y="104" text-anchor="middle" fill="#98a6cc">核对 setup revision</text>
+
+              <path d="M168 80 L204 80" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="206" y="32" width="196" height="96" rx="10" fill="#182342" stroke="#384975" />
+              <text x="304" y="58" text-anchor="middle" font-weight="bold">WorktreeProvisioner</text>
+              <text x="304" y="78" text-anchor="middle" fill="#98a6cc">realpath 校验 .worktree/&lt;name&gt;</text>
+              <text x="304" y="96" text-anchor="middle" fill="#98a6cc">git worktree add -b &lt;branch&gt;</text>
+              <text x="304" y="114" text-anchor="middle" fill="#34d399">刷新 WorktreeProjectRegistry</text>
+
+              <path d="M402 80 L438 80" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="440" y="32" width="206" height="96" rx="10" fill="#182342" stroke="#fbbf24" />
+              <text x="543" y="58" text-anchor="middle" font-weight="bold">受控 setup 执行 (tmux)</text>
+              <text x="543" y="78" text-anchor="middle" fill="#98a6cc">比对已批准 SHA-256 revision</text>
+              <text x="543" y="96" text-anchor="middle" fill="#98a6cc">在新建终端首面板可见运行</text>
+              <text x="543" y="114" text-anchor="middle" fill="#fbbf24">随机哨兵捕获真实退出码</text>
+
+              <path d="M646 80 L682 80" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="684" y="32" width="180" height="96" rx="10" fill="#182342" stroke="#34d399" />
+              <text x="774" y="58" text-anchor="middle" font-weight="bold">后续分支</text>
+              <text x="774" y="79" text-anchor="middle" fill="#34d399">exit=0 → 自动启动所选 CLI</text>
+              <text x="774" y="100" text-anchor="middle" fill="#f87171">exit≠0 → 停留在终端保留报错</text>
+              <text x="774" y="117" text-anchor="middle" fill="#98a6cc">绝不带病盲跑 Agent</text>
+            </g>
+            <text x="20" y="166" font-family="monospace" font-size="11.5" fill="#fde68a">
+              安全红线：runweave.json 中 setup 内容变化会产生新 SHA-256 revision，未传匹配 approvedSetupRevision 时仅建目录与纯终端，不跑脚本
+            </text>
+          </svg>
+        </div>
+
+        <div class="spec-grid">
+          <div class="spec-card">
+            <h3><code>runweave.json</code> 最小扩展合同</h3>
+            <ul>
+              <li>在现有 <code>schemaVersion: 1</code> 下新增可选顶层字段 <code>worktree?: { setup?: { command: string; cwd?: string } }</code>，复用 <code>WorkspaceServiceConfigLoader</code> 的非符号链接、256 KiB 与目录边界校验。</li>
+              <li>Backend 在当前 Profile 存储 <code>(repositoryId, setupSha256)</code> 批准记录；命令一字未改时后续新建免重复弹窗，改动任意字符立即要求重新确认。</li>
+            </ul>
+          </div>
+          <div class="spec-card">
+            <h3>接口与代码落点</h3>
+            <ul>
+              <li>新增 <code>POST /api/terminal/project/:parentProjectId/contexts</code>（参数：<code>name</code>、<code>branch</code>、<code>baseRef</code>、<code>launchAgent?</code>、<code>approvedSetupRevision?</code>、<code>operationId</code>）。</li>
+              <li>抽离 <code>backend/src/race/race-worktree-supply.ts</code> 公共校验至 <code>backend/src/terminal/workspace-service/worktree-provisioner.ts</code>；更新桌面 <code>worktree-rail.tsx</code> 与 iOS 首页上下文选择 Sheet。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 机制 4 -->
+      <section class="block" id="mech-4">
+        <h2>三、机制 4：Attention 待处理收口 + Working 折叠 + PR 有界值守</h2>
+        <p class="sublead">
+          把散落在各处的「真正在等人拍板」信号统一收进 <code>needs_action</code> 置顶，默认折叠正在跑的终端，并提供防死循环的后台 PR 值守。
+        </p>
+
+        <div class="demo-bar" role="group" aria-label="机制4演示切换">
+          <span class="demo-label">原型演示切换：</span>
+          <button class="demo-btn" id="m4-btn-collapsed" aria-pressed="true" onclick="setM4(false)">
+            默认态：待处理置顶 + Working 折叠
+          </button>
+          <button class="demo-btn" id="m4-btn-expanded" aria-pressed="false" onclick="setM4(true)">
+            展开 Working (3 个后台运行终端)
+          </button>
+        </div>
+
+        <div class="ui-frame" id="ui-mech-4">
+          <div class="ui-topbar">
+            <strong>Attention · 全局关注面板</strong>
+            <span style="color: var(--muted)">需你处理 3 · 已完成 1 · 运行中 3</span>
+          </div>
+          <div>
+            <div class="attn-item">
+              <div>
+                <span class="attn-tag tag-action">需回答</span>
+                <strong>wt-1(codex) · Panel 1</strong>
+                <div style="color: var(--muted); font-size: 13px; margin-top: 2px">
+                  Codex 等你回答结构化问题（来源：TerminalQuestions 实时连接）
+                </div>
+              </div>
+              <button class="btn-primary">打开回复辅助</button>
+            </div>
+            <div class="attn-item">
+              <div>
+                <span class="attn-tag tag-action">需授权</span>
+                <strong>wt-api(claude) · Panel 2</strong>
+                <div style="color: var(--muted); font-size: 13px; margin-top: 2px">
+                  Claude 请求执行命令权限（来源：PermissionRequest Hook / OSC 7501 blocked:permission）
+                </div>
+              </div>
+              <button class="btn-primary">直达 Panel 2</button>
+            </div>
+            <div class="attn-item">
+              <div>
+                <span class="attn-tag tag-action">PR 异常</span>
+                <strong>wt-auth(codex) · PR #942</strong>
+                <div style="color: var(--muted); font-size: 13px; margin-top: 2px">
+                  PR Watch 检测到合并冲突（草稿保护未自动投递 · 唤醒计数 2/10）
+                </div>
+              </div>
+              <button class="btn-primary">查看终端</button>
+            </div>
+            <div class="attn-item">
+              <div>
+                <span class="attn-tag tag-done">已完成</span>
+                <strong>main(pi)</strong>
+                <div style="color: var(--muted); font-size: 13px; margin-top: 2px">
+                  已完成日终重构审计，等待查阅确认（completionRevision=14）
+                </div>
+              </div>
+              <button class="seg-btn active">定位终端</button>
+            </div>
+            <div id="m4-working-box"></div>
+          </div>
+        </div>
+
+        <div class="flow-scroll" id="flow-mech-4">
+          <svg class="flow-svg" viewBox="0 0 880 205" xmlns="http://www.w3.org/2000/svg">
+            <rect width="880" height="205" fill="#0f1527" />
+            <g font-family="sans-serif" font-size="12" fill="#e6ecff">
+              <rect x="16" y="18" width="210" height="44" rx="8" fill="#182342" stroke="#fbbf24" />
+              <text x="121" y="45" text-anchor="middle">1. TerminalQuestions 待答请求</text>
+
+              <rect x="16" y="74" width="210" height="44" rx="8" fill="#182342" stroke="#fbbf24" />
+              <text x="121" y="101" text-anchor="middle">2. Claude PermissionRequest Hook</text>
+
+              <rect x="16" y="130" width="210" height="44" rx="8" fill="#182342" stroke="#fbbf24" />
+              <text x="121" y="157" text-anchor="middle">3. OSC 7501 blocked (perm/q/auth)</text>
+
+              <path d="M226 40 L290 88" stroke="#fbbf24" stroke-width="1.8" />
+              <path d="M226 96 L290 96" stroke="#fbbf24" stroke-width="1.8" />
+              <path d="M226 152 L290 104" stroke="#fbbf24" stroke-width="1.8" />
+
+              <rect x="292" y="52" width="225" height="92" rx="10" fill="#182342" stroke="#5b8cff" />
+              <text x="404" y="78" text-anchor="middle" font-weight="bold">AttentionService 统一聚合</text>
+              <text x="404" y="98" text-anchor="middle" fill="#fde68a">needs_action (置顶直达 Panel)</text>
+              <text x="404" y="116" text-anchor="middle" fill="#a7f3d0">completed / failed / blocked</text>
+              <text x="404" y="133" text-anchor="middle" fill="#98a6cc">working (UI 默认折叠降噪)</text>
+
+              <rect x="560" y="26" width="302" height="144" rx="10" fill="#182342" stroke="#34d399" />
+              <text x="711" y="52" text-anchor="middle" font-weight="bold">PR Watch 后台有界值守器 (2 分钟轮询)</text>
+              <text x="711" y="74" text-anchor="middle" fill="#98a6cc">• 绑定终端显式开启，gh api 只读拉取状态</text>
+              <text x="711" y="94" text-anchor="middle" fill="#98a6cc">• 仅新失败 Check / 冲突 / 他人新评论触发</text>
+              <text x="711" y="114" text-anchor="middle" fill="#98a6cc">• 过滤机器人启动回执，纯评论唤醒 ≤10 次熔断</text>
+              <text x="711" y="134" text-anchor="middle" fill="#34d399">• 复用 TaskSupervision 草稿保护投递原面板</text>
+              <text x="711" y="154" text-anchor="middle" fill="#fde68a">• PR Merged / Closed 自动停止值守</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 4. 机制 5 -->
+      <section class="block" id="mech-5">
+        <h2>四、机制 5：跨 Agent / 跨 Worktree 有预算上下文交接（Portable Context Handoff）</h2>
+        <p class="sublead">
+          当单家 CLI 额度触顶，或讨论完方案想切到新 Worktree 换另一个 Agent 实施时，一键抽取净对话并以终端文本附件交接到新终端。
+        </p>
+
+        <div class="demo-bar" role="group" aria-label="机制5演示切换">
+          <span class="demo-label">原型演示切换：</span>
+          <button class="demo-btn" id="m5-btn-quota" aria-pressed="true" onclick="setM5('quota')">
+            场景 A：Claude 额度受限 → 同目录交接给 Codex
+          </button>
+          <button class="demo-btn" id="m5-btn-wt" aria-pressed="false" onclick="setM5('wt')">
+            场景 B：Codex 调研完毕 → 新建 Worktree 交接给 Pi 实施
+          </button>
+        </div>
+
+        <div class="ui-frame" id="ui-mech-5">
+          <div class="ui-topbar">
+            <strong>交接会话到新终端</strong>
+            <span style="color: var(--muted)" id="m5-source-tag">来源：wt-1 · Claude Code (24 轮)</span>
+          </div>
+          <div class="modal-box" id="m5-body"></div>
+        </div>
+
+        <div class="flow-scroll" id="flow-mech-5">
+          <svg class="flow-svg" viewBox="0 0 880 185" xmlns="http://www.w3.org/2000/svg">
+            <rect width="880" height="185" fill="#0f1527" />
+            <g font-family="sans-serif" font-size="12" fill="#e6ecff">
+              <rect x="16" y="38" width="175" height="90" rx="10" fill="#182342" stroke="#5b8cff" />
+              <text x="103" y="65" text-anchor="middle" font-weight="bold">1. ConversationReader</text>
+              <text x="103" y="85" text-anchor="middle" fill="#98a6cc">读取 Codex/Claude/Pi/Trae</text>
+              <text x="103" y="103" text-anchor="middle" fill="#98a6cc">仅保留可见 user/assistant</text>
+              <text x="103" y="119" text-anchor="middle" fill="#34d399">天然过滤 thinking 与大输出</text>
+
+              <path d="M191 83 L227 83" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="229" y="38" width="205" height="90" rx="10" fill="#182342" stroke="#384975" />
+              <text x="331" y="65" text-anchor="middle" font-weight="bold">2. HandoffBudgeter (≤48KB)</text>
+              <text x="331" y="85" text-anchor="middle" fill="#98a6cc">固定保留首轮真实需求</text>
+              <text x="331" y="103" text-anchor="middle" fill="#98a6cc">从最近轮次逆序装入预算</text>
+              <text x="331" y="119" text-anchor="middle" fill="#fbbf24">被省略区间附 session-search 索引</text>
+
+              <path d="M434 83 L470 83" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="472" y="38" width="190" height="90" rx="10" fill="#182342" stroke="#384975" />
+              <text x="567" y="65" text-anchor="middle" font-weight="bold">3. 准备目标目录与附件</text>
+              <text x="567" y="85" text-anchor="middle" fill="#98a6cc">可选调用机制 3 建 Worktree</text>
+              <text x="567" y="103" text-anchor="middle" fill="#98a6cc">落盘受管 handoff Markdown</text>
+              <text x="567" y="119" text-anchor="middle" fill="#34d399">用户新追问永不截断</text>
+
+              <path d="M662 83 L698 83" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="700" y="38" width="164" height="90" rx="10" fill="#182342" stroke="#34d399" />
+              <text x="782" y="65" text-anchor="middle" font-weight="bold">4. 启动目标 CLI</text>
+              <text x="782" y="85" text-anchor="middle" fill="#98a6cc">Codex 同目录仍优先原生 Fork</text>
+              <text x="782" y="103" text-anchor="middle" fill="#98a6cc">异构 CLI 注入附件引用启动</text>
+              <text x="782" y="119" text-anchor="middle" fill="#34d399">原终端零写入、不中断</text>
+            </g>
+            <text x="20" y="162" font-family="monospace" font-size="11.5" fill="#98a6cc">
+              幂等保护：携带 operationId + expectedSourceRevision；已创建新终端但投递未确认时保留新终端供人工核对，绝不自动重复创建
+            </text>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 5. 机制 6 -->
+      <section class="block" id="mech-6">
+        <h2>五、机制 6：Agent 启动上下文与 MCP 工具字节预算门禁</h2>
+        <p class="sublead">
+          每次会话启动都会隐式加载根 <code>AGENTS.md</code>、Toolkit 技能列表摘要与 MCP 工具定义。用确定性字节预算文件锁死上限，防止日常迭代无感膨胀。
+        </p>
+
+        <div class="ui-frame" id="ui-mech-6">
+          <div class="ui-topbar">
+            <strong>Runweave 当前仓库实测基线（2026-11-26 实测值）</strong>
+            <span style="color: var(--ok)">pnpm context:budget --check → PASS</span>
+          </div>
+          <div class="metric-cards">
+            <div class="metric-card">
+              <div style="color: var(--muted); font-size: 13px">根 AGENTS.md UTF-8 字节</div>
+              <div class="metric-num">4,823 B</div>
+              <div style="color: var(--muted); font-size: 12px; margin-top: 4px">
+                全仓 29 个 AGENTS.md 独立统计单项上限
+              </div>
+            </div>
+            <div class="metric-card">
+              <div style="color: var(--muted); font-size: 13px">Toolkit 50 个技能 Frontmatter 总字节</div>
+              <div class="metric-num">17,621 B</div>
+              <div style="color: var(--muted); font-size: 12px; margin-top: 4px">
+                启动常驻上下文大头，单技能 description 限 ≤ 280 B
+              </div>
+            </div>
+            <div class="metric-card">
+              <div style="color: var(--muted); font-size: 13px">runweave-mcp tools.ts 源码与 Schema</div>
+              <div class="metric-num">14,039 B</div>
+              <div style="color: var(--muted); font-size: 12px; margin-top: 4px">
+                实例化 McpServer 导出 tools/list JSON 精确计量
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-scroll" id="flow-mech-6">
+          <svg class="flow-svg" viewBox="0 0 880 150" xmlns="http://www.w3.org/2000/svg">
+            <rect width="880" height="150" fill="#0f1527" />
+            <g font-family="sans-serif" font-size="12" fill="#e6ecff">
+              <rect x="18" y="34" width="230" height="78" rx="10" fill="#182342" stroke="#5b8cff" />
+              <text x="133" y="62" text-anchor="middle" font-weight="bold">修改 AGENTS.md / Skill / MCP</text>
+              <text x="133" y="84" text-anchor="middle" fill="#98a6cc">触发 pnpm quality:gate / CI</text>
+
+              <path d="M248 73 L296 73" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="298" y="34" width="260" height="78" rx="10" fill="#182342" stroke="#384975" />
+              <text x="428" y="60" text-anchor="middle" font-weight="bold">scripts/quality/context-budget.mjs</text>
+              <text x="428" y="80" text-anchor="middle" fill="#98a6cc">对比 HEAD^1:context-budget.json</text>
+              <text x="428" y="98" text-anchor="middle" fill="#98a6cc">防止同一 PR 顺手改大预算文件蒙混过关</text>
+
+              <path d="M558 73 L606 73" stroke="#5b8cff" stroke-width="2" />
+
+              <rect x="608" y="34" width="252" height="78" rx="10" fill="#182342" stroke="#34d399" />
+              <text x="734" y="60" text-anchor="middle" font-weight="bold">裁决结果</text>
+              <text x="734" y="80" text-anchor="middle" fill="#34d399">≤ 基线：直接通过（缩小可更新基线）</text>
+              <text x="734" y="98" text-anchor="middle" fill="#f87171">&gt; 基线：输出超标项明细，需精简或人工批准</text>
+            </g>
+          </svg>
+        </div>
+
+        <a class="back-top" href="#top">↑ 返回顶部</a>
+      </section>
+    </div>
+
+    <script>
+      function setM2(mode) {
+        ["working", "branch", "commits"].forEach(function (k) {
+          var b = document.getElementById("m2-btn-" + k);
+          var s = document.getElementById("m2-seg-" + k);
+          if (b) b.setAttribute("aria-pressed", String(k === mode));
+          if (s) s.className = "seg-btn" + (k === mode ? " active" : "");
+        });
+        var el = document.getElementById("m2-body");
+        if (mode === "working") {
+          el.innerHTML =
+            '<div class="tree-col"><div style="color:#98a6cc">Staged (0) · Working (0)</div></div>' +
+            '<div class="diff-col"><div style="padding:36px 12px;color:#98a6cc;text-align:center">' +
+            "当前工作区没有未提交改动。<br/>Agent 已将修改提交至本分支，可切到 <strong>相对 origin/main (6)</strong> 审阅完整分支改动。" +
+            "</div></div>";
+        } else if (mode === "commits") {
+          el.innerHTML =
+            '<div class="tree-col">' +
+            '<div style="color:#98a6cc;margin-bottom:8px">merge-base..HEAD (2 个提交)</div>' +
+            '<div class="file-row selected"><span>91c4e20 feat: add branch diff scope</span><span class="badge-a">+142</span></div>' +
+            '<div class="file-row"><span>4d08a11 refactor: share base oid</span><span class="badge-m">+38</span></div>' +
+            "</div>" +
+            '<div class="diff-col">' +
+            '<div class="diff-hdr">commit 91c4e20 · backend/src/terminal/preview/git.ts (只读视图)</div>' +
+            '<div class="diff-line"> export async function getPreviewGitChanges(params) {</div>' +
+            '<div class="diff-line diff-add">+  if (params.scope === "branch") return readBranchDiffAgainstBase(params);</div>' +
+            '<div class="diff-line diff-add">+  if (params.scope === "commits") return listBranchCommits(params);</div>' +
+            '<div class="diff-line">   const output = await runGit(repoRoot, ["status", "--porcelain=v1", "-z"]);</div>' +
+            "</div>";
+        } else {
+          el.innerHTML =
+            '<div class="tree-col">' +
+            '<div style="color:#98a6cc;margin-bottom:8px">基准：origin/main @ a81f20c (6 个文件)</div>' +
+            '<div class="file-row selected"><span>backend/.../preview/git.ts</span><span class="badge-m">M</span></div>' +
+            '<div class="file-row"><span>packages/shared/.../preview.ts</span><span class="badge-m">M</span></div>' +
+            '<div class="file-row"><span>frontend/.../changes/view.tsx</span><span class="badge-m">M</span></div>' +
+            '<div class="file-row"><span>packages/app-ios/.../DiffView.swift</span><span class="badge-m">M</span></div>' +
+            "</div>" +
+            '<div class="diff-col">' +
+            '<div class="diff-hdr">origin/main (merge-base a81f20c) ↔ 当前工作区 · 只读对比（隐藏单文件 Reset）</div>' +
+            '<div class="diff-line diff-del">-export type TerminalPreviewChangeKind = "staged" | "working";</div>' +
+            '<div class="diff-line diff-add">+export type TerminalPreviewChangeScope = "working" | "branch" | "commits";</div>' +
+            '<div class="diff-line diff-add">+export interface TerminalPreviewBranchDiffMeta { baseBranch: string; mergeBaseOid: string; headOid: string; }</div>' +
+            '<div class="diff-line"> export type TerminalPreviewGitStatus = "added" | "modified" | "deleted" | "renamed";</div>' +
+            "</div>";
+        }
+      }
+
+      function setM3(step) {
+        ["dialog", "running", "ready"].forEach(function (k) {
+          var b = document.getElementById("m3-btn-" + k);
+          if (b) b.setAttribute("aria-pressed", String(k === step));
+        });
+        var el = document.getElementById("m3-body");
+        if (step === "dialog") {
+          el.innerHTML =
+            '<div class="modal-box">' +
+            '<div class="field-row"><span>Worktree 目录</span><div class="fake-input">.worktree/wt-auth-refactor</div></div>' +
+            '<div class="field-row"><span>新建分支名</span><div class="fake-input">feat/auth-refactor (基于 origin/main)</div></div>' +
+            '<div class="field-row"><span>完成后启动</span><div class="fake-input">Codex CLI（setup 退出码为 0 后启动）</div></div>' +
+            '<div class="trust-box">' +
+            "<strong>检测到 runweave.json 声明了 worktree.setup（首次版本确认）</strong><br/>" +
+            "命令：<code>pnpm install --frozen-lockfile</code> · <code>cwd: .</code> · SHA-256: <code>7f3c91a8…</code><br/>" +
+            "☑ 信任并在此仓库当前版本执行该初始化命令" +
+            "</div>" +
+            "</div>";
+        } else if (step === "running") {
+          el.innerHTML =
+            '<div class="modal-box" style="font-family:var(--mono);font-size:12.5px;background:#090e1a">' +
+            '<div style="color:#fbbf24;margin-bottom:6px">[Runweave Setup] 正在 .worktree/wt-auth-refactor 执行初始化脚本…</div>' +
+            "<div>$ pnpm install --frozen-lockfile</div>" +
+            '<div style="color:#98a6cc">Packages: +1420  ++++++++++++++++++++++++++++++</div>' +
+            '<div style="color:#98a6cc">等待退出码为 0 后自动在同一面板启动 codex…（若失败将保留现场报错，不启动 Agent）</div>' +
+            "</div>";
+        } else {
+          el.innerHTML =
+            '<div class="modal-box" style="font-family:var(--mono);font-size:12.5px;background:#090e1a">' +
+            '<div style="color:#34d399;margin-bottom:6px">[Runweave Setup] 初始化完成 (exitCode=0, 6.4s) → 已启动 Codex</div>' +
+            "<div>╭──────────────────────────────────────────────╮</div>" +
+            "<div>│ OpenAI Codex (cwd: .worktree/wt-auth-refactor) │</div>" +
+            "<div>╰──────────────────────────────────────────────╯</div>" +
+            "</div>";
+        }
+      }
+
+      function setM4(expanded) {
+        document.getElementById("m4-btn-collapsed").setAttribute("aria-pressed", String(!expanded));
+        document.getElementById("m4-btn-expanded").setAttribute("aria-pressed", String(expanded));
+        var box = document.getElementById("m4-working-box");
+        if (!expanded) {
+          box.innerHTML =
+            '<div class="attn-item" style="background:#0a0f1e">' +
+            '<div><span class="attn-tag tag-work">运行中 · 已折叠 (3)</span>' +
+            '<span style="color:#98a6cc;font-size:13px">wt-2(codex)、wt-ios(claude)、wt-docs(pi) 正在正常执行，无需人工介入</span></div>' +
+            '<button class="seg-btn" onclick="setM4(true)">展开查看 ▾</button></div>';
+        } else {
+          box.innerHTML =
+            '<div class="attn-item" style="background:#0a0f1e">' +
+            '<div><span class="attn-tag tag-work">运行中 (3)</span><span style="color:#98a6cc;font-size:13px">遇到待答、权限请求、完成或报错时会自动提升至顶部</span></div>' +
+            '<button class="seg-btn" onclick="setM4(false)">收起 ▴</button></div>' +
+            '<div class="attn-item" style="background:#0c1222"><span>wt-2(codex) · 正在执行类型检查…</span><span style="color:#98a6cc;font-size:12px">working</span></div>' +
+            '<div class="attn-item" style="background:#0c1222"><span>wt-ios(claude) · 正在编译 Swift 包…</span><span style="color:#98a6cc;font-size:12px">working</span></div>' +
+            '<div class="attn-item" style="background:#0c1222"><span>wt-docs(pi) · PR #945 值守中（Checks 运行中）</span><span style="color:#98a6cc;font-size:12px">watching PR</span></div>';
+        }
+      }
+
+      function setM5(kind) {
+        document.getElementById("m5-btn-quota").setAttribute("aria-pressed", String(kind === "quota"));
+        document.getElementById("m5-btn-wt").setAttribute("aria-pressed", String(kind === "wt"));
+        var tag = document.getElementById("m5-source-tag");
+        var body = document.getElementById("m5-body");
+        if (kind === "quota") {
+          tag.textContent = "来源：wt-1 · Claude Code (24 轮对话)";
+          body.innerHTML =
+            '<div class="field-row"><span>目标 Agent</span><div class="fake-input">Codex (gpt-5.6-sol · 跨 Provider 有预算交接)</div></div>' +
+            '<div class="field-row"><span>目标工作区</span><div class="fake-input">复用当前目录 (.worktree/wt-1)</div></div>' +
+            '<div style="font-size:13px;color:#98a6cc">上下文交接包预算：<strong>18.4 KB / 48.0 KB</strong>（保留第 1 轮原始目标 + 最近 9 轮可见问答；中间 14 轮附 session-search 可回查引用；已剔除 thinking 与原始工具输出）</div>' +
+            '<div class="meter-track"><div class="meter-fill" style="width:38%"></div></div>' +
+            '<div class="field-row"><span>附加新指令</span><div class="fake-input">继续完成剩余的边界校验，不要改动已通过的路由合同（完整保留不截断）</div></div>';
+        } else {
+          tag.textContent = "来源：main · Codex (11 轮方案对齐)";
+          body.innerHTML =
+            '<div class="field-row"><span>目标 Agent</span><div class="fake-input">Pi Coding Agent</div></div>' +
+            '<div class="field-row"><span>目标工作区</span><div class="fake-input">新建隔离 Worktree (.worktree/wt-implement-plan · 自动跑 setup)</div></div>' +
+            '<div style="font-size:13px;color:#98a6cc">上下文交接包预算：<strong>11.2 KB / 48.0 KB</strong>（完整保留全部 11 轮净问答，通过受管文本附件注入新终端，主目录保持干净）</div>' +
+            '<div class="meter-track"><div class="meter-fill" style="width:23%"></div></div>' +
+            '<div class="field-row"><span>附加新指令</span><div class="fake-input">按刚刚对齐的方案在新 Worktree 实施并完成类型检查</div></div>';
+        }
+      }
+
+      setM2("branch");
+      setM3("dialog");
+      setM4(false);
+      setM5("quota");
+    </script>
+  </body>
+</html>

@@ -12,7 +12,13 @@ interface TerminalImagePreviewProps {
   path: string;
   refreshKey: number;
   onAuthExpired?: () => void;
-  change?: { kind: TerminalPreviewChangeKind; side: "old" | "new"; version: string };
+  change?: {
+    kind: TerminalPreviewChangeKind;
+    side: "old" | "new";
+    version: string;
+    baseOid?: string;
+    commitOid?: string;
+  };
   onReload?: () => void;
 }
 
@@ -34,6 +40,8 @@ export function TerminalImagePreview({
   const changeKind = change?.kind;
   const changeSide = change?.side;
   const changeVersion = change?.version;
+  const changeBaseOid = change?.baseOid;
+  const changeCommitOid = change?.commitOid;
 
   useEffect(() => {
     let cancelled = false;
@@ -41,8 +49,21 @@ export function TerminalImagePreview({
     setLoading(true);
     setError(null);
 
-    getTerminalProjectPreviewAsset(apiBase, token, projectId, path,
-      changeKind && changeSide && changeVersion ? { kind: changeKind, side: changeSide, version: changeVersion } : undefined)
+    getTerminalProjectPreviewAsset(
+      apiBase,
+      token,
+      projectId,
+      path,
+      changeKind && changeSide && changeVersion
+        ? {
+            kind: changeKind,
+            side: changeSide,
+            version: changeVersion,
+            baseOid: changeBaseOid,
+            commitOid: changeCommitOid,
+          }
+        : undefined,
+    )
       .then(async (blob) => {
         if (cancelled) {
           return;
@@ -94,7 +115,7 @@ export function TerminalImagePreview({
         URL.revokeObjectURL(nextObjectUrl);
       }
     };
-  }, [apiBase, onAuthExpired, path, projectId, refreshKey, token, changeKind, changeSide, changeVersion, retry]);
+  }, [apiBase, onAuthExpired, path, projectId, refreshKey, token, changeKind, changeSide, changeVersion, changeBaseOid, changeCommitOid, retry]);
 
   if (loading) {
     return (

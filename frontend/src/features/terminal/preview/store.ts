@@ -2,7 +2,10 @@ import { deviceStorage } from "../../device-storage";
 import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
+import type {
+  TerminalPreviewChangeKind,
+  TerminalPreviewChangeScope,
+} from "@runweave/shared/terminal/preview";
 import { TERMINAL_BROWSER_DEFAULT_PROFILE_ID } from "@runweave/shared/terminal-browser-profile";
 import { LOCAL_DEV_CONNECTION_ID } from "../../connection/system-connection";
 import {
@@ -333,26 +336,98 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     filePath: string,
     kind: TerminalPreviewChangeKind,
   ) => {
+    set((state: TerminalPreviewStore) => {
+      const current = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
+      if (kind === "branch") {
+        return {
+          projects: {
+            ...state.projects,
+            [projectId]: {
+              ...current,
+              mode: "changes",
+              changesScope: "branch",
+              selectedBranchChangePath: filePath,
+            },
+          },
+        };
+      }
+      if (kind === "commit") {
+        return {
+          projects: {
+            ...state.projects,
+            [projectId]: {
+              ...current,
+              mode: "changes",
+              changesScope: "commits",
+              selectedCommitChangePath: filePath,
+            },
+          },
+        };
+      }
+      return {
+        projects: {
+          ...state.projects,
+          [projectId]: {
+            ...current,
+            mode: "changes",
+            changesScope: "working",
+            selectedChangePath: filePath,
+            selectedChangeKind: kind,
+          },
+        },
+      };
+    });
+  },
+  clearSelectedChange: (
+    projectId: string,
+    scope?: TerminalPreviewChangeScope,
+  ) => {
+    set((state: TerminalPreviewStore) => {
+      const current = state.projects[projectId] ?? DEFAULT_PROJECT_STATE;
+      const targetScope = scope ?? current.changesScope ?? "working";
+      return {
+        projects: {
+          ...state.projects,
+          [projectId]: {
+            ...current,
+            ...(targetScope === "branch"
+              ? { selectedBranchChangePath: undefined }
+              : targetScope === "commits"
+                ? { selectedCommitChangePath: undefined }
+                : {
+                    selectedChangePath: undefined,
+                    selectedChangeKind: undefined,
+                  }),
+          },
+        },
+      };
+    });
+  },
+  setChangesScope: (
+    projectId: string,
+    changesScope: TerminalPreviewChangeScope,
+  ) => {
     set((state: TerminalPreviewStore) => ({
       projects: {
         ...state.projects,
         [projectId]: {
           ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
           mode: "changes",
-          selectedChangePath: filePath,
-          selectedChangeKind: kind,
+          changesScope,
         },
       },
     }));
   },
-  clearSelectedChange: (projectId: string) => {
+  setSelectedCommitOid: (
+    projectId: string,
+    selectedCommitOid: string | undefined,
+  ) => {
     set((state: TerminalPreviewStore) => ({
       projects: {
         ...state.projects,
         [projectId]: {
           ...(state.projects[projectId] ?? DEFAULT_PROJECT_STATE),
-          selectedChangePath: undefined,
-          selectedChangeKind: undefined,
+          selectedCommitOid,
         },
       },
     }));

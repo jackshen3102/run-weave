@@ -9,7 +9,16 @@ const HTML_PREVIEW_CSP = "sandbox allow-scripts; default-src 'self'; connect-src
 
 export function createHtmlPreviewRouter(manager: TerminalSessionManager, authService: AuthService): Router {
   const router = Router();
-  const handle = async (req: Request, res: Response, change?: { kind: "staged" | "working"; version: string }): Promise<void> => {
+  const handle = async (
+    req: Request,
+    res: Response,
+    change?: {
+      kind: "staged" | "working" | "branch" | "commit";
+      version: string;
+      baseOid?: string;
+      commitOid?: string;
+    },
+  ): Promise<void> => {
     if (req.method !== "GET" && req.method !== "HEAD") { res.status(405).set("Allow", "GET, HEAD").end(); return; }
     const { ticket, projectId, encodedPath } = req.params;
     if (typeof ticket !== "string" || typeof projectId !== "string" || typeof encodedPath !== "string") { res.status(400).end(); return; }
@@ -17,14 +26,23 @@ export function createHtmlPreviewRouter(manager: TerminalSessionManager, authSer
     if (Buffer.from(htmlPath, "utf8").toString("base64url") !== encodedPath) { res.status(400).end(); return; }
     const project = manager.getProject(projectId);
     if (!project) { res.status(404).end(); return; }
+    const changeSpec = change
+      ? change.kind === "branch"
+        ? `branch:${change.baseOid}:${change.version}`
+        : change.kind === "commit"
+          ? `commit:${change.commitOid}:${change.version}`
+          : `${change.kind}:${change.version}`
+      : undefined;
     if (!authService.verifyTemporaryToken(ticket, { tokenType: "html-preview", resource: {
-      projectId, htmlPath, ...(change ? { htmlChange: `${change.kind}:${change.version}` } : {}),
+      projectId, htmlPath, ...(changeSpec ? { htmlChange: changeSpec } : {}),
     } })) { res.status(401).end(); return; }
     try {
       if (change) {
+        const mainBranch = manager.getProject(manager.resolveParentProjectId(project.id))?.mainBranch ?? null;
         const snapshot = await resolveHtmlChangePreview({
           projectId, projectPath: project.path, requestedPath: htmlPath,
           changeKind: change.kind, version: change.version,
+          mainBranch, baseOid: change.baseOid, commitOid: change.commitOid,
         });
         if (snapshot.htmlPath !== htmlPath) { res.status(403).end(); return; }
         if ((req.params[0] ?? "") === path.basename(htmlPath)) {
@@ -58,6 +76,23 @@ export function createHtmlPreviewRouter(manager: TerminalSessionManager, authSer
       else res.status(500).end();
     }
   };
+  router.all("/:ticket/:projectId/:encodedPath/change/:kind/:oid/:version/*", (req, res) => {
+    const { kind, oid, version } = req.params;
+    if (
+      (kind !== "branch" && kind !== "commit") ||
+      typeof oid !== "string" ||
+      !/^[a-f0-9]{40,64}$/.test(oid) ||
+      typeof version !== "string" ||
+      !/^[a-f0-9]{64}$/.test(version)
+    ) {
+      res.status(400).end(); return;
+    }
+    void handle(req, res, {
+      kind,
+      version,
+      ...(kind === "branch" ? { baseOid: oid } : { commitOid: oid }),
+    });
+  });
   router.all("/:ticket/:projectId/:encodedPath/change/:kind/:version/*", (req, res) => {
     const { kind, version } = req.params;
     if ((kind !== "staged" && kind !== "working") || typeof version !== "string" || !/^[a-f0-9]{64}$/.test(version)) {

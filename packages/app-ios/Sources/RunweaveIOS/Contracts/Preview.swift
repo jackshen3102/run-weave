@@ -46,14 +46,68 @@ struct HtmlPreviewTicket: Decodable {
   let path: String
   let expiresIn: Int
 }
-struct PreviewChange: Decodable, Identifiable {
+struct PreviewChange: Decodable, Identifiable, Equatable {
   let path: String
+  let oldPath: String?
   let status: String
   var id: String { path }
 }
 struct PreviewChanges: Decodable {
   let staged: [PreviewChange]
   let working: [PreviewChange]
+}
+struct PreviewBranchCommitItem: Decodable, Identifiable, Equatable {
+  let oid: String
+  let shortOid: String
+  let subject: String
+  let authorName: String
+  let committedAt: String
+  var id: String { oid }
+}
+struct PreviewBranchChanges: Decodable {
+  let state: String
+  let reason: String?
+  let baseRef: String?
+  let baseOid: String?
+  let mergeBaseOid: String?
+  let headOid: String?
+  let files: [PreviewChange]
+
+  var unavailableDescription: String? {
+    guard state == "unavailable" else { return nil }
+    return describePreviewUnavailableReason(reason)
+  }
+}
+struct PreviewBranchCommits: Decodable {
+  let state: String
+  let reason: String?
+  let baseRef: String?
+  let mergeBaseOid: String?
+  let headOid: String?
+  let truncated: Bool
+  let commits: [PreviewBranchCommitItem]
+  let selectedCommitOid: String?
+  let files: [PreviewChange]
+
+  var unavailableDescription: String? {
+    guard state == "unavailable" else { return nil }
+    return describePreviewUnavailableReason(reason)
+  }
+}
+
+func describePreviewUnavailableReason(_ reason: String?) -> String {
+  switch reason {
+  case "not-repository":
+    return "当前项目不是 Git 仓库"
+  case "shallow-repository":
+    return "浅克隆仓库（shallow repository）无法计算相对主分支的共同祖先"
+  case "base-unavailable":
+    return "无法解析远端主分支基准引用，请检查远端或项目主分支设置"
+  case "no-merge-base":
+    return "当前分支与主分支没有共同历史（no merge-base），无法对比"
+  default:
+    return "当前仓库状态暂不支持分支对比"
+  }
 }
 struct PreviewContentSide: Decodable {
   let source: String
@@ -92,7 +146,15 @@ struct PreviewDiff: Decodable {
   }
   var versionLabel: String {
     let source = previewSide?.source
-    let label = source == "index" ? "暂存版本" : source == "head" ? "已提交版本" : "工作区版本"
+    let label: String
+    switch source {
+    case "index": label = "暂存版本"
+    case "head": label = "已提交版本"
+    case "merge-base": label = "主分支共同祖先版本"
+    case "commit-parent": label = "提交前版本"
+    case "commit": label = "该提交版本"
+    default: label = "工作区版本"
+    }
     return status == "deleted" ? "已删除 · 删除前版本 · " + label : label
   }
 }
@@ -100,8 +162,12 @@ struct SelectedFile: Identifiable, Equatable {
   let path: String
   var changeKind: String?
   var changeStatus: String?
+  var baseOid: String?
+  var commitOid: String?
   var readonly = false
-  var id: String { (changeKind ?? "file") + ":" + path }
+  var id: String {
+    [changeKind ?? "file", baseOid ?? commitOid ?? "", path].joined(separator: ":")
+  }
 }
 
 enum PreviewMutation {

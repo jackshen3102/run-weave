@@ -1,6 +1,9 @@
 import type { DesktopLocalBrowserInfo } from "@runweave/shared/browser-local-tunnel";
 import type { TerminalBrowserDeviceState } from "@runweave/shared/terminal-browser-device";
-import type { TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
+import type {
+  TerminalPreviewChangeKind,
+  TerminalPreviewChangeScope,
+} from "@runweave/shared/terminal/preview";
 import type { TerminalBrowserGroupSnapshot } from "@runweave/shared/terminal-browser-workspace";
 import type { TerminalBrowserProfileId } from "@runweave/shared/terminal-browser-profile";
 import type { TerminalBrowserMinimumViewportWidth } from "@runweave/shared/terminal-browser-minimum-width";
@@ -50,8 +53,12 @@ export interface TerminalPreviewProjectState {
   path?: string;
   openFileQuery?: string;
   selectedFilePath?: string;
+  changesScope?: TerminalPreviewChangeScope;
+  selectedCommitOid?: string;
   selectedChangePath?: string;
   selectedChangeKind?: TerminalPreviewChangeKind;
+  selectedBranchChangePath?: string;
+  selectedCommitChangePath?: string;
   markdownViewMode?: TerminalMarkdownViewMode;
   markdownSplitSourceWidthPct?: number;
   svgViewMode?: TerminalSvgViewMode;
@@ -117,7 +124,18 @@ export interface TerminalPreviewStore {
     filePath: string,
     kind: TerminalPreviewChangeKind,
   ) => void;
-  clearSelectedChange: (projectId: string) => void;
+  clearSelectedChange: (
+    projectId: string,
+    scope?: TerminalPreviewChangeScope,
+  ) => void;
+  setChangesScope: (
+    projectId: string,
+    scope: TerminalPreviewChangeScope,
+  ) => void;
+  setSelectedCommitOid: (
+    projectId: string,
+    commitOid: string | undefined,
+  ) => void;
   setMarkdownViewMode: (
     projectId: string,
     mode: TerminalMarkdownViewMode,

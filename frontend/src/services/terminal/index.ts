@@ -11,6 +11,8 @@ export {
   getTerminalProjectPreviewAsset,
   getTerminalProjectPreviewFile,
   getTerminalProjectPreviewFileDiff,
+  getTerminalProjectPreviewGitBranchChanges,
+  getTerminalProjectPreviewGitBranchCommits,
   getTerminalProjectPreviewGitChanges,
   listTerminalProjectPreviewDirectory,
   renameTerminalProjectPreviewFile,

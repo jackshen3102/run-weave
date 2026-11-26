@@ -1,7 +1,7 @@
 import { detectImageMimeType, IMAGE_PREVIEW_MAX_BYTES } from "./image-format";
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { TerminalPreviewFileResponse, TerminalPreviewBase, TerminalPreviewDeleteFileResponse, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileResponse, TerminalPreviewChangeKind } from "@runweave/shared/terminal/preview";
+import type { TerminalPreviewFileResponse, TerminalPreviewBase, TerminalPreviewDeleteFileResponse, TerminalPreviewResetChangeResponse, TerminalPreviewSaveFileResponse, TerminalPreviewWritableChangeKind } from "@runweave/shared/terminal/preview";
 import { resetPreviewGitChange as resetPreviewGitChangeFromGit } from "./git";
 import {
   TerminalPreviewError,
@@ -19,7 +19,12 @@ export {
   searchPreviewFolders,
 } from "./search";
 export { searchPreviewContent } from "./content-search";
-export { getPreviewFileDiff, getPreviewGitChanges } from "./git";
+export {
+  getPreviewFileDiff,
+  getPreviewGitBranchChanges,
+  getPreviewGitBranchCommits,
+  getPreviewGitChanges,
+} from "./git";
 
 const FILE_PREVIEW_MAX_BYTES = 1024 * 1024;
 
@@ -247,7 +252,7 @@ export async function resetPreviewGitChange(params: {
   projectId: string;
   projectPath: string | null | undefined;
   requestedPath: string;
-  changeKind: TerminalPreviewChangeKind;
+  changeKind: TerminalPreviewWritableChangeKind;
 }): Promise<TerminalPreviewResetChangeResponse> {
   const payload = await resetPreviewGitChangeFromGit(params);
   clearPreviewFileSearchCache(params.projectId);

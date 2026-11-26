@@ -20,8 +20,9 @@ async function git(root: string, args: string[], maxBuffer = 1024 * 1024) {
 export async function readChangeContent(options: {
   projectPath: string; repoRoot: string; repoPath: string;
   filePath: string; source: TerminalPreviewContentSide["source"];
+  treeOid?: string | null;
 }): Promise<ChangeContent> {
-  const { projectPath, repoRoot, repoPath, filePath, source } = options;
+  const { projectPath, repoRoot, repoPath, filePath, source, treeOid } = options;
   const side: TerminalPreviewContentSide = { source, path: filePath, state: "read-failed" };
   const result: ChangeContent = { side, text: "" };
   try {
@@ -53,17 +54,8 @@ export async function readChangeContent(options: {
         if (after.size !== stats.size || after.mtimeMs !== stats.mtimeMs || after.ctimeMs !== stats.ctimeMs) return result;
         bytes = buffer.subarray(0, length);
       } finally { await handle.close(); }
-    } else {
-      if (source === "head") {
-        try { await git(repoRoot, ["rev-parse", "--verify", "--quiet", "HEAD"]); }
-        catch (error) {
-          if ((error as { code?: number }).code === 1) { side.state = "missing"; return result; }
-          throw error;
-        }
-      }
-      const listing = (await git(repoRoot, source === "head"
-        ? ["ls-tree", "-z", "HEAD", "--", repoPath]
-        : ["ls-files", "--stage", "-z", "--", repoPath])).toString("utf8").split("\0").filter(Boolean);
+    } else if (source === "index") {
+      const listing = (await git(repoRoot, ["ls-files", "--stage", "-z", "--", repoPath])).toString("utf8").split("\0").filter(Boolean);
       if (!listing.length) { side.state = "missing"; return result; }
       if (listing.length !== 1) { side.state = "unsupported"; return result; }
       const record = listing[0]!;
@@ -72,13 +64,46 @@ export async function readChangeContent(options: {
       const listedPath = record.slice(separator + 1);
       const fields = header.split(" ");
       if (listedPath !== repoPath || !["100644", "100755"].includes(fields[0] ?? "")
-        || (source === "index" && fields[2] !== "0")) { side.state = "unsupported"; return result; }
-      const oid = fields[source === "head" ? 2 : 1];
+        || fields[2] !== "0") { side.state = "unsupported"; return result; }
+      const oid = fields[1];
       if (!oid || !/^[a-f0-9]{40,64}$/.test(oid)) return result;
-      const size = Number((await git(repoRoot, ["cat-file", "-s", oid])).toString());
+      const size = Number((await git(repoRoot, ["cat-file", "-s", "--end-of-options", oid])).toString());
       side.sizeBytes = size;
       if (size > IMAGE_PREVIEW_MAX_BYTES) { side.state = "too-large"; return result; }
-      bytes = await git(repoRoot, ["cat-file", "blob", oid], IMAGE_PREVIEW_MAX_BYTES + 1);
+      bytes = await git(repoRoot, ["cat-file", "blob", "--end-of-options", oid], IMAGE_PREVIEW_MAX_BYTES + 1);
+    } else {
+      if (treeOid === null) {
+        side.state = "missing";
+        return result;
+      }
+      let targetTree = "HEAD";
+      if (source === "head") {
+        try { await git(repoRoot, ["rev-parse", "--verify", "--quiet", "HEAD"]); }
+        catch (error) {
+          if ((error as { code?: number }).code === 1) { side.state = "missing"; return result; }
+          throw error;
+        }
+      } else {
+        if (!treeOid || !/^[a-f0-9]{40,64}$/.test(treeOid)) return result;
+        targetTree = treeOid;
+      }
+      const listing = (await git(repoRoot, ["ls-tree", "-z", "--end-of-options", targetTree, "--", repoPath])).toString("utf8").split("\0").filter(Boolean);
+      if (!listing.length) { side.state = "missing"; return result; }
+      if (listing.length !== 1) { side.state = "unsupported"; return result; }
+      const record = listing[0]!;
+      const separator = record.indexOf("\t");
+      const header = record.slice(0, separator);
+      const listedPath = record.slice(separator + 1);
+      const fields = header.split(" ");
+      if (listedPath !== repoPath || !["100644", "100755"].includes(fields[0] ?? "")) {
+        side.state = "unsupported"; return result;
+      }
+      const oid = fields[2];
+      if (!oid || !/^[a-f0-9]{40,64}$/.test(oid)) return result;
+      const size = Number((await git(repoRoot, ["cat-file", "-s", "--end-of-options", oid])).toString());
+      side.sizeBytes = size;
+      if (size > IMAGE_PREVIEW_MAX_BYTES) { side.state = "too-large"; return result; }
+      bytes = await git(repoRoot, ["cat-file", "blob", "--end-of-options", oid], IMAGE_PREVIEW_MAX_BYTES + 1);
     }
     side.sizeBytes = bytes.length;
     side.version = createHash("sha256").update(bytes).digest("hex");

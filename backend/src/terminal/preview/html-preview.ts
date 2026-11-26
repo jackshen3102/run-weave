@@ -23,6 +23,9 @@ export async function resolveHtmlChangePreview(params: {
   requestedPath: string;
   changeKind: TerminalPreviewChangeKind;
   version: string;
+  mainBranch?: string | null;
+  baseOid?: string;
+  commitOid?: string;
 }): Promise<{ htmlPath: string; content: Buffer }> {
   if (!/\.html?$/i.test(params.requestedPath)) throw new TerminalPreviewError("Only HTML files can be previewed", 415);
   const diff = await getPreviewFileDiff(params);

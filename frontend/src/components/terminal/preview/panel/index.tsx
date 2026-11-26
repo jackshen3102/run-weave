@@ -33,6 +33,7 @@ import { useTerminalFileTree } from "../files/use-tree";
 import { useTerminalMarkdownReferenceActions } from "../../markdown/use-actions";
 import { useTerminalPreviewFileMutations } from "../files/use-mutations";
 import { AgentObserverLauncher } from "../../automation/launcher";
+
 interface TerminalPreviewPanelProps {
   fileLinkIntent?: TerminalPreviewFileLinkIntent | null;
   onFileLinkDone?: () => void;
@@ -42,6 +43,7 @@ interface TerminalPreviewPanelProps {
   widthPx?: number;
   onEditProject: () => void;
 }
+
 function getPreviewParentDirectory(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/g, "");
   const lastSlashIndex = normalized.lastIndexOf("/");
@@ -49,17 +51,10 @@ function getPreviewParentDirectory(filePath: string): string {
 }
 
 function shouldIgnoreQuickSearchShortcut(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  if (
-    target.closest(
-      "input, textarea, select, [contenteditable='true'], .monaco-editor, .xterm",
-    )
-  ) {
-    return true;
-  }
-  return false;
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true'], .monaco-editor, .xterm"),
+  );
 }
 
 export function TerminalPreviewPanel({
@@ -74,76 +69,25 @@ export function TerminalPreviewPanel({
   const { apiBase, onAuthExpired, token, scope, connectionName } = useTerminalRuntime();
   const selectTool = useConversationTool(activeSession?.terminalSessionId ?? null, activePanelId);
   const {
-    closePreview,
-    setWidth,
-    expanded,
-    activeTool,
-    setActiveTool,
-    setExpanded,
-    setProjectPreviewMode,
-    setOpenFileQuery,
-    openFileInStore,
-    selectChange,
-    setMarkdownViewModeInStore,
-    setMarkdownSplitSourceWidthPct,
-    setSvgViewModeInStore,
-    setChangesViewModeInStore,
-    mode,
-    query,
-    selectedFilePath,
-    selectedChangePath,
-    selectedChangeKind,
-    markdownViewMode,
-    markdownSplitSourceWidthPct,
-    svgViewMode,
-    changesViewMode,
-    searchItems,
-    searchLoading,
-    searchError,
-    filePreview,
-    setFilePreview,
-    editorContent,
-    setEditorContent,
-    loadedMtimeMs,
-    saveLoading,
-    saveError,
-    saveConflict,
-    lastSavedAt,
-    fileLoading,
-    fileError,
-    changes,
-    changesLoading,
-    changesError,
-    fileDiff,
-    diffLoading,
-    diffError,
-    assetRefreshKey,
-    setAssetRefreshKey,
-    markdownScrollRatio,
-    setMarkdownScrollRatio,
-    pathCopied,
-    setPathCopied,
-    pathCopiedTimeoutRef,
-    projectId,
-    hasProjectPath,
-    absoluteInput,
-    panelWidth,
-    fileKind,
-    isFileEditable,
-    isDirty,
-    confirmDiscardDraft: confirmEditorDiscard,
-    handleRequestError,
-    loadFile,
-    loadDiff,
-    loadChanges,
-    saveFile,
-    replaceLoadedFile,
-    clearEditor,
-    clearFilePreview,
-    clearFileDiff,
-    selectedPath,
-    copyPath,
-    refreshFileSearch,
+    closePreview, setWidth, expanded, activeTool, setActiveTool, setExpanded,
+    setProjectPreviewMode, setOpenFileQuery, openFileInStore, selectChange,
+    setChangesScopeInStore, setSelectedCommitOidInStore,
+    setMarkdownViewModeInStore, setMarkdownSplitSourceWidthPct,
+    setSvgViewModeInStore, setChangesViewModeInStore,
+    mode, changesScope, query, selectedFilePath, selectedChangePath, selectedChangeKind,
+    markdownViewMode, markdownSplitSourceWidthPct, svgViewMode, changesViewMode,
+    searchItems, searchLoading, searchError, filePreview, setFilePreview,
+    editorContent, setEditorContent, loadedMtimeMs, saveLoading, saveError, saveConflict, lastSavedAt,
+    fileLoading, fileError, changes, changesLoading, changesError,
+    branchChanges, branchChangesLoading, branchChangesError,
+    branchCommits, branchCommitsLoading, branchCommitsError,
+    activeBaseOid, activeCommitOid, fileDiff, diffLoading, diffError,
+    assetRefreshKey, setAssetRefreshKey, markdownScrollRatio, setMarkdownScrollRatio,
+    pathCopied, setPathCopied, pathCopiedTimeoutRef, projectId, hasProjectPath,
+    absoluteInput, panelWidth, fileKind, isFileEditable, isDirty,
+    confirmDiscardDraft: confirmEditorDiscard, handleRequestError,
+    loadFile, loadDiff, loadChanges, saveFile, replaceLoadedFile,
+    clearEditor, clearFilePreview, clearFileDiff, selectedPath, copyPath, refreshFileSearch,
   } = useTerminalPreviewPanelData({
     apiBase,
     token,
@@ -156,11 +100,16 @@ export function TerminalPreviewPanel({
   const registerReviewGuard = useMemoizedFn((guard: (() => boolean) | null) => { reviewGuard.current = guard; });
   const confirmDiscardDraft = useMemoizedFn(() => confirmEditorDiscard() && (reviewGuard.current?.() ?? true));
 
-  const branchUpdates = useBranchUpdates(projectId, activeProject?.path ?? null,
-    activeTool === "preview" && mode === "branch-updates");
+  const branchUpdates = useBranchUpdates(
+    projectId,
+    activeProject?.path ?? null,
+    activeTool === "preview" && mode === "branch-updates",
+  );
 
   const quickSearch = useTerminalPreviewQuickSearch({
-    apiBase, token, projectId,
+    apiBase,
+    token,
+    projectId,
     onRequestError: handleRequestError,
   });
 
@@ -181,10 +130,7 @@ export function TerminalPreviewPanel({
     selectedFilePath,
     copyPath,
     loadFile: async (filePath) => {
-      if (
-        isSupportedTerminalImagePreviewPath(filePath) ||
-        isSupportedTerminalVideoPreviewPath(filePath)
-      ) {
+      if (isSupportedTerminalImagePreviewPath(filePath) || isSupportedTerminalVideoPreviewPath(filePath)) {
         setAssetRefreshKey((current) => current + 1);
         return;
       }
@@ -204,7 +150,8 @@ export function TerminalPreviewPanel({
     setMarkdownScrollRatio,
     confirmDiscardDraft,
   });
-  const markdownReference = useTerminalMarkdownReferenceActions({ scope,
+  const markdownReference = useTerminalMarkdownReferenceActions({
+    scope,
     activeSession,
     activePanelId,
     projectId,
@@ -227,16 +174,12 @@ export function TerminalPreviewPanel({
   }, [projectId, projectPath, resetTree]);
 
   useEffect(() => {
-    if (mode === "explorer") {
-      void loadRootDirectory();
-    }
+    if (mode === "explorer") void loadRootDirectory();
   }, [loadRootDirectory, mode, projectId, projectPath]);
 
   const invalidateFileTreeParents = useMemoizedFn((paths: string[]): void => {
     const directories = new Set(paths.map(getPreviewParentDirectory));
-    for (const directoryPath of directories) {
-      invalidateDirectory(directoryPath);
-    }
+    for (const directoryPath of directories) invalidateDirectory(directoryPath);
   });
 
   const mutations = useTerminalPreviewFileMutations({
@@ -263,11 +206,7 @@ export function TerminalPreviewPanel({
 
   const openPreviewFile = useMemoizedFn(
     (filePath: string, target?: { line?: number; column?: number }): void => {
-      if (!projectId || !confirmDiscardDraft()) {
-        return;
-      }
-      // Reopening the same file must discard an approved draft as well; query
-      // structural sharing may otherwise keep the editor's loaded object intact.
+      if (!projectId || !confirmDiscardDraft()) return;
       if (isDirty && filePreview) replaceLoadedFile(filePreview);
       quickSearch.closeSearch();
       setActiveTool("preview");
@@ -276,54 +215,49 @@ export function TerminalPreviewPanel({
       if (projectRelative) void fileTree.revealFile(filePath);
       clearFilePreview(filePath);
       setMarkdownScrollRatio(0);
-      markdownReference.setTarget(filePath, target?.line ? { line: target.line, column: target.column ?? 1 } : undefined);
+      markdownReference.setTarget(
+        filePath,
+        target?.line ? { line: target.line, column: target.column ?? 1 } : undefined,
+      );
     },
   );
 
-  const revealQuickSearchDirectory = useMemoizedFn(
-    (directoryPath: string): void => {
-      if (!projectId) {
-        return;
-      }
-      quickSearch.closeSearch();
-      setActiveTool("preview");
-      setProjectPreviewMode(projectId, "explorer");
-      void fileTree.revealDirectory(directoryPath);
-    },
-  );
+  const revealQuickSearchDirectory = useMemoizedFn((directoryPath: string): void => {
+    if (!projectId) return;
+    quickSearch.closeSearch();
+    setActiveTool("preview");
+    setProjectPreviewMode(projectId, "explorer");
+    void fileTree.revealDirectory(directoryPath);
+  });
 
-  const handleQuickSearchShortcut = useMemoizedFn(
-    (event: KeyboardEvent): void => {
-      if (
-        event.defaultPrevented ||
-        event.altKey ||
-        quickSearch.open ||
-        activeTool !== "preview" ||
-        !projectId ||
-        !hasProjectPath ||
-        !(event.metaKey || event.ctrlKey) ||
-        shouldIgnoreQuickSearchShortcut(event.target)
-      ) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if (key === "p" && !event.shiftKey) {
-        event.preventDefault();
-        quickSearch.openSearch("files");
-        return;
-      }
-      if (key === "f" && event.shiftKey) {
-        event.preventDefault();
-        quickSearch.openSearch("content");
-      }
-    },
-  );
+  const handleQuickSearchShortcut = useMemoizedFn((event: KeyboardEvent): void => {
+    if (
+      event.defaultPrevented ||
+      event.altKey ||
+      quickSearch.open ||
+      activeTool !== "preview" ||
+      !projectId ||
+      !hasProjectPath ||
+      !(event.metaKey || event.ctrlKey) ||
+      shouldIgnoreQuickSearchShortcut(event.target)
+    ) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (key === "p" && !event.shiftKey) {
+      event.preventDefault();
+      quickSearch.openSearch("files");
+      return;
+    }
+    if (key === "f" && event.shiftKey) {
+      event.preventDefault();
+      quickSearch.openSearch("content");
+    }
+  });
 
   useEffect(() => {
     window.addEventListener("keydown", handleQuickSearchShortcut);
-    return () => {
-      window.removeEventListener("keydown", handleQuickSearchShortcut);
-    };
+    return () => window.removeEventListener("keydown", handleQuickSearchShortcut);
   }, [handleQuickSearchShortcut]);
 
   const openFileMode = (): void => {
@@ -335,12 +269,7 @@ export function TerminalPreviewPanel({
   } else if (!hasProjectPath && !((mode === "file" || mode === "explorer") && selectedFilePath?.startsWith("/"))) {
     previewBody = renderPreviewEmpty(
       "Set a project path to use Preview",
-      <Button
-        type="button"
-        size="sm"
-        className="rounded-lg"
-        onClick={onEditProject}
-      >
+      <Button type="button" size="sm" className="rounded-lg" onClick={onEditProject}>
         Set project path
       </Button>,
     );
@@ -348,9 +277,13 @@ export function TerminalPreviewPanel({
     previewBody = (
       <TerminalPreviewFileView
         activeProject={activeProject}
-        reviewContext={{ scope, projectId: activeProject.projectId,
-          terminalSessionId: activeSession?.terminalSessionId ?? null, panelId: markdownReference.targetPanelId,
-          available: markdownReference.canInsertCode }}
+        reviewContext={{
+          scope,
+          projectId: activeProject.projectId,
+          terminalSessionId: activeSession?.terminalSessionId ?? null,
+          panelId: markdownReference.targetPanelId,
+          available: markdownReference.canInsertCode,
+        }}
         onInsertReview={markdownReference.insertReview}
         registerReviewGuard={registerReviewGuard}
         fileTree={fileTree}
@@ -386,9 +319,7 @@ export function TerminalPreviewPanel({
           onContentChange: setEditorContent,
           onOverwrite: () => void saveFile({ overwrite: true }),
           onReload: () => {
-            if (selectedFilePath && confirmDiscardDraft()) {
-              void loadFile(selectedFilePath);
-            }
+            if (selectedFilePath && confirmDiscardDraft()) void loadFile(selectedFilePath);
           },
         }}
         display={{
@@ -410,17 +341,32 @@ export function TerminalPreviewPanel({
     );
   } else if (mode === "branch-updates") {
     const readingKey = JSON.stringify([scope, projectId, activeProject.path]);
-    previewBody = <BranchUpdatesView key={readingKey} readingKey={readingKey}
-      projectName={activeProject.name} connectionName={connectionName}
-      data={branchUpdates.data} error={branchUpdates.error} loading={branchUpdates.isFetching} refresh={branchUpdates.refresh} />;
+    previewBody = (
+      <BranchUpdatesView
+        key={readingKey}
+        readingKey={readingKey}
+        projectName={activeProject.name}
+        connectionName={connectionName}
+        data={branchUpdates.data}
+        error={branchUpdates.error}
+        loading={branchUpdates.isFetching}
+        refresh={branchUpdates.refresh}
+      />
+    );
   } else if (mode === "changes") {
     previewBody = (
       <TerminalPreviewChangesView
         activeProject={activeProject}
-        changes={{
-          data: changes,
-          error: changesError,
-          loading: changesLoading,
+        changes={{ data: changes, error: changesError, loading: changesLoading }}
+        branchChanges={{
+          data: branchChanges,
+          error: branchChangesError,
+          loading: branchChangesLoading,
+        }}
+        branchCommits={{
+          data: branchCommits,
+          error: branchCommitsError,
+          loading: branchCommitsLoading,
         }}
         diff={{ data: fileDiff, error: diffError, loading: diffLoading }}
         markdownReference={{
@@ -431,19 +377,32 @@ export function TerminalPreviewPanel({
           setTarget: markdownReference.setTarget,
         }}
         selection={{
+          scope: changesScope,
           kind: selectedChangeKind,
           path: selectedChangePath,
+          baseOid: activeBaseOid,
+          commitOid: activeCommitOid,
           viewMode: changesViewMode,
         }}
         commands={{
           openFile: openFilePath,
           openFileMode,
-          reloadDiff: (filePath, kind) => void loadDiff(filePath, kind),
+          reloadDiff: (filePath, kind) =>
+            void loadDiff(filePath, kind, {
+              baseOid: kind === "branch" ? activeBaseOid : undefined,
+              commitOid: kind === "commit" ? activeCommitOid : undefined,
+            }),
           requestDelete: mutations.requestDelete,
           requestRename: mutations.requestRename,
           requestReset: mutations.requestReset,
           select: (filePath, kind) => {
             if (projectId) selectChange(projectId, filePath, kind);
+          },
+          selectScope: (nextScope) => {
+            if (projectId) setChangesScopeInStore(projectId, nextScope);
+          },
+          selectCommit: (commitOid) => {
+            if (projectId) setSelectedCommitOidInStore(projectId, commitOid);
           },
           setViewMode: setChangesViewMode,
         }}
@@ -453,14 +412,22 @@ export function TerminalPreviewPanel({
     previewBody = renderPreviewEmpty("Loading preview...");
   }
   const raceBody = <TerminalRacePanel />;
-  const automationBody = (
-    <AgentObserverLauncher active={activeTool === "automation"} />
-  );
+  const automationBody = <AgentObserverLauncher active={activeTool === "automation"} />;
   return (
     <>
       <TerminalPreviewPanelShell
         codeReviewBody={activeTool === "code-review" ? <CodeReviewReportView key={scope} /> : null}
-        conversationBody={activeTool === "conversation" ? <TerminalConversationSidecar projectId={activeProject?.projectId ?? ""} title={activeSession?.alias ?? "当前会话"} sessionId={activeSession?.terminalSessionId ?? null} panelId={activePanelId} onOpenFile={openPreviewFile} /> : null}
+        conversationBody={
+          activeTool === "conversation" ? (
+            <TerminalConversationSidecar
+              projectId={activeProject?.projectId ?? ""}
+              title={activeSession?.alias ?? "当前会话"}
+              sessionId={activeSession?.terminalSessionId ?? null}
+              panelId={activePanelId}
+              onOpenFile={openPreviewFile}
+            />
+          ) : null
+        }
         layout={{
           expanded,
           panelWidth,
@@ -470,17 +437,12 @@ export function TerminalPreviewPanel({
           onStartResize: startResize,
           onToggleExpanded: () => setExpanded(!expanded),
         }}
-        tools={{
-          activeTool,
-          onSetActiveTool: selectTool,
-        }}
+        tools={{ activeTool, onSetActiveTool: selectTool }}
         navigation={{
           activeProject,
           mode,
           onSetMode: (nextMode) => {
-            if (projectId && confirmDiscardDraft()) {
-              setProjectPreviewMode(projectId, nextMode);
-            }
+            if (projectId && confirmDiscardDraft()) setProjectPreviewMode(projectId, nextMode);
           },
         }}
         actions={{
@@ -527,8 +489,10 @@ export function TerminalPreviewPanel({
           changesViewMode,
           fileKind:
             mode === "changes" && selectedChangePath
-              ? fileDiff?.path === selectedChangePath && fileDiff.changeKind === selectedChangeKind
-                && fileDiff.contentKind && (fileDiff.contentKind !== "text" || fileDiff.diffState === "unavailable")
+              ? fileDiff?.path === selectedChangePath &&
+                fileDiff.changeKind === selectedChangeKind &&
+                fileDiff.contentKind &&
+                (fileDiff.contentKind !== "text" || fileDiff.diffState === "unavailable")
                 ? "unsupported"
                 : getTerminalPreviewFileKind(selectedChangePath, null)
               : fileKind,
@@ -546,7 +510,11 @@ export function TerminalPreviewPanel({
         body={previewBody}
         raceBody={raceBody}
         handoffBody={<TerminalHandoffPanel sessionId={activeSession?.terminalSessionId ?? null} />}
-        supervisionBody={activeTool === "task-supervision" ? <TerminalTaskSupervisionPanel sessionId={activeSession?.terminalSessionId ?? null} /> : null}
+        supervisionBody={
+          activeTool === "task-supervision" ? (
+            <TerminalTaskSupervisionPanel sessionId={activeSession?.terminalSessionId ?? null} />
+          ) : null
+        }
       />
 
       <TerminalPreviewQuickSearch
@@ -564,13 +532,15 @@ export function TerminalPreviewPanel({
         onRevealDirectory={revealQuickSearchDirectory}
       />
 
-      {fileLinkIntent ? <TerminalPreviewFileLink
-        key={fileLinkIntent.id}
-        intent={fileLinkIntent}
-        onOpen={openPreviewFile}
-        onDone={() => onFileLinkDone?.()}
-        onError={handleRequestError}
-      /> : null}
+      {fileLinkIntent ? (
+        <TerminalPreviewFileLink
+          key={fileLinkIntent.id}
+          intent={fileLinkIntent}
+          onOpen={openPreviewFile}
+          onDone={() => onFileLinkDone?.()}
+          onError={handleRequestError}
+        />
+      ) : null}
       <TerminalPreviewRenameDialog
         error={mutations.error}
         path={mutations.renamePath}

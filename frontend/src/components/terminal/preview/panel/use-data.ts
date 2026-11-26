@@ -3,7 +3,9 @@ import { useMemoizedFn } from "ahooks";
 import { useShallow } from "zustand/react/shallow";
 import type {
   TerminalPreviewChangeKind,
+  TerminalPreviewChangeScope,
   TerminalPreviewFileResponse,
+  TerminalPreviewWritableChangeKind,
 } from "@runweave/shared/terminal/preview";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import {
@@ -39,7 +41,7 @@ interface PreviewFileMutationTarget {
 
 interface PreviewChangeResetTarget {
   path: string;
-  kind: TerminalPreviewChangeKind;
+  kind: TerminalPreviewWritableChangeKind;
 }
 
 interface UseTerminalPreviewPanelDataArgs {
@@ -71,6 +73,8 @@ export function useTerminalPreviewPanelData({
     setOpenFileQuery,
     openFileInStore,
     selectChange,
+    setChangesScopeInStore,
+    setSelectedCommitOidInStore,
     setMarkdownViewModeInStore,
     setMarkdownSplitSourceWidthPct,
     setSvgViewModeInStore,
@@ -88,6 +92,8 @@ export function useTerminalPreviewPanelData({
       setOpenFileQuery: state.setOpenFileQuery,
       openFileInStore: state.openFile,
       selectChange: state.selectChange,
+      setChangesScopeInStore: state.setChangesScope,
+      setSelectedCommitOidInStore: state.setSelectedCommitOid,
       setMarkdownViewModeInStore: state.setMarkdownViewMode,
       setMarkdownSplitSourceWidthPct: state.setMarkdownSplitSourceWidthPct,
       setSvgViewModeInStore: state.setSvgViewMode,
@@ -108,8 +114,25 @@ export function useTerminalPreviewPanelData({
   const mode = projectState?.mode ?? null;
   const query = projectState?.openFileQuery ?? "";
   const selectedFilePath = projectState?.selectedFilePath;
-  const selectedChangePath = projectState?.selectedChangePath;
-  const selectedChangeKind = projectState?.selectedChangeKind;
+  const changesScope: TerminalPreviewChangeScope =
+    projectState?.changesScope ?? "working";
+  const selectedCommitOid = projectState?.selectedCommitOid;
+  const selectedChangePath =
+    changesScope === "branch"
+      ? projectState?.selectedBranchChangePath
+      : changesScope === "commits"
+        ? projectState?.selectedCommitChangePath
+        : projectState?.selectedChangePath;
+  const selectedChangeKind: TerminalPreviewChangeKind | undefined =
+    changesScope === "branch"
+      ? selectedChangePath
+        ? "branch"
+        : undefined
+      : changesScope === "commits"
+        ? selectedChangePath
+          ? "commit"
+          : undefined
+        : projectState?.selectedChangeKind;
   const markdownViewMode =
     projectState?.markdownViewMode ?? DEFAULT_MARKDOWN_VIEW_MODE;
   const markdownSplitSourceWidthPct =
@@ -129,6 +152,8 @@ export function useTerminalPreviewPanelData({
     projectId,
     hasProjectPath,
     mode,
+    changesScope,
+    selectedCommitOid,
     query,
     selectedFilePath,
     selectedChangePath,
@@ -136,6 +161,8 @@ export function useTerminalPreviewPanelData({
   });
   const filePreview = previewQueries.file.data ?? null;
   const changes = previewQueries.changes.data ?? null;
+  const branchChanges = previewQueries.branchChanges.data ?? null;
+  const branchCommits = previewQueries.branchCommits.data ?? null;
   const fileDiff = previewQueries.diff.data ?? null;
   const fileKind = selectedFilePath
     ? getTerminalPreviewFileKind(selectedFilePath, filePreview?.language)
@@ -216,7 +243,7 @@ export function useTerminalPreviewPanelData({
     });
   });
 
-  const { loadDiff, loadChanges } = useTerminalPreviewChangeRefresh({
+  const { loadDiff, loadChanges, recoverStaleDiff } = useTerminalPreviewChangeRefresh({
     apiBase,
     token,
     projectId,
@@ -225,6 +252,93 @@ export function useTerminalPreviewPanelData({
     queryClient: previewQueries.queryClient,
     onError: handleRequestError,
   });
+
+  const lastStaleRecoveryKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const err = previewQueries.diff.error;
+    if (
+      !err ||
+      !projectId ||
+      !selectedChangePath ||
+      !selectedChangeKind ||
+      !(err instanceof HttpError) ||
+      err.status !== 409 ||
+      err.code !== "terminal_preview_stale_diff"
+    ) {
+      return;
+    }
+    const recoveryKey = `${projectId}:${selectedChangeKind}:${selectedChangePath}:${previewQueries.activeBaseOid ?? previewQueries.activeCommitOid ?? ""}`;
+    if (lastStaleRecoveryKeyRef.current === recoveryKey) {
+      return;
+    }
+    lastStaleRecoveryKeyRef.current = recoveryKey;
+    void recoverStaleDiff(selectedChangePath, selectedChangeKind);
+  }, [
+    previewQueries.activeBaseOid,
+    previewQueries.activeCommitOid,
+    previewQueries.diff.error,
+    projectId,
+    recoverStaleDiff,
+    selectedChangeKind,
+    selectedChangePath,
+  ]);
+
+  useEffect(() => {
+    const err = previewQueries.branchCommits.error;
+    if (
+      !err ||
+      !projectId ||
+      changesScope !== "commits" ||
+      !selectedCommitOid ||
+      !(err instanceof HttpError) ||
+      err.status !== 409
+    ) {
+      return;
+    }
+    setSelectedCommitOidInStore(projectId, undefined);
+  }, [
+    changesScope,
+    previewQueries.branchCommits.error,
+    projectId,
+    selectedCommitOid,
+    setSelectedCommitOidInStore,
+  ]);
+
+  useEffect(() => {
+    if (!projectId || mode !== "changes") return;
+    if (changesScope === "branch" && branchChanges?.state === "ready") {
+      if (branchChanges.files.length === 0) {
+        if (projectState?.selectedBranchChangePath) {
+          useTerminalPreviewStore.getState().clearSelectedChange(projectId, "branch");
+        }
+        return;
+      }
+      const existing = projectState?.selectedBranchChangePath;
+      if (!existing || !branchChanges.files.some((f) => f.path === existing)) {
+        selectChange(projectId, branchChanges.files[0]!.path, "branch");
+      }
+    } else if (changesScope === "commits" && branchCommits?.state === "ready") {
+      if (branchCommits.files.length === 0) {
+        if (projectState?.selectedCommitChangePath) {
+          useTerminalPreviewStore.getState().clearSelectedChange(projectId, "commits");
+        }
+        return;
+      }
+      const existing = projectState?.selectedCommitChangePath;
+      if (!existing || !branchCommits.files.some((f) => f.path === existing)) {
+        selectChange(projectId, branchCommits.files[0]!.path, "commit");
+      }
+    }
+  }, [
+    branchChanges,
+    branchCommits,
+    changesScope,
+    mode,
+    projectId,
+    projectState?.selectedBranchChangePath,
+    projectState?.selectedCommitChangePath,
+    selectChange,
+  ]);
 
   useEffect(() => {
     if (changesRefreshRevision === 0 || mode !== "changes") {
@@ -260,6 +374,8 @@ export function useTerminalPreviewPanelData({
           projectId,
           path,
           kind: changeKind,
+          baseOid: changeKind === "branch" ? previewQueries.activeBaseOid : undefined,
+          commitOid: changeKind === "commit" ? previewQueries.activeCommitOid : undefined,
         }),
         exact: true,
       });
@@ -332,11 +448,15 @@ export function useTerminalPreviewPanelData({
     setOpenFileQuery,
     openFileInStore,
     selectChange,
+    setChangesScopeInStore,
+    setSelectedCommitOidInStore,
     setMarkdownViewModeInStore,
     setMarkdownSplitSourceWidthPct,
     setSvgViewModeInStore,
     setChangesViewModeInStore,
     mode,
+    changesScope,
+    selectedCommitOid,
     query,
     selectedFilePath,
     selectedChangePath,
@@ -365,10 +485,25 @@ export function useTerminalPreviewPanelData({
       ? handleRequestError(previewQueries.file.error)
       : null,
     changes,
-    changesLoading: previewQueries.changes.isFetching,
+    changesLoading:
+      previewQueries.changes.isFetching ||
+      (changesScope === "branch" && previewQueries.branchChanges.isFetching) ||
+      (changesScope === "commits" && previewQueries.branchCommits.isFetching),
     changesError: previewQueries.changes.error
       ? handleRequestError(previewQueries.changes.error)
       : null,
+    branchChanges,
+    branchChangesLoading: previewQueries.branchChanges.isFetching,
+    branchChangesError: previewQueries.branchChanges.error
+      ? handleRequestError(previewQueries.branchChanges.error)
+      : null,
+    branchCommits,
+    branchCommitsLoading: previewQueries.branchCommits.isFetching,
+    branchCommitsError: previewQueries.branchCommits.error
+      ? handleRequestError(previewQueries.branchCommits.error)
+      : null,
+    activeBaseOid: previewQueries.activeBaseOid,
+    activeCommitOid: previewQueries.activeCommitOid,
     fileDiff,
     diffLoading: previewQueries.diff.isFetching,
     diffError: previewQueries.diff.error
