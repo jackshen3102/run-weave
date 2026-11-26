@@ -1,11 +1,11 @@
 import Foundation
 
-struct TerminalAgentSettingsResponse: Decodable, Equatable {
+struct TerminalAgentSettingsResponse: Codable, Equatable {
   let settings: TerminalAgentSettings
   let models: [AgentModelOption]
 }
 
-struct TerminalAgentSettings: Decodable, Equatable {
+struct TerminalAgentSettings: Codable, Equatable {
   let terminalSessionId: String
   let panelId: String?
   let threadId: String
@@ -16,7 +16,15 @@ struct TerminalAgentSettings: Decodable, Equatable {
 }
 
 struct TerminalAgentSettingsFailure: Decodable, LocalizedError {
+  enum CodingKeys: String, CodingKey { case code, message }
   let code: String
   let message: String
+  var status: Int?
   var errorDescription: String? { message }
+
+  static func decode(status: Int, data: Data) -> TerminalAgentSettingsFailure? {
+    guard var failure = try? JSONDecoder().decode(TerminalAgentSettingsFailure.self, from: data) else { return nil }
+    failure.status = status
+    return failure
+  }
 }

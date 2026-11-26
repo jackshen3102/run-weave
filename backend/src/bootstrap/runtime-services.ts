@@ -145,17 +145,11 @@ async function assembleRuntimeServices(
     terminalQuickInputStore.dispose(),
   );
   await terminalQuickInputStore.initialize();
-  const agentModelCatalogStore = new AgentModelCatalogStore(
-    storagePaths.agentModelCatalogStoreFile,
-  );
-  resources.defer("agent-model-catalog", () =>
-    agentModelCatalogStore.dispose(),
-  );
+  const agentModelCatalogStore = new AgentModelCatalogStore(storagePaths.agentModelCatalogStoreFile);
+  resources.defer("agent-model-catalog", () => agentModelCatalogStore.dispose());
   await agentModelCatalogStore.initialize();
-  const agentModelCatalogService = new AgentModelCatalogService(
-    agentModelCatalogStore,
-    process.env,
-  );
+  const agentModelCatalogService = new AgentModelCatalogService(agentModelCatalogStore, process.env);
+  resources.defer("agent-model-catalog-service", () => agentModelCatalogService.dispose());
   const terminalQuickInputService = new TerminalQuickInputService(
     terminalQuickInputStore,
   );

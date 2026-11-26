@@ -16,6 +16,7 @@ import { beginTerminalReturn, TerminalInputBusyError } from "./input-admission";
 import { codexAppServerClient, traexAppServerClient } from "../../voice/codex-app-server-client";
 import { probeAgyCatalog } from "../../agent-model-catalog/agy";
 import { probeCodexCatalog } from "../../agent-model-catalog/codex";
+import type { AgentModelCatalogService } from "../../agent-model-catalog/service";
 import { probeTraexCatalog } from "../../agent-model-catalog/traex";
 
 const catalogCache = new Map<TerminalAgentSettingsProvider, {
@@ -89,8 +90,29 @@ async function resolveTarget(
   return { session, pane: paneTarget, panelId: panel.id, provider, threadId };
 }
 
-async function modelsFor(provider: TerminalAgentSettingsProvider): Promise<TerminalAgentModelOption[]> {
-  const cached = catalogCache.get(provider);
+async function modelsFor(
+  provider: TerminalAgentSettingsProvider,
+  catalogService?: AgentModelCatalogService,
+  options?: { requireFresh?: boolean; forceProbe?: boolean },
+): Promise<TerminalAgentModelOption[]> {
+  if (catalogService) {
+    const catalog = await catalogService.getProviderCatalogCachedFirst(provider, options);
+    if (
+      catalog.availability !== "available" ||
+      !catalog.models.length ||
+      (options?.requireFresh && catalog.errorCode !== null)
+    ) {
+      fail(503, "agent_settings_unavailable", "当前账号的模型目录暂不可用");
+    }
+    return catalog.models.map((model) => ({
+      id: model.id,
+      label: model.label,
+      description: model.description,
+      defaultReasoningEffort: model.defaultReasoningEffort,
+      reasoningEfforts: model.reasoningEfforts,
+    }));
+  }
+  const cached = !options?.forceProbe ? catalogCache.get(provider) : undefined;
   if (cached && cached.expires > Date.now()) return cached.models;
   try {
     const catalog = provider === "codex"
@@ -203,10 +225,11 @@ export async function getTerminalAgentSettings(
   tmux: TmuxService,
   session: TerminalSessionRecord,
   panelId?: string,
+  catalogService?: AgentModelCatalogService,
 ): Promise<TerminalAgentSettingsResponse> {
   const target = await resolveTarget(manager, tmux, session, panelId);
   const [models, thread] = await Promise.all([
-    modelsFor(target.provider),
+    modelsFor(target.provider, catalogService),
     readThread(target.provider, target.threadId),
   ]);
   const latest = await resolveTarget(manager, tmux, session, target.panelId);
@@ -380,6 +403,7 @@ export async function updateTerminalAgentSettings(
   tmux: TmuxService,
   session: TerminalSessionRecord,
   request: UpdateTerminalAgentSettingsRequest,
+  catalogService?: AgentModelCatalogService,
 ): Promise<TerminalAgentSettingsResponse> {
   let release: () => void;
   try { release = beginTerminalReturn(session); }
@@ -390,10 +414,18 @@ export async function updateTerminalAgentSettings(
   try {
     const target = await resolveTarget(manager, tmux, session, request.panelId ?? undefined);
     if (target.threadId !== request.threadId) fail(409, "settings_changed", "Agent 会话已切换，请刷新设置");
-    const [models, thread] = await Promise.all([modelsFor(target.provider), readThread(target.provider, target.threadId)]);
+    const [initialModels, thread] = await Promise.all([
+      modelsFor(target.provider, catalogService, { requireFresh: true }),
+      readThread(target.provider, target.threadId),
+    ]);
+    let models = initialModels;
+    let model = models.find((option) => option.id === request.model);
+    if (!model && catalogService) {
+      models = await modelsFor(target.provider, catalogService, { requireFresh: true, forceProbe: true });
+      model = models.find((option) => option.id === request.model);
+    }
     const current = settingsFor(target, thread, models);
     if (current.revision !== request.expectedRevision) fail(409, "settings_changed", "模型设置已变化，请刷新后重试");
-    const model = models.find((option) => option.id === request.model);
     if (!model) fail(409, "model_unavailable", "所选模型已不可用");
     if (!model.reasoningEfforts.includes(request.reasoningEffort)) {
       fail(400, "reasoning_unsupported", "该模型不支持所选推理强度");

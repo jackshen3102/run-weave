@@ -17,9 +17,7 @@ final class AppSession: ObservableObject {
   @Published var checking = false
   let home = HomeState()
   let drafts = TerminalDraftStore()
-
   @Published var writing = false
-
   var attentionRetention: AttentionRetentionStore { home.attentionRetention }
   @Published var health = DeviceHealthSnapshot()
   @Published var error: String?
@@ -50,6 +48,7 @@ final class AppSession: ObservableObject {
   let knowledgeInbox = KnowledgeInboxModel()
   let deviceStatus = DeviceStatusStore()
   let attachmentDrafts = TerminalAttachmentDrafts()
+  let agentSettingsCache = TerminalAgentSettingsStore()
   let draftArchive = ConnectionDraftArchive()
   var draftSaveTask: Task<Void, Never>?
   var changingDraftScope = false
@@ -401,6 +400,7 @@ final class AppSession: ObservableObject {
       guard epoch == generation, !Task.isCancelled else { return }
       setDraft("", terminalID: id)
       attachmentDrafts.clear(terminalID: id)
+      agentSettingsCache.remove(scope: connection?.scope, terminalID: id)
       overviewRevision += 1
       loadingRequest += 1
       loading = false
@@ -524,6 +524,7 @@ final class AppSession: ObservableObject {
   }
 
   private func apply(_ batch: [TerminalEvent]) {
+    agentSettingsCache.apply(batch, scope: connection?.scope)
     // Only the authoritative deletion event ends this route; offline/exit are not deletion.
     if let id = terminal?.id,
       batch.contains(where: {

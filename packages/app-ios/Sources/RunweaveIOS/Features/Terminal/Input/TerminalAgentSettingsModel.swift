@@ -11,6 +11,10 @@ final class TerminalAgentSettingsModel: ObservableObject {
   @Published private(set) var saving = false
   @Published private(set) var error: String?
 
+  init(initial: TerminalAgentSettingsResponse? = nil) {
+    self.response = initial
+  }
+
   var selectedModel: AgentModelOption? {
     response?.models.first { $0.id == selectedModelID }
   }
@@ -26,23 +30,37 @@ final class TerminalAgentSettingsModel: ObservableObject {
   }
 
   func refresh(session: AppSession, terminalID: String) async {
-    guard let api = session.api, session.terminal?.id == terminalID else { return }
+    guard session.api != nil, session.terminal?.id == terminalID else { return }
+    if response == nil, !saving,
+      let cached = session.agentSettingsCache.cached(session: session, terminalID: terminalID) {
+      response = cached
+    }
     let generation = session.generation
+    let api = session.api
     do {
-      let next = try await api.terminalAgentSettings(id: terminalID)
+      let next = try await session.agentSettingsCache.refresh(session: session, terminalID: terminalID)
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID,
         next.settings.terminalSessionId == terminalID else { return }
       if !saving {
-        if response != next { response = next }
+        if response != next {
+          response = next
+          if page == .efforts, let id = selectedModelID,
+            !next.models.contains(where: { $0.id == id }) {
+            selectedModelID = nil
+            page = .models
+          }
+        }
         if page == .input, error != nil { error = nil }
       }
     } catch {
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID else { return }
-      if let failure = error as? TerminalAgentSettingsFailure,
-        failure.code == "agent_settings_unavailable" {
-        if response != nil { response = nil }
+      if TerminalAgentSettingsStore.isAuthoritativelyUnavailable(error) {
+        if !saving {
+          if response != nil { response = nil }
+          if page != .input { exit() }
+        }
       } else if page != .input {
         self.error = displayError(error)
       }
@@ -92,6 +110,7 @@ final class TerminalAgentSettingsModel: ObservableObject {
         next.settings.terminalSessionId == terminalID,
         next.settings.threadId == original.threadId,
         next.settings.provider == original.provider else { return }
+      session.agentSettingsCache.store(next, session: session, terminalID: terminalID)
       response = next
       page = .input
       selectedModelID = nil
@@ -100,7 +119,7 @@ final class TerminalAgentSettingsModel: ObservableObject {
         session.api === api, session.terminal?.id == terminalID else { return }
       self.error = displayError(error)
       // Keep the user's model choice visible. A fresh snapshot resolves a stale revision.
-      if let latest = try? await api.terminalAgentSettings(id: terminalID),
+      if let latest = try? await session.agentSettingsCache.refresh(session: session, terminalID: terminalID),
         session.generation == generation, session.api === api,
         session.terminal?.id == terminalID {
         response = latest

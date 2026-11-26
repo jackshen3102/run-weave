@@ -36,6 +36,7 @@ extension AppSession {
     draftSaveTask = nil
     guard let connection else { return }
     discardDraftContents(connection)
+    agentSettingsCache.removeScope(connection.scope)
     do {
       try draftArchive.remove(connection.scope)
       unreadableDraftScopes.remove(connection.scope)

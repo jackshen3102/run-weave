@@ -266,6 +266,7 @@ Codex / Trae / Traex / TraeCLI 与 Pi 的输入面板还提供“排队”：前
 通过 `prompt_replace`、`submit=true` 和 `submitKey` 一次提交完整草稿。队列展示与消费归 Agent CLI，
 iOS 不保存第二套队列；Claude 和普通 Shell 不显示入口。排队确认后保留面板和输入焦点，
 只清理本次发送的草稿与附件；失败保留草稿且不自动重发。普通发送与停止语义保持不变。
+Codex / TraeX / AGY 的当前终端模型选择按连接 scope 与 terminal ID 保存在本机受保护缓存中：终端页预热并在打开输入面板首帧同步读取缓存展示，后台拉取最新设置对比后仅在有变更时更新缓存与界面，确认无可用 Agent 会话、终端回到普通 shell、删除终端或移除连接时清理缓存。
 
 ## 终端内置网页
 

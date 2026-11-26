@@ -1,6 +1,6 @@
 import Foundation
 
-struct AgentModelOption: Decodable, Identifiable, Equatable {
+struct AgentModelOption: Codable, Identifiable, Equatable {
   let id: String
   let label: String
   let description: String
