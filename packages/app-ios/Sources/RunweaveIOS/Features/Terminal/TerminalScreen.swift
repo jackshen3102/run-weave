@@ -223,6 +223,11 @@ struct TerminalScreen: View {
     .task(id: "side-chat:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status)") {
       if sideChat.canRead { sideChat.startPolling() } else { sideChat.suspend() }
     }
+    .task(id: "agent-settings:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status):\(details.id):\(presentation.value.state?.state ?? ""):\(presentation.value.state?.agent ?? "")") {
+      guard session.foreground, session.authenticated, session.health.status == .online,
+        presentation.value.state?.state != "shell_idle" else { return }
+      _ = try? await session.agentSettingsCache.refresh(session: session, terminalID: details.id)
+    }
     .fullScreenCover(isPresented: $sideChat.visible, onDismiss: resumePresentation) {
       SideChatView(model: sideChat, session: session, title: title, terminalID: details.id)
         .mobileAnalyticsScreen(.sideChat)

@@ -15,18 +15,59 @@ import type { AgentCatalogProbe } from "./types";
 
 const catalogLogger = logger.child({ component: "agent-model-catalog" });
 const PROVIDERS: readonly AgentModelProvider[] = ["codex", "traex", "agy"];
+const CATALOG_FRESH_TTL_MS = 30_000;
 
 export class AgentModelCatalogService {
+  private readonly inFlight = new Map<
+    AgentModelProvider,
+    Promise<AgentProviderCatalog>
+  >();
+  private readonly freshUntil = new Map<AgentModelProvider, number>();
+  private disposed = false;
+
   constructor(
     private readonly store: AgentModelCatalogStore,
     private readonly env: NodeJS.ProcessEnv = process.env,
   ) {}
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    await Promise.allSettled(this.inFlight.values());
+  }
 
   async getCatalogs(): Promise<AgentModelCatalogsResponse> {
     const catalogs = await this.probeProviders(PROVIDERS);
     return {
       catalogs,
     };
+  }
+
+  async getProviderCatalogCachedFirst(
+    provider: AgentModelProvider,
+    options?: { requireFresh?: boolean; forceProbe?: boolean },
+  ): Promise<AgentProviderCatalog> {
+    if (!options?.forceProbe) {
+      const cached = this.store.getCatalog(provider);
+      const isFresh = (this.freshUntil.get(provider) ?? 0) > Date.now();
+      if (cached && cached.models.length > 0) {
+        if (isFresh) {
+          return this.catalogFromCache(provider, cached, {
+            availability: "available",
+            errorCode: null,
+          });
+        }
+        if (!options?.requireFresh) {
+          if (!this.disposed) {
+            void this.probeProvider(provider);
+          }
+          return this.catalogFromCache(provider, cached, {
+            availability: "available",
+            errorCode: null,
+          });
+        }
+      }
+    }
+    return this.probeProvider(provider);
   }
 
   private async probeProviders(
@@ -44,7 +85,23 @@ export class AgentModelCatalogService {
     >;
   }
 
-  private async probeProvider(
+  private probeProvider(
+    provider: AgentModelProvider,
+  ): Promise<AgentProviderCatalog> {
+    const existingFlight = this.inFlight.get(provider);
+    if (existingFlight) {
+      return existingFlight;
+    }
+    const flight = this.runProbeProvider(provider).finally(() => {
+      if (this.inFlight.get(provider) === flight) {
+        this.inFlight.delete(provider);
+      }
+    });
+    this.inFlight.set(provider, flight);
+    return flight;
+  }
+
+  private async runProbeProvider(
     provider: AgentModelProvider,
   ): Promise<AgentProviderCatalog> {
     try {
@@ -54,16 +111,26 @@ export class AgentModelCatalogService {
           : provider === "agy"
             ? await probeAgyCatalog(this.env)
             : await probeTraexCatalog(this.env);
-      const capturedAt = new Date().toISOString();
-      const persisted: PersistedAgentProviderCatalog = {
-        schemaVersion: 1,
-        provider,
-        command: provider,
-        version: result.version,
-        capturedAt,
-        models: result.models,
-      };
-      await this.store.saveCatalog(persisted);
+      const previous = this.disposed ? null : this.store.getCatalog(provider);
+      const unchanged =
+        previous !== null &&
+        previous.version === result.version &&
+        JSON.stringify(previous.models) === JSON.stringify(result.models);
+      const capturedAt = unchanged
+        ? previous.capturedAt
+        : new Date().toISOString();
+      if (!this.disposed && !unchanged) {
+        const persisted: PersistedAgentProviderCatalog = {
+          schemaVersion: 1,
+          provider,
+          command: provider,
+          version: result.version,
+          capturedAt,
+          models: result.models,
+        };
+        await this.store.saveCatalog(persisted);
+      }
+      this.freshUntil.set(provider, Date.now() + CATALOG_FRESH_TTL_MS);
       this.logWarnings(provider, result);
       return {
         provider,
@@ -76,7 +143,7 @@ export class AgentModelCatalogService {
         errorCode: null,
       };
     } catch (error) {
-      const cached = this.store.getCatalog(provider);
+      const cached = this.disposed ? null : this.store.getCatalog(provider);
       const cliMissing = isCommandMissing(error);
       catalogLogger.warn("agent.model-catalog.probe-failed", {
         message: `${provider} model catalog probe failed`,

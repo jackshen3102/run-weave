@@ -329,6 +329,7 @@ function createHttpApp(
       terminalStateService: services.terminalStateService,
       quickInputService: services.terminalQuickInputService,
       scheduledTaskService: services.scheduledTaskService,
+      agentModelCatalogService: services.agentModelCatalogService,
       activity: services.terminalActivity,
       workspaceServiceManager: services.workspaceServiceManager,
       worktreeDeletionOwnerHooks: {

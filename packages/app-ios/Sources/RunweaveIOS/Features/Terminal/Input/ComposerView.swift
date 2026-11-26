@@ -40,7 +40,7 @@ struct ComposerView: View {
   let session: AppSession
   let controller: SessionController
   @StateObject private var state: TerminalComposerState
-  @StateObject private var modelSettings = TerminalAgentSettingsModel()
+  @StateObject private var modelSettings: TerminalAgentSettingsModel
   private let textEditor: CommandTextEditor
   private let attachmentDrafts: TerminalAttachmentDrafts
   @ObservedObject private var attachmentRecord: TerminalAttachmentDrafts.Record
@@ -93,6 +93,8 @@ struct ComposerView: View {
     attachmentRecord = session.attachmentDrafts.record(terminalID)
     _state = StateObject(wrappedValue: TerminalComposerState(
       session: session, controller: controller, terminalID: terminalID))
+    _modelSettings = StateObject(wrappedValue: TerminalAgentSettingsModel(
+      initial: session.agentSettingsCache.cached(session: session, terminalID: terminalID)))
     _preventsDismissal = preventsDismissal
     _showingInstantReplies = showingInstantReplies
     _showingShortcuts = State(initialValue: shortcutsInitiallyVisible)
