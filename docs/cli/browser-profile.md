@@ -52,6 +52,15 @@ Backend 协议 2 的响应包含 `binding`（desktopId、hostId、generation、i
 不单独证明某次请求命中规则。缺失状态或旧桌面没有 resolver 时明确失败，不伪造 `stopped`，
 也不回退到未经解析的 Browser。桌面、远端 Backend 和 CLI 需一起更新。
 
+## CDP 标签页发现
+
+Terminal Browser 接管页面发起的新标签页时，新标签页继承打开它的 Profile 和 Group。
+初始导航提交后，开启发现的 CDP 客户端收到 `Target.targetCreated`，开启自动附着的客户端收到
+`Target.attachedToTarget`。初始加载失败时，仍然存在的标签页也会发布。若可识别来源标签页，
+事件会带 `openerId`，其中 `canAccessOpener: false` 表示页面无法通过该关系访问来源窗口。
+
+`Target.createTarget` 已移除原有的 10 个标签页上限。创建时仍校验连接 Group 和目标桌面窗口。
+
 ## 控制链路诊断
 
 ```bash
