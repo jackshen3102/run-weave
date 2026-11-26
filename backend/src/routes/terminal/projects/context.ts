@@ -61,11 +61,14 @@ export function registerTerminalProjectContextRoutes(
   const creation = new WorktreeCreationService(terminalSessionManager, options ?? {});
   const creationSchema = z.object({
     operationId: z.string().uuid(), name: z.string().transform(value => value.normalize("NFC")).pipe(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u)),
-    branch: z.string().min(1).max(255).optional(), baseRef: z.string().min(1).max(512),
+    branch: z.string().min(1).max(255).optional(), baseRef: z.string().max(512).optional(),
     checkoutExistingBranch: z.boolean().optional(), runSetup: z.boolean().optional(),
     approvedSetupRevision: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
     launchAgent: z.enum(["none", "codex", "claude", "pi", "traex", "agy"]).optional(),
-  }).strict();
+  }).strict().refine(value => value.checkoutExistingBranch === true || Boolean(value.baseRef?.trim()), {
+    message: "baseRef is required when creating a new branch",
+    path: ["baseRef"],
+  });
   const creationError = (res: import("express").Response, error: unknown) => {
     if (error instanceof WorktreeProvisionError) res.status(error.statusCode).json({ message: error.message });
     else {

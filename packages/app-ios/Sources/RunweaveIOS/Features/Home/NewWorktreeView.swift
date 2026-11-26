@@ -38,7 +38,7 @@ struct NewWorktreeView: View {
           }
         }
         Button(busy ? "创建中…" : "创建 Worktree") { Task { await submit() } }
-          .disabled(name.isEmpty || base.isEmpty || !session.canWrite || loadedGeneration != session.generation)
+          .disabled(name.isEmpty || (!existing && base.isEmpty) || !session.canWrite || loadedGeneration != session.generation)
       } else if failure == nil { ProgressView("正在读取配置…") }
       if let failure {
         Text(failure).foregroundColor(.red)

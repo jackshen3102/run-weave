@@ -66,7 +66,7 @@ export function WorktreeCreateDialog({
     const fields = {
       name,
       branch: branch || name,
-      baseRef,
+      ...(existing ? {} : { baseRef }),
       launchAgent: agent,
       checkoutExistingBranch: existing,
       runSetup: approved,

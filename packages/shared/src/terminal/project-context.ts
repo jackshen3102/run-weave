@@ -172,7 +172,7 @@ export interface CreateWorktreeContextRequest {
   operationId: string;
   name: string;
   branch?: string;
-  baseRef: string;
+  baseRef?: string;
   checkoutExistingBranch?: boolean;
   runSetup?: boolean;
   approvedSetupRevision?: string;

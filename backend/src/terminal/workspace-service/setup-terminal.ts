@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { settingText } from "@runweave/config-node";
 import type { CreateWorktreeContextRequest } from "@runweave/shared/terminal/project-context";
 import { terminalShellName } from "@runweave/shared/terminal/shell";
 import { prepareTerminalAgent } from "../application/agent-preparation";
@@ -124,12 +125,16 @@ export async function startWorktreeTerminal(
   const launch = async () => {
     if (!agent || agent === "none") return;
     validate();
+    const command =
+      agent === "pi"
+        ? "pi"
+        : (settingText(`agents.${agent}.binary`)?.trim() || agent);
     if (panel && tmux && agent !== "claude") {
       await prepareTerminalAgent(
         manager,
         session,
         options,
-        { agent, panelId: panel.id, prompt: "" },
+        { agent, panelId: panel.id, command, prompt: "" },
         {
           reuseReadyShell: true,
           supervisorInput: true,
@@ -137,8 +142,18 @@ export async function startWorktreeTerminal(
           validateSupervisorTarget: validate,
         },
       );
+    } else if (process.platform === "win32") {
+      await send(
+        /^[A-Za-z0-9._\\:-]+$/u.test(command)
+          ? command
+          : '"' + command.replaceAll('"', '""') + '"',
+      );
     } else {
-      await send(agent);
+      await send(
+        /^[A-Za-z0-9._/-]+$/u.test(command)
+          ? command
+          : "'" + command.replaceAll("'", "'\\''") + "'",
+      );
     }
   };
 

@@ -125,10 +125,12 @@ export class WorktreeCreationService {
       }
       if (this.parent(id).path !== parent.path)
         throw new WorktreeProvisionError("Parent project changed");
-      const commit = await WorktreeProvisioner.resolveCommit(
-        worktreeRoot,
-        request.baseRef,
-      );
+      const commit = request.checkoutExistingBranch
+        ? ""
+        : await WorktreeProvisioner.resolveCommit(
+            worktreeRoot,
+            request.baseRef ?? "",
+          );
       const directory = await WorktreeProvisioner.add(
         worktreeRoot,
         request.name,
