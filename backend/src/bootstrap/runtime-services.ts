@@ -19,7 +19,7 @@ import { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-att
 import { settingText, configuration } from "@runweave/config-node";
 import type { RuntimeServices } from "./runtime-services-contract";
 export type { RuntimeServices } from "./runtime-services-contract";
-import { createKnowledgeInbox } from "./knowledge-inbox";
+import { createKnowledgeInboxRuntime } from "./knowledge-inbox";
 import { createEvolutionStorage } from "./evolution-storage";
 import { prepareEvolutionRepositoryMigration } from "./evolution-migration";
 import { LocalBrowserService } from "../browser-local/service";
@@ -360,7 +360,7 @@ async function assembleRuntimeServices(
     terminalSessionManager,
     activityQueryService,
   );
-  const knowledgeInboxService = createKnowledgeInbox(resources, {
+  const { knowledgeInboxService, hookDiagnostics, agentToolchain } = createKnowledgeInboxRuntime(resources, {
     evolutionService, evolutionAnalysisStore, evolutionFoundationStore,
     activityQueryService, experienceService, terminalSessionManager,
   });
@@ -442,8 +442,7 @@ async function assembleRuntimeServices(
     serviceInstanceId ?? activityInstanceId,
     {
       activityStoreAvailable: () => activityStore?.isAvailable() ?? false,
-      evolutionRuntime,
-      workspaceServiceManager,
+      evolutionRuntime, workspaceServiceManager, hookDiagnostics, agentToolchain,
     },
   );
   resources.defer("runtime-status", () => runtimeStatus.dispose());
@@ -591,6 +590,7 @@ async function assembleRuntimeServices(
     evolutionRuntime,
     evolutionService,
     knowledgeInboxService,
+    hookDiagnostics,
     experienceService,
     experienceLearning,
     scheduledTaskRuntime: scheduledTasks.runtime,

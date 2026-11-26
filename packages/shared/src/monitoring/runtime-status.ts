@@ -22,6 +22,7 @@ export const RUNTIME_STATUS_CAPABILITY_IDS = [
   "desktop",
   "background-tasks",
   "research-mcp",
+  "agent-toolchain",
 ] as const;
 
 export type RuntimeStatusCapabilityId =

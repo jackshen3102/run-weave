@@ -18,7 +18,9 @@ Electron lifecycle ─ narrow preload IPC ─ renderer
 ```
 
 Backend 自身报告 process、Activity store、App Server event consumer、
-Evolution maintenance 与 Workspace Services。App Server 报告 process、Event Center、Cloud Sync 和
+Evolution maintenance、Workspace Services 与 Agent 工具链。Agent 工具链只从当前节点真实的
+Codex Toolkit 安装和 Hook 归属诊断生成状态；Backend 对检查结果
+做 15–60 秒短期缓存，普通状态轮询不按每个请求重复启动子进程。App Server 报告 process、Event Center、Cloud Sync 和
 Thread reconciler。Feishu Bridge 报告配置、单实例 lease、Lark WebSocket 和 Backend auth。Electron
 报告主进程、packaged Backend、LAN 地址、CDP Proxy、Companion 和各 Browser Profile 的 Whistle。
 
@@ -75,6 +77,11 @@ Backend 已启用飞书但未收到 Bridge 报告时表达“尚未收到状态�
   限制，前台窗口不产生系统通知。
 - 报告不包含凭证、聊天或 Terminal 内容、完整命令、cwd、环境变量和错误 stack。
 - 状态检查不发送飞书消息、不写 Terminal，也不启动、停止或重启业务服务。
+- `agent-toolchain` 子进程只允许产品固定的 `codex plugin list`，使用 `shell: false`、最小环境、
+  输出上限和 15 秒硬超时；
+  请求方不能提供命令、参数、路径或环境变量。
+- Toolkit 状态只展示版本、来源类型、文件数和差异数；Hook 状态只展示来源、次数和当前
+  Backend 进程盐生成的 opaque 会话指纹。
 
 扩展状态项时，先在真实 owner 中复用已有生命周期证据，再返回共享 DTO；不要在消费者中复制状态机。
 

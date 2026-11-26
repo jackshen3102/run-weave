@@ -1,8 +1,8 @@
-import type { InboxItem } from "@runweave/shared/knowledge-inbox";
+import type { InboxItem, InboxLiveCheckResult } from "@runweave/shared/knowledge-inbox";
 import { useState, useRef, useEffect } from "react";
 import { useMemoizedFn } from "ahooks";
-import { Copy } from "lucide-react";
-import { shareInboxItem } from "../../services/knowledge-inbox";
+import { Copy, RefreshCw } from "lucide-react";
+import { runInboxLiveCheck, shareInboxItem } from "../../services/knowledge-inbox";
 import { HttpError } from "../../services/http";
 import { Button } from "../../components/ui/button";
 export function InboxDetail({
@@ -23,12 +23,16 @@ export function InboxDetail({
   const [copying, setCopying] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
   const [copyText, setCopyText] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<InboxLiveCheckResult | null>(item.liveCheck?.lastResult ?? null);
+  const [checkMessage, setCheckMessage] = useState("");
+  const checkRequest = useRef<AbortController | null>(null);
   // The parent remounts on account changes; a token refresh must not strand copying=true.
   const identity = `${apiBase}:${item.itemId}:${item.contentVersion}:${item.sourceRevision}`;
   const latestIdentity = useRef(identity);
   useEffect(() => {
     latestIdentity.current = identity;
-    return () => { latestIdentity.current = ""; };
+    return () => { latestIdentity.current = ""; checkRequest.current?.abort(); };
   }, [identity]);
   const copy = useMemoizedFn(async () => {
     if (copying) return;
@@ -48,6 +52,26 @@ export function InboxDetail({
       if (latestIdentity.current === started) setCopyMessage(error instanceof HttpError && error.status === 409
         ? "成果已变化，请刷新后重新复制" : "生成引用失败，请检查连接与服务版本后重试");
     } finally { if (latestIdentity.current === started) setCopying(false); }
+  });
+  const liveCheck = useMemoizedFn(async () => {
+    if (checking || !item.liveCheck?.supported) return;
+    const started = identity;
+    const controller = new AbortController();
+    checkRequest.current?.abort();
+    checkRequest.current = controller;
+    setChecking(true); setCheckMessage("");
+    try {
+      const result = await runInboxLiveCheck(apiBase, token, item, controller.signal);
+      if (latestIdentity.current !== started) return;
+      setCheckResult(result);
+    } catch (error) {
+      if (controller.signal.aborted || latestIdentity.current !== started) return;
+      setCheckMessage(error instanceof HttpError && error.status === 409
+        ? "经验内容已更新，请刷新后重新复验" : "现场复验失败，请检查连接后重试");
+    } finally {
+      if (checkRequest.current === controller) checkRequest.current = null;
+      if (latestIdentity.current === started) setChecking(false);
+    }
   });
   return (
     <article className="space-y-5 rounded-2xl border border-border bg-card p-6">
@@ -111,6 +135,20 @@ export function InboxDetail({
       </Button>
       {copyMessage ? <p role="status" className="text-sm text-muted-foreground">{copyMessage}</p> : null}
       {copyText && copyMessage.startsWith("自动复制") ? <textarea aria-label="成果交接内容" readOnly value={copyText} className="w-full rounded border p-3 text-sm" rows={6} onFocus={(event) => event.target.select()} /> : null}
+      {item.liveCheck?.supported ? (
+        <section className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
+          <div>
+            <h3 className="font-medium">现场复验</h3>
+            <p className="mt-1 text-xs text-muted-foreground">使用产品内置的只读检查核对当前真实环境，不会自动修复或标记已处理。</p>
+          </div>
+          <Button variant="outline" onClick={() => void liveCheck()} disabled={checking || disabled || item.availability !== "available"}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`} />
+            {checking ? "正在复验…" : checkResult ? "重新复验" : "现场复验"}
+          </Button>
+          {checkResult ? <LiveCheckResult result={checkResult} /> : null}
+          {checkMessage ? <p role="alert" className="text-sm text-destructive">{checkMessage}</p> : null}
+        </section>
+      ) : item.liveCheck ? <p className="text-xs text-muted-foreground">此经验暂无内置现场复验。</p> : null}
       <Button
         onClick={onChange}
         disabled={busy || disabled || item.availability !== "available"}
@@ -124,5 +162,24 @@ export function InboxDetail({
             : "已处理"}
       </Button>
     </article>
+  );
+}
+
+const CHECK_STATE_LABELS: Record<InboxLiveCheckResult["state"], string> = {
+  passed: "通过", failed: "未通过", blocked: "无法判断", unsupported: "暂不支持",
+};
+function LiveCheckResult({ result }: { result: InboxLiveCheckResult }) {
+  const tone = result.state === "passed" ? "text-emerald-700 dark:text-emerald-300"
+    : result.state === "failed" ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300";
+  return (
+    <div role="status" data-live-check-state={result.state} className="space-y-2 text-sm">
+      <p className={tone}><span className="font-medium">{CHECK_STATE_LABELS[result.state]}</span>{` · ${result.summary}`}</p>
+      {result.facts.length ? <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        {result.facts.map((fact) => <div key={fact.id} className="contents">
+          <dt className="text-muted-foreground">{fact.label}</dt><dd className="min-w-0 truncate font-mono">{fact.value}</dd>
+        </div>)}
+      </dl> : null}
+      <p className="text-[11px] text-muted-foreground">检查于 {new Date(result.observedAt).toLocaleString()} · 有效期 {Math.max(1, Math.round(result.validForMs / 1000))} 秒</p>
+    </div>
   );
 }

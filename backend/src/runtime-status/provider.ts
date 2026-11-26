@@ -9,6 +9,8 @@ import type {
 import type { AppServerEventConsumerStatusSnapshot } from "../app-server/event-consumer";
 import type { EvolutionRuntime } from "../evolution/runtime";
 import type { RuntimeStatusWorkspaceServiceManager } from "./workspace-service-manager";
+import type { HookDiagnosticService } from "../terminal/hook-diagnostics/service";
+import type { AgentToolchainService } from "../agent-toolchain/service";
 
 import { readNodeCliVersion } from "./cli-version";
 
@@ -30,6 +32,8 @@ export interface BackendRuntimeStatusInput {
   appServerIntegration: AppServerIntegrationStatus;
   evolution: ReturnType<EvolutionRuntime["getStatusSnapshot"]>;
   workspaceServiceManager: RuntimeStatusWorkspaceServiceManager;
+  hookDiagnostics: HookDiagnosticService;
+  agentToolchain: AgentToolchainService;
 }
 
 export async function createBackendRuntimeStatusReport(
@@ -86,6 +90,8 @@ export async function createBackendRuntimeStatusReport(
     },
     buildEventConsumerItem(services.eventConsumer, services.appServerIntegration, now),
     buildEvolutionItem(services.evolution, now),
+    services.hookDiagnostics.runtimeStatusItem(now),
+    ...(await services.agentToolchain.runtimeStatusItems(now)),
     ...(await services.workspaceServiceManager.getRuntimeStatusItems(now)),
   ];
 

@@ -80,6 +80,23 @@ launcher 行为很窄：
 6. Stop / notify 类完成事件会发出桌面/飞书完成通知，并向 backend 上报 completion event。
 7. 所有错误静默失败，不影响原 AI CLI 结束流程。
 
+### foreign tmux session 诊断旁路
+
+公共 Hook bridge 在任何 agent state、completion、Activity、通知或监督处理之前比较
+`RUNWEAVE_TMUX_SESSION_NAME` 与真实 pane 所属 session。两者不同时仍立即拒绝原事件，但会先向
+`POST /internal/terminal/hook-diagnostics` 做一次最多 1 秒的 best-effort 上报。该请求复用
+`X-Runweave-Hook-Token`，body 只允许 terminal session id、来源、固定 reason、expected/actual
+session token 和观察时间；请求失败、超时或旧 Backend 返回 404 都不会放行原事件。
+
+Backend 用自身的 Terminal session/tmux 事实重新核对 expected session，随后用当前进程临时盐把
+expected/actual 转成 opaque 指纹并丢弃原值。相同归属错误 60 秒内去重，只在内存保留最近 100 条、
+最长 24 小时，Backend 重启即清空。该服务没有 TerminalState、completion、Activity、通知或监督
+写入依赖，只向 Runtime Status 的 `agent-toolchain` 能力域提供只读快照。
+
+现有 `/internal/terminal/agent-hook` 在 token、schema 和 Terminal session 身份通过后记录最近一次
+accepted attribution。foreign 证据较新时状态异常；同一受管 session 后续真实 Hook 通过身份校验后
+恢复正常；从未观察到可判定事件时显示“检查中”，不能把“没有诊断事件”解释为健康。
+
 Codex 的 `notify` 命令也可以在系统通知后调用同一个 launcher。这不是另一套状态协议，只是把 Codex 的“通知已发生”转成同一个 Runweave completion event。
 
 完成提醒和 `TerminalState` 是两条链路：完成提醒点亮非当前终端的小绿点，`TerminalState` 只表达当前终端是否处在 `shell_idle`、`agent_idle` 或 `agent_running`。`/internal/terminal-completion` 和普通 completion feed 不能写入或修正 `TerminalState`。唯一受限例外是 hook bridge 双写到 app-server 的 `agent.completion`：当 payload 明确表示 `completionReason="hook_stop"` 且原始 hook event 是 `Stop` / `SubagentStop` 时，backend consumer 可以把它作为丢失直连 agent hook 时的 Stop fallback，并交给 agent hook processor 复用既有状态门禁；notify、manual completion、AI process exit 或其他 completion reason 不能写状态。
@@ -291,4 +308,5 @@ env | grep '^RUNWEAVE_'
 - CLI 配置、notify 脚本、tmux 环境变量、backend token 和 WebSocket 都可能成为断点。
 - event store 是内存态，backend 重启后历史 completion marker 不保留。
 
-后续可以补产品化诊断入口，展示当前 tab 的 `RUNWEAVE_TERMINAL_SESSION_ID`、hook endpoint 可用性、最近 completion event、WebSocket 状态和 hook 安装状态。
+Runtime Status 现已提供脱敏的 Hook 会话归属诊断；它只回答当前 Backend 是否观察到受管/foreign
+tmux 归属证据，不展示 Terminal id、endpoint、token、原始 session 名或 completion 内容。

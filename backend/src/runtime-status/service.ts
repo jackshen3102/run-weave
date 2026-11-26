@@ -28,6 +28,8 @@ export class BackendRuntimeStatusService {
       activityStoreAvailable: () => boolean;
       evolutionRuntime: EvolutionRuntime;
       workspaceServiceManager: BackendRuntimeStatusInput["workspaceServiceManager"];
+      hookDiagnostics: BackendRuntimeStatusInput["hookDiagnostics"];
+      agentToolchain: BackendRuntimeStatusInput["agentToolchain"];
     },
   ) {
     this.registry = new RuntimeStatusRegistry(serviceInstanceId);
@@ -41,6 +43,8 @@ export class BackendRuntimeStatusService {
         appServerIntegration: this.appServerIntegration,
         evolution: this.dependencies.evolutionRuntime.getStatusSnapshot(),
         workspaceServiceManager: this.dependencies.workspaceServiceManager,
+        hookDiagnostics: this.dependencies.hookDiagnostics,
+        agentToolchain: this.dependencies.agentToolchain,
       });
     });
   }

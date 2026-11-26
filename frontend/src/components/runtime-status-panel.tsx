@@ -35,6 +35,7 @@ const CAPABILITY_LABELS: Record<RuntimeStatusCapabilityId, string> = {
   desktop: "Desktop",
   "background-tasks": "后台任务",
   "research-mcp": "调查 MCP",
+  "agent-toolchain": "Agent 工具链",
 };
 const STATE_LABELS: Record<RuntimeStatusState, string> = {
   healthy: "正常", recovering: "恢复中", unhealthy: "异常",

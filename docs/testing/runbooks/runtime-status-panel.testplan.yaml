@@ -166,3 +166,17 @@ cases:
       - 使用 `$toolkit:playwright-cli` 在普通浏览器打开页面和状态抽屉；确认右上角显示当前页面 Backend 地址，抽屉只有当前节点。
       - 切换到移动 viewport；确认地址仍可复制，能力域和状态项可滚动读取，右侧抽屉不会超出可操作区域。
       - 确认页面不显示 Electron process、CDP Proxy、Companion、Whistle 或 CPU/内存 IPC 数据，也不因缺少 electronAPI 产生异常。
+
+  - id: RUI-013
+    name: Agent 工具链能力域展示真实检查结果
+    required: true
+    description: >
+      验证真实 Desktop/Web 状态面板把 Toolkit 与 Hook 归属聚合到一个
+      Agent 工具链能力域，并且重新检查只刷新只读证据。
+    preconditions:
+      - 已启动真实 Backend 与 macOS Desktop，并能让至少一个 Agent 工具链状态项显示可判定结果。
+      - 已记录 Toolkit 安装内容、Terminal 状态、Activity 数量和相关服务 PID。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 附着真实 Desktop renderer 并打开状态抽屉；确认存在“Agent 工具链”能力域，展开后只显示 Toolkit 与 Hook 归属项，没有 Playwright 专项版本检查。
+      - 核对每项状态、摘要、观察时间和安全事实与 GET /api/runtime-status 一致；同一能力内多个异常只增加一个能力域计数。
+      - 点击“重新检查”；确认更新时间刷新或复用有效期内结果，期间没有安装、升级、修复、Terminal 输入、Activity 写入、服务启停或 PID 变化。
