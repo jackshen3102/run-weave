@@ -59,7 +59,9 @@ export class WorktreeCreationService {
   }
 
   private async setup(directory: string) {
-    const loaded = await this.loader.load(directory);
+    const loaded = await this.loader.load(directory, {
+      forWorktreeSetup: true,
+    });
     return "setup" in loaded ? loaded.setup : undefined;
   }
 
@@ -147,15 +149,15 @@ export class WorktreeCreationService {
         );
       // Re-open the checked out file (O_NOFOLLOW), never reuse the parent preview.
       const actual = await this.setup(directory);
-      const actualRevision = actual && setupRevision(repositoryId, actual);
+      const actualSetupRevision = actual && setupRevision(repositoryId, actual);
       const approved = Boolean(
         request.runSetup &&
-        actualRevision &&
-        actualRevision === request.approvedSetupRevision,
+        actualSetupRevision &&
+        actualSetupRevision === request.approvedSetupRevision,
       );
       const mismatch = request.runSetup === true && !approved;
-      if (approved && actualRevision)
-        await approveSetup(repositoryId, actualRevision);
+      if (approved && actualSetupRevision)
+        await approveSetup(repositoryId, actualSetupRevision);
       let inputChanged = () => true;
       try {
         const session = await createTerminalSession(

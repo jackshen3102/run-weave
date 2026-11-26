@@ -9,6 +9,7 @@ import {
   type WorkspaceServiceConfigState,
   type WorktreeSetupDefinition,
 } from "@runweave/shared/terminal/workspace-service";
+import { readWindowsWorktreeConfig } from "./windows-config-reader";
 import { workspaceServiceError } from "./errors";
 
 const MAX_CONFIG_BYTES = 256 * 1024;
@@ -38,7 +39,10 @@ const configSchema = z
   .object({
     schemaVersion: z.literal(1),
     services: z.record(serviceSchema).default({}),
-    worktree: z.object({ setup: serviceSchema.omit({ healthCheck: true }).optional() }).strict().optional(),
+    worktree: z
+      .object({ setup: serviceSchema.omit({ healthCheck: true }).optional() })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -135,7 +139,10 @@ function formatZodError(error: z.ZodError): string {
 }
 
 export class WorkspaceServiceConfigLoader {
-  async load(contextPath: string): Promise<WorkspaceServiceConfigLoadResult> {
+  async load(
+    contextPath: string,
+    options: { forWorktreeSetup?: boolean } = {},
+  ): Promise<WorkspaceServiceConfigLoadResult> {
     const rootPath = await realpath(contextPath).catch(() => null);
     if (!rootPath) {
       return invalid("Project Context path is unavailable");
@@ -160,33 +167,47 @@ export class WorkspaceServiceConfigLoader {
       return invalid(`runweave.json exceeds ${MAX_CONFIG_BYTES} bytes`);
     }
 
-    const noFollowFlag = constants.O_NOFOLLOW ?? 0;
-    const handle = await open(
-      configPath,
-      constants.O_RDONLY | noFollowFlag,
-    ).catch(() => null);
-    if (!handle) return invalid("runweave.json cannot be opened safely");
-
     let content: Buffer;
-    try {
-      const before = await handle.stat();
-      if (!before.isFile() || before.size > MAX_CONFIG_BYTES ||
-          before.dev !== fileStats.dev || before.ino !== fileStats.ino) {
-        return invalid("runweave.json is not a supported regular file");
+    if (options.forWorktreeSetup && !constants.O_NOFOLLOW) {
+      if (process.platform !== "win32")
+        return invalid("Safe configuration open is unavailable");
+      try {
+        content = await readWindowsWorktreeConfig(configPath, MAX_CONFIG_BYTES);
+      } catch {
+        return invalid("runweave.json cannot be opened safely");
       }
-      content = await handle.readFile();
-      const after = await handle.stat();
-      if (
-        before.dev !== after.dev ||
-        before.ino !== after.ino ||
-        before.size !== after.size ||
-        before.mtimeMs !== after.mtimeMs ||
-        content.byteLength !== after.size
-      ) {
-        return invalid("runweave.json changed while it was being read");
+    } else {
+      const noFollowFlag = constants.O_NOFOLLOW ?? 0;
+      const handle = await open(
+        configPath,
+        constants.O_RDONLY | noFollowFlag | (constants.O_NONBLOCK ?? 0),
+      ).catch(() => null);
+      if (!handle) return invalid("runweave.json cannot be opened safely");
+
+      try {
+        const before = await handle.stat();
+        if (
+          !before.isFile() ||
+          before.size > MAX_CONFIG_BYTES ||
+          before.dev !== fileStats.dev ||
+          before.ino !== fileStats.ino
+        ) {
+          return invalid("runweave.json is not a supported regular file");
+        }
+        content = await handle.readFile();
+        const after = await handle.stat();
+        if (
+          before.dev !== after.dev ||
+          before.ino !== after.ino ||
+          before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs ||
+          content.byteLength !== after.size
+        ) {
+          return invalid("runweave.json changed while it was being read");
+        }
+      } finally {
+        await handle.close();
       }
-    } finally {
-      await handle.close();
     }
 
     let input: unknown;
@@ -212,7 +233,9 @@ export class WorkspaceServiceConfigLoader {
         () => null,
       );
       if (!cwdPath || !isPathInside(rootPath, cwdPath)) {
-        return invalid(`services.${name}.cwd must stay inside the Project Context`);
+        return invalid(
+          `services.${name}.cwd must stay inside the Project Context`,
+        );
       }
       const cwdStats = await stat(cwdPath).catch(() => null);
       if (!cwdStats?.isDirectory()) {
@@ -230,10 +253,19 @@ export class WorkspaceServiceConfigLoader {
     let setup: (WorktreeSetupDefinition & { cwdPath: string }) | undefined;
     if (parsed.data.worktree?.setup) {
       const { command, cwd = "." } = parsed.data.worktree.setup;
-      const cwdPath = await realpath(path.resolve(rootPath, cwd)).catch(() => null);
-      if (path.isAbsolute(cwd) || path.win32.isAbsolute(cwd) || !cwdPath ||
-          !isPathInside(rootPath, cwdPath) || !(await stat(cwdPath).catch(() => null))?.isDirectory()) {
-        return invalid("worktree.setup.cwd must resolve to a directory inside the Worktree");
+      const cwdPath = await realpath(path.resolve(rootPath, cwd)).catch(
+        () => null,
+      );
+      if (
+        path.isAbsolute(cwd) ||
+        path.win32.isAbsolute(cwd) ||
+        !cwdPath ||
+        !isPathInside(rootPath, cwdPath) ||
+        !(await stat(cwdPath).catch(() => null))?.isDirectory()
+      ) {
+        return invalid(
+          "worktree.setup.cwd must resolve to a directory inside the Worktree",
+        );
       }
       setup = { command, cwd: path.normalize(cwd), cwdPath };
     }
