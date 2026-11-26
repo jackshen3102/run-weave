@@ -1,8 +1,8 @@
-import { execFile } from "node:child_process";
-import { mkdir, realpath } from "node:fs/promises";
+import { WorktreeProvisioner, WorktreeProvisionError, worktreeGit as runGit } from "../terminal/workspace-service/worktree-provisioner";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 
-const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
+
 
 interface PlannedRaceWorktree {
   name: string;
@@ -21,47 +21,7 @@ export interface CreatedRaceWorktree extends PlannedRaceWorktree {
   worktreePath: string;
 }
 
-export class RaceWorktreeSupplyError extends Error {
-  constructor(
-    message: string,
-    readonly statusCode = 409,
-  ) {
-    super(message);
-    this.name = "RaceWorktreeSupplyError";
-  }
-}
-
-function runGit(
-  cwd: string,
-  args: string[],
-  timeout = 30_000,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      ["-C", cwd, ...args],
-      {
-        encoding: "utf8",
-        maxBuffer: MAX_GIT_OUTPUT_BYTES,
-        timeout,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(
-            new Error(
-              stderr.trim() ||
-                stdout.trim() ||
-                error.message ||
-                "Git command failed",
-            ),
-          );
-          return;
-        }
-        resolve(stdout);
-      },
-    );
-  });
-}
+export { WorktreeProvisionError as RaceWorktreeSupplyError };
 
 function parseWorktreePaths(output: string): string[] {
   return output
@@ -107,7 +67,7 @@ function assertDirectRaceChild(
     path.dirname(relativePath) !== "." ||
     !path.basename(candidatePath).startsWith("race-")
   ) {
-    throw new RaceWorktreeSupplyError(
+    throw new WorktreeProvisionError(
       "Race worktree path is outside the controlled .worktree/race-* namespace",
       403,
     );
@@ -122,27 +82,8 @@ export class RaceWorktreeSupply {
     count: number,
   ): Promise<RaceWorktreePlan> {
     const parentPath = await realpath(projectPath);
-    const worktreeRoot = path.join(parentPath, ".worktree");
-    await mkdir(worktreeRoot, { recursive: true });
-    const worktreeRootRealPath = await realpath(worktreeRoot);
-    if (path.relative(parentPath, worktreeRootRealPath) !== ".worktree") {
-      throw new RaceWorktreeSupplyError(
-        "Race worktree root must be the parent project .worktree directory",
-        403,
-      );
-    }
-
-    const baseCommit = (
-      await runGit(parentPath, [
-        "rev-parse",
-        "--verify",
-        "--end-of-options",
-        `${baseRef}^{commit}`,
-      ])
-    ).trim();
-    if (!/^[0-9a-f]{40}$/u.test(baseCommit)) {
-      throw new RaceWorktreeSupplyError("Race baseRef is not a commit");
-    }
+    const worktreeRootRealPath = await WorktreeProvisioner.root(parentPath);
+    const baseCommit = await WorktreeProvisioner.resolveCommit(parentPath, baseRef);
 
     const [worktreeOutput, branchOutput] = await Promise.all([
       runGit(parentPath, ["worktree", "list", "--porcelain", "-z"]),
@@ -201,16 +142,7 @@ export class RaceWorktreeSupply {
     worktree: PlannedRaceWorktree,
   ): Promise<CreatedRaceWorktree> {
     assertDirectRaceChild(plan.worktreeRoot, worktree.worktreePath);
-    await runGit(plan.parentPath, [
-      "worktree",
-      "add",
-      "--no-track",
-      "-b",
-      worktree.branch,
-      worktree.worktreePath,
-      plan.baseCommit,
-    ]);
-    const createdPath = await realpath(worktree.worktreePath);
+    const createdPath = await WorktreeProvisioner.add(plan.parentPath, worktree.name, worktree.branch, plan.baseCommit);
     assertDirectRaceChild(plan.worktreeRoot, createdPath);
     return { ...worktree, worktreePath: createdPath };
   }
@@ -227,7 +159,7 @@ export class RaceWorktreeSupply {
       path.join(parentPath, ".worktree"),
     ).catch(() => null);
     const targetPath = await realpath(worktreePath).catch(() => null);
-    if (!worktreeRoot || !targetPath) {
+    if (worktreeRoot !== path.join(parentPath, ".worktree") || !targetPath) {
       return false;
     }
     try {
@@ -260,17 +192,17 @@ export class RaceWorktreeSupply {
     const worktreeRoot = await realpath(path.join(parentPath, ".worktree"));
     const targetPath = await realpath(worktreePath).catch(() => null);
     if (!targetPath) {
-      throw new RaceWorktreeSupplyError("Race worktree is missing", 404);
+      throw new WorktreeProvisionError("Race worktree is missing", 404);
     }
     assertDirectRaceChild(worktreeRoot, targetPath);
     if (!(await this.isRegistered(parentPath, targetPath))) {
-      throw new RaceWorktreeSupplyError(
+      throw new WorktreeProvisionError(
         "Race worktree is not registered under this parent project",
         409,
       );
     }
     if ((await runGit(targetPath, ["status", "--porcelain=v1"])).trim()) {
-      throw new RaceWorktreeSupplyError(
+      throw new WorktreeProvisionError(
         "Race worktree has uncommitted changes",
         409,
       );
@@ -279,13 +211,13 @@ export class RaceWorktreeSupply {
     await beforeRemove();
 
     if (!(await this.isRegistered(parentPath, targetPath))) {
-      throw new RaceWorktreeSupplyError(
+      throw new WorktreeProvisionError(
         "Race worktree changed before removal",
         409,
       );
     }
     if ((await runGit(targetPath, ["status", "--porcelain=v1"])).trim()) {
-      throw new RaceWorktreeSupplyError(
+      throw new WorktreeProvisionError(
         "Race worktree became dirty before removal",
         409,
       );

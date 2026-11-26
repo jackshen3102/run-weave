@@ -155,3 +155,32 @@ export function isTerminalChildProjectIdLike(projectId: string): boolean {
 export function resolveTerminalParentProjectId(projectId: string): string {
   return parseTerminalChildProjectId(projectId)?.parentProjectId ?? projectId;
 }
+
+export interface WorktreeCreatePreviewResponse {
+  parentProjectId: string;
+  defaultBaseRef: string;
+  currentBranch: string | null;
+  branches: string[];
+  worktreeNames: string[];
+  setup: (import("./workspace-service").WorktreeSetupDefinition & {
+    revision: string;
+    approved: boolean;
+  }) | null;
+}
+
+export interface CreateWorktreeContextRequest {
+  operationId: string;
+  name: string;
+  branch?: string;
+  baseRef: string;
+  checkoutExistingBranch?: boolean;
+  runSetup?: boolean;
+  approvedSetupRevision?: string;
+  launchAgent?: "none" | "codex" | "claude" | "pi" | "traex" | "agy";
+}
+
+export interface CreateWorktreeContextResponse {
+  context: TerminalProjectContextListItem;
+  terminalSessionId: string;
+  setupStatus: "skipped" | "running" | "revision_mismatch_skipped";
+}

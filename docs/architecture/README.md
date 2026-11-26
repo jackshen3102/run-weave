@@ -124,7 +124,7 @@ Windows npm 终端保活与升级读 [windows-pty-host.md](./windows-pty-host.md
 | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | Terminal 状态来源与消费                                 | [terminal-state.md](./terminal-state.md)                                       |
 | 现有终端手机结构化问答                                  | [terminal-questions.md](./terminal-questions.md)                               |
-| Terminal 项目移动、Worktree Context 与 Race 生命周期    | [terminal-worktree-context.md](./terminal-worktree-context.md)                 |
+| Terminal 项目移动、Worktree 创建与初始化、Race 生命周期 | [terminal-worktree-context.md](./terminal-worktree-context.md)                 |
 | 本地开发服务稳定 URL 与生命周期                         | [terminal-workspace-services.md](./terminal-workspace-services.md)             |
 | 文件、Diff、Markdown、会话阅读与 Browser 预览、页内查找 | [terminal-code-preview.md](./terminal-code-preview.md)                         |
 | tmux 持久化与恢复                                       | [terminal-tmux-recovery.md](./terminal-tmux-recovery.md)                       |
@@ -148,7 +148,7 @@ CLI 探测成功不等同当前会话就绪，未验证的 Claude 操作保持�
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 定时任务与按需恢复普通终端 | [Web 与 Backend 接入边界](../../frontend/docs/scheduled-tasks.md)、[后台续接与回复](../cli/scheduled-task-cli.md#后台续接与人工回复)、[运行配置](../deployment/overview.md#定时任务运行) |
 | 快捷指令后台运行           | [定时任务接入边界](../../frontend/docs/scheduled-tasks.md)、[验收计划](../testing/background-commands/core.testplan.yaml)                                                                |
-| 原生 Agent 历史关键词搜索 | [会话搜索合同](../cli/session-search.md) |
+| 原生 Agent 历史关键词搜索  | [会话搜索合同](../cli/session-search.md)                                                                                                                                                 |
 | 普通会话项目经验           | [检索与证据回执](../cli/experience-cli.md)                                                                                                                                               |
 | Agent Self-Evolution       | [agent-self-evolution.md](./agent-self-evolution.md)                                                                                                                                     |
 

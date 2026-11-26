@@ -1,3 +1,4 @@
+import { WorktreeProvisioner } from "../terminal/workspace-service/worktree-provisioner";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type {
@@ -229,7 +230,9 @@ export class RaceService {
         launchStatus: "starting",
       })),
     };
+    let releaseParent: (() => void) | undefined;
     try {
+      releaseParent = await WorktreeProvisioner.acquireParent(parentProject.path);
       await this.options.store.write(record);
       const plan = await this.supply
         .plan(
@@ -354,6 +357,7 @@ export class RaceService {
       await this.options.store.write(record);
       return record;
     } finally {
+      releaseParent?.();
       this.creating = false;
       settleCreation();
       if (this.creationSettled === creationSettled) {
@@ -374,6 +378,7 @@ export class RaceService {
   }
 
   async removeWorktree(raceId: string, workerId: string): Promise<void> {
+    await this.creationSettled;
     const record = this.requireCurrent(raceId);
     const worker = record.workers.find(
       (candidate) => candidate.workerId === workerId,
@@ -388,22 +393,21 @@ export class RaceService {
       throw new RaceError(409, "Race parent project path is unavailable");
     }
 
-    await this.supply.remove(
-      parentProject.path,
-      worker.worktreePath,
-      () => this.stopWorkerSession(worker.terminalSessionId),
-    );
-    worker.terminalSessionId = null;
-    worker.launchStatus = "failed";
-    worker.launchError = "Race worktree was removed";
-    await this.options.terminalSessionManager.refreshProjectContexts(
-      record.parentProjectId,
-    );
-    await this.options.store.write(record);
-  }
-
-  async waitForWorktreeCreation(): Promise<void> {
-    await this.creationSettled;
+    const release = await WorktreeProvisioner.acquireParent(parentProject.path);
+    try {
+      await this.supply.remove(
+        parentProject.path,
+        worker.worktreePath,
+        () => this.stopWorkerSession(worker.terminalSessionId),
+      );
+      worker.terminalSessionId = null;
+      worker.launchStatus = "failed";
+      worker.launchError = "Race worktree was removed";
+      await this.options.terminalSessionManager.refreshProjectContexts(
+        record.parentProjectId,
+      );
+      await this.options.store.write(record);
+    } finally { release(); }
   }
 
   async markWorktreeRemoved(

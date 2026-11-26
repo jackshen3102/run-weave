@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   WORKSPACE_SERVICE_CONFIG_FILE_NAME,
   type WorkspaceServiceConfigState,
+  type WorktreeSetupDefinition,
 } from "@runweave/shared/terminal/workspace-service";
 import { workspaceServiceError } from "./errors";
 
@@ -36,7 +37,8 @@ const serviceSchema = z
 const configSchema = z
   .object({
     schemaVersion: z.literal(1),
-    services: z.record(serviceSchema),
+    services: z.record(serviceSchema).default({}),
+    worktree: z.object({ setup: serviceSchema.omit({ healthCheck: true }).optional() }).strict().optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -82,6 +84,7 @@ export type WorkspaceServiceConfigLoadResult =
         revision: string;
       };
       definitions: WorkspaceServiceDefinition[];
+      setup?: WorktreeSetupDefinition & { cwdPath: string };
     };
 
 function isValidHealthCheckPath(value: string): boolean {
@@ -167,7 +170,8 @@ export class WorkspaceServiceConfigLoader {
     let content: Buffer;
     try {
       const before = await handle.stat();
-      if (!before.isFile() || before.size > MAX_CONFIG_BYTES) {
+      if (!before.isFile() || before.size > MAX_CONFIG_BYTES ||
+          before.dev !== fileStats.dev || before.ino !== fileStats.ino) {
         return invalid("runweave.json is not a supported regular file");
       }
       content = await handle.readFile();
@@ -223,6 +227,16 @@ export class WorkspaceServiceConfigLoader {
       });
     }
 
+    let setup: (WorktreeSetupDefinition & { cwdPath: string }) | undefined;
+    if (parsed.data.worktree?.setup) {
+      const { command, cwd = "." } = parsed.data.worktree.setup;
+      const cwdPath = await realpath(path.resolve(rootPath, cwd)).catch(() => null);
+      if (path.isAbsolute(cwd) || path.win32.isAbsolute(cwd) || !cwdPath ||
+          !isPathInside(rootPath, cwdPath) || !(await stat(cwdPath).catch(() => null))?.isDirectory()) {
+        return invalid("worktree.setup.cwd must resolve to a directory inside the Worktree");
+      }
+      setup = { command, cwd: path.normalize(cwd), cwdPath };
+    }
     return {
       config: {
         status: "valid",
@@ -230,6 +244,7 @@ export class WorkspaceServiceConfigLoader {
         error: null,
       },
       definitions,
+      setup,
     };
   }
 }

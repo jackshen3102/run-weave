@@ -212,6 +212,21 @@ public actor APIClient {
       "/api/terminal/session", method: "POST", body: ["projectId": projectID],
       retryUnauthorized: false)
   }
+  func previewWorktree(parent: String) async throws -> WorktreeCreatePreview {
+    let value: WorktreeCreatePreview = try await authorized("/api/terminal/project/\(Self.pathComponent(parent))/worktree-create-preview")
+    guard value.parentProjectId == parent else { throw APIError.invalidResponse }
+    return value
+  }
+  func createWorktree(parent: String, operation: UUID, name: String, branch: String, base: String,
+    existing: Bool, agent: String, approvedRevision: String?) async throws -> WorktreeCreation {
+    var body: [String: Any] = ["operationId": operation.uuidString, "name": name, "branch": branch,
+      "baseRef": base, "checkoutExistingBranch": existing, "launchAgent": agent, "runSetup": approvedRevision != nil]
+    if let approvedRevision { body["approvedSetupRevision"] = approvedRevision }
+    let value: WorktreeCreation = try await authorized("/api/terminal/project/\(Self.pathComponent(parent))/contexts",
+      method: "POST", body: body, retryUnauthorized: false)
+    guard value.context.parentProjectId == parent, !value.context.isPrimary else { throw APIError.invalidResponse }
+    return value
+  }
   func projectContexts(parentProjectID: String) async throws -> [TerminalProjectContext] {
     let contexts: [TerminalProjectContext] = try await authorized(
       "/api/terminal/project/\(Self.pathComponent(parentProjectID))/contexts")

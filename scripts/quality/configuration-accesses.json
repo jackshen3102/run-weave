@@ -32,6 +32,62 @@
     "reason": "Read only the installed Codex package manifest to identify its Windows native executable; this package metadata is not instance configuration or credentials."
   },
   {
+    "file": "backend/src/terminal/workspace-service/setup-approvals.ts",
+    "kind": "file-io",
+    "expression": "readFile(approvalPath(repositoryId, revision))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取当前 Backend profile 内特定仓库和修订的批准回执。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/setup-approvals.ts",
+    "kind": "file-io",
+    "expression": "writeFile(temporary)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "写入独立的临时批准文件后原子发布，避免覆盖其他修订。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/setup-terminal.ts",
+    "kind": "file-io",
+    "expression": "readFile(receiptPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取首次面板包装进程原子发布的单次退出标记，绑定已批准脚本的实际退出状态。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/setup-terminal.ts",
+    "kind": "file-io",
+    "expression": "writeFile(file)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "为该首终端暂存明确批准的初始化命令与单次退出标记。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/setup-terminal.ts",
+    "kind": "file-io",
+    "expression": "writeFile(launcher)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "在当前任务的私有暂存目录生成 Windows 启动器，限定环境变量到脚本子进程。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/worktree-provisioner.ts",
+    "kind": "environment",
+    "expression": "env[key]",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "移除会重定向 Git 工作目录的环境变量，固定到请求所属父项目。"
+  },
+  {
+    "file": "backend/src/terminal/workspace-service/worktree-provisioner.ts",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "Git 子进程继承工具链所需环境，排除工作树和索引覆盖。"
+  },
+  {
     "file": "packages/runweave-cli/src/commands/terminal-review.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_TERMINAL_SESSION_ID",

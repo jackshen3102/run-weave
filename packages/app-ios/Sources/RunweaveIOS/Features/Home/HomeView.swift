@@ -289,7 +289,18 @@ struct HomeView: View {
       RenameTerminalView(session: session, terminal: terminal).mobileAnalyticsScreen(.renameTerminal)
     }
     .sheet(item: $newTerminalProject) { project in
-      NewTerminalView(session: session, project: project) { projectID in
+      NewTerminalView(session: session, project: project, opened: { result in
+        let generation = session.generation
+        newTerminalProject = nil
+        Task {
+          await session.reload()
+          guard generation == session.generation else { return }
+          await session.openTerminal(result.terminalSessionId)
+          if generation == session.generation && result.setupStatus == "revision_mismatch_skipped" {
+            session.error = "检出的初始化命令与批准版本不符，已跳过。"
+          }
+        }
+      }) { projectID in
         newTerminalProject = nil
         Task { await session.createTerminal(projectID: projectID) }
       }

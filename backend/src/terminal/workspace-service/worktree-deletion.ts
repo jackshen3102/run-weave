@@ -1,3 +1,4 @@
+import { WorktreeProvisioner } from "./worktree-provisioner";
 import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
@@ -201,12 +202,14 @@ export class TerminalWorktreeDeletionService {
       );
     }
     this.deletingProjectIds.add(childProjectId);
+    let releaseParent: (() => void) | undefined;
     let releaseOwnerGuard: void | (() => void | Promise<void>) = undefined;
     try {
       const initialTarget = await this.resolveSafeTarget(
         parentProjectId,
         childProjectId,
       );
+      releaseParent = await WorktreeProvisioner.acquireParent(initialTarget.parentPath);
       releaseOwnerGuard = await this.options.ownerHooks?.beforeDelete?.(
         initialTarget,
       );
@@ -215,6 +218,9 @@ export class TerminalWorktreeDeletionService {
         parentProjectId,
         childProjectId,
       );
+      if (target.parentPath !== initialTarget.parentPath || target.worktreePath !== initialTarget.worktreePath) {
+        throw new TerminalWorktreeDeletionError("Worktree identity changed while waiting for deletion", 409, "identity_changed");
+      }
       const sessions = this.listTargetSessions(childProjectId);
       this.assertNoRunningAgent(sessions);
       const cleanupWarnings = await cleanupWorktreeDevSessions(
@@ -292,8 +298,10 @@ export class TerminalWorktreeDeletionService {
       }
       return { cleanupWarnings };
     } finally {
-      await releaseOwnerGuard?.();
-      this.deletingProjectIds.delete(childProjectId);
+      try { await releaseOwnerGuard?.(); } finally {
+        releaseParent?.();
+        this.deletingProjectIds.delete(childProjectId);
+      }
     }
   }
 

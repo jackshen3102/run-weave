@@ -237,3 +237,20 @@ extension HomeOverview {
     return parent
   }
 }
+
+// Source: packages/shared/src/terminal/project-context.ts
+struct WorktreeCreatePreview: Decodable {
+  struct Setup: Decodable {
+    let command, cwd, revision: String
+    let approved: Bool
+  }
+  let parentProjectId, defaultBaseRef: String
+  let currentBranch: String?
+  let branches, worktreeNames: [String]
+  let setup: Setup?
+}
+
+struct WorktreeCreation: Decodable {
+  let context: TerminalProjectContext
+  let terminalSessionId, setupStatus: String
+}
