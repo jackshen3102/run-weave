@@ -1,5 +1,29 @@
 [
   {
+    "file": "backend/src/agent-toolchain/service.ts",
+    "kind": "file-io",
+    "expression": "readFile(target)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "对目录范围和大小受限的 Toolkit 包文件计算指纹，核对已安装副本。"
+  },
+  {
+    "file": "backend/src/agent-toolchain/service.ts",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "按固定的键列表向工具链版本探测子进程传递运行所需的进程环境。"
+  },
+  {
+    "file": "backend/src/agent-toolchain/service.ts",
+    "kind": "environment",
+    "expression": "process.env.CODEX_HOME",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取 Codex 自己的安装根目录，仅用于定位已登记 Toolkit 插件的缓存。"
+  },
+  {
     "file": "backend/src/evolution/providers/launch.ts",
     "kind": "file-io",
     "expression": "readFileSync(manifestPath)",
@@ -2347,9 +2371,9 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_ENDPOINT",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_ENDPOINT：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "从当前终端绑定的 Hook 地址派生诊断路由，并继续用于完成事件投递。"
   },
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
@@ -2371,9 +2395,9 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "使用当前终端绑定的 Hook 令牌为诊断及完成事件请求鉴权。"
   },
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
@@ -2403,9 +2427,9 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_SESSION_ID",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_TERMINAL_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "把诊断及完成事件归属到当前 Hook 所绑定的终端会话。"
   },
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
@@ -2579,9 +2603,9 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_ENDPOINT",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_ENDPOINT：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "从当前终端绑定的 Hook 地址派生诊断路由，并继续用于完成事件投递。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -2603,9 +2627,9 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "使用当前终端绑定的 Hook 令牌为诊断及完成事件请求鉴权。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -2635,9 +2659,9 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_SESSION_ID",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_TERMINAL_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "把诊断及完成事件归属到当前 Hook 所绑定的终端会话。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -4043,9 +4067,9 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_ENDPOINT",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_ENDPOINT：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "从当前终端绑定的 Hook 地址派生诊断路由，并继续用于完成事件投递。"
   },
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
@@ -4067,9 +4091,9 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "使用当前终端绑定的 Hook 令牌为诊断及完成事件请求鉴权。"
   },
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
@@ -4099,9 +4123,9 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_SESSION_ID",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_TERMINAL_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "把诊断及完成事件归属到当前 Hook 所绑定的终端会话。"
   },
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
@@ -5395,9 +5419,9 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_ENDPOINT",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_ENDPOINT：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "从当前终端绑定的 Hook 地址派生诊断路由，并继续用于完成事件投递。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
@@ -5419,9 +5443,9 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_TOKEN：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "使用当前终端绑定的 Hook 令牌为诊断及完成事件请求鉴权。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
@@ -5451,9 +5475,9 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_TERMINAL_SESSION_ID",
-    "count": 1,
+    "count": 2,
     "category": "runtime-context",
-    "reason": "RUNWEAVE_TERMINAL_SESSION_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+    "reason": "把诊断及完成事件归属到当前 Hook 所绑定的终端会话。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
