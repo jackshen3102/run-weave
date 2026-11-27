@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Only menu inputs invalidate the native menu, never output counters or unrelated sessions.
 struct TerminalActionsMenu: View, Equatable {
+  @State private var showingPrWatch = false
   let session: AppSession
   @State var handoff = false
   let controller: SessionController
@@ -68,6 +69,7 @@ struct TerminalActionsMenu: View, Equatable {
         }
       } label: { Label("Fork Thread", systemImage: "arrow.triangle.branch") }
         .disabled(!canFork).accessibilityIdentifier("terminal-menu-fork-codex")
+      Button { showingPrWatch = true } label: { Label("PR 值守", systemImage: "arrow.triangle.branch") }
       Button { showingSupervision = true } label: {
         Label(supervisionEnabled ? "长任务监控 · 已开启" : "长任务监控", systemImage: "eye")
       }.accessibilityIdentifier("terminal-menu-task-supervision")
@@ -90,6 +92,7 @@ struct TerminalActionsMenu: View, Equatable {
       Image(systemName: "ellipsis")
     }.accessibilityLabel("终端操作")
     .sheet(isPresented: $handoff) { ContextHandoffSheet(session: session, terminalID: terminalID) }
+      .sheet(isPresented: $showingPrWatch) { PrWatchSheet(session: session, terminalID: terminalID) }
       .fullScreenCover(isPresented: $showingBranchUpdates) {
         BranchUpdatesView(session: session, terminalID: terminalID, cwd: cwd,
           title: session.overview?.sessions.first(where: { $0.id == terminalID })?.title ?? "当前终端")

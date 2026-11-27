@@ -88,6 +88,14 @@
     "reason": "Git 子进程继承工具链所需环境，排除工作树和索引覆盖。"
   },
   {
+    "file": "backend/src/pr-watch/gh-reader.ts",
+    "kind": "environment",
+    "expression": "process.env[key]",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "只读 Git 与 GitHub CLI 子进程按固定名单继承命令路径、登录和网络环境。"
+  },
+  {
     "file": "packages/runweave-cli/src/commands/terminal-review.ts",
     "kind": "environment",
     "expression": "env.RUNWEAVE_TERMINAL_SESSION_ID",

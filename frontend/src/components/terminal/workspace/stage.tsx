@@ -23,6 +23,7 @@ import {
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalPanelTargetBar } from "../input/panel-target-bar";
 import { TerminalSurface } from "../surface/surface";
+import { TerminalPrWatch } from "../pr-watch";
 import { TerminalTaskSupervisionStatusStrip } from "../task-supervision/status-strip";
 import { TerminalBrowserAssistance } from "../browser/assistance";
 import { Button } from "../../ui/button";
@@ -210,6 +211,7 @@ export function TerminalWorkspaceStage({
       <div className="relative flex h-full min-h-0">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {!isMobileMonitor ? <CodeReviewStatus sessionId={activeSession?.terminalSessionId ?? null} /> : null}
+          {!isMobileMonitor && activeSession && <TerminalPrWatch key={activeSession.terminalSessionId} sessionId={activeSession.terminalSessionId} />}
           {!isMobileMonitor ? <TerminalTaskSupervisionStatusStrip sessionId={activeSession?.terminalSessionId ?? null} /> : null}
           {!isMobileMonitor ? <TerminalBrowserAssistance sessionId={activeSessionId} /> : null}
           {activeSession?.tmuxSessionName && !isMobileMonitor && panelSplitEnabled ? (

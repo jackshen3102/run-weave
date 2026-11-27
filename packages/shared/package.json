@@ -22,6 +22,7 @@
     "./activity/events": "./src/activity/events.ts",
     "./terminal-unread": "./src/terminal/unread.ts",
     "./task-supervision": "./src/task-supervision.ts",
+    "./pr-watch": "./src/pr-watch.ts",
     "./attention": "./src/attention.ts",
     "./app-server/codex-quota": "./src/app-server/codex-quota.ts",
     "./app-server-events": "./src/app-server/events.ts",

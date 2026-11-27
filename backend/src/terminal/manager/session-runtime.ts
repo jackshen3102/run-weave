@@ -35,6 +35,7 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
 
     invalidateTerminalInput(session);
     session.status = "exited";
+    this.observer.onSessionExited?.(session.id);
     session.exitCode = exitCode;
     const lastActivityAt = this.touchSessionActivity(session, "immediate");
     void this.sessionStore.updateSessionExit({

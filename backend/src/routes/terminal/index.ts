@@ -1,5 +1,7 @@
 import { registerContextHandoffRoutes } from "./context-handoff";
 import { TerminalContextHandoffService } from "../../terminal/application/context-handoff";
+import { registerPrWatch } from "./pr-watch";
+import type { PrWatchService } from "../../pr-watch/service";
 import { registerTerminalCodeReviewRoutes } from "./code-review";
 import type { CodeReviewService } from "../../terminal/code-review/service";
 import { registerTerminalVideoPreviewRoutes } from "./preview/video";
@@ -129,6 +131,7 @@ export function createTerminalRouter(
     terminalBadges?: TerminalBadges | null;
     desktopBadgeAccess?: DesktopBadgeAccess | null;
     terminalTaskService?: TerminalTaskService;
+    prWatchService?: PrWatchService;
     codeReviewService?: CodeReviewService;
     textAttachmentDelivery?: TerminalTextAttachmentDelivery;
     terminalQuestionsService?: TerminalQuestionsService;
@@ -149,6 +152,7 @@ export function createTerminalRouter(
   },
 ): Router {
   const router = Router();
+  if (options?.prWatchService) registerPrWatch(router, options.prWatchService);
   router.use("/unread", createTerminalUnreadRouter(
     options?.terminalBadges ?? null, options?.desktopBadgeAccess ?? null, options?.authService,
   ));

@@ -1,3 +1,5 @@
+import { PrWatchService, type DeliverPrompt } from "../pr-watch/service";
+import { PrWatchStore } from "../pr-watch/store";
 import { CodeReviewService } from "../terminal/code-review/service";
 import { CodeReviewStore } from "../terminal/code-review/store";
 import { TerminalTaskService } from "../terminal/tasks/service";
@@ -62,40 +64,41 @@ export async function createTerminalTaskServices(
   );
   resources.defer("terminal-tasks", () => tasks.dispose());
   await tasks.initialize();
-  supervision.attach(
-    options.terminalEventService!,
-    async (target, offer, valid) => {
-      valid();
-      const { session, panel } = resolveSupervisionTarget(manager, target.terminalSessionId, target.panelId);
-      if (panel && !options.tmuxService)
-        throw new Error("原终端输入服务不可用，未发送续接。");
-      const release = beginSupervisorDelivery(session);
-      const inputRevision = terminalInputAdmission(session).revision;
-      try {
-        await sendInputToSession(
-          manager,
-          {
-            ...options,
-            supervisorInput: true,
-            validateSupervisorTarget: () => {
-              valid();
-              if (terminalInputAdmission(session).revision !== inputRevision)
-                throw new Error("用户输入已变化，未发送旧续接。");
-            },
+  const deliver: DeliverPrompt = async (target, text, operationId, valid, beforeWrite) => {
+    valid();
+    const { session, panel } = resolveSupervisionTarget(manager, target.terminalSessionId, target.panelId);
+    if (panel && !options.tmuxService)
+      throw new Error("原终端输入服务不可用，未发送续接。");
+    const release = beginSupervisorDelivery(session);
+    const inputRevision = terminalInputAdmission(session).revision;
+    try {
+      await sendInputToSession(
+        manager,
+        {
+          ...options,
+          supervisorInput: true,
+          validateSupervisorTarget: () => {
+            valid();
+            if (terminalInputAdmission(session).revision !== inputRevision)
+              throw new Error("用户输入已变化，未发送旧续接。");
+            beforeWrite?.();
           },
-          session,
-          offer.reason,
-          "prompt_paste",
-          offer.decisionId,
-          panel && options.tmuxService ? buildPaneTarget(session, options.tmuxService, panel) : undefined,
-        );
-      } finally {
-        await release();
-      }
-    },
-  );
+        },
+        session,
+        text,
+        "prompt_paste",
+        operationId,
+        panel && options.tmuxService ? buildPaneTarget(session, options.tmuxService, panel) : undefined,
+      );
+    } finally {
+      await release();
+    }
+  };
+  supervision.attach(options.terminalEventService!, (target, offer, valid) => deliver(target, offer.reason, offer.decisionId, valid));
+  const prWatchService = new PrWatchService(new PrWatchStore(path.join(directory,"pr-watches.sqlite")), manager, deliver);
+  resources.defer("pr-watches", () => prWatchService.dispose());
   const codeReviews = new CodeReviewService(new CodeReviewStore(path.join(directory, "terminal-code-reviews")), manager, tasks, options);
   resources.defer("terminal-code-reviews", () => codeReviews.dispose());
   await codeReviews.initialize();
-  return { terminalTaskService: tasks, codeReviewService: codeReviews };
+  return { prWatchService, terminalTaskService: tasks, codeReviewService: codeReviews };
 }
