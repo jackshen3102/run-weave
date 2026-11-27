@@ -1,4 +1,4 @@
-import { splitClipboardImagePaste } from "../runtime/clipboard-image-paste";
+import { splitClipboardImagePaste, usesStandaloneClipboardImagePaste } from "../runtime/clipboard-image-paste";
 import type { CodexInputContext } from "@runweave/shared/terminal/codex-context";
 import { readCodexContext } from "../runtime/codex-context";
 import { replaceManagedCodexPrompt } from "../runtime/codex-input";
@@ -127,7 +127,7 @@ function buildPromptPasteInput(text: string, attachClipboardImages = false): str
 
 function buildClipboardImagePaste(text: string): string | null {
   const parts = splitClipboardImagePaste(text);
-  return parts.length > 1 || parts[0] !== text ? parts.map((value) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`).join("") : null;
+  return parts?.map((value) => `${BRACKETED_PASTE_START}${value}${BRACKETED_PASTE_END}`).join("") ?? null;
 }
 
 function splitPromptPaste(value: string): string[] {
@@ -308,6 +308,10 @@ export async function sendInputToSession(
       currentTerminalState?.state === "agent_running" ? "Tab" : "Enter";
     const dispatchData =
       codexSlashCommand === null ? resolveTerminalInputData(data, mode) : null;
+    // AGY stores media separately from prompt text. A draft sync followed by
+    // a submit would attach the same media twice, since Ctrl+U only clears text.
+    const attachImagesOnReplace = (agent: ReturnType<typeof getAgentForCommand>) =>
+      usesStandaloneClipboardImagePaste(agent) && (agent !== "agy" || submit === true);
     const exitTmuxCopyMode = mode === "tmux_exit_copy_mode";
     aiDiagnosticLog("terminal input dispatch requested", {
       terminalSessionId: session.id,
@@ -340,7 +344,8 @@ export async function sendInputToSession(
               .find((candidate) => candidate.tmuxPaneId === target.paneId)
           : undefined;
       const panelSubmitKey = (panel?.terminalState ?? currentTerminalState)?.state === "agent_running" ? "Tab" : "Enter";
-      const attachClipboardImages = getAgentForCommand(panel?.activeCommand ?? session.activeCommand) === "codex";
+      const agent = getAgentForCommand(panel?.activeCommand ?? session.activeCommand);
+      const attachClipboardImages = usesStandaloneClipboardImagePaste(agent);
       if (options.supervisorInput) {
         if (!("paneId" in target)) throw new Error("Supervisor input requires a fixed pane");
         const actual = (await options.tmuxService.listPanes(target)).find((candidate) => candidate.paneId === target.paneId);
@@ -357,7 +362,7 @@ export async function sendInputToSession(
         if (identity?.id !== expectedThreadId || identity.provider !== "codex" || (codexObservation?.managed ? codexObservation.context?.displayedRunning !== false : owner.terminalState?.state !== "agent_idle")) throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
       }
       const adapter = getAgentAdapter(
-        options.handoffAgent ?? getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
+        options.handoffAgent ?? agent,
       );
       const replacePrompt =
         !options.agentLaunch && structuredInput
@@ -424,13 +429,13 @@ export async function sendInputToSession(
         options.beforeTextAttachmentWrite?.();
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptReplaceSequence(data, submit === true, submitKey, attachClipboardImages, !!options.handoffAgent),
+          buildPromptReplaceSequence(data, submit === true, submitKey, attachImagesOnReplace(agent), !!options.handoffAgent),
         );
       } else if (mode === "line") {
         options.validateSupervisorTarget?.();
         await options.tmuxService.sendKeySequence(
           target,
-          buildTerminalLineSequence(data),
+          buildTerminalLineSequence(agent === "agy" && !options.agentLaunch ? buildClipboardImagePaste(data) ?? data : data),
         );
       } else {
         await options.tmuxService.sendInput(target, dispatchData ?? "");
@@ -452,8 +457,9 @@ export async function sendInputToSession(
         options.validateSupervisorTarget();
       }
       if (!exitTmuxCopyMode) {
-        const attachClipboardImages = getAgentForCommand(session.activeCommand) === "codex";
-        const agent = getAgentForCommand(session.activeCommand) ?? session.terminalState?.agent;
+        const activeAgent = getAgentForCommand(session.activeCommand);
+        const attachClipboardImages = usesStandaloneClipboardImagePaste(activeAgent);
+        const agent = activeAgent ?? session.terminalState?.agent;
         const flushPasteBuffer = process.platform === "win32" &&
           (agent === "codex" || agent === "trae" || agent === "traecli" || agent === "traex");
         if (mode === "prompt_replace") {
@@ -462,7 +468,7 @@ export async function sendInputToSession(
             data,
             submit === true,
             submitKey,
-            attachClipboardImages,
+            attachImagesOnReplace(activeAgent),
             flushPasteBuffer,
             operationId,
             options.beforeTextAttachmentWrite,
@@ -471,10 +477,10 @@ export async function sendInputToSession(
           // Match tmux: a TUI can treat text and Enter in one PTY write as paste.
           const text = mode === "prompt_paste"
             ? buildPromptPasteInput(data, attachClipboardImages)
-            : data;
+            : activeAgent === "agy" && !options.agentLaunch ? buildClipboardImagePaste(data) ?? data : data;
           let submitInput = mode === "prompt_paste" && composerSubmitKey === "Tab" ? "\t" : "\r";
           // Codex and TraeX buffer fast Windows paste bursts; flush before submitting.
-          if (flushPasteBuffer || (mode === "prompt_paste" && process.platform === "win32" && attachClipboardImages))
+          if (flushPasteBuffer || (mode === "prompt_paste" && process.platform === "win32" && activeAgent === "codex"))
             submitInput = `\x05${submitInput}`;
           if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([
             { type: "text", data: text }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },

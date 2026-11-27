@@ -1,9 +1,14 @@
 import path from "node:path";
 import os from "node:os";
+import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import { browserCommentEvidenceDirectory } from "../attachments/browser-comment-evidence";
 
-export function splitClipboardImagePaste(text: string): string[] {
-  // Codex recognizes an image only when its path is a standalone paste event.
+export function usesStandaloneClipboardImagePaste(agent: TerminalAgentKind | null): boolean {
+  return agent === "codex" || agent === "agy";
+}
+
+export function splitClipboardImagePaste(text: string): string[] | null {
+  // Codex and AGY recognize an image only when its path is a standalone paste event.
   // Match only our uploaded-image path format, preserving all intervening text.
   const directory = `${path.join(os.tmpdir(), "runweave-terminal-images")}${path.sep}`
     .replaceAll("'", "'\"'\"'").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -17,7 +22,7 @@ export function splitClipboardImagePaste(text: string): string[] {
     parts.push(match[0]);
     offset = match.index + match[0].length;
   }
-  if (!parts.length) return [text];
+  if (!parts.length) return null;
   if (offset < text.length) parts.push(text.slice(offset));
   return parts;
 }

@@ -33,7 +33,7 @@ export async function replaceManagedCodexPrompt(options: {
   const requestPath = path.join(directory, `input-${requestId}.json`);
   const responsePath = path.join(directory, `input-${requestId}.result.json`);
   try {
-    await writeFile(requestPath, JSON.stringify({ ...expected, text: options.text, segments: splitClipboardImagePaste(options.text), append: options.append === true, submit: options.submit, submitKey: options.submitKey, expiresAt: Date.now() + 10_000 }), { flag: "wx", mode: 0o600 });
+    await writeFile(requestPath, JSON.stringify({ ...expected, text: options.text, segments: splitClipboardImagePaste(options.text) ?? [options.text], append: options.append === true, submit: options.submit, submitKey: options.submitKey, expiresAt: Date.now() + 10_000 }), { flag: "wx", mode: 0o600 });
     await options.tmux.cancelCopyMode(options.target, { strict: true });
     await options.tmux.sendKeySequence(options.target, [{ type: "literal", value: `\x1b[200~RUNWEAVE_CODEX_INPUT:${context.generation}:${requestId}\x1b[201~` }]);
     const deadline = Date.now() + 10_000;
