@@ -1,8 +1,9 @@
 version: 1
-name: Attention 待处理阻塞信号收口与 Working 折叠验收
+name: Attention 待处理信号与终端列表展示验收
 description: >
   验证 AttentionService、macOS Desktop Slot Companion 与原生 iOS 首页统一将 Codex 结构化待答、Claude PermissionRequest
-  及 OSC 7501 阻塞态收口为高优先级 needs_action 并精确直达目标面板，同时默认折叠正常运行的 working 项且绝不从普通终端文本猜测告警。
+  及 OSC 7501 阻塞态收口为高优先级 needs_action 并精确直达目标面板。核对桌面端默认折叠 working 项、
+  iOS 首页直接展示 working 项，以及普通终端文本不会触发告警。
 
 cases:
   - id: ATTNCONV-001
@@ -63,11 +64,11 @@ cases:
     name: 原生 iOS 首页置顶展示待处理状态并支持直达目标面板或回复辅助
     required: true
     description: >
-      验证原生 iOS 首页识别待处理终端标识，点击 Codex 待答可直接进入对应回复辅助，运行中列表折叠开关不影响跨连接隔离。
+      验证原生 iOS 首页在「关注」中优先显示待答终端，其后直接显示运行中终端，点击 Codex 待答可进入对应回复辅助。
     preconditions:
       - iOS 模拟器运行候选 Debug App 并登录测试 Backend，存在一个 Codex 待答终端与两个正常 `working` 终端。
     steps:
-      - 使用 `$toolkit:agent-device` 查看首页；确认待答终端显示明确待处理标识并排在普通运行中终端之前，折叠运行中区域后待答终端依然可见。
+      - 使用 `$toolkit:agent-device` 查看首页；确认「关注」直接显示两个运行中终端，待答终端带有待处理标识并排在它们之前。
       - 点击待答终端的快捷处理入口；确认进入绑定同一终端与面板的回复辅助页面。
 
   - id: ATTNCONV-007
