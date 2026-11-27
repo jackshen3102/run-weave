@@ -2,7 +2,7 @@ import { browseEnabled, assertRecordDomain } from "../browse/domain";
 import { createLegacy } from "../browse/legacy";
 import { materialValue, materialReceipt, saveMaterial, validateMaterial } from "../materials/service";
 import { listChanges } from "./changes";
-import { followupSummaries } from "../followups/repository";
+import { followupCursor, followupSummaries } from "../followups/repository";
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type {
@@ -26,6 +26,7 @@ export type RecordQuery = {
   kind?: string;
   taskStatus?: string;
   q?: string;
+  includeFollowups?: boolean;
   tag?: string;
   from?: string;
   to?: string;
@@ -61,12 +62,13 @@ export class RecordService {
   async list(owner: string, query: RecordQuery): Promise<RecordPage> {
     if ((query.materialFrom || query.materialTo) && query.category !== "material") throw invalid("素材日期只能用于素材分类");
     if (query.materialFrom && query.materialTo && query.materialFrom > query.materialTo) throw invalid("起始日期不得晚于结束日期");
-    const { cursor, limit, ...filters } = query;
+    const { cursor, limit, includeFollowups, ...filters } = query;
+    const searchFollowups = Boolean(query.q && includeFollowups);
     const material = query.category === "material";
     const materialExists = "EXISTS(SELECT 1 FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
     const materialDay = "(SELECT material_date FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
     const materialTime = "(SELECT captured_at FROM record_materials m WHERE m.owner_id=records.owner_id AND m.record_id=records.id)";
-    const fingerprint = digest(filters);
+    const fingerprint = digest(searchFollowups ? { ...filters, includeFollowups } : filters);
     const values: unknown[] = [owner];
     const where = [
       "owner_id=$1",
@@ -85,8 +87,23 @@ export class RecordService {
     if (query.kind) add("kind=?", query.kind);
     if (query.taskStatus) add("task_status=?", query.taskStatus);
     if (query.tag) add("?=ANY(tags)", query.tag);
-    if (query.q)
-      add("body LIKE ? ESCAPE '\\'", `%${query.q.replace(/[\\%_]/g, "\\$&")}%`);
+    let followupJoin = "";
+    if (query.q) {
+      if (searchFollowups) {
+        const keyword = `$${values.push(query.q)}`;
+        followupJoin = `LEFT JOIN LATERAL (
+          SELECT f.id AS followup_id, f.sequence,
+            substring(f.body FROM greatest(1, strpos(f.body, ${keyword}) - 24) FOR 160) AS excerpt
+          FROM record_followups f
+          WHERE f.owner_id=records.owner_id AND f.record_id=records.id AND strpos(f.body, ${keyword})>0
+          ORDER BY f.sequence DESC LIMIT 1
+        ) hit ON true`;
+      }
+      add(
+        `(records.body LIKE ? ESCAPE '\\'${searchFollowups ? " OR hit.followup_id IS NOT NULL" : ""})`,
+        `%${query.q.replace(/[\\%_]/g, "\\$&")}%`,
+      );
+    }
     if (query.from) add("created_at>=?", query.from);
     if (query.to) add("created_at<?", query.to);
     if (cursor) {
@@ -116,16 +133,22 @@ export class RecordService {
         "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
       );
       const rows = (
-        await client.query(
-          `SELECT id FROM records WHERE ${where.join(" AND ")} ORDER BY ${material ? `${materialDay} DESC,${materialTime} DESC,id DESC` : "created_at DESC,id DESC"} LIMIT $${values.length}`,
+        await client.query<{ id: string; followup_id: string; sequence: number; excerpt: string }>(
+          `SELECT id${searchFollowups ? ", hit.*" : ""} FROM records ${followupJoin} WHERE ${where.join(" AND ")} ORDER BY ${material ? `${materialDay} DESC,${materialTime} DESC,id DESC` : "created_at DESC,id DESC"} LIMIT $${values.length}`,
           values,
         )
       ).rows;
       const items: SuijiRecord[] = [];
-      for (const row of rows.slice(0, limit))
-        items.push(
-          await getRecord(client, owner, row.id, false, query.trash === "true", false),
-        );
+      for (const row of rows.slice(0, limit)) {
+        const record = await getRecord(client, owner, row.id, false, query.trash === "true", false);
+        if (row.followup_id)
+          record.followupMatch = {
+            id: row.followup_id,
+            excerpt: row.excerpt,
+            cursor: followupCursor(owner, row.id, row.sequence + 1),
+          };
+        items.push(record);
+      }
       const summaries = await followupSummaries(client, owner, items.map(item => item.id));
       for (const item of items) item.followupSummary = summaries.get(item.id);
       const last = items.at(-1);

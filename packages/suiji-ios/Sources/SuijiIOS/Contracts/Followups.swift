@@ -16,6 +16,11 @@ public struct FollowupSummary: Codable, Equatable, Sendable {
   public let count: Int
   public let latest: FollowupLatest?
 }
+public struct FollowupSearchMatch: Codable, Equatable, Sendable {
+  public let id: String
+  public let excerpt: String
+  public let cursor: String
+}
 public struct SuijiFollowup: Codable, Identifiable, Equatable, Sendable {
   public let id: String
   public let recordId: String
@@ -32,6 +37,7 @@ struct FollowupFeatures: Codable, Sendable { let browse: Bool?; let materials: B
 func mergeSuijiRecord(_ old: SuijiRecord, _ new: SuijiRecord) -> SuijiRecord {
   var value = old.version > new.version ? old : new
   value.followupSummary = (old.followupSummary?.latest?.sequence ?? 0) > (new.followupSummary?.latest?.sequence ?? 0) ? old.followupSummary : new.followupSummary ?? old.followupSummary
+  value.followupMatch = new.followupMatch ?? old.followupMatch
   return value
 }
 func suijiHandoff(endpoint: String, info: ServiceInfo, recordID: String) throws -> String {

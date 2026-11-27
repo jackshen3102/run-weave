@@ -29,19 +29,19 @@ Compose 只发布宿主 loopback。`auth:reset` 从同样的 stdin 更新账号�
 公开合同：[shared/suiji](../shared/src/suiji/index.ts)。所有 `/api/suiji/v1` 请求需要 Bearer，
 所有业务写请求需要 `Idempotency-Key`。ID 为 UUID，UTC 时间精度为毫秒，正文按 Unicode 标量计数。
 
-| 接口                                          | 行为                                                                                 |
-| --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                                     |
-| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                                       |
-| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/tag/from/to/cursor/limit；创建时间倒序，q 为字面子串，tag 精确匹配 |
-| `GET /api/suiji/v1/tags`                      | 当前 owner 有效记录的去重标签，按最近使用记录更新时间倒序，返回 items                |
-| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                                       |
-| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds/tags；note 状态 null，task 初始 open                         |
-| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，kind/body/attachmentIds/tags 至少一个；一次原子保存                 |
-| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态                |
-| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成             |
-| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                                        |
-| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                              |
+| 接口                                          | 行为                                                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /api/auth/login` / `refresh` / `logout` | 单独会话、轮换刷新、注销当前会话                                                                 |
+| `GET /api/auth/verify` / `/api/suiji/v1/info` | 核验身份、协议、版本与输入限额                                                                   |
+| `GET /api/suiji/v1/records`                   | kind/taskStatus/q/tag/from/to/cursor/limit；正文和跟进的字面子串搜索，创建时间倒序，tag 精确匹配 |
+| `GET /api/suiji/v1/tags`                      | 当前 owner 有效记录的去重标签，按最近使用记录更新时间倒序，返回 items                            |
+| `GET /api/suiji/v1/records/:id`               | 当前正文、状态、版本和有序附件                                                                   |
+| `POST /api/suiji/v1/records`                  | kind/body/attachmentIds/tags；note 状态 null，task 初始 open                                     |
+| `PATCH /api/suiji/v1/records/:id`             | expectedVersion，kind/body/attachmentIds/tags 至少一个；一次原子保存                             |
+| `POST /api/suiji/v1/records/:id/trash`        | expectedVersion/trashed；移入回收站或恢复，保留正文、附件和待办原状态                            |
+| `POST /api/suiji/v1/records/:id/task-status`  | expectedVersion/targetStatus；open → done/archived；done → open 撤销完成                         |
+| `POST /api/suiji/v1/uploads`                  | 单个 multipart file；幂等摘要与 boundary 无关                                                    |
+| `GET /api/suiji/v1/attachments/:id/content`   | 当前 owner 的实际文件流，不返回存储路径                                                          |
 
 编辑可切换想法与待办，保留记录 ID、创建时间和附件。想法转待办时状态设为 open，待办转想法时清空状态；类型不变时保留原待办状态。省略 kind 保留原类型。
 
@@ -110,7 +110,7 @@ bearer_token_env_var = "SUIJI_MCP_TOKEN"
 | 工具                  | 行为                                                                                    |
 | --------------------- | --------------------------------------------------------------------------------------- |
 | `list_records`        | 创建时间倒序的摘要，kind/taskStatus/from/to/cursor/limit，默认 20、最多 50              |
-| `search_records`      | query 与同样筛选，默认 10、最多 50；当前正文的字面关键词匹配                            |
+| `search_records`      | query 与同样筛选，默认 10、最多 50；当前正文和跟进的字面关键词匹配                      |
 | `get_record`          | recordId，完整正文、version 和附件元数据                                                |
 | `create_record`       | kind/body/idempotencyKey，新记录来源 agent，不接附件上传                                |
 | `replace_record_body` | recordId/body/expectedVersion/idempotencyKey，仅替换正文                                |
@@ -119,6 +119,9 @@ bearer_token_env_var = "SUIJI_MCP_TOKEN"
 
 参数使用 camelCase，拒绝未知字段。摘要最多 300 标量，`excerptIsFullBody` 标明是否完整；
 替换前应先 `get_record`，不能用摘要覆盖全文。搜索明确不覆盖附件、历史正文、外链或语义索引。
+普通 HTTP 和个人 MCP 搜索每条记录返回至多一个 `followupMatch`，包含最近命中跟进的 ID、片段、
+以及从该条开始的跟进列表游标。用同一记录调用 HTTP 跟进列表或 `list_followups`，首条即为目标。
+AI 回顾的独立检索入口仍只匹配记录正文。
 Markdown 默认每页 4000、最多 16000 标量；图片沿用服务现有 5 MiB 上限，无图片分页。
 附件和正文是资料，不作为 Agent 指令；只有用户明确要求时写入，不自动执行外链内容。
 

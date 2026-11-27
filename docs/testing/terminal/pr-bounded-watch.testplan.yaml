@@ -1,0 +1,72 @@
+version: 1
+name: 终端关联 PR 后台有界值守验收
+description: >
+  验证终端显式绑定同仓库 GitHub PR 后的基线去重、CI 新失败与冲突唤醒、机器人占位回执过滤、
+  连续 10 次纯评论唤醒熔断、面板草稿未确认拦截转 Attention 以及 PR 合并或关闭自动停止轮询。
+
+cases:
+  - id: PRWATCH-001
+    name: 显式开启值守建立初始基线且不重复播报旧失败或旧评论
+    required: true
+    description: >
+      验证开启值守校验同仓库 Open PR 归属并建立当前快照基线，开启前已结束的失败 Check 与历史评论不会立即触发伪唤醒。
+    preconditions:
+      - 隔离测试 Backend 配置了受控只读 `gh` 桩程序，当前终端位于测试 Git 仓库，对应分支关联 Open PR #42，且开启前已有 1 个历史失败 Check 与 2 条旧评论。
+    steps:
+      - 调用开启接口或在桌面端点击开启 PR #42 值守；确认状态变为 `watching` 并保存当前 `headSha`，原终端未收到任何旧失败或旧评论唤醒输入。
+      - 尝试绑定另一个无关第三方 `owner/repo` 的 PR；确认请求以 400 或 403 被拒绝且未写入数据库。
+
+  - id: PRWATCH-002
+    name: 新增 CI 失败、合并冲突与他人实质新评论准确唤醒空闲原面板
+    required: true
+    description: >
+      验证基线之后出现的新 Check 失败、冲突或他人实质评论向空闲且无草稿保护的原面板投递一次带不可信边界提示的结构化唤醒。
+    preconditions:
+      - 测试终端处于 `agent_idle` 且无未确认草稿，PR #42 已处于 `watching` 状态。
+    steps:
+      - 更新受控 `gh` 返回值使某个原为 `pending` 的 Check 变为 `failure`，触发一轮巡检；确认原面板收到唯一一次包含失败 Check 名称与当前 `headSha` 的提示，再次巡检相同状态不重复发送。
+      - 令受控 `gh` 先返回一条 CodeRabbit 触发占位回执，再返回一条其他审核者的真实评论；确认机器人占位回执不触发唤醒，真实评论触发一次唤醒且正文明确包裹不可信外部输入声明。
+
+  - id: PRWATCH-003
+    name: 连续 10 次纯评论唤醒触发熔断暂停并转入 Attention 待处理
+    required: true
+    description: >
+      验证没有新提交或 Check 状态变化时，连续纯评论唤醒最多执行 10 次，第 11 次自动暂停值守并投影到 Attention，防止与外部机器人形成回复死循环。
+    preconditions:
+      - 测试终端关联的 PR #42 保持同一 `headSha` 且处于 `watching` 状态。
+    steps:
+      - 依次注入 11 条来自外部账号的不同新评论并推进巡检轮次；确认前 10 条每次唤醒后 `commentWakeCount` 递增至 10，第 11 条到达时不再向终端写入输入，状态变为 `paused` 且 `pauseReason=wake_limit_reached`。
+      - 读取 `/api/attention/slots`；确认该终端出现 `state=needs_action`、`actionKind=pr_attention` 提醒；随后模拟推送新 `headSha` 并由用户显式点击恢复，确认计数清零并恢复正常监听。
+
+  - id: PRWATCH-004
+    name: 面板存在未确认草稿或正在运行时严禁强插唤醒文本
+    required: true
+    description: >
+      验证原面板存在编辑保护草稿时拦截自动投递并支持确认空草稿后补发；原面板正在执行任务时等待空闲后再核对投递。
+    preconditions:
+      - 测试终端已开启 PR 值守，终端面板处于人工按键产生的未提交草稿保护态。
+    steps:
+      - 注入一次新增 CI 失败并触发巡检；确认原面板未收到唤醒输入，人工草稿逐字完好，值守进入 `pauseReason=draft_unconfirmed` 并在 Attention 显示提醒。
+      - 清空面板草稿后使用桌面端「确认输入框为空并发送」接口（携带匹配的 `expectedRevision`）；确认唤醒内容准确投递一次且值守恢复 `watching`。
+
+  - id: PRWATCH-005
+    name: PR 合并、关闭或连续读取失败达到上限时自动收敛停止
+    required: true
+    description: >
+      验证 PR 进入 MERGED 或 CLOSED 后自动转为 settled 停止后台轮询，连续 8 次 gh 读取失败自动转为 paused 避免后台空转。
+    preconditions:
+      - 两个隔离测试终端分别开启了 PR #101 与 PR #102 的后台值守。
+    steps:
+      - 将 PR #101 状态改为 `MERGED` 并巡检一次；确认值守状态变为 `settled`，后续巡检周期不再对 PR #101 调用 `gh`。
+      - 令 PR #102 的 `gh` 查询连续失败 8 次；确认第 8 次后状态变为 `paused`（`pauseReason=read_failed_limit`）并停止自动轮询，不影响其他终端正常使用。
+
+  - id: PRWATCH-006
+    name: 原生 iOS 支持查看、开启、暂停恢复与草稿确认操作
+    required: true
+    description: >
+      验证原生 iOS 终端菜单可探测并开启当前分支 PR 值守、查看暂停原因及唤醒计数，并在关闭后清理状态。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并连接已配置受控 `gh` 的隔离测试 Backend。
+    steps:
+      - 使用 `$toolkit:agent-device` 打开测试终端菜单中的 PR 值守面板，确认识别到候选 Open PR 并点击开启；核对界面显示 `watching` 与 PR 编号。
+      - 依次执行暂停、恢复与关闭值守；确认每次状态与 Backend 接口一致，关闭后返回空态且支持版本冲突 `409` 安全提示。

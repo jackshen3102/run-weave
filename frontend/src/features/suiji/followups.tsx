@@ -27,20 +27,31 @@ export function SuijiFollowups({
 }) {
   const [items, setItems] = useState<SuijiFollowup[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const generation = useRef(0);
-  const load = useMemoizedFn(async (more = false) => {
+  const match = record.followupMatch;
+  const matchedArticle = useRef<HTMLElement>(null);
+  const matchedId = showLatest ? undefined : match?.id;
+  const firstId = items[0]?.id;
+  useEffect(() => {
+    if (!matchedId || firstId !== matchedId) return;
+    matchedArticle.current?.focus({ preventScroll: true });
+    matchedArticle.current?.scrollIntoView({ block: "start" });
+  }, [firstId, matchedId]);
+  const load = useMemoizedFn(async (more = false, latest = showLatest) => {
     const request = ++generation.current;
     setBusy(true);
     setError("");
     try {
       const base = `/api/suiji/v1/records/${record.id}`;
+      const start = more ? cursor : latest ? undefined : match?.cursor;
       const [page, current] = await Promise.all([
         client.request<FollowupPage>(
           base +
             "/followups" +
-            (more && cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
+            (start ? "?cursor=" + encodeURIComponent(start) : ""),
         ),
         more ? undefined : client.request<RecordResponse>(base),
       ]);
@@ -56,6 +67,7 @@ export function SuijiFollowups({
           : page.items,
       );
       setCursor(page.nextCursor);
+      if (!more) setShowLatest(latest);
       if (current) onRecord(current.record);
     } catch (reason) {
       if (request === generation.current)
@@ -75,9 +87,10 @@ export function SuijiFollowups({
     <section className="flex flex-col gap-4 border-t pt-4" aria-label="跟进">
       <div className="flex items-center justify-between gap-2">
         <h3>跟进 {record.followupSummary?.count ?? items.length} 条</h3>
-        <Button variant="ghost" disabled={busy} onClick={() => void load()}>
-          刷新跟进
+        <Button variant="ghost" disabled={busy} onClick={() => void load(false, Boolean(matchedId) || showLatest)}>
+          {matchedId ? "查看最新跟进" : "刷新跟进"}
         </Button>
+        {matchedId && error ? <Button variant="ghost" disabled={busy} onClick={() => void load()}>重试定位</Button> : null}
         {!record.deletedAt ? (
           <Button disabled={!writable} onClick={onAdd}>
             追加跟进
@@ -92,8 +105,11 @@ export function SuijiFollowups({
       {items.map((item) => (
         <article
           key={item.id}
-          className="flex flex-col gap-2 rounded-xl border p-4"
+          ref={item.id === matchedId ? matchedArticle : undefined}
+          tabIndex={item.id === matchedId ? -1 : undefined}
+          className={`flex scroll-mt-16 flex-col gap-2 rounded-xl border p-4${item.id === matchedId ? " border-primary" : ""}`}
         >
+          {item.id === matchedId ? <p className="text-xs font-medium text-primary">命中的跟进</p> : null}
           <p className="text-xs text-muted-foreground">
             {item.source.actor === "app"
               ? "你"

@@ -189,7 +189,7 @@ export function SuijiWorkspace({
     if (value === tag) void load();
     else setTag(value);
   });
-  const open = useMemoizedFn(async (id: string, citedVersion?: number) => {
+  const open = useMemoizedFn(async (id: string, citedVersion?: number, followupMatch?: SuijiRecord["followupMatch"]) => {
     const sequence = generation.current;
     const request = ++detailRequest.current;
     try {
@@ -212,11 +212,11 @@ export function SuijiWorkspace({
       setItems((old) =>
         old.map((item) =>
           item.id === record.id && item.version <= record.version
-            ? record
+            ? { ...record, followupMatch: item.followupMatch }
             : item,
         ),
       );
-      setDetail({ record, citedVersion });
+      setDetail({ record: { ...record, followupMatch }, citedVersion });
     } catch (error) {
       if (alive.current)
         setMessage(error instanceof Error ? error.message : "读取失败");
@@ -398,8 +398,8 @@ export function SuijiWorkspace({
                 {searchVisible ? (
                   <Input
                     autoFocus
-                    aria-label="搜索原文"
-                    placeholder="搜索正文关键词"
+                    aria-label="搜索记录"
+                    placeholder="搜索正文或跟进"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     className="w-full"
@@ -417,7 +417,7 @@ export function SuijiWorkspace({
                     key={record.id}
                     record={record}
                     pending={pending.has(record.id)}
-                    onOpen={() => void open(record.id)}
+                    onOpen={() => void open(record.id, undefined, record.followupMatch)}
                     onOpenLink={onOpenLink}
                     onTag={selectTag}
                   />
@@ -433,7 +433,7 @@ export function SuijiWorkspace({
                   <div className="flex flex-col gap-3 py-16 text-center">
                     <h2 className="text-xl">
                       {query || tag
-                        ? "没有找到匹配的原文"
+                        ? "没有搜索结果"
                         : tab === "trash"
                           ? "回收站为空"
                           : "留一点想法在这里"}

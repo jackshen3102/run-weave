@@ -34,6 +34,7 @@ export function useFollowupActions({
     if (!alive.current || !client.active) return;
     const merge = (old: SuijiRecord) => ({
       ...(old.version > record.version ? old : record),
+      followupMatch: old.followupMatch,
       followupSummary: latestFollowupSummary(
         old.followupSummary,
         record.followupSummary,

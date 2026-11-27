@@ -28,6 +28,8 @@ struct RecordDetail: View {
   @State private var refreshed: SuijiRecord?
   @State private var confirmingTrash = false
   @State private var showingFollowups = false
+  @State private var openedSearchMatch = false
+  @State private var followupMatch: FollowupSearchMatch?
   @State private var addingFollowupAfterDismiss = false
   @State private var copyFeedback = ""
   @State private var editingTags = false
@@ -109,14 +111,21 @@ struct RecordDetail: View {
           saveTags((record.tags ?? []) + [tag])
         }
       }
+      .onAppear {
+        guard !openedSearchMatch, let match = original.followupMatch else { return }
+        openedSearchMatch = true
+        followupMatch = match
+        showingFollowups = true
+      }
       .sheet(isPresented: $showingFollowups, onDismiss: {
+        followupMatch = nil
         guard addingFollowupAfterDismiss else { return }
         addingFollowupAfterDismiss = false
         guard hasFollowups, record.deletedAt == nil, !pending, !busy else { return }
         Task { await session.openFollowup(record) }
       }) {
         NavigationStack {
-          ScrollView { FollowupsView(session: session, record: record).padding(20) }
+          ScrollView { FollowupsView(session: session, record: record, match: followupMatch).padding(20) }
             .background(SuijiTheme.background)
             .navigationTitle("跟进")
             .navigationBarTitleDisplayMode(.inline)

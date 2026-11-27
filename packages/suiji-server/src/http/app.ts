@@ -222,7 +222,7 @@ export function createApp(
       res.json(
         await records.list(
           res.locals.auth.ownerId,
-          listSchema.parse(req.query),
+          { ...listSchema.parse(req.query), includeFollowups: true },
         ),
       ),
     ),
