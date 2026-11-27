@@ -7,6 +7,7 @@ import { SettingsPage } from "./pages/settings-page";
 import { isManagementPath, settingsBackground, useSettingsNavigation } from "./features/settings/navigation";
 import { DevResourcesPage } from "./pages/dev-resources-page";
 import { useDesktopBadge } from "./features/attention/use-desktop-badge";
+import { useWebTabBadge } from "./features/attention/use-web-tab-badge";
 import { ResourceMonitorProvider } from "./features/system-monitor/resource-monitor-provider";
 import { ResourceNotice } from "./features/system-monitor/resource-notice";
 import { OverlayProvider } from "./features/overlay/provider";
@@ -154,6 +155,7 @@ function RunweaveApp() {
     generation: activeConnection?.tunnelEndpointId ? activeConnection.generation : undefined,
   });
   useQualityUploader(apiBase, token);
+  useWebTabBadge({ apiBase, token, enabled: !isElectron && authStatus === "authenticated" });
   const screenConversation = useScreenConversationLink({ scope: queryScope, apiBase, token }, navigate);
   const [pendingScheduledRunOpen, setPendingScheduledRunOpen] = useState<{ connectionId: string; runId: string } | null>(null);
   const [scheduledRunOpenError, setScheduledRunOpenError] = useState<string | null>(null);

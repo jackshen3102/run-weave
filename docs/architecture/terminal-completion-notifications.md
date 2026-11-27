@@ -18,6 +18,10 @@ iPhone 图标与 Mac Dock 使用 Backend 的未读终端绝对计数，不统计
 
 总数按响应中的 `hostId` 去重并排除当前电脑及其地址别名；同机使用最新 revision 的计数，当前电脑身份尚未知时暂不显示其他电脑总数。连接地址或代次改变后不复用旧来源，网络不可用时保留上次数量并标注，凭据或身份失效后移除该连接计数。
 
+## 网页标签页提醒
+
+纯网页形态（`!isElectron`）没有系统 Dock 角标或桌面伴侣，由 [use-web-tab-badge.ts](../../frontend/src/features/attention/use-web-tab-badge.ts) 按 `terminalSessionId` 去重汇总待接管终端（`GET /api/attention` 的 `needs_action` / `blocked` 及后台响铃终端）与未读完成终端：计数大于 0 时将 `document.title` 更新为 `(N · 待接管) <基础标题>` 或 `(N · 已完成) <基础标题>`，并在 `<link rel="icon">` 右上角切口绘制绿点；归零或退出登录时恢复原值，Electron 保持原生窗口标题与 Dock 角标不变。
+
 ## 手机输入的回复推送
 
 原生 iOS 登录的连接自动独立订阅 `terminal-reply`（`terminal.reply`）。Backend 从已认证的 App
