@@ -294,3 +294,14 @@ Windows 中 Claude 以上的祖先进程退出或 PID 被复用时，终止祖�
 如果 hook 丢失，状态可能短期停留在旧值；App Server 可在后续低频 reconciliation 中使用明确的 Codex rollout 生命周期或 Trae lifecycle 终态校正。Codex 的 `task_started` 可重新确认仍为 running 的线程，或恢复不晚于该开始记录的投影；不能用旧开始记录复活已结束的线程。读取从文件尾逐块回溯，最多 64 MiB，每块 1 MiB，避免长任务的开始记录落出最后一块后永久失去恢复依据；超过边界或读取期间文件变化时不推断状态。重新确认开始后，同一 rollout 中更新的终态序号仍可完成该轮；新的 prompt/start hook 会清除上一轮生命周期游标。Backend 重启会恢复同一 Profile 中仍有效的 Panel Agent 活动租约和 operation generation；过期或无法与当前 Panel 对齐的记录采用 fail-closed，不复活旧 Agent 状态。未知、缺失或过旧的 provider 事实保持原状态；系统不根据运行时长猜测 running。
 
 仍标为 running 的线程不受最近 3 小时活动窗口限制，避免长任务丢失 Stop hook 后永久漏过补偿；其它线程沿用活动窗口，单轮候选仍最多 100 个。
+
+### 跨 Agent 与 Worktree 的上下文交接
+
+终端菜单通过 `GET /api/terminal/session/:id/agent/handoff-preview` 读取绑定面板的可见问答，显示
+完整、部分保留及省略的轮数、历史字节数和同父项目下可用的工作区。App Server 在阅读页的传输裁剪之前生成交接投影；原生来源已不完整时拒绝将中途的请求标为首条任务。交接文档最多 49,152 UTF-8 字节，优先保留首条用户任务，
+再从末尾按轮填入；省略标记给出轮次及原会话检索指引。附加指令有独立的 32 KiB 预算。
+
+`POST /api/terminal/session/:id/agent/handoff` 校验来源版本和目标项目。空闲 Codex 同目录可走原生分叉；
+原有 `/agent/fork` 继续支持旧客户端。通用交接创建独立终端，启动目标 CLI，并通过目标终端的受管文本附件
+投递历史。文件继承终端附件的 0600 权限与保留期限。来源版本冲突需刷新预览；同一操作 ID 的回执在本进程
+保留一小时。投递未确认时返回新终端 ID 供人工核对。

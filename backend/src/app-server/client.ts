@@ -18,9 +18,12 @@ export class AppServerClient {
   async getConversation(threadId: string, signal?: AbortSignal, query: AppServerConversationQuery = {}): Promise<AppServerConversationResponse> {
     const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadId)}/conversation`);
     if (query.provider) url.searchParams.set("provider", query.provider);
+    if (query.handoffCwd) url.searchParams.set("handoffCwd", query.handoffCwd);
     const response = await fetch(url, {
       headers: this.headers(), signal, cache: "no-store",
     });
+    if (query.handoffCwd && response.status === 400)
+      return this.getConversation(threadId, signal, { provider: query.provider });
     if (!response.ok) throw new AppServerConversationError(response.status);
     return await response.json() as AppServerConversationResponse;
   }

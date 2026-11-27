@@ -66,6 +66,6 @@ export interface TerminalAgentPreparationFailureDetails {
   panelId: string | null;
   tmuxPaneId: string | null;
   createdPanel: boolean;
-  provider: TerminalAgentPreparationAgent;
+  provider: import("../context-handoff").HandoffTargetAgent;
   exitCode?: number;
 }

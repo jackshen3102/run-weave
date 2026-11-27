@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { budgetHandoff, HandoffBudgetError } from "@runweave/shared/terminal/handoff-budgeter";
 import type { AnalysisEvidenceReader } from "./analysis-evidence-reader.js";
 import type { SupervisionConversationReader } from "./supervision-reader.js";
 import type { AppServerThreadRef } from "@runweave/shared/app-server-events";
@@ -24,7 +26,7 @@ export class ConversationReader {
   }
 
   // Claude, Codex and Trae verify controlled sources; Pi needs its registered file context.
-  async read(thread: Pick<AppServerThreadRef, "agent" | "threadId" | "pi"> & Partial<Pick<AppServerThreadRef, "cwd">>, signal?: AbortSignal): Promise<AppServerConversationResponse> {
+  async read(thread: Pick<AppServerThreadRef, "agent" | "threadId" | "pi"> & Partial<Pick<AppServerThreadRef, "cwd">>, signal?: AbortSignal, handoffCwd?: string): Promise<AppServerConversationResponse> {
     const isTrae = ["trae", "traecli", "traex"].includes(thread.agent);
     const supported = thread.agent === "codex" || thread.agent === "pi" || thread.agent === "claude" || thread.agent === "agy" || isTrae;
     if (thread.agent === "claude" && !this.claude) throw new ConversationReadError(503, "CLAUDE_READER_UNAVAILABLE", "Claude 会话读取服务尚未初始化");
@@ -39,6 +41,17 @@ export class ConversationReader {
       availability: !supported ? "provider_unsupported" : content ? "available" : "source_missing",
       readAt: new Date().toISOString(), partial: content?.partial ?? false, turns: content?.turns ?? [],
     };
+    if (handoffCwd !== undefined) {
+      if (response.partial || response.availability !== "available") return { ...response, turns: [] };
+      try {
+        const revision = createHash("sha256").update(JSON.stringify(response.turns)).digest("hex");
+        return { ...response, turns: [], handoff: { revision,
+          ...budgetHandoff(response.turns, response.provider, response.threadId, handoffCwd) } };
+      } catch (error) {
+        if (error instanceof HandoffBudgetError) throw new ConversationReadError(error.status, "HANDOFF_PROJECTION_UNAVAILABLE", error.message);
+        throw error;
+      }
+    }
     return recentConversation(response);
   }
 }

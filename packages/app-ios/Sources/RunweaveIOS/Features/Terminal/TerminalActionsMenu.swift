@@ -3,6 +3,7 @@ import SwiftUI
 /// Only menu inputs invalidate the native menu, never output counters or unrelated sessions.
 struct TerminalActionsMenu: View, Equatable {
   let session: AppSession
+  @State var handoff = false
   let controller: SessionController
   let terminalID: String
   let cwd: String
@@ -45,6 +46,8 @@ struct TerminalActionsMenu: View, Equatable {
 
   var body: some View {
     Menu {
+      Button { handoff = true } label: { Label("交接到新终端…", systemImage: "arrowshape.turn.up.right") }
+        .disabled(!session.canEditTerminal(terminalID))
       Text(cwd)
       Button(action: review) { Label(reviewAgain ? "重新 Review" : "代码 Review", systemImage: "checkmark.bubble") }
         .disabled(!canReview).accessibilityIdentifier("terminal-menu-code-review")
@@ -86,6 +89,7 @@ struct TerminalActionsMenu: View, Equatable {
     } label: {
       Image(systemName: "ellipsis")
     }.accessibilityLabel("终端操作")
+    .sheet(isPresented: $handoff) { ContextHandoffSheet(session: session, terminalID: terminalID) }
       .fullScreenCover(isPresented: $showingBranchUpdates) {
         BranchUpdatesView(session: session, terminalID: terminalID, cwd: cwd,
           title: session.overview?.sessions.first(where: { $0.id == terminalID })?.title ?? "当前终端")

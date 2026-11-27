@@ -50,6 +50,7 @@ type TerminalInputDispatchOptions = {
   codexInputContext?: CodexInputContext;
   /** Internal task service already owns a supervisor delivery lease for the fixed pane. */
   supervisorInput?: boolean;
+  handoffAgent?: import("@runweave/shared/terminal/context-handoff").HandoffTargetAgent;
   validateSupervisorTarget?: () => void;
   /** Internal shell launch after a pane respawn, before command observation catches up. */
   agentLaunch?: boolean;
@@ -156,13 +157,14 @@ function buildPromptReplaceSequence(
   submit: boolean,
   submitKey: TerminalPromptSubmitKey,
   attachClipboardImages = false,
+  bracketedPaste = false,
 ): TmuxKeySequenceItem[] {
   return [
     { type: "key", key: "C-u" },
     {
       type: "literal",
       value: (attachClipboardImages ? buildClipboardImagePaste(text) : null)
-        ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text)),
+        ?? (submitKey === "Enter" && !bracketedPaste ? text : buildPromptPasteInput(text)),
       delayAfterMs: submit ? CODEX_COMPOSER_SUBMIT_DELAY_MS : undefined,
     },
     ...(submit ? [{ type: "key" as const, key: submitKey }] : []),
@@ -343,7 +345,7 @@ export async function sendInputToSession(
         if (!("paneId" in target)) throw new Error("Supervisor input requires a fixed pane");
         const actual = (await options.tmuxService.listPanes(target)).find((candidate) => candidate.paneId === target.paneId);
         if (!actual || actual.runweavePanelId !== panel?.id ||
-          (!options.agentLaunch && (!panel || getAgentForCommand(resolveEffectivePanelActiveCommand(actual, panel.activeCommand)) !== getAgentForCommand(panel.activeCommand))))
+          (!options.agentLaunch && (!panel || getAgentForCommand(resolveEffectivePanelActiveCommand(actual, panel.activeCommand)) !== (options.handoffAgent ?? getAgentForCommand(panel.activeCommand)))))
           throw new Error("Original Agent pane is unavailable; no runtime was restored");
         options.validateSupervisorTarget?.();
       }
@@ -355,7 +357,7 @@ export async function sendInputToSession(
         if (identity?.id !== expectedThreadId || identity.provider !== "codex" || (codexObservation?.managed ? codexObservation.context?.displayedRunning !== false : owner.terminalState?.state !== "agent_idle")) throw new Error("会话已切换或 Agent 正在运行，未发送交接内容。");
       }
       const adapter = getAgentAdapter(
-        getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
+        options.handoffAgent ?? getAgentForCommand(panel?.activeCommand ?? session.activeCommand),
       );
       const replacePrompt =
         !options.agentLaunch && structuredInput
@@ -422,7 +424,7 @@ export async function sendInputToSession(
         options.beforeTextAttachmentWrite?.();
         await options.tmuxService.sendKeySequence(
           target,
-          buildPromptReplaceSequence(data, submit === true, submitKey, attachClipboardImages),
+          buildPromptReplaceSequence(data, submit === true, submitKey, attachClipboardImages, !!options.handoffAgent),
         );
       } else if (mode === "line") {
         options.validateSupervisorTarget?.();

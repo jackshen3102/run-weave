@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import {
   type PrepareTerminalAgentRequest,
   type PrepareTerminalAgentResponse,
-  type TerminalAgentPreparationAgent,
   type TerminalAgentPreparationFailureDetails,
 } from "@runweave/shared/terminal/agent-preparation";
 import type {
@@ -30,6 +29,9 @@ import {
 import { buildTerminalRuntimeEnvironment } from "../runtime/environment";
 import { withStagedAgentLaunch } from "./staged-agent-launch";
 
+type LaunchAgent = TerminalAgentPreparationFailureDetails["provider"];
+type LaunchRequest = Omit<PrepareTerminalAgentRequest, "agent"> & { agent: LaunchAgent };
+
 const AGENT_SHELL_STARTUP_DELAY_MS = 10_000;
 const agentPreparationLogger = logger.child({
   component: "terminal-agent-preparation",
@@ -49,13 +51,15 @@ export interface PrepareTerminalAgentInternalOptions {
   stageResumeCommand?: boolean;
   /** Launch in the fresh Worktree shell, preserving visible setup history. */
   reuseReadyShell?: boolean;
+  /** The handoff CLI owns its new pane; queued input cannot fall through to a shell on exit. */
+  execInNewPane?: boolean;
 }
 
 export async function prepareTerminalAgent(
   terminalSessionManager: TerminalSessionManager,
   session: TerminalSessionRecord,
   options: TerminalPanelOptions,
-  request: PrepareTerminalAgentRequest,
+  request: LaunchRequest,
   internalOptions?: PrepareTerminalAgentInternalOptions,
 ): Promise<PrepareTerminalAgentResponse> {
   const operationId = `terminal_agent_prepare_${randomUUID()}`;
@@ -298,6 +302,7 @@ export async function prepareTerminalAgent(
         request,
         operationId,
         internalOptions?.skipInitialPrompt === true,
+        internalOptions?.execInNewPane,
       );
       const submit = (command: string) => sendInputToSession(
         terminalSessionManager,
@@ -438,7 +443,7 @@ function assertPreparationTargetCurrent(input: {
   panel: TerminalPanelRecord;
   paneTarget: TerminalPanelTargetResolution["paneTarget"];
   operationId: string;
-  provider: TerminalAgentPreparationAgent;
+  provider: LaunchAgent;
 }): void {
   const currentSession = input.terminalSessionManager.getSession(
     input.session.id,
@@ -463,9 +468,10 @@ function assertPreparationTargetCurrent(input: {
 }
 
 function buildAgentLaunchCommand(
-  request: PrepareTerminalAgentRequest,
+  request: LaunchRequest,
   operationId: string,
   skipInitialPrompt = false,
+  execInNewPane = false,
 ): string {
   const command = request.command?.trim() || request.agent;
   const requestedArgs = request.resumeThreadId?.trim()
@@ -502,6 +508,7 @@ function buildAgentLaunchCommand(
     request.agent === "codex" && !request.commandLine?.trim()
       ? `RUNWEAVE_CODEX_CONFIG_ARGS=${shellQuote(JSON.stringify(args))} RUNWEAVE_CODEX_EXECUTABLE=${shellQuote(command)} `
       : "";
+  if (execInNewPane) return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}exec ${invocation}`;
   return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 
@@ -523,7 +530,7 @@ function throwPreparationError(input: {
   session: TerminalSessionRecord;
   panel: TerminalPanelRecord | null;
   createdPanel: boolean;
-  provider: TerminalAgentPreparationAgent;
+  provider: LaunchAgent;
   message: string;
   cause?: unknown;
   exitCode?: number;

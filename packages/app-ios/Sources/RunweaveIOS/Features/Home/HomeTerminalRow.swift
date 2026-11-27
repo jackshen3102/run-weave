@@ -22,6 +22,7 @@ struct HomeTerminalRow: View, Equatable {
   let rename: () -> Void
   let move: () -> Void
   let delete: () -> Void
+  @State private var handoff = false
   @State private var showingCopied = false
   @State private var forkFailure: String?
   private var terminal: HomeTerminal { state.value.terminal ?? initialTerminal }
@@ -156,6 +157,8 @@ struct HomeTerminalRow: View, Equatable {
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))
     }
     .contextMenu {
+      Button { handoff = true } label: { Label("交接到新终端…", systemImage: "arrowshape.turn.up.right") }
+        .disabled(!session.canEditTerminal(terminal.id))
       Button {
         Task {
           guard session.connection?.scope == connectionScope, let current = record.snapshot.terminal else { return }
@@ -191,6 +194,7 @@ struct HomeTerminalRow: View, Equatable {
       Button("删除终端", role: .destructive, action: delete)
         .disabled(!session.canEditTerminal(terminal.id))
     }
+    .sheet(isPresented: $handoff) { ContextHandoffSheet(session: session, terminalID: terminal.id) }
     .alert("已复制终端 ID", isPresented: $showingCopied) {
       Button("好", role: .cancel) {}
     } message: {

@@ -1,3 +1,4 @@
+import { ContextHandoffDialog } from "../session/context-handoff-dialog";
 import { useStartCodeReview, useCodeReviewActionState, useCodeReviews } from "../../../features/terminal/queries/code-review";
 import { useTerminalBrowserTunnelBinding } from "../../../features/tunnels/terminal-binding";
 import { useTunnelStore } from "../../../features/tunnels/store";
@@ -143,6 +144,7 @@ export function TerminalWorkspaceHeader({
   const contexts =
     useTerminalProjectContextsQuery(activeParentProjectId).data ??
     EMPTY_TERMINAL_PROJECT_CONTEXTS;
+  const [handoff, setHandoff] = useState<string | null>(null);
   const [recoveringAgent, setRecoveringAgent] = useState(false);
   const sharing = useSnapshotShareStore((state) => state.pending);
   const createShare = useSnapshotShareStore((state) => state.createShare);
@@ -236,6 +238,7 @@ export function TerminalWorkspaceHeader({
   });
   return (
     <div className="flex h-8 items-center gap-1.5 border-b border-slate-800 px-2">
+      {handoff && <ContextHandoffDialog key={scope + handoff} id={handoff} close={() => setHandoff(null)} />}
       <TerminalAppMenu
         isMobileMonitor={isMobileMonitor}
         loading={loading}
@@ -363,6 +366,7 @@ export function TerminalWorkspaceHeader({
               </DropdownMenuTrigger>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem disabled={loading || !activeSessionId} onSelect={() => setHandoff(activeSessionId)}>交接到新终端…</DropdownMenuItem>
               <DropdownMenuGroup>
                 <DropdownMenuItem disabled={loading || !activeSession || codeReviewAction?.pending || reviewBusy} onSelect={() => void startCodeReview()}>
                   {latestReview?.caseStatus === "open" && latestReview.reportId ? "重新 Review" : "代码 Review"}

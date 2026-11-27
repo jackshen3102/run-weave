@@ -51,6 +51,8 @@
     "./terminal/agy-agent": "./src/terminal/agy-agent.ts",
     "./terminal/pi-agent": "./src/terminal/pi-agent.ts",
     "./terminal/agent-preparation": "./src/terminal/runtime/agent-preparation.ts",
+    "./terminal/handoff-budgeter": "./src/terminal/handoff-budgeter.ts",
+    "./terminal/context-handoff": "./src/terminal/context-handoff.ts",
     "./terminal/agent-fork": "./src/terminal/agent-fork.ts",
     "./terminal/questions": "./src/terminal/questions.ts",
     "./terminal/agent-settings": "./src/terminal/agent-settings.ts",

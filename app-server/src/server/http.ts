@@ -321,6 +321,7 @@ export function createHttpApp(options: {
   app.get("/threads/:threadId/conversation", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const query = z.object({
+      handoffCwd: z.string().min(1).max(8192).optional(),
       provider: z.enum(["claude", "codex", "trae", "traecli", "traex", "pi", "agy", "unknown"]).optional(),
     }).strict().safeParse(req.query);
     if (!query.success) {
@@ -342,7 +343,7 @@ export function createHttpApp(options: {
       // Reading their verified source must not create lifecycle events or ThreadRef state.
       const response = await options.conversations.read(
         thread ? { ...thread, agent: provider ?? thread.agent }
-          : { agent: provider ?? "codex", threadId: req.params.threadId }, controller.signal,
+          : { agent: provider ?? "codex", threadId: req.params.threadId }, controller.signal, query.data.handoffCwd,
       );
       if (controller.signal.aborted) return;
       if (!thread && response.availability === "source_missing") {
