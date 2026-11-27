@@ -18,6 +18,13 @@ import {
   inferHandoffWorkloadState,
   sendWithConfirmation,
 } from "./terminal-agent.js";
+import {
+  formatTerminalStateExplain,
+  isUnsupportedEndpointError,
+  runSendAndWaitCommand,
+  runUnwrappedSnapshotCommand,
+  runWaitOutputCommand,
+} from "./terminal-orchestration.js";
 import { tailLines, writeOutput } from "../output/format.js";
 import type { TerminalInputMode } from "@runweave/shared/terminal/input";
 import type { TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
@@ -39,7 +46,7 @@ export async function runTerminalCommand(
 ): Promise<void> {
   if (!subcommand) {
     throw new CliError(
-      "Usage: rw terminal <create|list|show|snapshot|handoff|send|interrupt|state|history|delete|panel|task|review>",
+      "Usage: rw terminal <create|list|show|snapshot|handoff|send|wait-output|interrupt|state|history|delete|panel|task|review>",
       2,
     );
   }
@@ -50,7 +57,20 @@ export async function runTerminalCommand(
       : { args, values: [] };
   const parsed = parseArgs(
     createArgScan.args,
-    new Set(["json", "plain", "enter", "stdin", "agent-overwrite", "draft-cleared"]),
+    new Set([
+      "json",
+      "plain",
+      "enter",
+      "stdin",
+      "agent-overwrite",
+      "draft-cleared",
+      "wait",
+      "allow-blocked",
+      "reject-if-blocked",
+      "unwrap",
+      "no-unwrap",
+      "explain",
+    ]),
   );
   const mode = resolveOutputMode(parsed.options);
   const auth = await resolveAuthContext({
@@ -181,9 +201,28 @@ export async function runTerminalCommand(
 
   if (subcommand === "snapshot") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const panelSelector =
-      getStringOption(parsed.options, "panel") ??
-      getStringOption(parsed.options, "role");
+    const lineCount = resolveTail(parsed.options);
+    const panelOption = getStringOption(parsed.options, "panel");
+    const roleOption = getStringOption(parsed.options, "role");
+    const panelSelector = panelOption ?? roleOption;
+    if (getBooleanOption(parsed.options, "unwrap")) {
+      const resolvedPanelId = panelSelector
+        ? resolvePanelIdentifier(
+            await client.listPanels(terminalSessionId),
+            panelSelector,
+          ).panelId
+        : undefined;
+      await runUnwrappedSnapshotCommand({
+        client,
+        terminalSessionId,
+        panelId: resolvedPanelId,
+        role: resolvedPanelId ? undefined : roleOption,
+        lineCount,
+        mode,
+        stdout: io.stdout,
+      });
+      return;
+    }
     const session = panelSelector
       ? await client.getPanelHistory(
           terminalSessionId,
@@ -193,7 +232,7 @@ export async function runTerminalCommand(
           ).panelId,
         )
       : await client.getSessionHistory(terminalSessionId);
-    const tail = tailLines(session.scrollback, resolveTail(parsed.options));
+    const tail = tailLines(session.scrollback, lineCount);
     writeOutput(io.stdout, mode, mode === "json" ? { ...session, tail } : tail);
     return;
   }
@@ -224,15 +263,61 @@ export async function runTerminalCommand(
 
   if (subcommand === "state") {
     const terminalSessionId = requireTerminalId(parsed.positionals);
-    const statePayload = await client.getCurrentTerminalState(terminalSessionId);
+    const explainRequested = getBooleanOption(parsed.options, "explain");
+    let statePayload;
+    try {
+      statePayload = await client.getCurrentTerminalState(terminalSessionId, {
+        explain: explainRequested,
+      });
+    } catch (error) {
+      if (explainRequested && isUnsupportedEndpointError(error, terminalSessionId)) {
+        throw new CliError("当前 Backend 不支持该能力，请升级服务端", 4);
+      }
+      throw error;
+    }
+    if (explainRequested) {
+      if (!statePayload.explain) {
+        throw new CliError("当前 Backend 不支持该能力，请升级服务端", 4);
+      }
+      writeOutput(
+        io.stdout,
+        mode,
+        mode === "json"
+          ? {
+              terminalSessionId,
+              terminalState: statePayload.terminalState,
+              explain: statePayload.explain,
+            }
+          : formatTerminalStateExplain(
+              terminalSessionId,
+              statePayload.terminalState,
+              statePayload.explain,
+            ),
+      );
+      return;
+    }
     writeOutput(
       io.stdout,
       mode,
-      {
-        terminalSessionId,
-        terminalState: statePayload.terminalState,
-      },
+      mode === "json"
+        ? {
+            terminalSessionId,
+            terminalState: statePayload.terminalState,
+          }
+        : `${statePayload.terminalState.state}${statePayload.terminalState.agent ? ` (${statePayload.terminalState.agent})` : ""}`,
     );
+    return;
+  }
+
+  if (subcommand === "wait-output") {
+    const terminalSessionId = requireTerminalId(parsed.positionals);
+    await runWaitOutputCommand({
+      client,
+      terminalSessionId,
+      options: parsed.options,
+      mode,
+      stdout: io.stdout,
+    });
     return;
   }
 
@@ -259,15 +344,34 @@ export async function runTerminalCommand(
     const terminalSessionId = requireTerminalId(parsed.positionals);
     const requestedAgent = getStringOption(parsed.options, "agent");
     const inputModeValue = getStringOption(parsed.options, "mode");
+    const text = await resolveInputText(parsed.options, io.stdin);
+    const enter = getBooleanOption(parsed.options, "enter");
+    const inputMode = resolveInputMode(
+      inputModeValue ?? (requestedAgent ? "line" : undefined),
+    );
+    const inputModeProvided = inputModeValue != null || requestedAgent != null;
+    if (getBooleanOption(parsed.options, "wait")) {
+      await runSendAndWaitCommand({
+        client,
+        terminalSessionId,
+        text,
+        options: parsed.options,
+        inputMode,
+        inputModeProvided,
+        enter,
+        requestedAgent,
+        mode,
+        stdout: io.stdout,
+      });
+      return;
+    }
     const result = await sendWithConfirmation({
       client,
       terminalSessionId,
-      text: await resolveInputText(parsed.options, io.stdin),
-      enter: getBooleanOption(parsed.options, "enter"),
-      inputMode: resolveInputMode(
-        inputModeValue ?? (requestedAgent ? "line" : undefined),
-      ),
-      inputModeProvided: inputModeValue != null || requestedAgent != null,
+      text,
+      enter,
+      inputMode,
+      inputModeProvided,
       panel: getStringOption(parsed.options, "panel"),
       role: getStringOption(parsed.options, "role"),
       confirmMode: getStringOption(parsed.options, "confirm") ?? "none",
@@ -326,13 +430,15 @@ function requireTerminalId(positionals: string[]): string {
 }
 
 function resolveTail(options: Record<string, string | boolean>): number {
-  const rawTail = getStringOption(options, "tail");
+  const rawLines = getStringOption(options, "lines");
+  const rawTail = rawLines ?? getStringOption(options, "tail");
   if (!rawTail) {
     return DEFAULT_TAIL_LINES;
   }
   const tail = Number(rawTail);
+  const flagName = rawLines !== undefined ? "--lines" : "--tail";
   if (!Number.isInteger(tail) || tail < 0) {
-    throw new CliError("--tail must be a non-negative integer", 2);
+    throw new CliError(`${flagName} must be a non-negative integer`, 2);
   }
   return tail;
 }

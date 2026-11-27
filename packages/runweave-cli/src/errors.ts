@@ -10,11 +10,22 @@ export class CliError extends Error {
 
 export class HttpError extends CliError {
   readonly status: number;
+  readonly code?: string;
+  readonly payload?: Record<string, unknown>;
 
-  constructor(status: number, message: string) {
-    super(message, status === 401 ? 3 : status === 404 || status === 409 ? 4 : 1);
+  constructor(
+    status: number,
+    message: string,
+    options?: { code?: string; payload?: Record<string, unknown> },
+  ) {
+    super(
+      message,
+      status === 401 ? 3 : status === 404 || status === 409 ? 4 : 1,
+    );
     this.name = "HttpError";
     this.status = status;
+    this.code = options?.code;
+    this.payload = options?.payload;
   }
 }
 

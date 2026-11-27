@@ -151,6 +151,10 @@ export class TerminalStateService {
     });
   }
 
+  peekStored(terminalSessionId: string): TerminalState | null {
+    return this.store.get(terminalSessionId);
+  }
+
   getCurrent(
     terminalSessionId: string,
     sessionSnapshot: TerminalStateSessionSnapshot | undefined,

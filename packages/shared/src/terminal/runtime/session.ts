@@ -65,6 +65,7 @@ export interface TerminalSessionStatusResponse {
   tmuxSocketPath?: string;
   scrollback: string;
   scrollbackSourceCols?: number;
+  unwrapped?: boolean;
   status: "running" | "exited";
   createdAt: string;
   lastActivityAt: string;

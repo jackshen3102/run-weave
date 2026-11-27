@@ -84,6 +84,23 @@ rw terminal history "$TERMINAL_ID" --tail 200 --plain
 
 `send --confirm short` 只做短确认，不等待 AI CLI 长任务完成。JSON 会返回 `transport`、`inputAccepted`、`inputEnqueued`、`runtimeKind`、`echoObserved`、`observedState`、`confirmConfidence`、`tailBefore` 和 `tailAfter`，供调用方决定是否重试、读取 snapshot 或向用户说明已投递。
 
+需要原子提交并事件驱动等待受支持 Agent 收敛，或在普通命令下等待特定输出行时，可使用通用编排原语（Backend 实现见 [terminal-wait-service](../../backend/src/terminal/application/terminal-wait-service.ts)，共享合同见 `@runweave/shared/terminal/wait`）：
+
+```bash
+# 提交并等待进入 idle 或 blocked（默认开启阻塞态拒送与 5 秒活动门禁）
+rw terminal send "$TERMINAL_ID" --text "继续" --wait [--until idle,blocked] [--timeout-ms 120000] [--allow-blocked] --json
+
+# 普通 shell 命令有界等待匹配输出（与 Agent 生命周期解耦）
+rw terminal wait-output "$TERMINAL_ID" --match "READY" [--panel main] [--lines 120] [--timeout-ms 60000] --json
+rw terminal wait-output "$TERMINAL_ID" --regex "Listening on :[0-9]+" --json
+```
+
+`send --wait` 规则：
+
+- 发送前通过 `AttentionService` 只读检查目标面板是否已处于结构化 `needs_action` / `blocked`；默认拒送并返回 `HTTP 409`（`AGENT_BLOCKED`，非 0 退出码），**不写入任何字节**；显式传 `--allow-blocked`（或 `--reject-if-blocked=false`）时才允许继续发送。
+- 先订阅 `TerminalEventService` 再提交输入（未显式指定 `--mode` 时默认 `line` 提交）。若发送前不在 `agent_running`，启动默认 5 秒活动门禁（`--activity-gate-ms`，上限 30000）：未观测到 `agent_running`、OSC `working` 或结构化阻塞时返回 `outcome: "stalled"`（`code: "AGENT_PROMPT_STALLED"`），避免在 `shell_idle` 或未真正提交时误判 `settled`。
+- 通过活动门禁后事件驱动等待命中 `--until`（`outcome: "settled"`）；超时返回 `outcome: "timeout"`（`code: "WAIT_TIMEOUT"`，提示输入已提交、切勿盲目重发）。单 Backend 进程并发 wait 上限为 32（超限 `429`），HTTP 连接断开立即清理订阅。遇到不支持新端点的旧版 Backend（`404`/`501`）直接报错提示升级服务端，不回退盲等。
+
 `inputAccepted=true` / `inputEnqueued=true` 只在 backend 的 HTTPS input 接口已鉴权、找到目标 terminal，并且 `runtime.write(...)` 调用未抛错后出现。若 backend 返回 4xx/5xx，CLI 会以非 0 exit code 失败，不把传输层成功误报成投递成功。
 
 常用输入模式：
@@ -132,10 +149,14 @@ rw project list --json
 rw terminal list --json
 rw terminal show "$TERMINAL_ID" --json
 rw terminal state "$TERMINAL_ID" --json
+rw terminal state "$TERMINAL_ID" --explain [--json]
 rw terminal history "$TERMINAL_ID" --tail 200 --json
 rw terminal snapshot "$TERMINAL_ID" --tail 120 --plain
+rw terminal snapshot "$TERMINAL_ID" --lines 120 --unwrap [--json]
 rw terminal handoff "$TERMINAL_ID" --tail 120 --json
 ```
+
+`state --explain` 请求 `GET /api/terminal/session/:id/state?explain=1`，默认输出多行可读诊断摘要，`--json` 输出完整结构（生效状态 `winningSource`、各 Panel 的命令名/活动租约/OSC 7501/待处理权限与问答标记，以及 `Attention` 当前胜出槽位和被压制候选）。`snapshot --unwrap` 对运行中的 tmux 面板通过 `GET /api/terminal/session/:id/snapshot?unwrap=1` 使用 `capture-pane -J -p` 拼接软换行，避免超长日志或 URL 被终端列宽截断；普通 PTY 回退持久化 scrollback 并返回 `unwrapped: false`。
 
 `handoff` 会聚合 `cwd`、`sessionStatus`、`foregroundCommand`、后端 `TerminalState`、tail 和建议命令。`terminalState` 是 App/CLI 共享的权威产品状态；`inferredAgent` / `inferredWorkloadState` 只保留为短确认和诊断辅助，不能作为权限或调度依据。仅有 `activeCommand=codex` 这类前台进程信号时，CLI 不直接断言 agent 正在执行，是否 running 以 `/api/terminal/session/:id/state` 返回的 `TerminalState` 为准。
 

@@ -309,12 +309,11 @@ function createHttpApp(
       terminalSessionManager: services.terminalSessionManager,
       terminalStateService: services.terminalStateService,
       tmuxService: services.tmuxService,
+      attentionService: services.attentionService,
+      terminalQuestionsService: services.terminalQuestionsService,
     }),
-  );
-  app.use(
-    "/api/terminal",
-    requireAuth,
     createTerminalRouter(services.terminalSessionManager, {
+      attentionService: services.attentionService,
       terminalBadges: services.terminalBadges,
       desktopBadgeAccess: services.desktopBadgeAccess,
       terminalTaskService: services.terminalTaskService,

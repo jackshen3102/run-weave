@@ -1,7 +1,9 @@
 import type { Router } from "express";
 import { z } from "zod";
 import type { TerminalAnsiScrollbackResponse } from "@runweave/shared/terminal/session";
+import type { TerminalSnapshotResponse } from "@runweave/shared/terminal/wait";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
+import { toHistoryPayload } from "../../terminal/application/payloads";
 import { isTmuxBackedSession } from "../../terminal/runtime/launcher";
 import type { TmuxService } from "../../terminal/tmux/service";
 import type { TerminalEventService } from "../../terminal/state/terminal-event-service";
@@ -18,6 +20,27 @@ const ansiScrollbackQuerySchema = z
     panelId: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
+
+const snapshotQuerySchema = z
+  .object({
+    panelId: z.string().trim().min(1).max(200).optional(),
+    panelAlias: z.string().trim().min(1).max(200).optional(),
+    role: z.string().trim().min(1).max(200).optional(),
+    lines: z.coerce.number().int().min(0).max(5000).optional(),
+    unwrap: z.enum(["0", "1", "true", "false"]).optional(),
+  })
+  .strict();
+
+function sliceTailLines(value: string, lineCount: number): string {
+  if (lineCount <= 0) {
+    return "";
+  }
+  const lines = value.split(/\r?\n/);
+  while (lines.length > 0 && lines[lines.length - 1]?.trim() === "") {
+    lines.pop();
+  }
+  return lines.slice(-lineCount).join("\n");
+}
 
 export function registerTerminalScrollbackRoutes(
   router: Router,
@@ -107,5 +130,101 @@ export function registerTerminalScrollbackRoutes(
         message: "Failed to capture terminal ANSI scrollback",
       });
     }
+  });
+
+  router.get("/session/:id/snapshot", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const parsedQuery = snapshotQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({
+        code: "INVALID_REQUEST",
+        message: "Invalid snapshot query parameters",
+      });
+      return;
+    }
+
+    const session = terminalSessionManager.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ message: "Terminal session not found" });
+      return;
+    }
+
+    const wantUnwrap =
+      parsedQuery.data.unwrap === "1" || parsedQuery.data.unwrap === "true";
+    const requestedLines = parsedQuery.data.lines;
+
+    if (
+      session.status === "running" &&
+      isTmuxBackedSession(session) &&
+      options?.tmuxService
+    ) {
+      try {
+        const target = options.tmuxService.buildTarget(session.id);
+        if (await options.tmuxService.hasSession(target)) {
+          const hasExplicitSelector = Boolean(
+            parsedQuery.data.panelId ||
+              parsedQuery.data.panelAlias ||
+              parsedQuery.data.role,
+          );
+          const { panel, paneTarget } = await resolvePanelTarget(
+            terminalSessionManager,
+            session,
+            {
+              tmuxService: options.tmuxService,
+              terminalEventService: options.terminalEventService,
+            },
+            {
+              panelId: parsedQuery.data.panelId,
+              panelAlias: parsedQuery.data.panelAlias,
+              role: parsedQuery.data.role,
+            },
+            hasExplicitSelector ? "explicit-or-active" : "default-history",
+          );
+          const captureLines =
+            requestedLines !== undefined
+              ? Math.max(requestedLines, 1)
+              : undefined;
+          const capture = await options.tmuxService.capturePane(
+            paneTarget,
+            captureLines,
+            { joinWrappedLines: wantUnwrap },
+          );
+          const scrollback =
+            requestedLines !== undefined
+              ? sliceTailLines(capture.data, requestedLines)
+              : capture.data;
+          const payload: TerminalSnapshotResponse = {
+            ...toHistoryPayload(session, scrollback, capture.sourceCols),
+            panelId: panel.id,
+            unwrapped: wantUnwrap,
+          };
+          res.json(payload);
+          return;
+        }
+      } catch (error) {
+        if (sendTerminalPanelRouteError(res, error)) {
+          return;
+        }
+        terminalLogger.warn("terminal.session.snapshot.tmux-fallback", {
+          message: "Terminal snapshot fell back to persisted scrollback",
+          terminalSessionId: session.id,
+          error,
+        });
+      }
+    }
+
+    const rawScrollback = await terminalSessionManager.readScrollback(
+      session.id,
+    );
+    const scrollback =
+      requestedLines !== undefined
+        ? sliceTailLines(rawScrollback, requestedLines)
+        : rawScrollback;
+    const payload: TerminalSnapshotResponse = {
+      ...toHistoryPayload(session, scrollback),
+      panelId: null,
+      unwrapped: false,
+    };
+    res.json(payload);
   });
 }

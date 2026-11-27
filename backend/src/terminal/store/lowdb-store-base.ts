@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { Low } from "lowdb";
-import { JSONFile } from "lowdb/node";
+import { Low, type Adapter } from "lowdb";
 import type {
   PersistedTerminalPanelRecord,
   PersistedTerminalPanelWorkspaceRecord,
@@ -11,6 +10,7 @@ import type {
   PersistedTerminalSessionRecord,
 } from "./store";
 import { normalizeActiveCommand } from "./lowdb-records";
+import { TerminalStoreRecoveryController } from "./store-recovery";
 
 export interface TerminalSessionStoreData {
   projects: PersistedTerminalProjectRecord[];
@@ -55,11 +55,21 @@ export abstract class LowDbStoreBase {
   protected pendingWrite: Promise<void> = Promise.resolve();
   protected pendingScrollbackWrite: Promise<void> = Promise.resolve();
   protected readonly scrollbackDir: string;
+  protected readonly recovery: TerminalStoreRecoveryController;
 
-  constructor(protected readonly storeFile: string) {
+  constructor(
+    protected readonly storeFile: string,
+    recoveryOptions?: ConstructorParameters<
+      typeof TerminalStoreRecoveryController
+    >[1],
+  ) {
     this.scrollbackDir = path.join(
       path.dirname(storeFile),
       "terminal-scrollback",
+    );
+    this.recovery = new TerminalStoreRecoveryController(
+      storeFile,
+      recoveryOptions,
     );
   }
 
@@ -74,12 +84,23 @@ export abstract class LowDbStoreBase {
     await mkdir(path.dirname(this.storeFile), { recursive: true });
     await mkdir(this.scrollbackDir, { recursive: true });
 
-    const database = new Low(
-      new JSONFile<LegacyTerminalSessionStoreData>(this.storeFile),
-      { ...DEFAULT_DATA },
-    );
-    await database.read();
-    const rawData = database.data ?? { ...DEFAULT_DATA };
+    const loadResult =
+      await this.recovery.readAndValidate<LegacyTerminalSessionStoreData>();
+    const adapter: Adapter<LegacyTerminalSessionStoreData> = {
+      read: async () => {
+        const result =
+          await this.recovery.readAndValidate<LegacyTerminalSessionStoreData>();
+        return result.status === "ok" ? result.data : null;
+      },
+      write: async (data) => {
+        await this.recovery.writeAtomically(data);
+      },
+    };
+    const database = new Low(adapter, {
+      ...DEFAULT_DATA,
+    } as LegacyTerminalSessionStoreData);
+    const rawData: LegacyTerminalSessionStoreData =
+      loadResult.status === "ok" ? loadResult.data : { ...DEFAULT_DATA };
     const projects = [...(rawData.projects ?? [])];
     const sessions = [...(rawData.sessions ?? [])];
     const panels = [...(rawData.panels ?? [])];
@@ -127,7 +148,9 @@ export abstract class LowDbStoreBase {
       panelWorkspaces,
       recentAgentActivities,
     };
-    await database.write();
+    if (loadResult.status !== "corrupted") {
+      await this.enqueueWrite(() => database.write());
+    }
     this.database = database as unknown as Low<TerminalSessionStoreData>;
   }
 
@@ -207,18 +230,16 @@ export abstract class LowDbStoreBase {
   }
 
   protected enqueueWrite(operation: () => Promise<void>): Promise<void> {
-    const run = this.pendingWrite.catch(() => undefined).then(operation);
-    this.pendingWrite = run;
+    const run = this.pendingWrite.then(operation, operation);
+    this.pendingWrite = run.catch(() => undefined);
     return run;
   }
 
   protected enqueueScrollbackWrite(
     operation: () => Promise<void>,
   ): Promise<void> {
-    const run = this.pendingScrollbackWrite
-      .catch(() => undefined)
-      .then(operation);
-    this.pendingScrollbackWrite = run;
+    const run = this.pendingScrollbackWrite.then(operation, operation);
+    this.pendingScrollbackWrite = run.catch(() => undefined);
     return run;
   }
 }
