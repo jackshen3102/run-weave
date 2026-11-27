@@ -37,7 +37,7 @@ struct ConnectionSettingsView: View {
           }
           Button { showingCodexQuota = true } label: {
             Label {
-              Text("Codex 额度").foregroundStyle(Color.primary)
+              Text("订阅额度").foregroundStyle(Color.primary)
             } icon: {
               Image(systemName: "chart.bar")
             }

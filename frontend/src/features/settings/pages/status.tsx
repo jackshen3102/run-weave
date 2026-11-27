@@ -17,7 +17,7 @@ export default function Status() {
           ["runtime", "运行状态"],
           ["resources", "系统资源"],
           ["dev", "开发资源"],
-          ["quota", "Codex 额度"],
+          ["quota", "订阅额度"],
           ["logs", "日志"],
         ]}
         active={section}

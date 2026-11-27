@@ -5,7 +5,7 @@ import type { PtyHostSession, PtyHostUpstreams } from "@runweave/shared/terminal
 import { EventOutbox } from "./event-outbox";
 
 const backendPaths = new Set(["/internal/terminal/agent-hook", "/internal/terminal-completion", "/internal/task-supervision", "/internal/task-supervision/validate"]);
-const appRead = /^(?:\/healthz|\/readyz|\/events(?:\/latest)?|\/runtime-status|\/codex\/quota|\/sync\/status|\/threads(?:\/previews|\/[a-zA-Z0-9_-]+(?:\/(?:conversation|detail|supervision-context|analysis-evidence))?)?)$/;
+const appRead = /^(?:\/healthz|\/readyz|\/events(?:\/latest)?|\/runtime-status|\/codex\/quota|\/agy\/quota|\/sync\/status|\/threads(?:\/previews|\/[a-zA-Z0-9_-]+(?:\/(?:conversation|detail|supervision-context|analysis-evidence))?)?)$/;
 
 export function isGatewayCredential(actual: string, expected: string): boolean {
   const left = Buffer.from(actual), right = Buffer.from(expected);
