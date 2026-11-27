@@ -197,7 +197,7 @@ async function postCompletionHook({
       (notificationType !== "idle_prompt" && isFeishuAttentionHook(payload, source)) ? "notify" : "hook_stop";
   }
   try {
-    const response = await fetch(endpoint, {
+    let response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -206,6 +206,21 @@ async function postCompletionHook({
       body: JSON.stringify(body),
       ...(source === "claude" ? { signal: AbortSignal.timeout(5000), redirect: "error" } : {}),
     });
+    if (response.status === 400 && body.notificationType) {
+      const error = await response.json().catch(() => null);
+      if ((error?.errors?.formErrors ?? []).includes("Unrecognized key(s) in object: 'notificationType'")) {
+        const legacy = { ...body };
+        delete legacy.notificationType;
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Runweave-Hook-Token": token },
+          body: JSON.stringify(legacy),
+          ...(source === "claude" ? { signal: AbortSignal.timeout(5000), redirect: "error" } : {}),
+        });
+      } else {
+        return { summary: error?.event?.payload?.summary, ok: false, status: response.status, accepted: false };
+      }
+    }
     const result = await response.json().catch(() => null);
     return { summary: result?.event?.payload?.summary, ok: response.ok, status: response.status, accepted: Boolean(result?.event || result?.notificationId) && !result?.ignored, notificationId: result?.notificationId ?? (result?.event?.payload?.completionRevision ? String(result.event.payload.completionRevision) : undefined) };
   } catch (error) {

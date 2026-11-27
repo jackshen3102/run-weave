@@ -17,6 +17,9 @@ struct TerminalQuestionNotificationResponse: Decodable {
   let panelId: String
   let questions: TerminalQuestionsResponse?
   let resolved: Bool?
+  let terminalOnly: Bool?
+  let actionKind: String?
+  let title: String?
 }
 
 struct TerminalQuestionHandoff: Identifiable {

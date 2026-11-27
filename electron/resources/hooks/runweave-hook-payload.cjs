@@ -393,10 +393,12 @@ function buildCompletionHookBody({
   rawEvent,
   commandName,
 }) {
+  const notificationType = readNotificationType(payload);
   return {
     terminalSessionId,
     source,
     ...(payload.feishuNotificationOnly ? { feishuNotificationOnly: true } : {}),
+    ...(notificationType ? { notificationType } : {}),
     ...(source === "pi" && payload.pi ? { pi: payload.pi } : {}),
     ...(source === "agy" && payload.agy ? { agy: payload.agy } : {}),
     completionReason,
@@ -462,7 +464,7 @@ function buildAppServerBaseEvent({
       stateHookEvent,
       activityEventId: payload.runweaveHookEventId,
       ...((stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted") && toolHook.toolName
-        ? { toolName: toolHook.toolName }
+        ? { toolName: toolHook.toolName, ...(toolHook.toolUseId ? { toolUseId: toolHook.toolUseId } : {}) }
         : {}),
       ...(stateHookEvent === "UserPromptSubmit" ? { query: extractUserPrompt(payload) } : {}),
       panelId: terminalPanelId,

@@ -69,6 +69,7 @@ export async function handleAgentHookEvent(
     tmuxPaneId,
     commandName,
     operationId,
+    toolUseId: readAppServerPayloadString(event.payload, "toolUseId"),
     toolName: readAppServerPayloadString(event.payload, "toolName"),
     ...(isAgyAgentContext((event.payload as Record<string, unknown>)?.agy) ? { agy: (event.payload as { agy: import("@runweave/shared/terminal/agy-agent").AgyAgentContext }).agy } : {}),
     ...(isClaudeAgentContext((event.payload as Record<string, unknown>)?.claude) ? { claude: (event.payload as { claude: import("@runweave/shared/terminal/claude-agent").ClaudeAgentContext }).claude } : {}),

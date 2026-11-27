@@ -42,6 +42,11 @@ export const deviceMonitorSchema = z
         attempts: z.number().int().nonnegative(), nextAttemptAt: time,
       }).strict()),
     }).strict()).optional(),
+    terminalQuestionPrompts: z.record(z.string().uuid(), z.object({
+      actionKind: z.enum(["question", "permission", "auth", "agent_prompt"]),
+      title: z.string(),
+      body: z.string(),
+    }).strict()).optional(),
     unread: z.object({ revision: z.number().int().positive(), count: z.number().int().nonnegative() }).optional(),
     terminalReplies: z.object({
       inputs: z.record(z.array(z.object({

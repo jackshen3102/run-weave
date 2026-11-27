@@ -43,6 +43,44 @@ export class TerminalQuestionsService {
     return { terminalId, panelId: panel.id, threadId: thread.id, executor };
   }
 
+  async hasRemoteExecutor(terminalId: string, panelId: string): Promise<boolean> {
+    const session = this.manager.getSession(terminalId);
+    const panel = this.manager.getPanel(panelId);
+    if (!session || session.status !== "running" || session.runtimeKind !== "tmux" ||
+        !panel || panel.status !== "running" || panel.terminalSessionId !== session.id || !panel.tmuxPaneId) {
+      return false;
+    }
+    try {
+      const paneTarget = buildPaneTarget(session, this.tmux, panel);
+      const { panePid } = await this.tmux.textAttachmentProcessIdentity(paneTarget);
+      return Boolean(await findQuestionExecutor(panePid));
+    } catch {
+      return false;
+    }
+  }
+
+  isSessionPanelRunning(terminalId: string, panelId: string): boolean {
+    const session = this.manager.getSession(terminalId);
+    if (!session || session.status !== "running") return false;
+    if (!panelId) return true;
+    const panel = this.manager.getPanel(panelId);
+    return !!panel && panel.status === "running" && panel.terminalSessionId === session.id;
+  }
+
+  isTerminalAgentActive(terminalId: string, panelId: string): boolean {
+    if (!this.isSessionPanelRunning(terminalId, panelId)) return false;
+    const session = this.manager.getSession(terminalId)!;
+    const panel = panelId ? this.manager.getPanel(panelId) : undefined;
+    if (panel) {
+      return panel.terminalState?.state === "agent_running" ||
+        panel.oscProgramStatus?.state === "blocked" ||
+        Boolean(panel.pendingAgyQuestion || panel.pendingPermissionRequest || panel.pi?.event === "ui_prompt_start");
+    }
+    return session.terminalState?.state === "agent_running" ||
+      session.oscProgramStatus?.state === "blocked" ||
+      Boolean(session.pi?.event === "ui_prompt_start");
+  }
+
   async readOriginal(origin: TerminalQuestionOrigin): Promise<OriginalTerminalQuestion> {
     const session = this.manager.getSession(origin.terminalId);
     const panel = this.manager.getPanel(origin.panelId);
@@ -52,6 +90,7 @@ export class TerminalQuestionsService {
     try {
       const value = await this.read(origin.terminalId, origin.panelId, origin.threadId);
       if (value.target && value.target.threadId !== origin.threadId) return { status: "closed" } as const;
+      if (value.capability === "unsupported") return { status: "unsupported" } as const;
       if (value.capability !== "available" || !value.target) return { status: "unavailable" } as const;
       const request = value.requests.find((entry) => entry.turnId === origin.turnId && entry.itemId === origin.itemId);
       return { status: "available", request, value } as const;
