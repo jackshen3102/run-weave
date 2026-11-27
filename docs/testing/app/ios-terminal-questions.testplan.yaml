@@ -183,3 +183,29 @@ cases:
     steps:
       - 用绑定的登录查询该引用，确认响应包含目标待答状态。
       - 用另一个登录查询同一引用，确认返回 404，响应体没有问题、选项和终端定位。
+
+  - id: TQ-015
+    name: 无共享执行服务的待确认与提问触发通知并直达目标面板
+    required: true
+    description: >
+      验证未启用 Unix 共享执行服务的普通 Codex 提问、AGY ask_question、Claude 提问或权限请求及 OSC 7501 blocked 会生成待确认推送，手机点击后聚焦目标面板并直达原终端。
+    preconditions:
+      - 候选 iOS App 已安装到本轮独占模拟器并登录隔离 Backend，具备已确认的 terminal-question 订阅和通知捕获传输。
+      - 隔离 Backend 存在多面板测试终端，目标非默认面板未启用 codex --remote。
+    steps:
+      - 将候选 App 切到后台，在目标面板触发无共享执行服务的待确认事件（如普通 Codex request_user_input 或 AGY ask_question），从捕获传输取得 terminal.question 通知并确认标题为受控通用文案、不包含敏感参数正文。
+      - 向本轮租约模拟器执行 simctl push 并通过 agent-device 点击系统通知；确认 App 自动聚焦目标面板并打开对应终端页面，不停留在暂时无法核对页。
+      - 清理本轮自有测试终端与模拟器会话。
+
+  - id: TQ-016
+    name: 同面板多路阻塞信号合并去重且电脑处理后旧通知显示已结束
+    required: true
+    description: >
+      验证同一面板同时上报结构化工具待确认与 OSC 7501 blocked 时只向同一安装发送一份通知，且电脑端完成工具返回或结束轮次后点击旧通知显示问题已处理或已结束。
+    preconditions:
+      - 候选 iOS App 已登录隔离 Backend，测试安装有已确认的 terminal-question 订阅及可统计投递次数的捕获传输。
+      - 自有测试终端面板处于运行态，可顺序上报待确认 Hook、OSC 7501 blocked 与完成事件。
+    steps:
+      - 在同一面板触发待确认 Hook 并紧接上报 OSC 7501 blocked；观察稳定窗结束后捕获传输只收到一份有效通知。
+      - 在电脑端上报对应 ToolCompleted，随后向模拟器注入前面捕获的通知并用 agent-device 点击；确认显示问题已处理且保留回原终端查看入口，不会自动误跳为待确认状态。
+      - 清理本轮自有测试资源。

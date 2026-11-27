@@ -1,4 +1,9 @@
 import { syncAgentThreadMetadata } from "./agent-hook-thread-metadata";
+import {
+  observeAgyMobilePrompt,
+  observeClaudeMobilePrompt,
+  observePiMobilePrompt,
+} from "./agent-hook-mobile-prompts";
 import { recordAgyHookContext, withAgyHookQueue } from "./agy-hook-lifecycle";
 import { recordClaudeHookContext, withClaudeHookQueue } from "./claude-hook-lifecycle";
 import { isAgyAgentContext, type AgyAgentContext } from "@runweave/shared/terminal/agy-agent";
@@ -43,6 +48,7 @@ export interface ProcessTerminalAgentHookInput {
   operationId?: string | null;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
+  toolUseId?: string | null;
   toolName?: string | null;
   query?: string | null;
   activityEventId?: string;
@@ -373,6 +379,7 @@ async function processTerminalAgentHookUnlocked(
         await options.terminalSessionManager.upsertPanel(panel);
       }
     }
+    observeAgyMobilePrompt(options.terminalSessionManager.mobilePrompts, session.id, panel?.id ?? null, input.hookEvent, input.toolName, input.toolUseId, input.agy);
     const { status } = result;
     if (!status) {
       return {
@@ -408,6 +415,7 @@ async function processTerminalAgentHookUnlocked(
         await options.terminalSessionManager.upsertPanel(panel);
       }
     }
+    observeClaudeMobilePrompt(options.terminalSessionManager.mobilePrompts, session.id, panel?.id ?? null, input.hookEvent, input.toolName, input.toolUseId, input.claude);
     const { status } = result;
     if (!status) {
       return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
@@ -436,6 +444,7 @@ async function processTerminalAgentHookUnlocked(
         session.threadId ?? null, session.threadProvider ?? null, input.pi);
     }
     const event = input.pi.event;
+    observePiMobilePrompt(options.terminalSessionManager.mobilePrompts, session.id, panel?.id ?? null, input.pi);
     if (event === "ui_prompt_start" || (event === "agent_settled" && input.pi.outcome === "failed")) {
       options.terminalStateService.notifyPi(session.id, session.projectId,
         event === "ui_prompt_start" ? "Pi 需要你处理" : "Pi 本轮执行失败");
@@ -444,6 +453,14 @@ async function processTerminalAgentHookUnlocked(
   if (input.hookEvent === "AgentMetadata" && input.agent !== "claude" && input.agent !== "agy") {
     return { status: "recorded", terminalSessionId: session.id, agent: effectiveAgent,
       hookEvent: input.hookEvent, terminalState: currentTargetState, panelId: panel?.id ?? null };
+  }
+
+  if (!context.lifecycleObservation && input.agent !== "claude" && input.agent !== "agy" && input.agent !== "pi") {
+    if (input.hookEvent === "UserPromptSubmit") {
+      options.terminalSessionManager.mobilePrompts?.resolvePrompt(session.id, panel?.id ?? null, "resolved");
+    } else if (input.hookEvent === "Stop") {
+      options.terminalSessionManager.mobilePrompts?.resolvePrompt(session.id, panel?.id ?? null, "closed");
+    }
   }
 
   if (input.hookEvent === "UserPromptSubmit" && !context.lifecycleObservation && !(input.agent === "agy" && agyAlreadyRunning)) {

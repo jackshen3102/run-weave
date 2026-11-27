@@ -36,19 +36,20 @@ WebSocket；不接受或拒绝其他审批，也不改变模型、模式、工�
 切换 Backend 或退出登录清空问题草稿，迟到请求不会更新新页面。问题草稿不写入终端草稿、
 附件或队列。收到正式的问题后按 panel/thread 保持绑定，原任务 turn 的正常推进不会使页面误失效。
 
-## iPhone 待答通知
+## iPhone 待答与待确认通知
 
-受鉴权的 Codex `PreToolUse` 经终端 Agent Hook 上报 thread、turn 和工具调用 ID。Backend 在后台最多等待
-5 秒，确认所选面板的原执行服务仍有对应待答请求。每个已确认且保持登录的安装最多投递一份
-`terminal.question`。通知只显示「Codex 等你回答」和通用提示，`terminal-question` 目标只携带 UUID 引用。
-Backend 按原问题和安装持久化定位与投递状态。明确可重试时沿用原事件和载荷，结果未知时保留投递记录。
-已确认的原生结束事件会写入定位记录，Codex 退出或 Backend 重启后仍可核对。
+推送链路复用 `terminal-question`（`terminal.question`）订阅与 UUID 引用定位，同时覆盖两类终端确认形态：
 
-iOS 通过 `questions=1` 协商 `terminal-question` 订阅。点击通知先选择来源电脑，再用当前安装的
-`X-Runweave-Installation-ID` 调用 `GET /api/terminal/questions/notifications/:questionRef`。
-只有绑定该安装的已授权登录能读取定位。定位在 15 分钟后结束。连接重建时按原 thread、turn 和 item
-重新核对，面板切换或连接不可用时可重新检查。答复沿用终端问答提交接口。提交状态未确认时保留草稿，
-并暂停再次提交。
+1. **共享执行服务结构化问答（`codex --remote unix:///绝对路径`）**：受鉴权的 Codex `PreToolUse(request_user_input)` 上报 thread、turn 和工具调用 ID 后，Backend 在后台最多等待 5 秒确认原执行服务仍有对应待答请求，发送「Codex 等你回答」；手机点击后在回复辅助表单内直接作答。
+2. **原终端直达待确认提醒（`terminalOnly: true`）**：当终端无共享执行服务或来自其他结构化门禁——包括普通/受管 Codex 的 `request_user_input` 与 `Notification(permission_prompt)`、主进程 AGY 的 `ask_question`、主进程 Claude 的 `AskUserQuestion` 与 `PermissionRequest`、Pi 的 `ui_prompt_start`、Trae 的等待通知，以及面板/会话的 OSC 7501 `blocked`（`question | permission | auth`）——Backend 经过短暂稳定窗（Hook 250ms、OSC 500ms）确认会话仍在等待后，按 `(terminalId, panelId)` 优先级合并去重（结构化问答 > 提问工具 > 权限/UI 门禁 > OSC 7501 > 通用通知），每个已确认安装最多投递一份通用安全文案通知（不携带命令全文、路径或问题正文）。扩展元数据保存在顶层可选 `terminalQuestionPrompts`，保持 `terminalQuestions` 条目与旧版 Backend 回滚兼容。
+
+后续 `ToolCompleted`、`UserPromptSubmit`、`Stop`、Claude `Notification(idle_prompt)`、Pi 提示结束、OSC 退出 `blocked` 或终端退出/删除会将对应定位标记为 `resolved` 或 `closed`，未外发的待发记录自动取消。
+
+iOS 通过 `questions=1` 协商 `terminal-question` 订阅。点击通知先选择来源电脑，再用当前安装的 `X-Runweave-Installation-ID` 调用 `GET /api/terminal/questions/notifications/:questionRef`。只有绑定该安装的已授权登录能读取定位，定位在 15 分钟后结束：
+
+- 结构化 `pending` 打开回复辅助表单；
+- 仍处于等待态的 `terminalOnly` 定位自动聚焦目标 `panelId`、打开原终端并收起中转弹层（旧版 iOS 降级展示「回原终端查看」按钮，不发生解码错误）；
+- 已在电脑端处理或已结束的通知展示「问题已处理」/「问题已结束」，保留回原终端查看入口；断线不可达时保留「暂时无法核对」与「重新检查」。
 
 部署依次更新 Push Gateway、Backend 和 iOS。回滚前在 Backend 将
 `services.terminalQuestionNotifications.enabled` 改为 `false` 并重载配置。待答订阅与既有订阅在磁盘上

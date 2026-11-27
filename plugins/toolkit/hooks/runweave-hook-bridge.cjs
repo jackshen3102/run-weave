@@ -314,7 +314,8 @@ async function main() {
         hookEvent: stateHookEvent,
         threadId,
         turnId: source === "codex" && normalizedEvent === "pretooluse"
-          && toolHook?.toolName === "request_user_input" && toolHook.toolUseId
+          && (toolHook?.toolName === "request_user_input" || toolHook?.toolName === "functions.request_user_input")
+          && toolHook.toolUseId
           && typeof payload.turn_id === "string" && payload.turn_id.length <= 256
           ? payload.turn_id : undefined,
         panelId: terminalPanelId,

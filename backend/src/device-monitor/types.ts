@@ -1,5 +1,6 @@
 import type { PushEnvironment } from "@runweave/shared/push-notifications";
 import type { DeviceNotificationKind } from "@runweave/shared/device-notifications";
+import type { TerminalPromptActionKind } from "@runweave/shared/terminal/questions";
 import type { TerminalQuestionEnd, TerminalQuestionOrigin } from "../terminal/questions/origin";
 
 export interface DeviceSubscription {
@@ -64,8 +65,15 @@ export interface DeviceDelivery {
   notification?: { title: string; body: string; occurredAt: string };
 }
 
+export interface TerminalQuestionPromptMeta {
+  actionKind: TerminalPromptActionKind;
+  title: string;
+  body: string;
+}
+
 export interface DeviceMonitorData {
   terminalQuestions?: Record<string, TerminalQuestionLocation>;
+  terminalQuestionPrompts?: Record<string, TerminalQuestionPromptMeta>;
   terminalReplies?: {
     inputs: Record<string, { id: string; hash: string; sessionId: string; subscriptionIds: string[]; expiresAt: number }[]>;
     turns: Record<string, { id: string; startEventId?: string; threadId: string | null; source: string; hash: string; sessionId: string | null; subscriptionIds: string[]; completed: boolean; startedAt: number }>;

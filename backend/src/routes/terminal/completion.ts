@@ -38,6 +38,7 @@ const completionEventSchema = z
     agy: z.custom<import("@runweave/shared/terminal/agy-agent").AgyAgentContext>(isAgyAgentContext).optional(),
     pi: z.custom<import("@runweave/shared/terminal/pi-agent").PiAgentContext>(isPiAgentContext).optional(),
     feishuNotificationOnly: z.boolean().optional(),
+    notificationType: z.string().trim().max(128).optional(),
     terminalSessionId: z.string().trim().min(1),
     source: z
       .enum(["claude", "codex", "trae", "traecli", "traex", "pi", "agy", "unknown"])
@@ -306,6 +307,20 @@ export function createInternalTerminalCompletionRouter(options: {
       if (effectiveSource === "pi" && (!pi || owner.pi?.instanceId !== pi.instanceId || owner.pi?.sequence !== pi.sequence)) {
         res.status(202).json({ ignored: true }); return;
       }
+      if (effectiveSource === "codex" && rawHookEvent?.toLowerCase() === "notification" &&
+          parsed.data.notificationType?.toLowerCase() === "permission_prompt") {
+        options.terminalSessionManager.mobilePrompts?.observePrompt({
+          terminalId: session.id,
+          panelId,
+          source: "codex",
+          actionKind: "permission",
+          dedupeKey: `codex:perm:${parsed.data.threadId ?? session.id}:${Math.floor(Date.now() / 2_000)}`,
+          title: "Codex 请求权限确认",
+          body: "打开 Runweave 回到原终端确认操作。",
+          specificity: 150,
+          settleMs: 300,
+        });
+      }
       try {
         const notificationId = await options.terminalSessionManager.feishuNotifications.attention(session.id, panelId);
         res.status(202).json({ notificationId });
@@ -352,6 +367,26 @@ export function createInternalTerminalCompletionRouter(options: {
         session,
         feishuTurnId,
       );
+      if (
+        completionReason === "notify" &&
+        completionHookEvent?.toLowerCase() === "notification" &&
+        ["trae", "traex", "traecli"].includes(effectiveSource)
+      ) {
+        const isPerm = parsed.data.notificationType?.toLowerCase() === "permission_prompt";
+        options.terminalSessionManager.mobilePrompts?.observePrompt({
+          terminalId: session.id,
+          panelId,
+          source: effectiveSource,
+          actionKind: isPerm ? "permission" : "agent_prompt",
+          dedupeKey: `trae:notify:${session.completionRevision}`,
+          title: isPerm ? "Trae 请求权限确认" : "Trae 等你确认",
+          body: "打开 Runweave 回到原终端继续处理。",
+          specificity: 150,
+          settleMs: 300,
+        });
+      } else if (completionReason === "hook_stop") {
+        options.terminalSessionManager.mobilePrompts?.resolvePrompt(session.id, panelId, "closed");
+      }
     } catch (error) {
       if (piKey) piCompletions.delete(piKey);
       terminalCompletionLogger.error("terminal-completion.record.failed", {

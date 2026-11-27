@@ -136,6 +136,7 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     if (inputSession) invalidateTerminalInput(inputSession);
     delete panel.pendingPermissionRequest;
     delete panel.pendingAgyQuestion;
+    this.mobilePrompts?.resolvePrompt(panel.terminalSessionId, panelId, "closed");
     panel.status = "exited";
     panel.exitCode = exitCode;
     panel.lastActivityAt = new Date();

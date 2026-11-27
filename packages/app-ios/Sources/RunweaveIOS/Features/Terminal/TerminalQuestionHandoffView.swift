@@ -34,9 +34,16 @@ struct TerminalQuestionHandoffView: View {
               Text(questions.notificationResolved ? "问题已处理" : "问题已结束")
                 .font(.title2.bold()).accessibilityIdentifier("codex-question-handoff-state")
             case .unavailable, nil:
-              Text("暂时无法核对").font(.title2.bold()).accessibilityIdentifier("codex-question-handoff-state")
-              Button("重新检查") { retry += 1 }
-                .buttonStyle(.borderedProminent).accessibilityIdentifier("codex-question-handoff-retry")
+              if questions.notificationTerminalOnly {
+                Text("等待你在原终端确认")
+                  .font(.title2.bold()).accessibilityIdentifier("codex-question-handoff-state")
+                Text("请打开原终端查看选项或完成确认。")
+                  .foregroundStyle(.secondary)
+              } else {
+                Text("暂时无法核对").font(.title2.bold()).accessibilityIdentifier("codex-question-handoff-state")
+                Button("重新检查") { retry += 1 }
+                  .buttonStyle(.borderedProminent).accessibilityIdentifier("codex-question-handoff-retry")
+              }
             }
             if questions.notificationSubmissionNeedsCheck {
               Text("提交状态待核对，答案草稿已保留。").foregroundStyle(.secondary)
@@ -46,7 +53,7 @@ struct TerminalQuestionHandoffView: View {
               Button("回原终端查看") {
                 guard canRead else { return }
                 Task {
-                  await openTerminal(terminalID)
+                  await openTerminal(terminalID, panelID: questions.notificationPanelID, focusPanel: true)
                   if activeComputer, session.terminal?.id == terminalID { close() }
                 }
               }.disabled(!canRead).accessibilityIdentifier("codex-question-handoff-terminal")
@@ -54,7 +61,7 @@ struct TerminalQuestionHandoffView: View {
           }
         }.frame(maxWidth: .infinity, alignment: .leading).padding()
       }
-      .navigationTitle("Codex 回复辅助")
+      .navigationTitle(questions.notificationTitle ?? (questions.notificationTerminalOnly ? "终端待确认" : "Codex 回复辅助"))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) { Button("关闭", action: close) }
@@ -86,9 +93,18 @@ struct TerminalQuestionHandoffView: View {
     }
     await questions.refreshNotification(api: api, target: target)
     guard !Task.isCancelled else { return }
+    if questions.notificationStatus == .unavailable, questions.notificationTerminalOnly,
+      let terminalID = questions.notificationTerminalID {
+      await openTerminal(terminalID, panelID: questions.notificationPanelID, focusPanel: true)
+      guard !Task.isCancelled else { return }
+      if activeComputer, session.terminal?.id == terminalID {
+        close()
+        return
+      }
+    }
     checking = false
     if questions.notificationStatus == .pending, let terminalID = questions.notificationTerminalID {
-      await openTerminal(terminalID)
+      await openTerminal(terminalID, panelID: questions.notificationPanelID, focusPanel: false)
     }
     while !Task.isCancelled && questions.notificationStatus == .pending {
       do { try await Task.sleep(nanoseconds: 1_000_000_000) } catch { return }
@@ -100,11 +116,24 @@ struct TerminalQuestionHandoffView: View {
     }
   }
 
-  private func openTerminal(_ id: String) async {
+  private func openTerminal(_ id: String, panelID: String?, focusPanel: Bool) async {
+    guard canRead else { return }
+    var focused = false
+    if focusPanel, session.canWrite, let api = session.api, let panelID, !panelID.isEmpty {
+      do {
+        try await api.focusTerminalPanel(terminalID: id, panelID: panelID)
+        _ = await session.reload()
+        focused = true
+      } catch APIError.http(404), APIError.http(409) {
+        _ = await session.reload()
+      } catch {}
+    }
     guard canRead else { return }
     session.showingScheduledTasks = false
     session.showingEnergyMonitor = false
     session.showingDevelopmentResources = false
-    if session.terminal?.id != id { await session.openTerminal(id) }
+    if session.terminal?.id != id || focused {
+      await session.openTerminal(id)
+    }
   }
 }

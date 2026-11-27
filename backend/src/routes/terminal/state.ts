@@ -185,12 +185,34 @@ export function createInternalTerminalAgentHookRouter(options: {
         if (target.panel) await recoverCodexToolConversation(options.terminalSessionManager,
           target.panel, parsed.data.threadId, parsed.data.operationId);
         const { hookEvent, toolName, threadId, turnId, toolUseId } = parsed.data;
-        if (target.panel && hookEvent === "ToolRequested" && toolName === "request_user_input" && threadId && turnId && toolUseId) {
-          const origin = {
-            terminalId: session.id, panelId: target.panel.id, threadId, turnId, itemId: toolUseId,
-          };
-          options.terminalQuestionsService?.observeQuestion(origin);
-          options.questionNotifications?.observe(origin);
+        const isCodexQuestion = toolName === "request_user_input" || toolName === "functions.request_user_input";
+        if (hookEvent === "ToolRequested" && isCodexQuestion && toolUseId) {
+          if (target.panel && threadId && turnId) {
+            const origin = {
+              terminalId: session.id, panelId: target.panel.id, threadId, turnId, itemId: toolUseId,
+            };
+            options.terminalQuestionsService?.observeQuestion(origin);
+            options.questionNotifications?.observe(origin);
+          } else {
+            options.questionNotifications?.observePrompt({
+              terminalId: session.id,
+              panelId: target.panel?.id ?? null,
+              source: "codex",
+              actionKind: "question",
+              dedupeKey: `codex:question:${threadId ?? session.id}:${turnId ?? "turn"}:${toolUseId}`,
+              title: "Codex 等你回答",
+              body: "打开 Runweave 回到原终端确认选项。",
+              specificity: 350,
+              toolUseId,
+            });
+          }
+        } else if (hookEvent === "ToolCompleted") {
+          options.questionNotifications?.resolvePrompt(
+            session.id,
+            target.panel?.id ?? null,
+            "resolved",
+            toolUseId ? { toolUseId } : undefined,
+          );
         }
       }
       if (parsed.data.agent === "pi" || parsed.data.agent === "claude" || parsed.data.agent === "agy") {

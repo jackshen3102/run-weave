@@ -9,6 +9,9 @@ final class TerminalQuestionsModel: ObservableObject {
   @Published private(set) var notificationStatus: TerminalQuestionNotificationResponse.Status?
   @Published private(set) var notificationResolved = false
   @Published private(set) var notificationTerminalID: String?
+  @Published private(set) var notificationPanelID: String?
+  @Published private(set) var notificationTerminalOnly = false
+  @Published private(set) var notificationTitle: String?
   @Published private(set) var requestedTerminalID: String?
   @Published private var drafts: [String: [String: String]] = [:]
   private var operations: [String: String] = [:]
@@ -42,6 +45,9 @@ final class TerminalQuestionsModel: ObservableObject {
     notificationStatus = nil
     notificationResolved = false
     notificationTerminalID = nil
+    notificationPanelID = nil
+    notificationTerminalOnly = false
+    notificationTitle = nil
   }
 
   func closeNotification(_ target: TerminalQuestionHandoff) {
@@ -56,9 +62,11 @@ final class TerminalQuestionsModel: ObservableObject {
       && response?.requests.first?.state != "submitting"
   }
 
-  func notificationUnavailable(_ target: TerminalQuestionHandoff) {
+  func notificationUnavailable(_ target: TerminalQuestionHandoff, terminalOnly: Bool = false, title: String? = nil) {
     guard handoff?.id == target.id else { return }
     response = nil
+    notificationTerminalOnly = terminalOnly
+    if let title { notificationTitle = title }
     notificationStatus = .unavailable
   }
 
@@ -76,6 +84,7 @@ final class TerminalQuestionsModel: ObservableObject {
       let location = try await api.terminalQuestionNotification(target)
       guard epoch == revision, !Task.isCancelled else { return }
       notificationTerminalID = location.terminalId
+      notificationPanelID = location.panelId.isEmpty ? nil : location.panelId
       terminalID = location.terminalId
       switch location.status {
       case .pending:
@@ -85,15 +94,23 @@ final class TerminalQuestionsModel: ObservableObject {
           let request = value.requests.first, request.threadId == original.threadId,
           request.generation == value.generation, ["pending", "submitting"].contains(request.state)
         else { notificationUnavailable(target); return }
+        notificationTerminalOnly = false
+        notificationTitle = nil
         pinnedTarget = original
         response = value
         notificationStatus = .pending
       case .closed:
         response = nil
+        notificationTerminalOnly = location.terminalOnly == true
+        notificationTitle = location.title
         notificationResolved = location.resolved == true
         notificationStatus = .closed
       case .unavailable:
-        notificationUnavailable(target)
+        notificationUnavailable(
+          target,
+          terminalOnly: location.terminalOnly == true,
+          title: location.title
+        )
       }
       error = nil
     } catch {

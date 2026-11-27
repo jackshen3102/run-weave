@@ -152,14 +152,50 @@ async function assembleRuntimeServices(
   let sideChatService: SideChatService | null = null;
   const terminalSessionManager = new TerminalSessionManager(terminalSessionStore,
     {
-      onPanelProgramStatusChanged: (session, panel) => publishCodexPanelStatus(terminalSessionManager, terminalEventService, session, panel),
+      onPanelProgramStatusChanged: (session, panel) => {
+        publishCodexPanelStatus(terminalSessionManager, terminalEventService, session, panel);
+        const status = panel ? panel.oscProgramStatus : session.oscProgramStatus;
+        if (status?.state === "blocked") {
+          const kind = status.kind;
+          const actionKind = kind ?? "agent_prompt";
+          const title = kind === "permission" ? "终端请求权限确认"
+            : kind === "question" ? "终端等你回答"
+              : kind === "auth" ? "终端需要认证" : "Agent 等你确认";
+          const body = kind === "permission" ? "打开 Runweave 回到原终端确认权限。"
+            : kind === "question" ? "打开 Runweave 回到原终端确认选项。"
+              : kind === "auth" ? "打开 Runweave 回到原终端完成认证。"
+                : "打开 Runweave 回到原终端继续处理。";
+          terminalSessionManager.mobilePrompts?.observePrompt({
+            terminalId: session.id,
+            panelId: panel?.id ?? null,
+            source: "osc",
+            actionKind,
+            dedupeKey: `osc:${panel?.id ?? "session"}:${kind ?? "generic"}:${status.observedAt ?? Date.now()}`,
+            title,
+            body,
+            specificity: 200,
+            settleMs: 500,
+          });
+        } else {
+          terminalSessionManager.mobilePrompts?.resolvePrompt(
+            session.id,
+            panel?.id ?? null,
+            status?.state === "working" || status?.state === "done" ? "resolved" : "closed",
+            { onlySource: "osc" },
+          );
+        }
+      },
       onCompletionAcknowledged: (session) => terminalEventService.record({
         kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
         payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },
       }),
-      onSessionExited: (id) => prWatchOwner?.remove(id),
+      onSessionExited: (id) => {
+        prWatchOwner?.remove(id);
+        terminalSessionManager.mobilePrompts?.closeTerminal(id);
+      },
       onSessionDeleted: async (id) => {
         prWatchOwner?.remove(id);
+        terminalSessionManager.mobilePrompts?.closeTerminal(id);
         await Promise.all([textAttachmentFiles?.deleted(id), sideChatService?.deleted(id)]);
       },
       onBell: ({ terminalSessionId, projectId, count }) => {
@@ -450,7 +486,11 @@ async function assembleRuntimeServices(
     scheduledTaskStore: scheduledTasks.store,
   });
   const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService, deviceMonitoring.batteryAlerts?.subscriptions);
-  resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
+  terminalSessionManager.mobilePrompts = terminalQuestionsService.notifications;
+  resources.defer("terminal-questions", async () => {
+    terminalSessionManager.mobilePrompts = undefined;
+    await terminalQuestionsService.dispose();
+  });
   const attentionService = new AttentionService(
     terminalSessionManager,
     terminalCompletionEventService,

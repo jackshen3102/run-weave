@@ -1,6 +1,7 @@
 import { clearCodexContext } from "../runtime/codex-context";
 import { TerminalFeishuPolicy } from "../completion/feishu-policy";
 import type { TerminalMobileReplies } from "../completion/mobile-replies";
+import type { TerminalMobilePrompts } from "../questions/origin";
 import type { TerminalSessionMetadataSnapshot } from "@runweave/shared/terminal/events";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
@@ -54,6 +55,7 @@ export type TerminalPanelMutationListener = (
 
 export abstract class TerminalManagerBase {
   mobileReplies?: TerminalMobileReplies;
+  mobilePrompts?: TerminalMobilePrompts;
   readonly feishuNotifications: TerminalFeishuPolicy;
   protected readonly projects = new Map<string, TerminalProjectRecord>();
   protected readonly projectContexts = new WorktreeProjectRegistry();

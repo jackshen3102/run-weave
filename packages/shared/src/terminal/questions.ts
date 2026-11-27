@@ -24,10 +24,30 @@ export type TerminalQuestionsResponse = {
   target: { terminalId: string; panelId: string; threadId: string } | null;
   requests: TerminalQuestionRequest[];
 };
+export type TerminalPromptActionKind =
+  | "question"
+  | "permission"
+  | "auth"
+  | "agent_prompt";
 export type TerminalQuestionNotificationResponse =
   | { status: "pending"; terminalId: string; panelId: string; questions: TerminalQuestionsResponse }
-  | { status: "closed"; terminalId: string; panelId: string; resolved?: true }
-  | { status: "unavailable"; terminalId: string; panelId: string };
+  | {
+      status: "closed";
+      terminalId: string;
+      panelId: string;
+      resolved?: true;
+      terminalOnly?: true;
+      actionKind?: TerminalPromptActionKind;
+      title?: string;
+    }
+  | {
+      status: "unavailable";
+      terminalId: string;
+      panelId: string;
+      terminalOnly?: true;
+      actionKind?: TerminalPromptActionKind;
+      title?: string;
+    };
 export type AnswerTerminalQuestionRequest = {
   panelId: string;
   generation: string;
