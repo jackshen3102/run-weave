@@ -183,7 +183,7 @@ export function createTerminalRouter(
 
   const agentSettingsUpdateSchema = z.object({
     panelId: z.string().min(1).nullable(),
-    threadId: z.string().min(1),
+    threadId: z.string().min(1).nullable(),
     expectedRevision: z.string().min(1),
     model: z.string().min(1),
     reasoningEffort: z.string().min(1),

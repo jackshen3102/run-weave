@@ -197,7 +197,7 @@ public actor APIClient {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/agent-settings",
       method: "PUT",
       body: ["panelId": settings.panelId as Any? ?? NSNull(),
-        "threadId": settings.threadId, "expectedRevision": settings.revision,
+        "threadId": settings.threadId as Any? ?? NSNull(), "expectedRevision": settings.revision,
         "model": model, "reasoningEffort": effort],
       retryUnauthorized: false,
       decodeError: { status, data in TerminalAgentSettingsFailure.decode(status: status, data: data) })
