@@ -19,10 +19,17 @@ final class TerminalAgentSettingsModel: ObservableObject {
 
   var summary: String? {
     guard let response else { return nil }
-    let label = response.models.first { $0.id == response.settings.model }?.label
-      ?? response.settings.model
+    guard let model = response.settings.model else { return "选择模型" }
+    let name = response.models.first { $0.id == model }?.label ?? model
+    let label = response.settings.modelSource == "default" ? "默认 · \(name)" : name
     if commitsModelOnSelection { return label }
     return "\(label) · \(Self.effortLabel(response.settings.reasoningEffort))"
+  }
+
+  var accessibilityLabel: String {
+    guard let summary, let settings = response?.settings, settings.model != nil else { return "选择模型" }
+    if settings.modelSource == "default" { return summary }
+    return commitsModelOnSelection ? "当前终端模型：\(summary)" : "当前终端模型与推理强度：\(summary)"
   }
 
   static func effortLabel(_ effort: String?) -> String {
@@ -110,6 +117,7 @@ final class TerminalAgentSettingsModel: ObservableObject {
       guard !Task.isCancelled, session.generation == generation,
         session.api === api, session.terminal?.id == terminalID,
         next.settings.terminalSessionId == terminalID,
+        next.settings.panelId == original.panelId,
         next.settings.threadId == original.threadId,
         next.settings.provider == original.provider else { return }
       session.agentSettingsCache.store(next, session: session, terminalID: terminalID)

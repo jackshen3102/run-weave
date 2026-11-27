@@ -8,9 +8,10 @@ struct TerminalAgentSettingsResponse: Codable, Equatable {
 struct TerminalAgentSettings: Codable, Equatable {
   let terminalSessionId: String
   let panelId: String?
-  let threadId: String
+  let threadId: String?
   let provider: String
-  let model: String
+  let model: String?
+  let modelSource: String?
   let reasoningEffort: String?
   let revision: String
 }

@@ -13985,23 +13985,23 @@
     "reason": "Read Runweave-written session workspace metadata alongside agy native transcript to resolve cwd/repositoryId."
   },
   {
-    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "file": "backend/src/terminal/runtime/terminal-agent-model-readback.ts",
     "kind": "file-io",
-    "expression": "readFile(path.join(brainDirectory, threadId, \".runweave-agy-meta.json\"))",
+    "expression": "readFile(path.join(directory, \".runweave-agy-meta.json\"))",
     "count": 1,
     "category": "external-protocol",
     "reason": "Read agy session metadata to determine active model for live terminal settings readback."
   },
   {
-    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "file": "backend/src/terminal/runtime/terminal-agent-model-readback.ts",
     "kind": "file-io",
-    "expression": "readFile(path.join(brainDirectory, threadId, \".system_generated\", \"logs\", \"transcript.jsonl\"))",
+    "expression": "readFile(path.join(directory, \".system_generated\", \"logs\", \"transcript.jsonl\"))",
     "count": 1,
     "category": "external-protocol",
     "reason": "Read agy native transcript to determine active model for live terminal settings readback."
   },
   {
-    "file": "backend/src/terminal/runtime/terminal-agent-settings.ts",
+    "file": "backend/src/terminal/runtime/terminal-agent-model-readback.ts",
     "kind": "file-io",
     "expression": "readFile(path.join(configDirectory, \"settings.json\"))",
     "count": 1,

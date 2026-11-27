@@ -245,8 +245,7 @@ struct ComposerView: View {
               Text(summary).font(.caption.weight(.medium)).lineLimit(1).truncationMode(.tail)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
-            .accessibilityLabel(modelSettings.commitsModelOnSelection
-              ? "当前终端模型：\(summary)" : "当前终端模型与推理强度：\(summary)")
+            .accessibilityLabel(modelSettings.accessibilityLabel)
             .accessibilityIdentifier("terminal-agent-settings-open")
             .disabled(modelSettings.saving)
           }

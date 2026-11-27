@@ -3,9 +3,12 @@ export type TerminalAgentSettingsProvider = "codex" | "traex" | "agy";
 export interface TerminalAgentSettings {
   terminalSessionId: string;
   panelId: string | null;
-  threadId: string;
+  /** A live CLI can offer settings before it has established a conversation. */
+  threadId: string | null;
   provider: TerminalAgentSettingsProvider;
-  model: string;
+  model: string | null;
+  /** Preselection from the CLI's defaults when the active selection is unavailable. */
+  modelSource?: "default";
   reasoningEffort: string | null;
   revision: string;
 }
@@ -25,7 +28,7 @@ export interface TerminalAgentSettingsResponse {
 
 export interface UpdateTerminalAgentSettingsRequest {
   panelId: string | null;
-  threadId: string;
+  threadId: string | null;
   expectedRevision: string;
   model: string;
   reasoningEffort: string;
