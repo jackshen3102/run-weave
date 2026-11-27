@@ -76,14 +76,21 @@ export function registerTerminalScrollbackRoutes(
         { panelId: parsedQuery.data.panelId },
         "explicit-or-active",
       );
-      const capture =
-        await options.tmuxService.capturePaneAnsiHistory(paneTarget);
+      const [capture, scrollState] = await Promise.all([
+        options.tmuxService.capturePaneAnsiHistory(paneTarget),
+        typeof options.tmuxService.readScrollState === "function"
+          ? options.tmuxService.readScrollState(paneTarget).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       const payload: TerminalAnsiScrollbackResponse = {
         terminalSessionId: session.id,
         paneId: capture.paneId,
         sourceCols: capture.sourceCols,
         lineCount: capture.lineCount,
         data: capture.data,
+        ...(scrollState
+          ? { owner: scrollState.owner, copyMode: scrollState.copyMode }
+          : {}),
       };
       res.json(payload);
     } catch (error) {

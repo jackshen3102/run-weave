@@ -83,6 +83,10 @@ export interface TerminalAnsiScrollbackResponse {
   lineCount: number;
   /** 经 capture-pane -e -J -p 抓取并按完整行裁剪至 <= 1 MiB UTF-8 的带 ANSI 样式文本。 */
   data: string;
+  /** 服务端抓取时刻该 pane 的真实滚动归属（"history" | "application"），用于在 WS scroll-state 延迟窗口内即时防旧历史覆盖。 */
+  owner?: "history" | "application";
+  /** 服务端抓取时刻该 pane 是否处于 tmux copy-mode。 */
+  copyMode?: boolean;
 }
 
 export interface TerminalSessionListItem {
