@@ -27,7 +27,6 @@ struct HomeView: View {
   @State private var moving: HomeTerminal?
   @State private var initializedGeneration: Int?
   @State private var visibleConversationCounts: [String: Int] = [:]
-  @State private var workingExpanded = false
 
   init(session: AppSession) {
     self.session = session
@@ -45,22 +44,20 @@ struct HomeView: View {
   }
   private var attention: [HomeTerminal] {
     let online = session.health.status == .online
+    let slots = attentionSlots
     let visible = groups.flatMap(\.sessions).filter {
-      attentionSlots[$0.id] != nil || $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
+      slots[$0.id] != nil || $0.hasUnreadCompletion || (online && $0.isAgentActive) || $0.pinnedAt != nil
         || (attentionRetention.retainedUntil[$0.id].map { $0 > Date() } ?? false)
     }
     let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
     let slotIDs = session.attentionSnapshot?.slots.map(\.terminalSessionId) ?? []
     let order = slotIDs + attentionRetention.orderedIDs.filter { !slotIDs.contains($0) }
-    return order.compactMap { byID[$0] }
-  }
-  private var foregroundAttention: [HomeTerminal] {
-    attention.filter { attentionSlots[$0.id]?.state != "working" &&
-      !(attentionSlots[$0.id] == nil && $0.isAgentActive) }
-  }
-  private var workingAttention: [HomeTerminal] {
-    attention.filter { attentionSlots[$0.id]?.state == "working" ||
-      (attentionSlots[$0.id] == nil && $0.isAgentActive) }
+    let ordered = order.compactMap { byID[$0] }
+    func isWorking(_ terminal: HomeTerminal) -> Bool {
+      if let slot = slots[terminal.id] { return slot.state == "working" }
+      return terminal.isAgentActive
+    }
+    return ordered.filter { !isWorking($0) } + ordered.filter(isWorking)
   }
 
   private func initializeExpansion() {
@@ -123,33 +120,12 @@ struct HomeView: View {
       if !session.loading, session.overview != nil, searching, groups.isEmpty {
         Text("没有找到匹配的项目或终端")
       } else if !session.loading, session.overview?.projects.isEmpty == true { Text("暂无项目") }
-      if !foregroundAttention.isEmpty {
+      if !attention.isEmpty {
         Section("关注") {
-          ForEach(foregroundAttention) { terminal in
+          ForEach(attention) { terminal in
             row(terminal, projectName: session.overview?.projects.first {
               $0.id == HomeOverview.parentProjectID(terminal.projectId)
             }?.name)
-          }
-        }
-      }
-      if !workingAttention.isEmpty {
-        Section {
-          Button {
-            workingExpanded.toggle()
-          } label: {
-            HStack {
-              Image(systemName: workingExpanded ? "chevron.down" : "chevron.right")
-              Text("运行中 (\(workingAttention.count))")
-              Spacer()
-            }
-          }
-          .accessibilityIdentifier("home-working-toggle")
-          if workingExpanded {
-            ForEach(workingAttention) { terminal in
-              row(terminal, projectName: session.overview?.projects.first {
-                $0.id == HomeOverview.parentProjectID(terminal.projectId)
-              }?.name)
-            }
           }
         }
       }
@@ -248,7 +224,6 @@ struct HomeView: View {
       renaming = nil
       moving = nil
       deleting = nil
-      workingExpanded = false
       initializeExpansion()
     }
     .onChange(of: query) { state.setQuery($0) }
