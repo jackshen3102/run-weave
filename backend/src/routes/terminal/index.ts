@@ -15,6 +15,9 @@ import { registerTerminalTaskRoutes } from "./tasks";
 import type { TerminalTaskService } from "../../terminal/tasks/service";
 import { registerTerminalConversationRoutes } from "./conversation";
 import { registerTerminalScrollbackRoutes } from "./scrollback";
+import { registerTerminalWaitRoutes } from "./wait";
+import type { AttentionService } from "../../attention/attention-service";
+import { TerminalWaitService } from "../../terminal/application/terminal-wait-service";
 import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
 import { registerTerminalSessionUpdateRoute } from "./sessions/update";
@@ -129,6 +132,7 @@ async function readTerminalHistory(
 export function createTerminalRouter(
   terminalSessionManager: TerminalSessionManager,
   options?: {
+    attentionService?: AttentionService;
     terminalBadges?: TerminalBadges | null;
     desktopBadgeAccess?: DesktopBadgeAccess | null;
     terminalTaskService?: TerminalTaskService;
@@ -439,6 +443,12 @@ export function createTerminalRouter(
 
   registerTerminalSessionUpdateRoute(router, terminalSessionManager, options?.terminalStateService, options?.terminalEventService);
   registerTerminalInputRoutes(router, terminalSessionManager, options);
+  registerTerminalWaitRoutes(
+    router,
+    terminalSessionManager,
+    new TerminalWaitService(terminalSessionManager, options ?? {}),
+    options?.authService,
+  );
   registerBrowserAssistanceRoutes(router, terminalSessionManager, options);
   router.delete("/session/:id", async (req, res) => {
     const session = terminalSessionManager.getSession(req.params.id);

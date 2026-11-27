@@ -139,6 +139,8 @@ Agent hook 的接收身份以 Panel 为最小作用域。Backend 为每个 Agent
 
 活动租约同时写入当前 Profile 的 `terminal-session-store.json`。Backend 重启时只恢复仍存在的 Session/Panel：`starting/active` 必须与当前 Panel 事实兼容，`grace` 必须保持原 `clearedAt` 且仍未超过 30 秒；不匹配、过期或孤立记录会被删除。恢复不得刷新 grace 时间，也不得从 Session 聚合状态推测某个多 Pane Agent 的归属。
 
+`terminal-session-store.json` 由 [store-recovery](../../backend/src/terminal/store/store-recovery.ts) 提供防损坏与历史快照保护：启动读取遇到非法 JSON、结构异常或高于当前支持版本的 `schemaVersion` 时置 `protectUnloaded`，内存回退空结构以保持服务可启动，并在首次写入覆盖前将原文件字节拷贝到同目录 `terminal-session-backups/`（最多保留最近 3 份，备份失败则中止写入并保留原文件）；正常写入采用同目录临时文件 + `fsync` + `rename` 原子替换，并按 15 分钟节流与布局结构指纹去重在 `terminal-session-snapshots/` 保留最多 48 份非空历史快照（快照异常仅告警，不阻断主写入）。
+
 另外，app-server event center 上的 `agent.completion` 只允许作为受限兜底：当 backend 消费到同一 terminal session 的 `completionReason="hook_stop"` 且原始 hook event 为 `Stop` / `SubagentStop` 时，可以把它规范化为一次 `Stop` hook，并复用 agent hook processor 的 active command、grace window、session 生命周期和 source gate 规则校正为 `agent_idle`。App Server 的独立 Codex app-server 进程也可以用 `thread/read=active` 写入 `payload.compensation=true` 的 lifecycle observation，把陈旧 projection 恢复为 `agent_running`；同一原生 rollout 的开始记录也可按下文规则确认运行态。Backend 消费补偿时必须匹配当前会话；当前绑定已清空时，仍不得覆盖另一个最近会话。独立进程返回的 `idle`、`notLoaded`、`systemError` 和读取失败都不是其它 TUI 进程已停止的证据；`agent_running -> agent_idle` 只接受同一 thread rollout 中不早于当前 projection、或比本轮已观察开始记录更新的 `task_complete` / `turn_aborted`。这不是新的 completion 状态机，也不能让 notify、manual completion、AI process exit 或普通 completion feed 写入 `TerminalState`。
 
 Codex 的 Hook 仍是主路径；[原记录监听器](../../app-server/src/codex/lifecycle-monitor.ts)
@@ -179,6 +181,7 @@ starting 改为 idle/running。每 30 秒最多检查 8 个候选，单轮 2 秒
 
 ```http
 GET /api/terminal/session/:terminalSessionId/state
+GET /api/terminal/session/:terminalSessionId/state?explain=1
 ```
 
 返回：
@@ -191,6 +194,8 @@ GET /api/terminal/session/:terminalSessionId/state
   }
 }
 ```
+
+携带 `explain=1` 时额外返回只读诊断字段 `explain`（见 [terminal-state-explain](../../backend/src/terminal/application/terminal-state-explain.ts) 与共享合同 `@runweave/shared/terminal/events`）：包含 `sessionStatus`、`winningSource`（`session_exited | panel_aggregation | state_service | persisted_fallback`）、各面板脱敏信号 `panels[]`（`activeCommand` 命令名、`terminalState`、`agentLease`、`oscProgramStatus`、`pendingPermissionRequest`、`pendingQuestion`、`piWaitState`）以及 `attention`（`activeSlot` 与被更高优先级或新鲜度压制的 `suppressedCandidates`）。诊断投影无副作用，不暴露命令参数全文或用户对话正文。
 
 内部 hook 写入接口：
 

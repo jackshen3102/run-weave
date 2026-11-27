@@ -1,6 +1,7 @@
 import { HttpError } from "../errors.js";
 
 interface ErrorPayload {
+  code?: unknown;
   error?: unknown;
   message?: unknown;
   details?: unknown;
@@ -49,10 +50,25 @@ async function buildHttpError(
 
   if (contentType.includes("application/json")) {
     try {
-      const payload = (await response.json()) as ErrorPayload;
-      const message = formatErrorPayloadMessage(payload);
-      if (message) {
-        return new HttpError(response.status, message);
+      const payload = (await response.json()) as ErrorPayload &
+        Record<string, unknown>;
+      const code =
+        typeof payload.code === "string" && payload.code.trim()
+          ? payload.code.trim()
+          : undefined;
+      const rawMessage = formatErrorPayloadMessage(payload);
+      if (rawMessage) {
+        const message =
+          code && !rawMessage.includes(code)
+            ? `${code}: ${rawMessage}`
+            : rawMessage;
+        return new HttpError(response.status, message, { code, payload });
+      }
+      if (code) {
+        return new HttpError(response.status, `${code}: ${fallback}`, {
+          code,
+          payload,
+        });
       }
     } catch {
       // Keep the fallback error when the server returns malformed JSON.

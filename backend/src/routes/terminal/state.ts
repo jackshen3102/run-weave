@@ -14,6 +14,8 @@ import type {
 import { logger } from "../../logging/index";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
 import type { TerminalStateService } from "../../terminal/state/terminal-state-service";
+import type { AttentionService } from "../../attention/attention-service";
+import { buildTerminalStateExplain } from "../../terminal/application/terminal-state-explain";
 import { resolveEffectiveTerminalState } from "../../terminal/application/terminal-state-projection";
 import type { TmuxService } from "../../terminal/tmux/service";
 import type { TerminalActivityDependencies } from "../../terminal/runtime/activity-events";
@@ -92,6 +94,11 @@ export function createTerminalStateRouter(options: {
   terminalSessionManager: TerminalSessionManager;
   terminalStateService: TerminalStateService;
   tmuxService?: TmuxService;
+  attentionService?: AttentionService;
+  terminalQuestionsService?: Pick<
+    TerminalQuestionsService,
+    "findActivePendingQuestion"
+  > | null;
 }): Router {
   const router = Router();
 
@@ -109,8 +116,21 @@ export function createTerminalStateRouter(options: {
       options.terminalStateService,
       session,
     );
+    const includeExplain =
+      req.query.explain === "1" || req.query.explain === "true";
 
-    const payload: TerminalStateResponse = { terminalState };
+    const payload: TerminalStateResponse = includeExplain
+      ? {
+          terminalState,
+          explain: buildTerminalStateExplain({
+            terminalSessionManager: options.terminalSessionManager,
+            terminalStateService: options.terminalStateService,
+            attentionService: options.attentionService,
+            terminalQuestionsService: options.terminalQuestionsService,
+            session,
+          }),
+        }
+      : { terminalState };
     res.json(payload);
   });
 

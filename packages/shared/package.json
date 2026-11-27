@@ -70,6 +70,7 @@
     "./terminal/project-context": "./src/terminal/project-context.ts",
     "./terminal/session": "./src/terminal/runtime/session.ts",
     "./terminal/state": "./src/terminal/runtime/state.ts",
+    "./terminal/wait": "./src/terminal/wait.ts",
     "./terminal/program-status": "./src/terminal/runtime/program-status.ts",
     "./terminal/workspace-service": "./src/terminal/workspace-service.ts",
     "./terminal/websocket": "./src/terminal/runtime/websocket.ts",

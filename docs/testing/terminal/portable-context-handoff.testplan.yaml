@@ -68,3 +68,50 @@ cases:
       - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，存在一个含多轮对话的终端与可用子 Worktree。
     steps:
       - 使用 `$toolkit:agent-device` 打开目标终端的交接面板；确认显示来源会话轮次与字节预算占用，选择目标 Agent 与子 Worktree 后提交，确认自动进入新建的目标终端页。
+
+  - id: HANDOFF-007
+    name: 同工作区空闲 tmux 面板支持原位切换 Agent 且保留终端 Tab 与关联状态
+    required: true
+    description: >
+      验证桌面端通过顶栏显式「换 Agent」入口选择「原位替换当前面板」后，在同一 terminalSessionId 与同一 panelId 内启动目标原生 CLI 并送达受管交接上下文与附加指令，Tab 数量及终端关联状态保持不变。
+    preconditions:
+      - 隔离测试 Backend 运行一个采用持久交互式 Shell 的 tmux 终端，当前活跃面板运行一个处于 agent_idle 且已有真实多轮问答的来源会话（如 Claude Code 或 Codex），并记录其 terminalSessionId、panelId 与 Tab 总数。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在桌面终端顶栏点击「换 Agent」按钮；确认弹窗显示来源轮次与 48 KiB 预算占用，默认选中「原位替换当前面板」并预选与来源不同的目标 Agent。
+      - 填写附加指令并提交；确认未新增终端 Tab，页面停留在同一 terminalSessionId 与 panelId，且旧 Agent 的运行态字段已清空。
+      - 确认目标 CLI 在同一面板启动就绪并收到权限为 `0600` 的受管交接附件路径与完整附加指令，终端显示干净无上一任 CLI 残留画面，项目 Git 工作区未出现交接临时文件。
+
+  - id: HANDOFF-008
+    name: 运行中面板或非 tmux 终端拒绝原位切换且零副作用
+    required: true
+    description: >
+      验证当来源面板正在执行（agent_running）或会话不是 tmux 运行时，预览明确标示不可原位切换，强制提交 placement="in_place" 返回 409 且不重启、不中断原面板进程。
+    preconditions:
+      - 隔离测试环境存在一个处于 agent_running 状态（或非 tmux 运行时）且已有可读取会话记录的终端，并记录原面板进程 PID 与缓冲内容。
+    steps:
+      - 调用 `GET /handoff-preview`；确认返回 `canInPlaceHandoff=false` 且 `inPlaceUnavailableReason` 为非空可读提示。
+      - 携带该预览的 `sourceRevision` 构造 `POST /handoff`（`placement="in_place"`、`mode="portable_handoff"`）；确认接口返回 `409`，且原面板进程 PID、运行状态与终端缓冲均未受影响。
+
+  - id: HANDOFF-009
+    name: 跨 Worktree 与 native_fork 互斥原位切换且缺省 placement 保持旧协议兼容
+    required: true
+    description: >
+      验证原位切换仅限同工作区便携交接：非法组合返回 409 且不破坏来源面板，UI 选择跨 Worktree 时自动切换为「交接到新终端」，省略 placement 字段的旧格式请求仍默认新建终端。
+    preconditions:
+      - 隔离测试环境存在包含主目录会话（处于 agent_idle，含可原生 Fork 的 Codex 或便携会话）与同父项目可用子 Worktree `wt-impl` 的终端环境。
+    steps:
+      - 调用 `GET /handoff-preview` 取得最新 `sourceRevision` 后，分别向 `POST /handoff` 发送「`placement="in_place"` + 目标为 `wt-impl`」以及「`placement="in_place"` + `mode="native_fork"`」；确认两次请求均返回 `409` 且来源面板未被重启。
+      - 使用 `$toolkit:playwright-cli` 打开「换 Agent」弹窗并将目标工作区切至 `wt-impl`；确认切换方式自动切回「交接到新终端」且「原位替换当前面板」处于不可选状态。
+      - 构造省略 `placement` 字段的旧版 `POST /handoff` 请求提交；确认接口按 `placement="new_terminal"` 正常创建新终端并返回新 `terminalSessionId`。
+
+  - id: HANDOFF-010
+    name: 原项目目录生成计划后支持自动识别计划文件并以精简计划上下文交接执行
+    required: true
+    description: >
+      验证在原项目目录生成 docs/plans/*.md 计划文件后，预览可自动探测该文件，选择 plan_focused 与执行预设提交后目标 CLI 在原目录直接收到计划路径与执行指令，且越出项目目录的非法计划路径被拒绝。
+    preconditions:
+      - 隔离测试环境存在处于 agent_idle 的 tmux 会话，其多轮对话末段生成并提及了原项目目录内的计划文件 `docs/plans/sample-exec-plan.md`（实际文件存在于该目录）。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 打开桌面终端顶栏「换 Agent」弹窗；确认 `detectedPlanFiles` 列出 `docs/plans/sample-exec-plan.md` 且默认勾选、默认选中「仅带计划与目标（精简上下文）」并预填执行指令。
+      - 在原项目目录提交原位切换（或同目录新终端交接）；核对生成的 `0600` 受管交接文档字节数 `<= 49152`、包含该计划文件的相对路径与绝对路径及原始目标，不含中间冗长讨论轮次，且目标 CLI 收到执行指令开始工作。
+      - 构造包含目录穿越路径（如 `../outside.md`）的 `planFilePaths` 调用 `POST /handoff`；确认接口返回 `400` 或 `403` 且不执行原位重启或创建新终端。

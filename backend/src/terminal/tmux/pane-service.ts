@@ -476,11 +476,24 @@ export class TmuxPaneService extends TmuxSessionService {
   async capturePane(
     target: TmuxTarget | TmuxPaneTarget,
     historyLines = CaptureHistoryLines,
+    options?: { joinWrappedLines?: boolean },
   ): Promise<{ data: string; durationMs: number; sourceCols?: number }> {
     const startedAt = performance.now();
     const tmuxTarget = resolveTmuxTargetName(target);
+    const joinWrappedLines = options?.joinWrappedLines !== false;
     const [result, sourceCols] = await Promise.all([
-      this.runTmux(["capture-pane", "-p", "-J", "-S", `-${historyLines}`, "-t", tmuxTarget], target),
+      this.runTmux(
+        [
+          "capture-pane",
+          "-p",
+          ...(joinWrappedLines ? ["-J"] : []),
+          "-S",
+          `-${historyLines}`,
+          "-t",
+          tmuxTarget,
+        ],
+        target,
+      ),
       this.readPaneWidth(target),
     ]);
     const durationMs = Number((performance.now() - startedAt).toFixed(2));

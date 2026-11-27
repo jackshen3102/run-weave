@@ -5,6 +5,13 @@ import type { SendTerminalInterruptRequest, SendTerminalInterruptResponse, SendT
 import type { CreateTerminalPanelRequest, TerminalPanelWorkspace } from "@runweave/shared/terminal/panel";
 import type { CreateTerminalProjectRequest, TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { CreateTerminalSessionRequest, CreateTerminalSessionResponse, TerminalSessionHistoryResponse, TerminalSessionListItem, TerminalSessionStatusResponse } from "@runweave/shared/terminal/session";
+import type {
+  TerminalSendAndWaitRequest,
+  TerminalSendAndWaitResponse,
+  TerminalSnapshotResponse,
+  TerminalWaitOutputRequest,
+  TerminalWaitOutputResponse,
+} from "@runweave/shared/terminal/wait";
 import type { AuthContext } from "./auth-context.js";
 import type { CodeReviewDetail, CodeReviewPage, CodeReviewRun, CreateCodeReviewRequest } from "@runweave/shared/terminal/code-review";
 import type { CreateTerminalTaskRequest, StartTerminalTaskRequest, SendTerminalTaskRequest, ControlTerminalTaskRequest, ReviewTerminalTaskRequest, InterruptTerminalTaskRequest, TerminalTask, TerminalTaskObservation } from "@runweave/shared/terminal/task";
@@ -182,9 +189,63 @@ export class TerminalHttpClient {
 
   getCurrentTerminalState(
     terminalSessionId: string,
+    options?: { explain?: boolean },
   ): Promise<TerminalStateResponse> {
+    const query = options?.explain ? "?explain=1" : "";
     return this.auth.requestJson<TerminalStateResponse>(
-      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state`,
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/state${query}`,
+    );
+  }
+
+  getSessionSnapshot(
+    terminalSessionId: string,
+    options?: {
+      panelId?: string;
+      panelAlias?: string;
+      role?: string;
+      lines?: number;
+      unwrap?: boolean;
+    },
+  ): Promise<TerminalSnapshotResponse> {
+    const params = new URLSearchParams();
+    if (options?.panelId) params.set("panelId", options.panelId);
+    if (options?.panelAlias) params.set("panelAlias", options.panelAlias);
+    if (options?.role) params.set("role", options.role);
+    if (options?.lines !== undefined) params.set("lines", String(options.lines));
+    if (options?.unwrap !== undefined) {
+      params.set("unwrap", options.unwrap ? "1" : "0");
+    }
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.auth.requestJson<TerminalSnapshotResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/snapshot${suffix}`,
+    );
+  }
+
+  sendAndWait(
+    terminalSessionId: string,
+    payload: TerminalSendAndWaitRequest,
+  ): Promise<TerminalSendAndWaitResponse> {
+    return this.auth.requestJson<TerminalSendAndWaitResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/send-and-wait`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  waitOutput(
+    terminalSessionId: string,
+    payload: TerminalWaitOutputRequest,
+  ): Promise<TerminalWaitOutputResponse> {
+    return this.auth.requestJson<TerminalWaitOutputResponse>(
+      `/api/terminal/session/${encodeURIComponent(terminalSessionId)}/wait-output`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
     );
   }
 

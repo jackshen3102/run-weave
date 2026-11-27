@@ -3,6 +3,7 @@
 `rw terminal task` 用于 Dots 等主 Agent 创建专用终端、持续交办、读取原生结果并记录验收。
 通过 `rw terminal task create` 创建的任务在 tmux 中运行 Codex。任务绑定一个终端和固定面板，返工沿用该终端。
 主 Agent 决定目标和下一步，Backend 保存执行事实，不运行第二个调度器。
+不需要持久 `taskId`/revision 账本的单次交互编排（`rw terminal send --wait`、`wait-output`、`snapshot --unwrap`、`state --explain`）见 [Agent CLI 控制面](./terminal-cli.md)。
 独立 Reviewer 的启动与审查流程见[下文](#原生-cli-与终端页面独立代码-review)。
 
 ## 创建、启动、交办

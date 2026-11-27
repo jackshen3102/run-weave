@@ -1,3 +1,8 @@
+import type {
+  AttentionActionKind,
+  AttentionSlot,
+  AttentionState,
+} from "../../attention";
 import type { AgyAgentContext } from "../../terminal/agy-agent";
 import type { ClaudeAgentContext } from "../../terminal/claude-agent";
 import type { PiAgentContext } from "../pi-agent";
@@ -5,6 +10,10 @@ import type { DeviceStatusSnapshot } from "../../monitoring/device-status";
 import type { TerminalCompletionEventPayload } from "./completion";
 import type { TerminalPanelListItem, TerminalPanelWorkspace } from "../panel";
 import type { TerminalProjectListItem } from "../project";
+import type {
+  TerminalProgramStatusKind,
+  TerminalProgramStatusState,
+} from "./program-status";
 import type { TerminalSessionListItem } from "./session";
 import type {
   TerminalAgentKind,
@@ -216,8 +225,73 @@ export interface TerminalCompletionEventListResponse {
   events: TerminalEventEnvelope[];
 }
 
+export type TerminalStateWinningSource =
+  | "session_exited"
+  | "panel_aggregation"
+  | "state_service"
+  | "persisted_fallback";
+
+export interface TerminalPanelAgentLeaseExplain {
+  phase: "starting" | "active" | "grace";
+  provider: string;
+  operationId: string | null;
+  observedAt: string;
+  clearedAt: string | null;
+}
+
+export interface TerminalPanelProgramStatusExplain {
+  state: TerminalProgramStatusState;
+  waitKind: TerminalProgramStatusKind | null;
+  source: "osc" | "hook";
+  observedAt: string | null;
+}
+
+export interface TerminalPanelExplain {
+  panelId: string;
+  alias: string | null;
+  role: string | null;
+  status: "running" | "exited";
+  activeCommand: string | null;
+  terminalState: TerminalState | null;
+  agentLease: TerminalPanelAgentLeaseExplain | null;
+  oscProgramStatus: TerminalPanelProgramStatusExplain | null;
+  pendingPermissionRequest: {
+    pending: boolean;
+    observedAt: string | null;
+  };
+  pendingQuestion: {
+    pending: boolean;
+    provider: "codex" | "agy" | null;
+    observedAt: string | null;
+  };
+  piWaitState: {
+    waiting: boolean;
+    failed: boolean;
+    event: string | null;
+  } | null;
+}
+
+export interface TerminalAttentionSuppressedCandidateExplain {
+  state: AttentionState;
+  actionKind?: AttentionActionKind;
+  panelId: string | null;
+  evidence: string;
+  reason: string;
+}
+
+export interface TerminalStateExplain {
+  sessionStatus: "running" | "exited";
+  winningSource: TerminalStateWinningSource;
+  panels: TerminalPanelExplain[];
+  attention: {
+    activeSlot: AttentionSlot | null;
+    suppressedCandidates: TerminalAttentionSuppressedCandidateExplain[];
+  };
+}
+
 export interface TerminalStateResponse {
   terminalState: TerminalState;
+  explain?: TerminalStateExplain;
 }
 
 export type AgentHookIgnoreReason =
