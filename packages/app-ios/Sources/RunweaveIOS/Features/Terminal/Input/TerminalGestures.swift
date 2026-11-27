@@ -264,6 +264,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   var endLocalHistoryScroll: ((CGFloat) -> Void)?
   private var localHistoryHandoffActive = false
   private var localHistoryGestureMultiplier: CGFloat = 1
+  private var localHistoryPendingDeltaY: CGFloat = 0
   // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
   private let tmuxRowsPerWheel = 5
   var active = true {
@@ -314,6 +315,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     cancelled = true
     localHistoryHandoffActive = false
     localHistoryGestureMultiplier = 1
+    localHistoryPendingDeltaY = 0
     if usesNormalizedScroll() { stopNormalizedScroll?(gestureID) }
   }
 
@@ -352,6 +354,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
       cancelled = false
       localHistoryHandoffActive = false
       localHistoryGestureMultiplier = 1
+      localHistoryPendingDeltaY = 0
     }
     if gesture.state == .began || gesture.state == .changed || gesture.state == .ended {
       let dy = gesture.translation(in: view).y
@@ -359,10 +362,19 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
       if localHistoryHandoffActive {
         updateLocalHistoryScroll?(dy * localHistoryGestureMultiplier)
       } else if canUseLocalHistoryScroll() {
-        let multiplier: CGFloat = dy < 0 ? -1 : 1
-        if abs(dy) > 0, beginLocalHistoryScroll?(abs(dy)) == true {
-          localHistoryGestureMultiplier = multiplier
-          localHistoryHandoffActive = true
+        localHistoryPendingDeltaY += dy
+        if localHistoryPendingDeltaY >= 2 {
+          if beginLocalHistoryScroll?(localHistoryPendingDeltaY) == true {
+            localHistoryGestureMultiplier = 1
+            localHistoryHandoffActive = true
+            localHistoryPendingDeltaY = 0
+          }
+        } else if localHistoryPendingDeltaY <= -14 {
+          if beginLocalHistoryScroll?(abs(localHistoryPendingDeltaY)) == true {
+            localHistoryGestureMultiplier = -1
+            localHistoryHandoffActive = true
+            localHistoryPendingDeltaY = 0
+          }
         }
       } else {
         move(dy, phase: "direct")
@@ -373,15 +385,20 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
         let multiplier = localHistoryGestureMultiplier
         localHistoryHandoffActive = false
         localHistoryGestureMultiplier = 1
+        localHistoryPendingDeltaY = 0
         endLocalHistoryScroll?(gesture.velocity(in: view).y * multiplier)
         return
       }
+      localHistoryPendingDeltaY = 0
       if usesNormalizedScroll(), !cancelled, !canUseLocalHistoryScroll() {
         let velocity = gesture.velocity(in: view).y
         if abs(velocity) >= 80 {
           momentumVelocity = min(max(velocity, -view.bounds.height * 4), view.bounds.height * 4)
           lastMomentumTime = 0
           let link = CADisplayLink(target: self, selector: #selector(decelerate(_:)))
+          if #available(iOS 15.0, *) {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+          }
           momentum = link
           link.add(to: .main, forMode: .common)
         }
@@ -390,6 +407,7 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
       if localHistoryHandoffActive {
         localHistoryHandoffActive = false
         localHistoryGestureMultiplier = 1
+        localHistoryPendingDeltaY = 0
         endLocalHistoryScroll?(0)
       }
       cancelScroll()
