@@ -240,6 +240,12 @@ Windows PTY 的 Codex / TraeX 在使用 Enter 提交的 `line`、`prompt_paste` 
 
 ## Antigravity Agent 地区校验故障
 
+本节使用 [cli117/antigravity-hakimi](https://github.com/cli117/antigravity-hakimi)
+提供的独立 `agy` CLI 分析与修补脚本，只采用已验证的 CLI 路径，不安装其增强版桌面客户端。
+脚本修改本机 `agy` 二进制中 `ValidateAndOnboardAccount` 的 `free-tier` 资格分支；它不会改变
+代理出口或 Google 账号地区，因此不能替代前置网络排查。固定下方提交是为了让二进制修补逻辑
+与验收结果可复现；更新提交前需重新完成同一套分析、签名与真实模型调用验收。
+
 仅当 macOS arm64 的 `agy` 报 `Eligibility check failed`，且海外代理出口正常时使用；
 出口仍为 `CN` 时先修代理。本流程实测于 `agy 1.5.18`，其他版本只在只读分析返回
 `status: unpatched` 并命中 `ValidateAndOnboardAccount` 时继续：

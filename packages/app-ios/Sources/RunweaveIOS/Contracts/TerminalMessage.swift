@@ -33,6 +33,8 @@ struct TerminalAnsiScrollbackResponse: Decodable {
   let sourceCols: Int
   let lineCount: Int
   let data: String
+  let owner: String?
+  let copyMode: Bool?
 }
 
 /// Mirrors packages/shared/src/terminal/runtime/websocket.ts. Unknown types are forward compatible.

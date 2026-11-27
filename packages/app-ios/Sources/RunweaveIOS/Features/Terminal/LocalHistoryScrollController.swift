@@ -18,13 +18,10 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   private(set) var ansiScrollbackUnsupported = false
   private(set) var lastKnownOwner = "history"
   private(set) var lastKnownCopyMode = false
-  private(set) var hasReceivedScrollState = false
 
   var isViewportActive = true {
     didSet {
-      if isViewportActive, !oldValue, dirty, !isShowingLocalHistory {
-        scheduleRefresh(immediate: false)
-      }
+      if isViewportActive, !oldValue, dirty, !isShowingLocalHistory { scheduleRefresh(immediate: false) }
     }
   }
   var onStateChanged: (() -> Void)?
@@ -42,12 +39,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   private var debounceTask: Task<Void, Never>?
   private var refreshTask: Task<Void, Never>?
   private var stagingSurface: SwiftTermSurface?
-  private var pendingSnapshot: (
-    surface: SwiftTermSurface,
-    paneId: String,
-    sourceCols: Int,
-    lineCount: Int
-  )?
+  private var pendingSnapshot: (surface: SwiftTermSurface, paneId: String, sourceCols: Int, lineCount: Int)?
   private var lastSyncCompletedAt: TimeInterval = 0
   private var firstDirtyAt: TimeInterval?
 
@@ -82,9 +74,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   }
 
   func handleConnected(runtimeKind: String?) {
-    if runtimeKind != "tmux" {
-      resetAll()
-    }
+    if runtimeKind != "tmux" { resetAll() }
   }
 
   func handleInitialSnapshot(runtimeKind: String?) {
@@ -112,7 +102,6 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   }
 
   func updateScrollState(_ state: TerminalScrollState, runtimeKind: String?) {
-    hasReceivedScrollState = true
     lastKnownOwner = state.owner
     lastKnownCopyMode = state.copyMode
     if let nextPaneId = state.paneId, !nextPaneId.isEmpty {
@@ -159,11 +148,6 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
       return false
     }
     guard lastKnownOwner == "history", !lastKnownCopyMode else {
-      return false
-    }
-    if let liveTerminal = liveSurface?.terminalView.getTerminal(),
-      liveTerminal.isCurrentBufferAlternate, liveTerminal.mouseMode != .off
-    {
       return false
     }
     if let currentPaneId, let cachedPaneId, currentPaneId != cachedPaneId {
@@ -369,6 +353,12 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
           self.dirty = true
           return
         }
+        if let owner = response.owner, !owner.isEmpty {
+          self.lastKnownOwner = owner
+        }
+        if let copyMode = response.copyMode {
+          self.lastKnownCopyMode = copyMode
+        }
         if self.currentPaneId == nil {
           self.currentPaneId = response.paneId
         }
@@ -550,35 +540,22 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   func resetForDisconnect() {
     cancelMomentum()
     handoffActive = false
-    hasReceivedScrollState = false
-    debounceTask?.cancel()
-    debounceTask = nil
-    refreshTask?.cancel()
-    refreshTask = nil
-    stagingSurface?.dispose()
-    stagingSurface = nil
+    debounceTask?.cancel(); debounceTask = nil
+    refreshTask?.cancel(); refreshTask = nil
+    stagingSurface?.dispose(); stagingSurface = nil
   }
 
   func resetAll() {
     generation += 1
     paneEpoch += 1
     resetForDisconnect()
-    if isShowingLocalHistory {
-      isShowingLocalHistory = false
-    }
-    pendingSnapshot?.surface.dispose()
-    pendingSnapshot = nil
-    surface?.dispose()
-    surface = nil
-    cachedPaneId = nil
-    currentPaneId = nil
-    cachedLineCount = 0
-    cachedSourceCols = 0
-    isReady = false
-    dirty = false
-    lastKnownOwner = "history"
-    lastKnownCopyMode = false
-    hasReceivedScrollState = false
+    if isShowingLocalHistory { isShowingLocalHistory = false }
+    pendingSnapshot?.surface.dispose(); pendingSnapshot = nil
+    surface?.dispose(); surface = nil
+    cachedPaneId = nil; currentPaneId = nil
+    cachedLineCount = 0; cachedSourceCols = 0
+    isReady = false; dirty = false
+    lastKnownOwner = "history"; lastKnownCopyMode = false
     onVisibilityChanged?(nil, false)
     onStateChanged?()
   }
