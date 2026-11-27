@@ -8,12 +8,8 @@ import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
 import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
-import { TerminalBadges } from "../device-monitor/terminal-badges";
-import { TerminalReplyNotifications } from "../device-monitor/terminal-replies";
-import { DesktopBadgeAccess } from "../device-monitor/desktop-badge-access";
+import { createDeviceMonitoringRuntime } from "./device-monitoring-runtime";
 import { TerminalQuestionsService } from "../terminal/questions/service";
-import { ResourceMonitorService } from "../resource-monitor/service";
-import { ResourceMonitorStore } from "../resource-monitor/store";
 import { TerminalTextAttachmentService } from "../terminal/attachments/text-attachment-service";
 import { TerminalTextAttachmentDelivery } from "../terminal/attachments/text-attachment-delivery";
 import { settingText, configuration } from "@runweave/config-node";
@@ -24,9 +20,6 @@ import { createEvolutionStorage } from "./evolution-storage";
 import { prepareEvolutionRepositoryMigration } from "./evolution-migration";
 import { LocalBrowserService } from "../browser-local/service";
 import { resolveTmuxShutdownPolicy } from "./tmux-shutdown-policy";
-import {
-  createDeviceMonitor,
-} from "../device-monitor/bootstrap";
 import { MobileLoginService } from "../auth/mobile-login";
 import path from "node:path";
 import { createExperienceLearning } from "../experience/bootstrap";
@@ -70,7 +63,6 @@ import { RaceRecordStore } from "../race/race-record-store";
 import { RaceService } from "../race/race-service";
 import { BackendRuntimeStatusService } from "../runtime-status/service";
 import { createScheduledTasks } from "./scheduled-tasks";
-import { ScheduledTaskAlerts } from "../device-monitor/scheduled-task-alerts";
 import {
   resolveDefaultTmuxSocketPath,
 } from "./tmux-paths";
@@ -443,17 +435,20 @@ async function assembleRuntimeServices(
     ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher, terminalEventService, terminalStateService, quickInputService: terminalQuickInputService,
   }, runtimeStatus.registry);
   resources.defer("feishu-node", () => feishuConnector?.close());
-  const deviceMonitoring = await createDeviceMonitor(
-    storagePaths.browserProfileDir,
+  const {
+    deviceMonitoring,
+    resourceMonitor,
+    terminalBadges,
+    desktopBadgeAccess,
+    taskAlerts,
+  } = await createDeviceMonitoringRuntime(resources, {
+    browserProfileDir: storagePaths.browserProfileDir,
     authService,
-  );
-  resources.defer("push-configuration", deviceMonitoring.disposeConfiguration);
-  resources.defer("device-monitor", () =>
-    deviceMonitoring.deviceMonitor?.dispose(),
-  );
-  resources.defer("battery-alerts", () =>
-    deviceMonitoring.batteryAlerts?.dispose(),
-  );
+    terminalSessionManager,
+    terminalEventService,
+    workspaceServiceManager,
+    scheduledTaskStore: scheduledTasks.store,
+  });
   const terminalQuestionsService = new TerminalQuestionsService(terminalSessionManager, tmuxService, deviceMonitoring.batteryAlerts?.subscriptions);
   resources.defer("terminal-questions", () => terminalQuestionsService.dispose());
   const attentionService = new AttentionService(
@@ -463,44 +458,6 @@ async function assembleRuntimeServices(
     terminalQuestionsService,
     terminalTaskServices.prWatchService,
   );
-  let resourceMonitor: ResourceMonitorService | null = null;
-  if (deviceMonitoring.deviceMonitor) {
-    let resourceStore: ResourceMonitorStore | null = null;
-    try {
-      resourceStore = await ResourceMonitorStore.create(path.join(storagePaths.browserProfileDir, "resource-monitor"));
-      resourceMonitor = new ResourceMonitorService(resourceStore, deviceMonitoring.deviceMonitor, workspaceServiceManager);
-      resources.defer("resource-monitor", () => resourceMonitor?.dispose());
-      resourceMonitor.start();
-    } catch {
-      await resourceStore?.close();
-      logger.warn("resource-monitor.initialize.failed");
-    }
-  }
-  const terminalBadges = deviceMonitoring.batteryAlerts
-    ? new TerminalBadges(terminalSessionManager, terminalEventService, deviceMonitoring.batteryAlerts.subscriptions)
-    : null;
-  if (deviceMonitoring.batteryAlerts) {
-    const mobileReplies = new TerminalReplyNotifications(terminalSessionManager, deviceMonitoring.batteryAlerts.subscriptions);
-    terminalSessionManager.mobileReplies = mobileReplies;
-    resources.defer("terminal-replies", async () => {
-      terminalSessionManager.mobileReplies = undefined;
-      await mobileReplies.dispose();
-    });
-    await mobileReplies.start();
-  }
-  resources.defer("terminal-badges", () => terminalBadges?.dispose());
-  const desktopBadgeAccess = deviceMonitoring.batteryAlerts
-    ? new DesktopBadgeAccess(authService, deviceMonitoring.batteryAlerts.subscriptions)
-    : null;
-  const taskAlerts =
-    scheduledTasks.store && deviceMonitoring.batteryAlerts
-      ? new ScheduledTaskAlerts(
-          scheduledTasks.store,
-          deviceMonitoring.batteryAlerts.subscriptions,
-        )
-      : null;
-  if (taskAlerts)
-    resources.defer("scheduled-task-alerts", () => taskAlerts.dispose());
   const mobileLoginService = new MobileLoginService(authService);
   resources.defer("mobile-login", () => mobileLoginService.dispose());
   const localBrowserService = new LocalBrowserService((authId, terminalId) =>
