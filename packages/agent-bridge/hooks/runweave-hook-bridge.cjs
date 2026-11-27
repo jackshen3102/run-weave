@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global __dirname, process, require, URL */
+/* global __filename, process, require, URL */
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const { spawn, spawnSync } = require("node:child_process");
@@ -13,7 +13,7 @@ const {
   writeAgyHookStdout,
   isAgyCompletionEligible,
 } = require("./runweave-hook-agy.cjs");
-const { postAgentHook, postCompletionHook } = require("./runweave-hook-completion.cjs");
+const { postAgentHook, postCompletionHook, notifyFeishu: dispatchFeishu, notifyFeishuOnWindows } = require("./runweave-hook-completion.cjs");
 const { deriveHookDiagnosticsEndpoint, postHookDiagnostic } = require("./runweave-hook-diagnostics.cjs");
 const {
   STOP_EVENTS,
@@ -100,33 +100,8 @@ function notifyDesktop(source, options = {}) {
   }
 }
 
-function notifyFeishu(payload, source, terminalSessionId, terminalPanelId) {
-  if (process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY === "1") return;
-  const script = path.join(__dirname, "feishu_stop_notify.sh");
-  try {
-    if (!fs.existsSync(script)) {
-      return;
-    }
-    const child = spawn(script, [], {
-      stdio: ["pipe", "ignore", "ignore"],
-      detached: true,
-      env: { ...process.env, RUNWEAVE_HOOK_NODE: process.execPath },
-    });
-    child.on("error", () => {});
-    child.stdin.end(
-      JSON.stringify({
-        ...payload,
-        last_assistant_message: extractCompletionSummary(payload),
-        source,
-        terminalSessionId,
-        terminalPanelId: terminalPanelId || undefined,
-        projectId: process.env.RUNWEAVE_PROJECT_ID || undefined,
-      }),
-    );
-    child.unref();
-  } catch {
-    // Ignore Feishu notification failures.
-  }
+function notifyFeishu(...args) {
+  dispatchFeishu(...args, __filename);
 }
 
 function readStdin() {
@@ -465,7 +440,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+const run = process.platform === "win32" && process.argv.includes("--feishu-notify-worker") ? async () => notifyFeishuOnWindows(await readStdin()) : main;
+run().catch((error) => {
   appendDebugLog("hook bridge failed", {
     error: error instanceof Error ? error.message : String(error),
   });

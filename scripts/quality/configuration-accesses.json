@@ -2442,14 +2442,6 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
     "count": 2,
     "category": "runtime-context",
@@ -2459,7 +2451,7 @@
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_PROJECT_ID",
-    "count": 3,
+    "count": 2,
     "category": "runtime-context",
     "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2510,14 +2502,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
-    "kind": "environment-forward",
-    "expression": "...process.env",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
@@ -2674,14 +2658,6 @@
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
     "count": 2,
     "category": "runtime-context",
@@ -2691,7 +2667,7 @@
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_PROJECT_ID",
-    "count": 3,
+    "count": 2,
     "category": "runtime-context",
     "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -2742,14 +2718,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment-forward",
-    "expression": "...process.env",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -4138,14 +4106,6 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
     "count": 2,
     "category": "runtime-context",
@@ -4155,7 +4115,7 @@
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_PROJECT_ID",
-    "count": 3,
+    "count": 2,
     "category": "runtime-context",
     "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -4206,14 +4166,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment-forward",
-    "expression": "...process.env",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
@@ -5490,14 +5442,6 @@
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
-    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment",
     "expression": "process.env.RUNWEAVE_HOOK_TOKEN",
     "count": 2,
     "category": "runtime-context",
@@ -5507,7 +5451,7 @@
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
     "expression": "process.env.RUNWEAVE_PROJECT_ID",
-    "count": 3,
+    "count": 2,
     "category": "runtime-context",
     "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
@@ -5558,14 +5502,6 @@
     "count": 2,
     "category": "system",
     "reason": "TMUX_PANE：保留系统合同，不写入实例 YAML；作用仅限此调用点。"
-  },
-  {
-    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
-    "kind": "environment-forward",
-    "expression": "...process.env",
-    "count": 1,
-    "category": "runtime-context",
-    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
@@ -14119,5 +14055,197 @@
     "count": 1,
     "category": "external-protocol",
     "reason": "Read Runweave-written session workspace metadata alongside agy native transcript to resolve cwd."
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_HOOK_SUPPRESS_FEISHU_NOTIFY：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_INSTANCE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "file-io",
+    "expression": "fs.appendFileSync(path.join(root, \"runtime\", \"feishu-notify.log\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Append a failure code to the owning instance notification runtime log; no credentials are recorded."
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_INSTANCE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "file-io",
+    "expression": "fs.appendFileSync(path.join(root, \"runtime\", \"feishu-notify.log\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Append a failure code to the owning instance notification runtime log; no credentials are recorded."
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_INSTANCE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "file-io",
+    "expression": "fs.appendFileSync(path.join(root, \"runtime\", \"feishu-notify.log\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Append a failure code to the owning instance notification runtime log; no credentials are recorded."
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_CONFIG_ROOT",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_RUNTIME_INSTANCE_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "Windows notification worker uses only its owning Backend instance context."
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "file-io",
+    "expression": "fs.appendFileSync(path.join(root, \"runtime\", \"feishu-notify.log\"))",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "Append a failure code to the owning instance notification runtime log; no credentials are recorded."
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "environment-forward",
+    "expression": "...process.env",
+    "count": 2,
+    "category": "runtime-context",
+    "reason": "子进程启动环境拷贝；持久配置由配置库读取，凭据过滤由终端/Agent 启动边界负责。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_PROJECT_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_PROJECT_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_PROJECT_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-completion.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_PROJECT_ID",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_PROJECT_ID：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   }
 ]
