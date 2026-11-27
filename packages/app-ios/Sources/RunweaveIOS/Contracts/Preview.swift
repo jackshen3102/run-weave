@@ -251,9 +251,13 @@ struct TerminalFilePanel: Decodable {
     let windowHeight: Int
   }
   let panelId: String
+  let tmuxPaneId: String?
   let geometry: Geometry?
 }
-struct TerminalFileWorkspace: Decodable { let panels: [TerminalFilePanel] }
+struct TerminalFileWorkspace: Decodable {
+  let activePanelId: String?
+  let panels: [TerminalFilePanel]
+}
 struct TerminalFileCandidate: Decodable, Identifiable {
   let path: String
   let absolutePath: String

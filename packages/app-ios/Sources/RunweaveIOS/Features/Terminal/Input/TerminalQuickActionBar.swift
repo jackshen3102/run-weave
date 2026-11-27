@@ -68,7 +68,7 @@ struct TerminalReturnToBottomOverlay: ViewModifier {
               .terminalGlass(in: Circle()).contentShape(Circle())
           }
           .accessibilityLabel("回到底部").accessibilityIdentifier("terminal-return-to-bottom")
-          .disabled(!canWrite || !controller.canSend)
+          .disabled(!controller.canReturnToBottomLocally && (!canWrite || !controller.canSend))
         }
       }
   }

@@ -63,6 +63,13 @@ public struct TerminalFileTap: Identifiable {
   let firstRow: Int
   let cells: [Int: [(text: String, col: Int, width: Int, attribute: Attribute)]]
   let wrapped: Set<Int>
+  var sourcePaneId: String? = nil
+
+  func withSourcePaneId(_ paneId: String?) -> Self {
+    var copy = self
+    copy.sourcePaneId = paneId
+    return copy
+  }
 
   @MainActor static func capture(_ terminal: Terminal, hit: Position, filesOnly: Bool = true) -> Self? {
     let explicit = terminal.link(at: .buffer(hit), mode: .explicitOnly)

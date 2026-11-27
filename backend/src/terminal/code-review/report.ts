@@ -2,7 +2,7 @@ import { mkdir, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { CodeReviewReport, CodeReviewSnapshot } from "@runweave/shared/terminal/code-review";
-import { atomicJson, CodeReviewError, CodeReviewStore, readOwnedFile } from "./store";
+import { atomicJson, CodeReviewError, CodeReviewStore, MAX_REVIEW_REPORT_BYTES, readOwnedFile, REVIEW_REPORT_FILENAME } from "./store";
 import type { ReviewRequirements } from "./requirements";
 const text = z.string().min(1).max(16000);
 const kind = z.enum(["staged", "working"]);
@@ -27,10 +27,10 @@ export const codeReviewReportSchema = z.object({
 }).strict();
 
 /** Structural validation cannot establish semantic correctness or actual reproduction. */
-export async function saveReviewReport(store: CodeReviewStore, reviewId: string, snapshot: CodeReviewSnapshot, final: string, requirements?: ReviewRequirements | null): Promise<CodeReviewReport> {
-  if (Buffer.byteLength(final) > 2 * 1024 * 1024) throw new CodeReviewError(413, "report_invalid", "报告超过大小上限");
+export async function saveReviewReport(store: CodeReviewStore, reviewId: string, snapshot: CodeReviewSnapshot, submission: string, requirements?: ReviewRequirements | null): Promise<CodeReviewReport> {
+  if (Buffer.byteLength(submission) > MAX_REVIEW_REPORT_BYTES) throw new CodeReviewError(413, "report_invalid", "报告超过大小上限");
   let report: CodeReviewReport;
-  try { report = codeReviewReportSchema.parse(JSON.parse(final.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/, "$1"))); }
+  try { report = codeReviewReportSchema.parse(JSON.parse(submission.replace(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/, "$1"))); }
   catch { throw new CodeReviewError(422, "report_invalid", "最终报告不是约定的完整 JSON"); }
   const invalid = (message: string): never => { throw new CodeReviewError(422, "report_invalid", message); };
   if (report.reviewId !== reviewId || report.snapshotId !== snapshot.snapshotId || report.fingerprint !== snapshot.fingerprint)
@@ -92,7 +92,7 @@ export async function saveReviewReport(store: CodeReviewStore, reviewId: string,
   }
   for (const item of [...report.findings, ...report.checks])
     if (item.evidenceRefs.some((id) => !ids.has(id))) invalid("报告引用未登记的证据");
-  if (Buffer.byteLength(JSON.stringify(report)) > 2 * 1024 * 1024) invalid("归档报告超过大小上限");
-  await atomicJson(path.join(store.saved(reviewId), "report.json"), report);
+  if (Buffer.byteLength(JSON.stringify(report)) > MAX_REVIEW_REPORT_BYTES) invalid("归档报告超过大小上限");
+  await atomicJson(path.join(store.saved(reviewId), REVIEW_REPORT_FILENAME), report);
   return report;
 }

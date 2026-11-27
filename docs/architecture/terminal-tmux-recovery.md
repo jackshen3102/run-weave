@@ -122,9 +122,17 @@ tmux 连接通过 `scrollInput: normalized-v1` 协商语义化滚动。Web 和�
 不能因旧回执到达而继续滚动隐藏的终端。原生 iOS 的远端滚动惯性使用 CADisplayLink 与系统减速率，
 新触摸、选区或页面停用立即停止；本地历史继续使用 UIScrollView 自带滚动。
 
-`scroll-state` 返回真实 copy mode 和可用的历史偏移；应用内部位置为未知，客户端不再
-按已发送事件数估算其底部。全局回到底部入口只处理本地/tmux 历史，不把退出 tmux copy
-mode 声称为返回应用内部底部，未知位置也不作为完成通知的自动已读依据。
+`scroll-state` 返回真实 copy mode、当前 `paneId` 和可用的历史偏移；应用内部位置为未知，客户端不再
+按已发送事件数估算其底部。tmux pane 元数据同步在 `activeCommand`、活跃 `paneId` 或备用屏幕/鼠标报告
+状态变化时联动刷新 `scroll-state`。
+
+原生 iOS 在 `runtimeKind: tmux`、`scroll-state.owner: history` 且远端未处于外部 `copyMode` 时，使用通过
+`GET /api/terminal/session/:id/scrollback/ansi`（`capture-pane -e -J -p -S -5000`，单 pane 并发收敛、
+按完整行裁剪至不超过 1 MiB UTF-8）预热的只读本地历史 `SwiftTermSurface` 与 `UIScrollView` 像素滚动承载
+向上回看，不进入远端 `tmux copy-mode`；当 `owner: application`（全屏鼠标应用）、远端已处于 `copyMode`、
+首次预热未完成或连接旧版 Backend（HTTP 404）时，手势继续走 `normalized-v1` 远端滚动。分屏切换通过
+`scroll-state.paneId` 与响应 `paneId` 隔离并作废旧 pane 本地历史。全局回到底部入口只处理本地/tmux 历史，
+不把退出 tmux copy mode 声称为返回应用内部底部，未知位置也不作为完成通知的自动已读依据。
 滚动回执只确认输入处理，不代表应用已完成显示。
 
 如果原 tmux session 已消失，恢复不再等价于接回原进程。Launcher 会区分原 shell、可恢复的 Agent thread

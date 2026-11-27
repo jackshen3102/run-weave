@@ -1,6 +1,8 @@
+import path from "node:path";
 import type { CodeReviewSnapshot } from "@runweave/shared/terminal/code-review";
 
 import type { ReviewRequirements } from "./requirements";
+import { REVIEW_REPORT_FILENAME } from "./store";
 
 /** Whitelist: frozen code and user requirements, never implementation reasoning. */
 export function buildCodeReviewPrompt(input: {
@@ -27,7 +29,7 @@ availability=available 时默认 scope=code_and_goals，同时核验代码与当
 对疑似问题执行受影响的真实代码或交互，记录复现步骤、预期与实际结果及证据；不要用重写逻辑的模拟代替真实路径。无法复现就不列为问题，静态推断和环境故障都不能替代 Bug 证据。
 报告只陈述实际观察、复现过程、影响和证据，不主动要求来源 Agent 修复或补做验收。验证无法完成时表述为“验收阻塞”，说明原因、未执行项和缺失证据，不据此下“验收不通过”的结论。
 
-最终回复只输出以下 JSON，由 Backend 保存报告，无需另写 report.json：
+将完整报告按以下格式写成 JSON 文件 ${JSON.stringify(path.join(input.outputPath, REVIEW_REPORT_FILENAME))}。先在同目录写临时文件，再重命名为正式报告；写入时省略工具输出，终端无需展示文件正文。Backend 会读取并校验此文件：
 {
  "scope":"${input.requirements?.availability === "available" ? "code_and_goals" : "code"}",
  "schemaVersion":1,"reviewId":"${input.reviewId}","snapshotId":"${input.snapshot.snapshotId}","fingerprint":"${input.snapshot.fingerprint}",
@@ -43,5 +45,7 @@ reviewedChanges 列出所有已审的非 omission 项；不可读项和实际覆
 checks 只记录当前仍必要的复现过程与目标检查；资料核对通过也需保存原始来源证据并填写对应冻结范围的 beforeFingerprint/afterFingerprint。无法执行或无法证明同版时记 not_run，并将未验证的疑点简记在 limitations，不进入 findings。没有需要运行的疑点时 checks 可为空。每条 finding 必须关联已执行的同版检查和证据，检查中记录复现步骤、预期与实际结果、辅助代码版本及执行前后范围指纹。
 范围指纹算法为 SHA256(JSON.stringify({head:snapshot.head,rootPath:snapshot.rootPath,entries:snapshot.entries}))，UTF-8、小写十六进制，保留字段顺序。
 finding.evidenceRefs 的每个引用必须出现在至少一条已执行（passed 或 failed）且前后指纹匹配本轮快照的 check.evidenceRefs 中；允许多条检查共同覆盖，不可仅由 not_run 检查支撑。不要把未核验的补充资料放入问题证据。
-evidenceRefs 引用 artifacts 中的 artifactId，文件保存在专属输出目录。`;
+evidenceRefs 引用 artifacts 中的 artifactId，文件保存在专属输出目录。
+
+报告写好后，最终回复用简短文字给出结论，列出已复现问题的级别、标题和代码位置，再用一句话说明影响结论的验证缺口（如有）。问题很多时优先列最严重的 5 项并注明总数，其他详情可在 Review 报告中查看。不要输出 JSON、快照编号、指纹或逐项检查与产物清单。`;
 }

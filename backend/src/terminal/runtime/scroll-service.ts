@@ -29,16 +29,21 @@ export function createTerminalScrollController(options: {
     const session = manager.getSession(terminalId);
     if (!session || session.status !== "running" || !isTmuxBackedSession(session)) throw new Error("Scroll target exited");
     const base = resolveTmuxTarget(session, tmux);
+    const selectedPaneId = typeof tmux.readSelectedPane === "function" ? await tmux.readSelectedPane(base) : null;
     const workspace = manager.getPanelWorkspace(terminalId);
     const panel = workspace && manager.getPanel(workspace.activePanelId);
-    const paneId = panel?.tmuxPaneId ?? await tmux.readSelectedPane(base);
+    if (selectedPaneId && panel?.tmuxPaneId !== selectedPaneId) {
+      const matched = manager.listPanels(terminalId).find((candidate) => candidate.tmuxPaneId === selectedPaneId);
+      if (matched) await manager.focusPanel(terminalId, matched.id);
+    }
+    const paneId = selectedPaneId ?? panel?.tmuxPaneId ?? null;
     if (!paneId) throw new Error("Scroll pane unavailable");
     return { session, pane: { ...base, paneId } satisfies TmuxPaneTarget };
   };
   const read = async (pane: TmuxPaneTarget) => {
     const state = await tmux.readScrollState(pane);
     lastState = { type: "scroll-state", owner: state.owner, copyMode: state.copyMode,
-      offsetRows: state.owner === "history" ? state.offsetRows : null, status: "state" };
+      offsetRows: state.owner === "history" ? state.offsetRows : null, paneId: pane.paneId, status: "state" };
     return state;
   };
   const apply = async (message: TerminalScrollInput, pane: TmuxPaneTarget) => {

@@ -24,6 +24,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
   var scrollSensitivity: (() -> CGFloat)?
   var normalizedScroll: ((String, Int, String) -> Bool)?
   var stopNormalizedScroll: ((String) -> Void)?
+  var canUseLocalHistoryScroll: (() -> Bool)?
+  var beginLocalHistoryScroll: ((CGFloat) -> Bool)?
+  var updateLocalHistoryScroll: ((CGFloat) -> Void)?
+  var endLocalHistoryScroll: ((CGFloat) -> Void)?
 
   func cancelScroll() { gestures?.cancelScroll() }
   func applyScrollState(_ state: TerminalScrollState) { gestures?.applyScrollState(state) }
@@ -119,6 +123,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
       gestures.sendNormalizedScroll = { [weak self] id, steps, phase in self?.normalizedScroll?(id, steps, phase) ?? false }
       gestures.stopNormalizedScroll = { [weak self] id in self?.stopNormalizedScroll?(id) }
       gestures.sendScroll = { [weak self] input, rows in self?.tmuxScroll?(input, rows) ?? false }
+      gestures.canUseLocalHistoryScroll = { [weak self] in self?.canUseLocalHistoryScroll?() ?? false }
+      gestures.beginLocalHistoryScroll = { [weak self] dy in self?.beginLocalHistoryScroll?(dy) ?? false }
+      gestures.updateLocalHistoryScroll = { [weak self] dy in self?.updateLocalHistoryScroll?(dy) }
+      gestures.endLocalHistoryScroll = { [weak self] vy in self?.endLocalHistoryScroll?(vy) }
       self.gestures = gestures
     }
     applyTheme(dark: DevicePreferences.theme != "light")
@@ -168,6 +176,10 @@ public final class SwiftTermSurface: NSObject, TerminalSurface, TerminalViewDele
     normalizedScrollUsesHistory = nil
     scrollSensitivity = nil
     stopNormalizedScroll = nil
+    canUseLocalHistoryScroll = nil
+    beginLocalHistoryScroll = nil
+    updateLocalHistoryScroll = nil
+    endLocalHistoryScroll = nil
     terminalView.terminalDelegate = nil
     (terminalView as? NativeTerminalView)?.disposeSelectionMenu()
     terminalView.singleTapLinkHandler = nil

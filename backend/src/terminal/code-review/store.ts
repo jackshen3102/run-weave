@@ -33,9 +33,14 @@ export interface ReviewRecord {
   reuseFromReviewId?: string;
   startedAt: number;
   dispatchId: string;
+  /** Older dispatched turns submit their report in the native final. */
+  reportSource?: "file";
   recovered: boolean;
   delivery: { deliveryId: string; reportHash: string | null; attemptedAt: string | null };
 }
+export const REVIEW_REPORT_FILENAME = "report.json";
+export const MAX_REVIEW_REPORT_BYTES = 2 * 1024 * 1024;
+
 export async function atomicJson(file: string, value: unknown): Promise<void> {
   const temporary = `${file}.${randomUUID()}.tmp`;
   const handle = await open(temporary, "wx", 0o600);
@@ -130,7 +135,16 @@ export class CodeReviewStore {
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
   }
   async report(id: string): Promise<CodeReviewReport> {
-    return JSON.parse((await readOwnedFile(this.saved(id), "report.json", 2 * 1024 * 1024)).toString("utf8"));
+    return JSON.parse((await readOwnedFile(this.saved(id), REVIEW_REPORT_FILENAME, MAX_REVIEW_REPORT_BYTES)).toString("utf8"));
+  }
+  async submittedReport(id: string): Promise<string> {
+    try {
+      return (await readOwnedFile(this.output(id), REVIEW_REPORT_FILENAME, MAX_REVIEW_REPORT_BYTES)).toString("utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new CodeReviewError(422, "report_invalid", "Reviewer 未写入报告文件");
+      throw error;
+    }
   }
   async close() { await this.tail; }
 }

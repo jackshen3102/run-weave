@@ -73,6 +73,18 @@ export interface TerminalSessionStatusResponse {
 
 export type TerminalSessionHistoryResponse = TerminalSessionStatusResponse;
 
+export interface TerminalAnsiScrollbackResponse {
+  terminalSessionId: string;
+  /** 当前抓取对应的真实 tmux pane 标识（如 "%0"），用于客户端防串屏校验。 */
+  paneId: string;
+  /** 服务端抓取时的 pane 列宽，供诊断记录。 */
+  sourceCols: number;
+  /** 实际返回的逻辑行数（上限 5000）。 */
+  lineCount: number;
+  /** 经 capture-pane -e -J -p 抓取并按完整行裁剪至 <= 1 MiB UTF-8 的带 ANSI 样式文本。 */
+  data: string;
+}
+
 export interface TerminalSessionListItem {
   /** Explicit restore target approved by this Backend; not a current Agent binding. */
   agentRecovery?: TerminalAgentRecoveryTarget;

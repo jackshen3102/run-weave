@@ -61,13 +61,20 @@ struct TerminalFilePreview: View {
         try Task.checkCancellation()
         target = tap.reference()
         if workspace.panels.count > 1 {
-          guard let panel = workspace.panels.first(where: { panel in
-            guard let g = panel.geometry, g.windowWidth == tap.cols, g.windowHeight <= tap.rows else { return false }
-            return tap.col >= g.paneLeft && tap.col < g.paneLeft + g.paneWidth
-              && tap.viewportRow >= g.paneTop && tap.viewportRow < g.paneTop + g.paneHeight
-          }) else { failure = "终端分屏布局已变化，请重新点击文件。"; loading = false; return }
-          panelID = panel.panelId
-          target = tap.reference(geometry: panel.geometry)
+          if let sourcePaneId = tap.sourcePaneId, !sourcePaneId.isEmpty {
+            let matched = workspace.panels.first(where: { $0.tmuxPaneId == sourcePaneId })
+              ?? workspace.panels.first(where: { $0.panelId == workspace.activePanelId })
+              ?? workspace.panels.first
+            panelID = matched?.panelId
+          } else {
+            guard let panel = workspace.panels.first(where: { panel in
+              guard let g = panel.geometry, g.windowWidth == tap.cols, g.windowHeight <= tap.rows else { return false }
+              return tap.col >= g.paneLeft && tap.col < g.paneLeft + g.paneWidth
+                && tap.viewportRow >= g.paneTop && tap.viewportRow < g.paneTop + g.paneHeight
+            }) else { failure = "终端分屏布局已变化，请重新点击文件。"; loading = false; return }
+            panelID = panel.panelId
+            target = tap.reference(geometry: panel.geometry)
+          }
         } else if let id = workspace.panels.first?.panelId, id != "default" { panelID = id }
       }
       guard let target else { failure = "无法识别此文件路径"; loading = false; return }
