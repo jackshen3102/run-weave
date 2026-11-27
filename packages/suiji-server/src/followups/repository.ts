@@ -24,6 +24,10 @@ const source = (row: Row): FollowupSource => ({
   ...(row.session_id ? { sessionId: row.session_id } : {}),
 });
 
+export function followupCursor(owner: string, recordId: string, before: number) {
+  return Buffer.from(JSON.stringify({ owner, recordId, before })).toString("base64url");
+}
+
 export async function followupSummaries(
   client: Client,
   owner: string,
@@ -66,7 +70,7 @@ export async function followupRows(
   before?: number,
 ): Promise<SuijiFollowup[]> {
   const { rows } = await client.query<Row>(
-    "SELECT * FROM record_followups WHERE owner_id=$1 AND record_id=$2 AND ($3::int IS NULL OR sequence<$3) ORDER BY sequence DESC LIMIT $4",
+    "SELECT * FROM record_followups WHERE owner_id=$1 AND record_id=$2 AND ($3::bigint IS NULL OR sequence<$3) ORDER BY sequence DESC LIMIT $4",
     [owner, record, before ?? null, limit],
   );
   if (!rows.length) return [];

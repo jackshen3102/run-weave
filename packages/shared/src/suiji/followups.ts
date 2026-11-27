@@ -34,6 +34,11 @@ export type FollowupPage = {
   items: SuijiFollowup[];
   nextCursor: string | null;
 };
+export type FollowupSearchMatch = {
+  id: string;
+  excerpt: string;
+  cursor: string;
+};
 export type FollowupResponse = {
   followup: SuijiFollowup;
   followupSummary: FollowupSummary;

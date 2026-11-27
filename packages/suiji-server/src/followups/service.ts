@@ -10,7 +10,7 @@ import {
 import { transaction } from "../db/pool";
 import { invalid, missing } from "../errors";
 import { mutate, type Mutation } from "../records/mutations";
-import { followupRows, followupSummaries } from "./repository";
+import { followupCursor, followupRows, followupSummaries } from "./repository";
 
 export class FollowupService {
   constructor(private pool: pg.Pool) {}
@@ -60,13 +60,7 @@ export class FollowupService {
         items,
         nextCursor:
           rows.length > input.limit
-            ? Buffer.from(
-                JSON.stringify({
-                  owner,
-                  recordId,
-                  before: items.at(-1)!.sequence,
-                }),
-              ).toString("base64url")
+            ? followupCursor(owner, recordId, items.at(-1)!.sequence)
             : null,
       };
     });

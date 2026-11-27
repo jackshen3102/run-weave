@@ -77,7 +77,7 @@ struct CaptureHome: View {
         TagFilter(available: session.availableTags, selected: $session.selectedTag)
         if !session.message.isEmpty { Text(session.message).clarityMask().foregroundStyle(.orange); Button("重新读取") { Task { await session.load(kind: kind, status: status, q: query, tag: session.selectedTag, trash: tab == "trash", hideClosedTasks: tab == "records", category: session.info?.features?.materials == true ? category : nil) } } }
         if session.loading && visibleRecords.isEmpty { ProgressView("正在读取") }
-        else if visibleRecords.isEmpty { EmptyState(title: category == "material" ? "当前日期与筛选下没有素材" : (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或正文关键词。") }
+        else if visibleRecords.isEmpty { EmptyState(title: category == "material" ? "当前日期与筛选下没有素材" : (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "回收站为空" : "还没有记录") : "没有搜索结果", detail: (query.isEmpty && session.selectedTag.isEmpty) ? (tab == "trash" ? "删除的记录会保留在这里，可随时恢复。" : "点右下角加号，记下此刻的想法。") : "试试其他标签或更短的关键词。") }
         ForEach(visibleRecords) { record in
           if category == "material", let material = record.material,
             visibleRecords.first(where: { $0.material?.materialDate == material.materialDate })?.id == record.id {
@@ -133,7 +133,7 @@ struct CaptureHome: View {
     HStack(spacing: 12) {
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-        TextField("搜索正文关键词", text: $query).clarityMask()
+        TextField("搜索正文或跟进", text: $query).clarityMask()
           .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
           .focused($searchFocused).accessibilityIdentifier("record-search")
         if !query.isEmpty {

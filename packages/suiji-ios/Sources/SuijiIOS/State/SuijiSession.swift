@@ -168,7 +168,8 @@ enum RecordAction { case status(TaskStatus), trash(Bool), tags([String]) }
       var incoming: [SuijiRecord] = [], pending: Set<String> = []
       repeat {
         query.queryItems = items + (cursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? [])
-        let page = try await client.request(RecordPage.self, path: "api/suiji/v1/records?" + (query.percentEncodedQuery ?? ""))
+        let encodedQuery = (query.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
+        let page = try await client.request(RecordPage.self, path: "api/suiji/v1/records?" + encodedQuery)
         guard generation == current, listGeneration == request else { return }
         if let store {
           for record in page.items { if try await store.status(record.id) != nil { pending.insert(record.id) } }

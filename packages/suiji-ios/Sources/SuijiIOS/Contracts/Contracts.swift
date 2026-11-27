@@ -17,6 +17,7 @@ public struct Attachment: Codable, Identifiable, Equatable, Sendable {
 public struct SuijiRecord: Codable, Identifiable, Equatable, Sendable {
   public var material: MaterialMetadata? = nil
   public var followupSummary: FollowupSummary? = nil
+  public var followupMatch: FollowupSearchMatch? = nil
   public let id: String
   public let kind: RecordKind
   public let body: String

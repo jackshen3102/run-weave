@@ -1,12 +1,13 @@
 import type { SuijiAttachment } from "./attachments";
 import type { MaterialInput, MaterialMetadata } from "./materials";
 export type { SuijiAttachment, UploadedAttachment } from "./attachments";
-import type { FollowupSummary } from "./followups";
+import type { FollowupSearchMatch, FollowupSummary } from "./followups";
 export type RecordKind = "note" | "task";
 export type TaskStatus = "open" | "done" | "archived";
 export type SuijiRecord = {
   material?: MaterialMetadata | null;
   followupSummary?: FollowupSummary;
+  followupMatch?: FollowupSearchMatch;
   id: string;
   kind: RecordKind;
   body: string;

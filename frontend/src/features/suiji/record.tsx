@@ -268,7 +268,7 @@ export function SuijiRecordCard({
     <article className="relative flex flex-col gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent">
       <button
         type="button"
-        aria-label={`查看记录：${record.body || "附件记录"}`}
+        aria-label={record.followupMatch ? `查看命中跟进：${record.followupMatch.excerpt}` : `查看记录：${record.body || "附件记录"}`}
         onClick={onOpen}
         className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
@@ -289,7 +289,9 @@ export function SuijiRecordCard({
           {record.attachments.map((a) => a.fileName).join(" · ")}
         </span>
       ) : null}
-      {record.followupSummary?.latest ? <p className="pointer-events-none relative truncate text-sm text-muted-foreground">跟进 {record.followupSummary.count} 条 · {record.followupSummary.latest.excerpt}</p> : null}
+      {record.followupMatch ? (
+        <p className="pointer-events-none relative line-clamp-2 break-all text-sm">跟进命中 · {record.followupMatch.excerpt}</p>
+      ) : record.followupSummary?.latest ? <p className="pointer-events-none relative truncate text-sm text-muted-foreground">跟进 {record.followupSummary.count} 条 · {record.followupSummary.latest.excerpt}</p> : null}
       <RecordTags tags={record.tags} onSelect={onTag} />
     </article>
   );
