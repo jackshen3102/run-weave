@@ -180,7 +180,7 @@ export function createInternalTerminalCompletionRouter(options: {
       }
     }
     if (parsed.data.source === "codex" && targetPanel &&
-        !(await codexHookBelongsToPrimary(targetPanel, parsed.data.threadId))) {
+        !(await codexHookBelongsToPrimary(targetPanel, parsed.data.threadId, false, session))) {
       res.status(202).json({ event: null, ignored: true, reason: "codex_context_mismatch" });
       return;
     }

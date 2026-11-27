@@ -69,3 +69,15 @@ cases:
     steps:
       - 使用 `$toolkit:agent-device` 查看首页；确认待答终端显示明确待处理标识并排在普通运行中终端之前，折叠运行中区域后待答终端依然可见。
       - 点击待答终端的快捷处理入口；确认进入绑定同一终端与面板的回复辅助页面。
+
+  - id: ATTNCONV-007
+    name: AGY ask_question 投影为需回答并在继续执行后清除
+    required: true
+    description: >
+      验证 AGY 主进程的结构化 ask_question Hook 生成指向对应 Panel 的 needs_action，回答后继续执行或结束时自动清除。
+    preconditions:
+      - 隔离测试 Backend 运行已安装 Runweave Hook 的 tmux AGY 终端。
+    steps:
+      - 令 AGY 调用 `ask_question` 并保持待答；确认 `/api/attention/slots` 返回唯一 `state=needs_action`、`actionKind=question`、`source.evidence=agy_ask_question` 且 `panelId` 指向实际 AGY Panel。
+      - 从桌面 Companion 或 iOS 首页打开该项；确认定位到目标终端与 Panel，且 iOS 不误入 Codex 回复辅助。
+      - 回答问题令 AGY 继续执行或结束；确认下一次 Attention 快照不再包含该 `agy_ask_question` 槽位。

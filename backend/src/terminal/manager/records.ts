@@ -99,6 +99,12 @@ export interface TerminalPanelRecord {
   threadId?: string;
   threadProvider?: TerminalAgentKind;
   agy?: AgyAgentContext;
+  pendingAgyQuestion?: {
+    observedAt: number;
+    processGeneration: string;
+    conversationId: string;
+    eventId: string;
+  };
   claude?: ClaudeAgentContext;
   pendingPermissionRequest?: {
     hookTimestamp: number;

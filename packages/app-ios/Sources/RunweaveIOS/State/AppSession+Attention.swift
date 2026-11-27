@@ -14,14 +14,18 @@ extension AppSession {
   }
 
   func openAttentionSlot(_ slot: AttentionSlot) async {
-    guard canWrite, let api else { return }
+    guard let api else { return }
     let epoch = generation
     do {
-      if let panelID = slot.panelId {
-        try await api.focusTerminalPanel(terminalID: slot.terminalSessionId, panelID: panelID)
-        guard await reload() else { return }
+      if canWrite, let panelID = slot.panelId {
+        do {
+          try await api.focusTerminalPanel(terminalID: slot.terminalSessionId, panelID: panelID)
+          guard await reload() else { return }
+        } catch APIError.http(404), APIError.http(409) {
+          guard await reload() else { return }
+        }
       }
-      if slot.actionKind == "question" {
+      if canWrite, slot.actionKind == "question", slot.source.evidence == "terminal_question" {
         terminalQuestions.requestOpen(terminalID: slot.terminalSessionId)
       }
       await openTerminal(slot.terminalSessionId)

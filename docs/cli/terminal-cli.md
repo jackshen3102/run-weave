@@ -233,3 +233,33 @@ Pi 的 `line`、`prompt_paste`、`prompt_replace` 输入先通过当前 Pane 的
 历史只读取扩展登记的 Pi v3 JSONL 会话文件，并按当前分支展示消息、工具和压缩摘要。
 恢复使用已校验的 `--session <精确文件>`，文件缺失或 header ID 不匹配时失败，
 不会回退到最近会话。
+
+## Antigravity Agent 地区校验故障
+
+仅当 macOS arm64 的 `agy` 报 `Eligibility check failed`，且海外代理出口正常时使用；
+出口仍为 `CN` 时先修代理。本流程实测于 `agy 1.5.18`，其他版本只在只读分析返回
+`status: unpatched` 并命中 `ValidateAndOnboardAccount` 时继续：
+
+```bash
+uname -m
+curl -fsSL https://ipinfo.io/country
+agy --version
+
+agy_unlock_dir="$(mktemp -d)/antigravity-hakimi"
+git clone https://github.com/cli117/antigravity-hakimi.git "$agy_unlock_dir"
+git -C "$agy_unlock_dir" checkout --detach 4a4225211fb0f8d0072dc28c9c9584dd2de0837d
+agy_bin="$(command -v agy)"
+node "$agy_unlock_dir/scripts/cli-unlock.js" --analyze --binary "$agy_bin" --json
+node "$agy_unlock_dir/scripts/cli-unlock.js" --apply --binary "$agy_bin" --json
+```
+
+保留 apply 输出的 `backupPath`，退出全部旧 `agy` 进程后验收：
+
+```bash
+codesign --verify --strict "$agy_bin"
+agy models
+agy --print-timeout 60s --disable-slash-commands --print 'Reply with exactly: AGY_OK'
+```
+
+模型返回 `AGY_OK` 才算恢复。升级 `agy` 会覆盖补丁；回退时执行
+`cp "<backupPath>" "$agy_bin"`。

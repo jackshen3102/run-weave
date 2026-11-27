@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "ceilings": {
+    "rootAgentsMdBytes": 4823,
+    "maxScopedAgentsMdBytes": 3730,
+    "toolkitSkillFrontmatterTotalBytes": 17621,
+    "maxSingleSkillDescriptionBytes": 693,
+    "runweaveMcpInstructionsBytes": 768,
+    "runweaveMcpToolsJsonBytes": 7020
+  }
+}

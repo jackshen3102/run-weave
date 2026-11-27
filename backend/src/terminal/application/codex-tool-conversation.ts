@@ -10,9 +10,10 @@ export async function recoverCodexToolConversation(
 ): Promise<void> {
   if (!threadId || panel.threadId || panel.lastThreadId === threadId ||
       getTerminalSessionAgent(panel) !== "codex" || readCodexContext(panel).managed) return;
+  const session = manager.getSession(panel.terminalSessionId);
   const previous = panel.lastThreadId;
-  if (!previous || await isCodexConversationThread(previous) !== false ||
-      await isCodexConversationThread(threadId) !== true) return;
+  if ((previous && await isCodexConversationThread(previous, panel, session) !== false) ||
+      await isCodexConversationThread(threadId, panel, session) !== true) return;
   const current = manager.getPanel(panel.id);
   const generation = manager.getPanelAgentOperationGeneration(panel.terminalSessionId, panel.id);
   if (!current || current.status !== "running" || current.threadId || current.lastThreadId !== previous ||

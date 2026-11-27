@@ -429,6 +429,7 @@ function buildAppServerBaseEvent({
 }) {
   const terminalPanelId = process.env.RUNWEAVE_TERMINAL_PANEL_ID || null;
   const tmuxPaneId = process.env.TMUX_PANE || null;
+  const toolHook = extractToolHook(payload);
   return {
     kind,
     source: {
@@ -460,6 +461,9 @@ function buildAppServerBaseEvent({
       normalizedEvent,
       stateHookEvent,
       activityEventId: payload.runweaveHookEventId,
+      ...((stateHookEvent === "ToolRequested" || stateHookEvent === "ToolCompleted") && toolHook.toolName
+        ? { toolName: toolHook.toolName }
+        : {}),
       ...(stateHookEvent === "UserPromptSubmit" ? { query: extractUserPrompt(payload) } : {}),
       panelId: terminalPanelId,
       tmuxPaneId,

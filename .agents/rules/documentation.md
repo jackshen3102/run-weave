@@ -45,6 +45,7 @@ git ls-files '**/AGENTS.md' 'AGENTS.md'
 - `docs/plans/` 与 `docs/review/` 在任务完成后删除；仍有效的结论先迁入活文档。
 - 历史原型和架构流程不得被当作当前实现依据；需要当前事实时回到活文档和代码。
 - 新增或移动 Markdown 后运行 `pnpm docs:check`，修复相对链接与缺失入口。
+- 新增或扩写根 `AGENTS.md`、就近 `**/AGENTS.md`、Toolkit Skill 描述或 `runweave-mcp` 工具时须通过 `pnpm context:budget`。
 
 ## 就近 `AGENTS.md`
 

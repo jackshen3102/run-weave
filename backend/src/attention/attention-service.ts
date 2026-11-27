@@ -126,6 +126,23 @@ export class AttentionService {
           }, 300);
         }
 
+        const agyQuestion = panel.pendingAgyQuestion;
+        if (agyQuestion && panel.agy?.instanceId === agyQuestion.processGeneration &&
+          panel.agy.conversationId === agyQuestion.conversationId) {
+          add({
+            ...withPanel(panel),
+            attentionId: `terminal:${session.id}:agy-question:${panel.id}:${agyQuestion.eventId}`,
+            state: "needs_action",
+            actionKind: "question",
+            title: "AGY 等待你的回答",
+            detail: "请打开目标面板完成回答",
+            updatedAt: new Date(agyQuestion.observedAt).toISOString(),
+            source: { kind: "terminal_session", evidence: "agy_ask_question" },
+            targetSurface: "terminal",
+            completionRevision: null,
+          }, 400);
+        }
+
         if (panel.pi?.event === "ui_prompt_start" || panel.pi?.outcome === "failed") {
           const waiting = panel.pi.event === "ui_prompt_start";
           add({

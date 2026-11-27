@@ -32,6 +32,7 @@ struct AttentionSlot: Codable, Identifiable, Equatable {
     case "question": return "需回答"
     case "permission": return "需授权"
     case "auth": return "需认证"
+    case "pr_attention": return "PR 待处理"
     default: return "待处理"
     }
   }

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { configuration } from "@runweave/config-node";
 import { isCodexConversationContext, type CodexConversationContext } from "@runweave/shared/terminal/codex-context";
-import type { TerminalPanelRecord } from "../manager/records";
+import type { TerminalPanelRecord, TerminalSessionRecord } from "../manager/records";
 import { isCodexConversationThread } from "./codex-thread-identity";
 
 export function codexContextPath(terminalSessionId: string, panelId: string): string {
@@ -36,9 +36,14 @@ export function readCodexContext(panel: Pick<TerminalPanelRecord, "id" | "termin
   } catch { return { managed: true, context: null }; }
 }
 
-export async function codexHookBelongsToPrimary(panel: TerminalPanelRecord, threadId: string | null | undefined, initialSessionStart = false): Promise<boolean> {
+export async function codexHookBelongsToPrimary(
+  panel: TerminalPanelRecord,
+  threadId: string | null | undefined,
+  initialSessionStart = false,
+  session?: Pick<TerminalSessionRecord, "tmuxSocketPath"> | null,
+): Promise<boolean> {
   const { managed, context } = readCodexContext(panel);
-  if (!managed) return !threadId || await isCodexConversationThread(threadId) !== false;
+  if (!managed) return !threadId || await isCodexConversationThread(threadId, panel, session) !== false;
   return Boolean(threadId && context && !context.closed &&
-    (context.primaryThreadId === threadId || (initialSessionStart && context.revision === 0)));
+    (context.primaryThreadId === threadId || (initialSessionStart && context.primaryThreadId === null)));
 }
