@@ -18,6 +18,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   private(set) var ansiScrollbackUnsupported = false
   private(set) var lastKnownOwner = "history"
   private(set) var lastKnownCopyMode = false
+  private(set) var hasReceivedScrollState = false
 
   var isViewportActive = true {
     didSet {
@@ -111,6 +112,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   }
 
   func updateScrollState(_ state: TerminalScrollState, runtimeKind: String?) {
+    hasReceivedScrollState = true
     lastKnownOwner = state.owner
     lastKnownCopyMode = state.copyMode
     if let nextPaneId = state.paneId, !nextPaneId.isEmpty {
@@ -160,7 +162,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
       return false
     }
     if let liveTerminal = liveSurface?.terminalView.getTerminal(),
-      liveTerminal.isCurrentBufferAlternate || liveTerminal.mouseMode != .off
+      liveTerminal.isCurrentBufferAlternate, liveTerminal.mouseMode != .off
     {
       return false
     }
@@ -193,8 +195,16 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
           "sourceCols": cachedSourceCols,
           "dirty": dirty,
         ])
-      if dirty, refreshTask == nil {
-        triggerRefresh()
+      if debounceTask != nil {
+        debounceTask?.cancel()
+        debounceTask = nil
+      }
+      if refreshTask != nil {
+        refreshTask?.cancel()
+        refreshTask = nil
+        stagingSurface?.dispose()
+        stagingSurface = nil
+        dirty = true
       }
     }
     handoffActive = true
@@ -229,6 +239,9 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
       momentumVelocity = min(max(velocityY, -maxVelocity), maxVelocity)
       lastMomentumTime = 0
       let link = CADisplayLink(target: self, selector: #selector(stepMomentum(_:)))
+      if #available(iOS 15.0, *) {
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+      }
       momentum = link
       link.add(to: .main, forMode: .common)
     }
@@ -301,7 +314,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   }
 
   func scheduleRefresh(immediate: Bool) {
-    guard !ansiScrollbackUnsupported else { return }
+    guard !ansiScrollbackUnsupported, !isShowingLocalHistory else { return }
     debounceTask?.cancel()
     debounceTask = nil
     if immediate {
@@ -503,7 +516,6 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
 
   private func scrollSurfaceToBottom(_ targetSurface: SwiftTermSurface) {
     let view = targetSurface.terminalView
-    view.scroll(toPosition: 1)
     let maxOffset = Self.maxOffsetY(for: view)
     applyOffsetY(maxOffset, to: view, maxOffset: maxOffset)
   }
@@ -521,11 +533,13 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
       ? maxRow
       : max(0, min(maxRow, Int(floor(clampedY / lineHeight))))
     ApplyingProgrammaticOffset = true
-    view.scrollTo(row: targetRow, notifyAccessibility: false)
-    if abs(view.contentOffset.y - clampedY) > 0.5 {
-      view.contentOffset = CGPoint(x: 0, y: clampedY)
+    if terminal.displayTopVisibleRow != targetRow {
+      view.scrollTo(row: targetRow, notifyAccessibility: false)
     }
-    view.setNeedsDisplay(view.bounds)
+    if abs(view.contentOffset.y - clampedY) > 0.25 {
+      view.contentOffset = CGPoint(x: 0, y: clampedY)
+      view.setNeedsDisplay(view.bounds)
+    }
     ApplyingProgrammaticOffset = false
   }
 
@@ -536,6 +550,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
   func resetForDisconnect() {
     cancelMomentum()
     handoffActive = false
+    hasReceivedScrollState = false
     debounceTask?.cancel()
     debounceTask = nil
     refreshTask?.cancel()
@@ -563,6 +578,7 @@ public final class LocalHistoryScrollController: NSObject, ObservableObject {
     dirty = false
     lastKnownOwner = "history"
     lastKnownCopyMode = false
+    hasReceivedScrollState = false
     onVisibilityChanged?(nil, false)
     onStateChanged?()
   }

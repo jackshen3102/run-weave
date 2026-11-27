@@ -193,6 +193,7 @@ extension DiagnosticRecord {
       "attemptId", "errorDomain", "errorCode", "underlyingDomain", "underlyingCode", "closeCode",
       "retry", "retryDelayMs", "receivedBytes", "consumedBytes", "outputFrames", "consumeFrames",
       "committedOffset", "streamId",
+      "paneId", "lineCount", "sourceCols", "dirty", "reason", "owner", "copyMode", "status", "steps", "phase",
       "app_version", "app_build", "build_id", "source_revision", "source_state",
     ]
     var details: [String: String] = [:]
