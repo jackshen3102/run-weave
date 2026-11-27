@@ -6,6 +6,7 @@ import type { TerminalSessionManager } from "../terminal/manager/manager";
 import { beginTerminalInput, queueBehindTextAttachment } from "../terminal/runtime/input-admission";
 import { rawTerminalInputIntent } from "../terminal/runtime/input-intent";
 import { createTerminalScrollController } from "../terminal/runtime/scroll-service";
+import { registerTerminalScrollController } from "./terminal-metadata-sync";
 import type { TerminalOutputBatcher } from "../terminal/runtime/output-batcher";
 import {
   logTerminalPerf,
@@ -53,6 +54,7 @@ export function createTerminalInputHandler({
     manager: terminalSessionManager, terminalId: terminalSessionId, tmux: tmuxService, runtime,
     alive: () => socket.readyState === 1, publish: (state) => { sendEvent(socket, state); },
   }) : undefined;
+  registerTerminalScrollController(socket, scroll);
   socket.once("close", () => scroll?.dispose());
   void scroll?.sync();
   return (data, isBinary) => {

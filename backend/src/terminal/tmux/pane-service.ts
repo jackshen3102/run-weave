@@ -32,12 +32,14 @@ import {
   shellQuote,
   splitInputForSendKeys,
   tmuxLogger,
+  truncateAnsiScrollbackToLimit,
 } from "./internals";
 
 // Hex arguments expand each byte; bound each command for tmux's IPC size limit.
 const LiteralInputChunkBytes = 512;
 
 export class TmuxPaneService extends TmuxSessionService {
+  private readonly ansiHistoryInFlight = new Map<string, Promise<{ paneId: string; data: string; lineCount: number; sourceCols: number; durationMs: number }>>();
   async listPanes(target: TmuxTarget): Promise<TmuxPaneInfo[]> {
     const result = await this.runTmux(
       [
@@ -446,6 +448,31 @@ export class TmuxPaneService extends TmuxSessionService {
     return result.stdout.replace(/\r\n/g, "\n").replace(/\n$/, "");
   }
 
+  /** Capture bounded history with ANSI styles and joined soft wraps (-e -J -p), singleflight per pane. */
+  async capturePaneAnsiHistory(target: TmuxPaneTarget, historyLines = CaptureHistoryLines) {
+    if (!/^%\d+$/.test(target.paneId)) throw new Error("Invalid pane target");
+    const flightKey = `${target.socketPath ?? "default"}:${target.paneId}:${historyLines}`;
+    const existing = this.ansiHistoryInFlight.get(flightKey);
+    if (existing) return existing;
+    const operation = (async () => {
+      const startedAt = performance.now();
+      const [result, rawCols] = await Promise.all([
+        this.runTmux(["capture-pane", "-e", "-J", "-p", "-S", `-${historyLines}`, "-t", target.paneId], target, { sensitiveOutput: true }),
+        this.readPaneWidth(target),
+      ]);
+      const sourceCols = rawCols ?? 80;
+      const truncated = truncateAnsiScrollbackToLimit(result.stdout, undefined, historyLines);
+      const durationMs = Number((performance.now() - startedAt).toFixed(2));
+      logTerminalPerf("terminal.tmux.capture-pane-ansi", {
+        sessionName: target.sessionName, paneId: target.paneId, durationMs, historyLines, sourceCols, lineCount: truncated.lineCount,
+        bytes: Buffer.byteLength(truncated.data, "utf8"),
+      });
+      return { paneId: target.paneId, data: truncated.data, lineCount: truncated.lineCount, sourceCols, durationMs };
+    })();
+    this.ansiHistoryInFlight.set(flightKey, operation);
+    try { return await operation; } finally { if (this.ansiHistoryInFlight.get(flightKey) === operation) this.ansiHistoryInFlight.delete(flightKey); }
+  }
+
   async capturePane(
     target: TmuxTarget | TmuxPaneTarget,
     historyLines = CaptureHistoryLines,
@@ -453,33 +480,14 @@ export class TmuxPaneService extends TmuxSessionService {
     const startedAt = performance.now();
     const tmuxTarget = resolveTmuxTargetName(target);
     const [result, sourceCols] = await Promise.all([
-      this.runTmux(
-        [
-          "capture-pane",
-          "-p",
-          "-J",
-          "-S",
-          `-${historyLines}`,
-          "-t",
-          tmuxTarget,
-        ],
-        target,
-      ),
+      this.runTmux(["capture-pane", "-p", "-J", "-S", `-${historyLines}`, "-t", tmuxTarget], target),
       this.readPaneWidth(target),
     ]);
     const durationMs = Number((performance.now() - startedAt).toFixed(2));
     logTerminalPerf("terminal.tmux.capture-pane", {
-      sessionName: target.sessionName,
-      durationMs,
-      historyLines,
-      sourceCols,
-      bytes: Buffer.byteLength(result.stdout, "utf8"),
+      sessionName: target.sessionName, durationMs, historyLines, sourceCols, bytes: Buffer.byteLength(result.stdout, "utf8"),
     });
-    return {
-      data: result.stdout,
-      durationMs,
-      sourceCols,
-    };
+    return { data: result.stdout, durationMs, sourceCols };
   }
 
   async readPaneMetadata(
@@ -488,36 +496,15 @@ export class TmuxPaneService extends TmuxSessionService {
   ): Promise<TmuxPaneMetadata | null> {
     const tmuxTarget = resolveTmuxTargetName(target);
     const result = await this.runTmux(
-      [
-        "display-message",
-        "-p",
-        "-t",
-        tmuxTarget,
-        [
-          "#{pane_current_path}",
-          "#{@runweave_command}",
-          "#{pane_current_command}",
-        ].join(TMUX_METADATA_FIELD_SEPARATOR),
-      ],
+      ["display-message", "-p", "-t", tmuxTarget, ["#{pane_current_path}", "#{@runweave_command}", "#{pane_current_command}"].join(TMUX_METADATA_FIELD_SEPARATOR)],
       target,
     );
     const [rawCwd = "", rawRunweaveCommand = "", rawCommand = ""] =
       result.stdout.replace(/\r?\n$/, "").split(TMUX_METADATA_FIELD_SEPARATOR);
     const cwd = rawCwd.trim();
-    if (!cwd) {
-      return null;
-    }
-    const activeCommand = resolvePaneActiveCommand(
-      rawRunweaveCommand,
-      rawCommand,
-      shellCommand,
-    );
-    return {
-      cwd,
-      activeCommand: activeCommand.command,
-      activeCommandSource: activeCommand.source,
-      paneCommand: normalizePaneCommand(rawCommand),
-    };
+    if (!cwd) return null;
+    const activeCommand = resolvePaneActiveCommand(rawRunweaveCommand, rawCommand, shellCommand);
+    return { cwd, activeCommand: activeCommand.command, activeCommandSource: activeCommand.source, paneCommand: normalizePaneCommand(rawCommand) };
   }
 
   async pipePaneOutput(

@@ -1,0 +1,78 @@
+version: 1
+name: iOS 终端 TMUX 本地历史滚动层验收
+description: >
+  验证原生 iOS 客户端在连接 tmux 终端时，普通历史回看使用预热的带 ANSI 样式本地缓冲区与原生 UIScrollView 零网络往返滚动，
+  并在弱网或离线、远端持续输出、全屏鼠标应用接管、多分屏切换及旧版 Backend 兼容场景下保持状态与归属正确。
+
+cases:
+  - id: IOSHIST-001
+    name: 普通 tmux 会话上滑零网络往返切入本地彩色重排历史
+    required: true
+    description: >
+      验证 tmux 会话处于普通历史归属时，iOS 首滑即切入本地 UIScrollView 顺滑滚动并产生系统惯性，
+      保留 ANSI 颜色且将桌面宽屏软换行内容按手机列宽自动重排，不触发远端 tmux copy-mode。
+    preconditions:
+      - 按共享设备池规则申请 iOS 模拟器或连接测试真机，已构建安装最新 Runweave 原生 App 并登录专用测试 Backend。
+      - 已创建专用 tmux 测试终端，先以 140 列宽写入 3000 行含行号、ANSI 颜色、粗体及超过 100 列的软换行长句，并等待首屏与本地历史预热完成。
+    steps:
+      - 在手机终端页面从底部向上单次拖动并快速甩动松手；使用 $toolkit:agent-device 观察画面连续向上滚动并产生惯性减速，确认显示早期行号、保留 ANSI 颜色且长句按手机当前列宽连续折行显示。
+      - 检查手机本地诊断事件与 Backend 终端日志；确认本次上滑触发 scroll.local_enter，未发送 WebSocket scroll 消息，且通过 tmux display-message 核对远端 pane_in_mode 仍为 0。
+      - 在本地历史层中长按选中一段历史文本执行复制，并点击一条历史中的仓库文件引用；确认剪贴板内容正确且能正常弹出文件预览面板。
+
+  - id: IOSHIST-002
+    name: 网络中断或高延迟下本地历史仍可顺滑滚动并退回实时层
+    required: true
+    description: >
+      验证本地历史预热就绪后，即使网络中断或高延迟，上滑阅读与点击回到底部退回实时层均完全本地响应，不因离线禁用死锁。
+    preconditions:
+      - 原生 App 已打开专用 tmux 测试终端，已输出 2000 行带行号内容且本地历史层已完成预热，当前停留在实时层底部。
+      - 测试环境具备仅中断该客户端到 Backend 网络连接或注入大于 500ms 延迟的控制手段。
+    steps:
+      - 中断客户端到 Backend 的网络连接（确认终端提示离线或重连中），在终端视图向上滑动；确认立即切入本地历史层并可上下顺畅翻阅已预热行号，无报错弹窗或空白闪屏。
+      - 保持离线状态并停留在历史中部，确认右下角显示回到底部按钮且处于可点击状态；点击回到底部按钮，确认视图立即退回实时层且 scrolledBack 状态恢复为 false。
+      - 恢复网络连接并等待会话自动重连收敛；再次向上滑动后再向下滑到底部边界，确认手动滑到底部同样自动退回实时层并继续接收新输出。
+
+  - id: IOSHIST-003
+    name: 停留本地历史阅读时远端持续输出不抢夺视口且发送输入自动归位
+    required: true
+    description: >
+      验证用户在本地历史层阅读期间，底层远端新输出不会重置阅读偏移或误消除未读完成状态，点击回到底部或提交输入后立即切回最新实时画面。
+    preconditions:
+      - 原生 App 已打开专用 tmux 测试终端并完成预热，远端后台任务每秒向该 pane 追加一行递增序号输出。
+    steps:
+      - 向上滑动停留在早期第 200 行附近静置观察 5 秒；确认视口始终稳定停留在第 200 行附近不被拉回底部，且控制器 scrolledBack 保持为 true。
+      - 打开底部 Composer 输入一条唯一回显命令并发送；确认输入确认后自动退出本地历史层回到实时层底部，画面展示刚才持续输出的最新序号及本次新命令回显。
+
+  - id: IOSHIST-004
+    name: 全屏鼠标追踪应用保持远端滚轮直通不误切本地历史层
+    required: true
+    description: >
+      验证远端 tmux pane 内运行开启鼠标报告的全屏应用时，客户端收到 owner 为 application 后将滑动手势直通远端应用，不劫持为本地历史层。
+    preconditions:
+      - 原生 App 已打开专用 tmux 测试终端且本地已存在早期 shell 历史缓存。
+      - 在该 tmux pane 中启动启用备用屏幕与鼠标滚轮追踪的可控全屏测试程序，并等待状态同步完成。
+    steps:
+      - 在手机终端向上与向下滑动；确认未切入旧 shell 的本地历史层，画面保持全屏测试程序界面并记录到程序内部接收到鼠标滚轮事件。
+      - 退出该全屏测试程序回到普通 shell 提示符并等待状态同步；再次向上滑动，确认恢复切入本地历史层查看 shell 历史。
+
+  - id: IOSHIST-005
+    name: 多分屏切换隔离各自 pane 历史缓存不串屏
+    required: true
+    description: >
+      验证启用分屏的 tmux 终端在切换活跃面板时立即作废旧 pane 本地历史，确保任意面板上滑只展示所属面板自身历史。
+    preconditions:
+      - 原生 App 已打开启用分屏的专用 tmux 终端，面板 A 输出 1000 行带前缀 PANEL_A 的历史，面板 B 输出 1000 行带前缀 PANEL_B 的历史。
+    steps:
+      - 在面板 A 停留预热后向上滑动；确认本地历史层只包含 PANEL_A 内容，随后退回实时层。
+      - 切换活跃分屏到面板 B，等待面板 B 同步就绪后向上滑动；确认本地历史层只包含 PANEL_B 内容，不出现任何 PANEL_A 残留文本。
+
+  - id: IOSHIST-006
+    name: 连接缺少彩色历史接口的旧版服务端时静默回退远端滚动
+    required: false
+    description: >
+      验证当服务端对 GET /scrollback/ansi 返回 404 时，原生客户端在当前会话内自动停用本地历史预热并无缝回退 normalized-v1 远端滚动。
+    preconditions:
+      - 测试连接指向未暴露 /scrollback/ansi 路由（或响应该路由为 404）的兼容 Backend fixture，并打开包含 1000 行输出的 tmux 终端。
+    steps:
+      - 打开终端并等待首屏完成，检查客户端状态；确认未显示错误横幅，也未循环重试 404 请求。
+      - 向上滑动查看历史再点击回到底部；确认自动通过 normalized-v1 发送远端 scroll 消息驱动 tmux copy-mode 翻阅并正常退出。

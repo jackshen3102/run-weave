@@ -26,6 +26,7 @@ ios/RunweaveNative → RootView → AppSession
 | `State/StateProjection.swift`                               | 只发布消费值的变化；覆盖时暂停呈现，返回时同步最新值           |
 | `Services/APIClient.swift`                                  | 规范化 endpoint、认证、HTTP 错误分类与请求                     |
 | `Features/Terminal/SessionController.swift`                 | 终端连接、输入确认、事件与资源释放                             |
+| `Features/Terminal/LocalHistoryScrollController.swift`      | tmux 本地只读彩色历史缓冲、分片预热、pane 隔离与手势接力       |
 | `Features/Terminal/EventStream.swift`、`Rendering`、`Input` | 传输、解析显示和用户输入分别归属                               |
 | `Features/Preview`、`Features/Media`                        | 文件审阅与单文件操作、上传与转写，业务错误由所属区域展示       |
 | `State/DiagnosticStore.swift`、`ios/Diagnostics`            | 日常脱敏日志与内部验证入口，二者分开                           |
@@ -99,14 +100,22 @@ Backend 协议及持久身份边界见 [移动端架构](../../../docs/architect
 Swift 不直接导入 TypeScript。修改接口时同时核对 Swift `Contracts/`、`Services/`、`Features/Terminal/`
 与仓库的 `packages/shared/src`，并对真实 Backend 取证，不再维护依赖已删除客户端源码的迁移哈希。
 
-| 能力       | Backend 合同                                                                             |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| 认证与健康 | `/api/auth/*`、`/health`；`X-Auth-Client: app` 和 Bearer                                 |
-| 首页与事件 | `/api/app/home/overview`、`/ws/terminal-events`                                          |
-| 终端       | ticket、session metadata、terminal WS、input、interrupt、clipboard-image、clipboard-file |
-| 文件与变更 | `/api/terminal/project/:id/preview/*`，项目作用域与后端权限共同约束                      |
-| 语音       | `/api/voice/transcribe`，24 kHz WAV                                                      |
-| 诊断       | Backend diagnostic logs 的 start/stop/upload 合同                                        |
+| 能力       | Backend 合同                                                                           |
+| ---------- | -------------------------------------------------------------------------------------- |
+| 认证与健康 | `/api/auth/*`、`/health`；`X-Auth-Client: app` 和 Bearer                               |
+| 首页与事件 | `/api/app/home/overview`、`/ws/terminal-events`                                        |
+| 终端       | ticket、session metadata、scrollback/ansi、terminal WS、input、interrupt、clipboard-\* |
+| 文件与变更 | `/api/terminal/project/:id/preview/*`，项目作用域与后端权限共同约束                    |
+| 语音       | `/api/voice/transcribe`，24 kHz WAV                                                    |
+| 诊断       | Backend diagnostic logs 的 start/stop/upload 合同                                      |
+
+tmux 终端收到首屏 `snapshot` 后，由 `LocalHistoryScrollController` 通过
+`GET /api/terminal/session/:id/scrollback/ansi` 拉取带 ANSI 与软换行合并的受控历史（上限 5,000 行、1 MiB），
+按 16 KiB 分片异步喂入与实时层同视口对齐的只读 `SwiftTermSurface`；新输出按 600 ms 静默（或前台持续输出满 3 秒）
+单飞刷新待命缓冲，阅读期间不覆盖当前视口与选区。`scroll-state.owner == "history"` 且远端未处于 `copyMode` 时，
+实时层上滑零延迟切入本地 `UIScrollView` 像素级滚动与惯性减速，此时 `scrolledBack == true` 阻止完成通知误标已读，
+离线亦可点击「回到底部」或滑到底部退回实时层；发送输入确认后自动归位。`owner == "application"`、切换 `paneId`
+或旧 Backend 返回 404 时，分别直通远端 `normalized-v1` 滚轮、作废旧 pane 缓存或回退远端 copy-mode。
 
 `app` 是服务端认证与接口命名的一部分，删除旧客户端不重命名这些协议或改变权限。
 Backend、Web/Electron 和 App Server 继续由仓库各自入口维护，iOS 不承担其进程生命周期。

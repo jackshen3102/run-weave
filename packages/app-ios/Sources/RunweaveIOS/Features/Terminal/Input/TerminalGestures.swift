@@ -8,13 +8,36 @@ final class NativeTerminalView: TerminalView {
   weak var scrollHandler: TerminalGestures?
   var acceptsTerminalResponses: () -> Bool = { true }
   var linkIntent: ((BrowserOpenIntent) -> Void)?
+  var onTouchBegan: (() -> Void)?
+  var onScrollPositionChanged: ((CGFloat, CGFloat, Bool, Bool) -> Void)?
   private var menuObserver: NSObjectProtocol?
   private var selectionMenu: AnyObject?
   private var menuPoint = CGPoint.zero
 
+  override var contentOffset: CGPoint {
+    didSet {
+      notifyScrollPositionChanged()
+    }
+  }
+
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    onTouchBegan?()
     scrollHandler?.cancelScroll()
     super.touchesBegan(touches, with: event)
+  }
+
+  private func notifyScrollPositionChanged() {
+    guard let callback = onScrollPositionChanged else { return }
+    let maxOffset = max(0, contentSize.height - bounds.height + adjustedContentInset.bottom)
+    callback(contentOffset.y, maxOffset, isTracking, isDecelerating)
+  }
+
+  @objc private func nativePanDidUpdate(_ gesture: UIPanGestureRecognizer) {
+    if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
+      DispatchQueue.main.async { [weak self] in
+        self?.notifyScrollPositionChanged()
+      }
+    }
   }
 
   override func mouseModeChanged(source: Terminal) {
@@ -33,6 +56,8 @@ final class NativeTerminalView: TerminalView {
   }
 
   func installSelectionMenu() {
+    panGestureRecognizer.removeTarget(self, action: #selector(nativePanDidUpdate(_:)))
+    panGestureRecognizer.addTarget(self, action: #selector(nativePanDidUpdate(_:)))
     // Observe SwiftTerm's own recognizer after its hit testing. Do not install a competing pan
     // or maintain a second ANSI/cell map. Long press selects via SwiftTerm's public API.
     for recognizer in gestureRecognizers ?? [] where recognizer is UILongPressGestureRecognizer {
@@ -71,9 +96,12 @@ final class NativeTerminalView: TerminalView {
       recognizer.removeTarget(self, action: #selector(selectAtLongPress(_:)))
       recognizer.removeTarget(self, action: #selector(selectionPanEnded(_:)))
       recognizer.removeTarget(self, action: #selector(selectionTapped(_:)))
+      recognizer.removeTarget(self, action: #selector(nativePanDidUpdate(_:)))
     }
     if isFirstResponder { UIMenuController.shared.hideMenu() }
     linkIntent = nil
+    onTouchBegan = nil
+    onScrollPositionChanged = nil
   }
 
   @objc private func selectAtLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -230,12 +258,17 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   var scrollSensitivity: () -> CGFloat = { 1 }
   var sendNormalizedScroll: ((String, Int, String) -> Bool)?
   var stopNormalizedScroll: ((String) -> Void)?
+  var canUseLocalHistoryScroll: () -> Bool = { false }
+  var beginLocalHistoryScroll: ((CGFloat) -> Bool)?
+  var updateLocalHistoryScroll: ((CGFloat) -> Void)?
+  var endLocalHistoryScroll: ((CGFloat) -> Void)?
+  private var localHistoryHandoffActive = false
+  private var localHistoryGestureMultiplier: CGFloat = 1
   // Runweave's private tmux server uses the default copy-mode wheel bindings (-N 5).
   private let tmuxRowsPerWheel = 5
   var active = true {
     didSet {
       view?.isScrollEnabled = active
-      pan.isEnabled = active
       cancelScroll()
     }
   }
@@ -262,9 +295,11 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     otherGestureRecognizer.view === view && otherGestureRecognizer is UIPanGestureRecognizer
   }
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    guard active, let view, !view.hasActiveSelection else { return false }
+    guard let view, !view.hasActiveSelection else { return false }
+    let localReady = isTmux() && canUseLocalHistoryScroll()
+    guard active || localReady else { return false }
     // Normal-buffer history already has pixel scrolling and native inertia.
-    guard view.getTerminal().isCurrentBufferAlternate || (isTmux() && usesNormalizedScroll()) else { return false }
+    guard view.getTerminal().isCurrentBufferAlternate || (isTmux() && (usesNormalizedScroll() || localReady)) else { return false }
     let position = pan.location(in: view)
     let start = position.x - pan.translation(in: view).x - view.bounds.minX
     let velocity = pan.velocity(in: view)
@@ -277,6 +312,8 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     momentumVelocity = 0
     accumulated = 0
     cancelled = true
+    localHistoryHandoffActive = false
+    localHistoryGestureMultiplier = 1
     if usesNormalizedScroll() { stopNormalizedScroll?(gestureID) }
   }
 
@@ -313,21 +350,48 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
       cancelScroll()
       gestureID = UUID().uuidString
       cancelled = false
+      localHistoryHandoffActive = false
+      localHistoryGestureMultiplier = 1
     }
     if gesture.state == .began || gesture.state == .changed || gesture.state == .ended {
-      move(gesture.translation(in: view).y, phase: "direct")
+      let dy = gesture.translation(in: view).y
       gesture.setTranslation(.zero, in: view)
+      if localHistoryHandoffActive {
+        updateLocalHistoryScroll?(dy * localHistoryGestureMultiplier)
+      } else if canUseLocalHistoryScroll() {
+        let multiplier: CGFloat = dy < 0 ? -1 : 1
+        if abs(dy) > 0, beginLocalHistoryScroll?(abs(dy)) == true {
+          localHistoryGestureMultiplier = multiplier
+          localHistoryHandoffActive = true
+        }
+      } else {
+        move(dy, phase: "direct")
+      }
     }
-    if gesture.state == .ended, usesNormalizedScroll(), !cancelled {
-      let velocity = gesture.velocity(in: view).y
-      if abs(velocity) >= 80 {
-        momentumVelocity = min(max(velocity, -view.bounds.height * 4), view.bounds.height * 4)
-        lastMomentumTime = 0
-        let link = CADisplayLink(target: self, selector: #selector(decelerate(_:)))
-        momentum = link
-        link.add(to: .main, forMode: .common)
+    if gesture.state == .ended {
+      if localHistoryHandoffActive {
+        let multiplier = localHistoryGestureMultiplier
+        localHistoryHandoffActive = false
+        localHistoryGestureMultiplier = 1
+        endLocalHistoryScroll?(gesture.velocity(in: view).y * multiplier)
+        return
+      }
+      if usesNormalizedScroll(), !cancelled, !canUseLocalHistoryScroll() {
+        let velocity = gesture.velocity(in: view).y
+        if abs(velocity) >= 80 {
+          momentumVelocity = min(max(velocity, -view.bounds.height * 4), view.bounds.height * 4)
+          lastMomentumTime = 0
+          let link = CADisplayLink(target: self, selector: #selector(decelerate(_:)))
+          momentum = link
+          link.add(to: .main, forMode: .common)
+        }
       }
     } else if gesture.state == .cancelled || gesture.state == .failed {
+      if localHistoryHandoffActive {
+        localHistoryHandoffActive = false
+        localHistoryGestureMultiplier = 1
+        endLocalHistoryScroll?(0)
+      }
       cancelScroll()
     }
   }
@@ -351,6 +415,13 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
   @discardableResult func scroll(rows: Int) -> Bool {
     guard active, let view, !view.hasActiveSelection, rows != 0 else { return false }
     let terminal = view.getTerminal()
+    if rows > 0, isTmux(), canUseLocalHistoryScroll() {
+      let lineHeight = max(1, view.getOptimalFrameSize().height / CGFloat(max(1, terminal.rows)))
+      if beginLocalHistoryScroll?(CGFloat(rows) * lineHeight) == true {
+        endLocalHistoryScroll?(0)
+        return true
+      }
+    }
     if isTmux(), usesNormalizedScroll() {
       cancelScroll()
       gestureID = UUID().uuidString
@@ -379,6 +450,10 @@ final class TerminalGestures: NSObject, UIGestureRecognizerDelegate {
     cancelScroll()
     sendNormalizedScroll = nil
     stopNormalizedScroll = nil
+    canUseLocalHistoryScroll = { false }
+    beginLocalHistoryScroll = nil
+    updateLocalHistoryScroll = nil
+    endLocalHistoryScroll = nil
     if let view {
       view.removeGestureRecognizer(pan)
       view.scrollHandler = nil

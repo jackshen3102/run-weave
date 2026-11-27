@@ -14,6 +14,158 @@ export const RUNWEAVE_TMUX_PREFIX = "runweave-";
 export const TmuxCommandTimeoutMs = 5_000;
 export { RebuildWindowMs, MaxRebuildAttempts } from "../runtime/recovery-policy";
 export const CaptureHistoryLines = 5_000;
+export const MAX_ANSI_SCROLLBACK_BYTES = 1024 * 1024;
+const ANSI_RESET_PREFIX = "\x1b[0m";
+const ESC_CHAR = String.fromCharCode(0x1b);
+
+function consumeSgrTokens(rawParams: string, activeTokens: string[]): void {
+  if (!rawParams) {
+    activeTokens.length = 0;
+    return;
+  }
+  const parts = rawParams.split(";");
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i] ?? "";
+    if (part === "" || part === "0" || part === "00") {
+      activeTokens.length = 0;
+      continue;
+    }
+    if ((part === "38" || part === "48" || part === "58") && i + 1 < parts.length) {
+      const mode = parts[i + 1];
+      if (mode === "5" && i + 2 < parts.length) {
+        activeTokens.push(`${part};5;${parts[i + 2]}`);
+        i += 2;
+        continue;
+      }
+      if (mode === "2" && i + 4 < parts.length) {
+        activeTokens.push(`${part};2;${parts[i + 2]};${parts[i + 3]};${parts[i + 4]}`);
+        i += 4;
+        continue;
+      }
+    }
+    activeTokens.push(part);
+  }
+}
+
+function scanSgrInText(text: string, activeTokens: string[]): void {
+  let cursor = 0;
+  while (cursor < text.length) {
+    const escIndex = text.indexOf(ESC_CHAR, cursor);
+    if (escIndex === -1 || escIndex + 1 >= text.length) break;
+    if (text[escIndex + 1] !== "[") {
+      cursor = escIndex + 1;
+      continue;
+    }
+    let end = escIndex + 2;
+    while (end < text.length && text.charCodeAt(end) >= 0x20 && text.charCodeAt(end) <= 0x3f) {
+      end += 1;
+    }
+    if (end < text.length && text[end] === "m") {
+      consumeSgrTokens(text.slice(escIndex + 2, end), activeTokens);
+    }
+    cursor = end + 1;
+  }
+}
+
+function formatSgrPrefix(activeTokens: string[]): string {
+  return activeTokens.length > 0
+    ? `${ANSI_RESET_PREFIX}\x1b[${activeTokens.slice(-8).join(";")}m`
+    : ANSI_RESET_PREFIX;
+}
+
+function extractTrailingSgrPrefix(lines: string[], endExclusive: number, extraPartialLine?: string): string {
+  const activeTokens: string[] = [];
+  for (let index = 0; index < endExclusive; index += 1) {
+    scanSgrInText(lines[index]!, activeTokens);
+  }
+  if (extraPartialLine) {
+    scanSgrInText(extraPartialLine, activeTokens);
+  }
+  return formatSgrPrefix(activeTokens);
+}
+
+function stripLeadingOrphanCsiTail(tail: string): string {
+  const firstEsc = tail.indexOf(ESC_CHAR);
+  const candidate = firstEsc === -1 ? tail : tail.slice(0, firstEsc);
+  const match = /^(?:\[[0-9;:?<>! "$-/]*[@-~]|[0-9;:]+[mHJKfABCDGsu])/.exec(candidate);
+  return match ? tail.slice(match[0].length) : tail;
+}
+
+export function truncateAnsiScrollbackToLimit(
+  raw: string,
+  maxBytes = MAX_ANSI_SCROLLBACK_BYTES,
+  maxLines = CaptureHistoryLines,
+): { data: string; lineCount: number } {
+  const normalized = raw.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  if (!normalized) return { data: "", lineCount: 0 };
+  const allLines = normalized.split("\n");
+  const lineStart = maxLines > 0 && allLines.length > maxLines ? allLines.length - maxLines : 0;
+  const lines = lineStart > 0 ? allLines.slice(lineStart) : allLines;
+  const lineBounded = lineStart > 0 ? lines.join("\n") : normalized;
+  if (lineStart === 0 && Buffer.byteLength(lineBounded, "utf8") <= maxBytes) {
+    return { data: lineBounded, lineCount: lines.length };
+  }
+  if (lineStart > 0) {
+    const initialPrefix = extractTrailingSgrPrefix(allLines, lineStart);
+    const prefixed = initialPrefix && !lineBounded.startsWith(ANSI_RESET_PREFIX) ? `${initialPrefix}${lineBounded}` : lineBounded;
+    if (Buffer.byteLength(prefixed, "utf8") <= maxBytes) {
+      return { data: prefixed, lineCount: lines.length };
+    }
+  }
+  let accumulatedBytes = 0;
+  let startIndex = lines.length;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const lineBytes = Buffer.byteLength(lines[index]!, "utf8");
+    const separatorBytes = index < lines.length - 1 ? 1 : 0;
+    if (accumulatedBytes + lineBytes + separatorBytes > maxBytes) break;
+    accumulatedBytes += lineBytes + separatorBytes;
+    startIndex = index;
+  }
+  while (startIndex < lines.length) {
+    const prefix = extractTrailingSgrPrefix(allLines, lineStart + startIndex);
+    const prefixBytes = Buffer.byteLength(prefix, "utf8");
+    if (accumulatedBytes + prefixBytes <= maxBytes) {
+      const sliced = lines.slice(startIndex).join("\n");
+      const data = sliced.startsWith(ANSI_RESET_PREFIX) ? sliced : `${prefix}${sliced}`;
+      if (Buffer.byteLength(data, "utf8") <= maxBytes) {
+        return { data, lineCount: lines.length - startIndex };
+      }
+    }
+    const droppedLineBytes = Buffer.byteLength(lines[startIndex]!, "utf8");
+    const droppedSeparatorBytes = startIndex < lines.length - 1 ? 1 : 0;
+    accumulatedBytes = Math.max(0, accumulatedBytes - droppedLineBytes - droppedSeparatorBytes);
+    startIndex += 1;
+  }
+  const lastLine = lines[lines.length - 1] ?? "";
+  const lastLineBuffer = Buffer.from(lastLine, "utf8");
+  const roughCutOffset = Math.min(lastLineBuffer.length, Math.max(0, lastLineBuffer.length - maxBytes) + 64);
+  const droppedHead = lastLineBuffer.subarray(0, roughCutOffset).toString("utf8");
+  const prefix = extractTrailingSgrPrefix(allLines, allLines.length - 1, droppedHead);
+  const tailBudget = Math.max(0, maxBytes - Buffer.byteLength(prefix, "utf8"));
+  const cutOffset = Math.max(0, lastLineBuffer.length - tailBudget);
+  const rawTail = lastLineBuffer
+    .subarray(cutOffset)
+    .toString("utf8")
+    .replace(/^\uFFFD+/, "");
+  const cleanTail = stripLeadingOrphanCsiTail(rawTail);
+  const strippedFragmentBytes = Buffer.byteLength(rawTail, "utf8") - Buffer.byteLength(cleanTail, "utf8");
+  const exactDroppedHead = lastLineBuffer
+    .subarray(0, Math.min(lastLineBuffer.length, cutOffset + Math.max(0, strippedFragmentBytes)))
+    .toString("utf8");
+  const finalPrefix = extractTrailingSgrPrefix(allLines, allLines.length - 1, exactDroppedHead);
+  let finalCleanTail = cleanTail;
+  const finalBudget = Math.max(0, maxBytes - Buffer.byteLength(finalPrefix, "utf8"));
+  if (Buffer.byteLength(finalCleanTail, "utf8") > finalBudget) {
+    finalCleanTail = stripLeadingOrphanCsiTail(
+      lastLineBuffer
+        .subarray(Math.max(0, lastLineBuffer.length - finalBudget))
+        .toString("utf8")
+        .replace(/^\uFFFD+/, ""),
+    );
+  }
+  const data = finalCleanTail.startsWith(ANSI_RESET_PREFIX) ? finalCleanTail : `${finalPrefix}${finalCleanTail}`;
+  return { data, lineCount: 1 };
+}
 export const InteractivePaneReadyMinWaitMs = 1_000;
 export const InteractivePaneReadyStableMs = 200;
 export const InteractivePaneReadyTimeoutMs = 2_500;

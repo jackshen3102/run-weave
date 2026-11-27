@@ -177,6 +177,20 @@ public actor APIClient {
   func history(id: String) async throws -> TerminalDetails {
     try await authorized("/api/terminal/session/\(Self.pathComponent(id))/history")
   }
+  func terminalAnsiScrollback(id: String, panelID: String? = nil) async throws -> TerminalAnsiScrollbackResponse {
+    var suffix = ""
+    if let panelID, !panelID.isEmpty {
+      var components = URLComponents()
+      components.queryItems = [URLQueryItem(name: "panelId", value: panelID)]
+      suffix = components.percentEncodedQuery.map { "?" + $0 } ?? ""
+    }
+    let value: TerminalAnsiScrollbackResponse = try await authorized(
+      "/api/terminal/session/\(Self.pathComponent(id))/scrollback/ansi" + suffix)
+    guard value.terminalSessionId == id, value.paneId.hasPrefix("%") else {
+      throw APIError.invalidResponse
+    }
+    return value
+  }
   func terminalConversation(id: String, panelID: String?, expectedThreadID: String?) async throws -> TerminalConversation {
     var query: [URLQueryItem] = []
     if let panelID { query.append(URLQueryItem(name: "panelId", value: panelID)) }

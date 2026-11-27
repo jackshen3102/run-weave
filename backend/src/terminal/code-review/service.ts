@@ -251,7 +251,7 @@ export class CodeReviewService {
         if (!usePty) await this.tasks.start(record.reviewerTaskId, { expectedRevision: task.revision }, launch);
       }
     }
-    if (Date.now() - record.startedAt > (run.phase === "starting" ? 120_000 : 30 * 60_000))
+    if (Date.now() - record.startedAt > (run.phase === "starting" ? 120_000 : 60 * 60_000))
       throw new CodeReviewError(409, "review_timeout", "自动推进已超时，Reviewer 未被强制停止，请查看评审终端");
     const observation = await this.tasks.observe(record.reviewerTaskId);
     const task = observation.task;
@@ -268,6 +268,7 @@ export class CodeReviewService {
       if (record.recovered || task.control !== "supervisor") throw new CodeReviewError(409, "human_control", "Reviewer 已由人工接管，不自动派发");
       const snapshot = await this.store.snapshot(id);
       record.reviewerThreadId = task.threadId;
+      record.reportSource = "file";
       run.phase = "reviewing"; record.startedAt = Date.now(); await this.touch(record);
       await this.tasks.send(task.taskId, { expectedRevision: task.revision, dispatchId: record.dispatchId, delivery: "when_idle",
         text: buildCodeReviewPrompt({ reviewId: id, round: run.round, snapshot, inputPath: path.join(this.store.input(id), "snapshot.json"), outputPath: this.store.output(id), requirements: await this.store.requirements(id) }) });
@@ -293,7 +294,8 @@ export class CodeReviewService {
     if (finals.length !== 1) throw new CodeReviewError(422, "final_unavailable", "缺少完整且唯一的原生 final");
     const snapshot = await this.store.snapshot(id);
     const requirements = await this.store.requirements(id);
-    const report = await saveReviewReport(this.store, id, snapshot, finals[0]!.text, requirements);
+    const submission = record.reportSource === "file" ? await this.store.submittedReport(id) : finals[0]!.text;
+    const report = await saveReviewReport(this.store, id, snapshot, submission, requirements);
     try { run.stale = (await captureReviewSnapshot(record.source.projectId, record.source.rootPath)).fingerprint !== snapshot.fingerprint; }
     catch { run.stale = true; }
     if (requirements && report.scope === "code_and_goals") {

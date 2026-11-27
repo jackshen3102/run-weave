@@ -14,6 +14,7 @@ import { TerminalAgentForkService } from "../../terminal/application/agent-fork"
 import { registerTerminalTaskRoutes } from "./tasks";
 import type { TerminalTaskService } from "../../terminal/tasks/service";
 import { registerTerminalConversationRoutes } from "./conversation";
+import { registerTerminalScrollbackRoutes } from "./scrollback";
 import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type { TerminalTextAttachmentDelivery } from "../../terminal/attachments/text-attachment-delivery";
 import { registerTerminalSessionUpdateRoute } from "./sessions/update";
@@ -239,6 +240,10 @@ export function createTerminalRouter(
   });
   registerTerminalPreviewRoutes(router, terminalSessionManager);
   registerTerminalConversationRoutes(router, terminalSessionManager, options?.tmuxService);
+  registerTerminalScrollbackRoutes(router, terminalSessionManager, {
+    tmuxService: options?.tmuxService,
+    terminalEventService: options?.terminalEventService,
+  });
 
   const reorderSessionsSchema = z
     .object({

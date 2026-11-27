@@ -83,6 +83,7 @@ struct TerminalScreen: View {
     let active = !presentationCovered && session.foreground
       && session.terminalController === controller && session.terminal?.id == details.id
     presentation.setActive(active); hasAttachments.setActive(active)
+    controller.setViewportActive(active)
   }
   private var projectID: String { presentation.value.projectID ?? details.projectId }
   private var canReportCompletionViewed: Bool {
@@ -174,7 +175,7 @@ struct TerminalScreen: View {
       if session.terminalQuestions.consumeOpen(terminalID: details.id) {
         openReplyAssistant()
       }
-      controller.surface.applyTheme(dark: theme != "light")
+      controller.applyTheme(dark: theme != "light")
       connectBrowserIntents()
       controller.openFileRequested = { tap in
         guard session.terminalController === controller, session.terminal?.id == details.id else { return }
@@ -190,7 +191,7 @@ struct TerminalScreen: View {
         try await api.reportCompletionViewed(id: details.id, revision: revision)
       } catch { /* A missing view receipt must not suppress the reminder. */ }
     }
-    .onChange(of: theme) { controller.surface.applyTheme(dark: $0 != "light") }
+    .onChange(of: theme) { controller.applyTheme(dark: $0 != "light") }
     .onChange(of: presentationCovered) { _ in resumePresentation() }
     .onChange(of: session.foreground) { _ in resumePresentation() }
     .task(id: "\(canReadChanges):\(projectID)") {
@@ -436,7 +437,11 @@ struct TerminalScreen: View {
         Text(failure).font(.caption).foregroundColor(.red)
       }
       if let notice = controller.notice { Text(notice).font(.caption).foregroundColor(.orange) }
-      TerminalHostView(surface: controller.surface, covered: composerViewportCovered || sideChat.visible || showingConversation).frame(minHeight: 24)
+      TerminalHostView(
+        surface: controller.surface,
+        localHistory: controller.localHistory,
+        covered: composerViewportCovered || sideChat.visible || showingConversation
+      ).frame(minHeight: 24)
         .padding(.horizontal, 12).padding(.top, 8)
         .ignoresSafeArea(.container, edges: .bottom)
     }

@@ -21,9 +21,18 @@ struct TerminalScrollState: Decodable {
   let owner: String
   let copyMode: Bool
   let offsetRows: Int?
+  let paneId: String?
   let gestureId: String?
   let sequence: Int?
   let status: String
+}
+
+struct TerminalAnsiScrollbackResponse: Decodable {
+  let terminalSessionId: String
+  let paneId: String
+  let sourceCols: Int
+  let lineCount: Int
+  let data: String
 }
 
 /// Mirrors packages/shared/src/terminal/runtime/websocket.ts. Unknown types are forward compatible.

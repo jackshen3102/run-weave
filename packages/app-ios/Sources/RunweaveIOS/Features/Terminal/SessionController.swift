@@ -21,6 +21,16 @@ public final class SessionController: ObservableObject {
   @Published private(set) var metadata: Metadata?
   @Published private(set) var scrolledBack = false
   @Published private(set) var scrollPositionKnown = true
+  public private(set) lazy var localHistory = LocalHistoryScrollController(
+    liveSurface: surface,
+    fetchScrollback: { [weak self] in
+      guard let self else { throw CancellationError() }
+      return try await self.api.terminalAnsiScrollback(id: self.terminalID)
+    },
+    record: { [weak self] event, extra in self?.record(event, extra: extra) }
+  )
+  public var isShowingLocalHistory: Bool { localHistory.isShowingLocalHistory }
+  public var canReturnToBottomLocally: Bool { localHistory.isShowingLocalHistory && !(scrollTransport.state?.copyMode ?? false) }
   private lazy var scrollTransport = TerminalScrollTransport(surface: surface,
     canSend: { [weak self] in self?.canSend ?? false }, send: { [weak self] in self?.send($0) },
     record: { [weak self] event, extra in self?.record(event, extra: extra) })
@@ -85,14 +95,19 @@ public final class SessionController: ObservableObject {
     Task { await QualityDiagnosticsUploader.shared.register(api) }
     surface.openFileRequested = { [weak self] tap in self?.openFileRequested?(tap) }
     surface.openLinkRequested = { [weak self] intent in self?.openLinkRequested?(intent) }
+    localHistory.openFileRequested = { [weak self] tap in self?.openFileRequested?(tap) }
+    localHistory.openLinkRequested = { [weak self] intent in self?.openLinkRequested?(intent) }
+    localHistory.onStateChanged = { [weak self] in self?.updateScrollState() }
+    surface.canUseLocalHistoryScroll = { [weak self] in self?.localHistory.canUseLocalHistoryScroll(runtimeKind: self?.runtimeKind) ?? false }
+    surface.beginLocalHistoryScroll = { [weak self] dy in self?.localHistory.beginGesture(deltaY: dy, runtimeKind: self?.runtimeKind) ?? false }
+    surface.updateLocalHistoryScroll = { [weak self] dy in self?.localHistory.updateGesture(deltaY: dy) }
+    surface.endLocalHistoryScroll = { [weak self] vy in self?.localHistory.endGesture(velocityY: vy) }
     surface.rawInput = { [weak self] bytes in
       guard let text = String(bytes: bytes, encoding: .utf8) else { return }
       self?.sendRaw(text)
     }
     surface.isTmux = { [weak self] in self?.runtimeKind == "tmux" }
-    surface.scrollSensitivity = { [weak self] in
-      self?.metadata?.activeCommand == "claude" ? 0.75 : 1
-    }
+    surface.scrollSensitivity = { [weak self] in self?.metadata?.activeCommand == "claude" ? 0.75 : 1 }
     surface.tmuxScroll = { [weak self] input, rows in
       guard let self, self.canSend else { return false }
       self.sendRaw(input)
@@ -108,18 +123,20 @@ public final class SessionController: ObservableObject {
     }
     surface.viewportChanged = { [weak self] cols, rows in
       if let self, let size = self.size, size != (cols, rows) {
-        // A locally resized renderer no longer represents the old cursor's grid.
-        self.committedCursor = nil
-        self.cursorValid = false
+        self.committedCursor = nil; self.cursorValid = false
       }
-      self?.size = (cols, rows)
-      self?.sendSize()
+      self?.size = (cols, rows); self?.sendSize()
     }
   }
 
+  func applyTheme(dark: Bool) { surface.applyTheme(dark: dark); localHistory.applyTheme(dark: dark) }
+  func setViewportActive(_ active: Bool) { localHistory.isViewportActive = active }
+
   private func updateScrollState() {
-    if scrollPositionKnown != scrollTransport.positionKnown { scrollPositionKnown = scrollTransport.positionKnown }
-    let next = scrollTransport.enabled ? (scrollTransport.state?.copyMode ?? false) : (!localAtBottom || tmuxScrollRows >= 4)
+    let nextKnown = localHistory.isShowingLocalHistory || scrollTransport.positionKnown
+    if scrollPositionKnown != nextKnown { scrollPositionKnown = nextKnown }
+    let remoteScrolledBack = scrollTransport.enabled ? (scrollTransport.state?.copyMode ?? false) : (!localAtBottom || tmuxScrollRows >= 4)
+    let next = localHistory.isShowingLocalHistory || remoteScrolledBack
     if scrolledBack != next { scrolledBack = next }
   }
 
@@ -241,6 +258,7 @@ public final class SessionController: ObservableObject {
 
   public func disconnect() {
     surface.cancelScroll()
+    localHistory.resetForDisconnect()
     scrollTransport.reset()
     connectionDiagnostics?.stage(.cancelled)
     connectionDiagnostics = nil
@@ -266,6 +284,7 @@ public final class SessionController: ObservableObject {
 
   public func sendRaw(_ text: String) {
     guard canSend else { return }
+    if localHistory.isShowingLocalHistory { localHistory.exitLocalHistory(reason: "input_submitted"); updateScrollState() }
     send(["type": "input", "data": text])
   }
 
@@ -274,12 +293,16 @@ public final class SessionController: ObservableObject {
   }
 
   public func returnToBottom() {
+    if localHistory.isShowingLocalHistory {
+      localHistory.exitLocalHistory(reason: "return_to_bottom")
+      updateScrollState()
+      if !(scrollTransport.state?.copyMode ?? false) || !canSend { return }
+    }
     guard canSend else { return }
     if runtimeKind == "tmux" {
       performInput("", mode: "tmux_exit_copy_mode", returnToBottom: true)
     } else if runtimeKind == "pty" {
-      surface.terminalView.scroll(toPosition: 1)
-      scrolledBack = false
+      surface.terminalView.scroll(toPosition: 1); scrolledBack = false
     }
   }
 
@@ -337,10 +360,9 @@ public final class SessionController: ObservableObject {
       action.stage(.confirmed)
       guard generation == epoch, !Task.isCancelled else { throw APIError.inputResultUnknown }
       if exitsCopyMode {
-        tmuxScrollRows = 0
-        localAtBottom = true
-        scrolledBack = false
-        surface.terminalView.scroll(toPosition: 1)
+        if localHistory.isShowingLocalHistory { localHistory.exitLocalHistory(reason: "input_submitted") }
+        tmuxScrollRows = 0; localAtBottom = true; scrolledBack = false
+        surface.terminalView.scroll(toPosition: 1); updateScrollState()
       }
       record("input.accepted", extra: ["mode": mode])
     } catch {
@@ -364,6 +386,7 @@ public final class SessionController: ObservableObject {
     openFileRequested = nil
     openLinkRequested = nil
     disconnect()
+    localHistory.dispose()
     surface.dispose()
     networking.invalidateAndCancel()
   }
@@ -373,6 +396,7 @@ public final class SessionController: ObservableObject {
     case .connected(let id, let kind, let recovery, let supportsScroll):
       scrollTransport.reset()
       scrollTransport.enabled = kind == "tmux" && supportsScroll
+      localHistory.handleConnected(runtimeKind: kind)
       updateScrollState()
       guard id == terminalID else { throw APIError.invalidResponse }
       connected = true
@@ -383,6 +407,7 @@ public final class SessionController: ObservableObject {
         guard committedCursor != nil else { throw APIError.invalidResponse }
         receivedCursor = committedCursor
         hasSnapshot = true
+        localHistory.markDirty(runtimeKind: kind)
         record("recovery.resume")
       } else {
         if committedCursor != nil {
@@ -396,7 +421,9 @@ public final class SessionController: ObservableObject {
       connectionStatus = "已连接"
       record("connected", extra: ["attemptId": attemptID])
       sendSize()
-    case .scrollState(let state): scrollTransport.receive(state)
+    case .scrollState(let state):
+      scrollTransport.receive(state)
+      localHistory.updateScrollState(state, runtimeKind: runtimeKind)
       updateScrollState()
     case .snapshot(let text, let bracketed, let cursor, let cols, let rows):
       guard connected else { throw APIError.invalidResponse }
@@ -415,6 +442,7 @@ public final class SessionController: ObservableObject {
       localAtBottom = true
       scrolledBack = false
       hasSnapshot = true
+      localHistory.handleInitialSnapshot(runtimeKind: runtimeKind)
       let modes = bracketed.map { $0 ? "\u{1b}[?2004h" : "\u{1b}[?2004l" } ?? ""
       enqueue(
         text + modes, event: "snapshot", cursor: cursor,
@@ -434,6 +462,7 @@ public final class SessionController: ObservableObject {
         cursorValid = false
       }
       receivedCursor = cursor
+      localHistory.markDirty(runtimeKind: runtimeKind)
       enqueue(text, event: "output", cursor: cursor)
     case .status(let status, _):
       if runtimeStatus != status { runtimeStatus = status }
@@ -454,46 +483,38 @@ public final class SessionController: ObservableObject {
   }
 
   private func showNotice(_ message: String) {
-    noticeTask?.cancel()
-    notice = message
-    let epoch = generation
+    noticeTask?.cancel(); notice = message; let epoch = generation
     noticeTask = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
       guard let self, self.generation == epoch else { return }
-      self.notice = nil
-      self.noticeTask = nil
+      self.notice = nil; self.noticeTask = nil
     }
   }
 
-  private func clearNotice() {
-    noticeTask?.cancel()
-    noticeTask = nil
-    notice = nil
+  private func clearNotice() { noticeTask?.cancel(); noticeTask = nil; notice = nil }
+
+  private func clearQueue() {
+    drainGeneration += 1; drainTask?.cancel(); drainTask = nil
+    queue.removeAll(keepingCapacity: false); outputMetrics.clearQueued(); receivedCursor = committedCursor
   }
 
-  private func enqueue(
-    _ text: String, event: String, cursor: TerminalOutputCursor? = nil,
-    snapshotSize: (Int, Int)? = nil
-  ) {
+  private func halt(_ message: String) {
+    disconnect(); failure = message; connectionStatus = "连接停止"; record("connection.halted")
+  }
+
+  private func enqueue(_ text: String, event: String, cursor: TerminalOutputCursor? = nil, snapshotSize: (Int, Int)? = nil) {
     let bytes = Array(text.utf8)
     guard queuedBytes + bytes.count <= Self.highWater, queue.count < 8192 else {
-      halt("输出积压超过 1 MiB，需要重同步；连接已停止")
-      return
+      halt("输出积压超过 1 MiB，需要重同步；连接已停止"); return
     }
-    outputMetrics.addReceived(bytes.count)
-    outputMetrics.addQueued(bytes.count)
-    // A range is fed atomically. Dropping an unconsumed frame on disconnect
-    // cannot leave an already-rendered prefix that would be replayed twice.
+    outputMetrics.addReceived(bytes.count); outputMetrics.addQueued(bytes.count)
     queue.append(OutputFrame(bytes: bytes, cursor: cursor, size: snapshotSize))
     record(event, bytes: bytes.count)
     guard drainTask == nil else { return }
-    let epoch = generation
-    let drainEpoch = drainGeneration
+    let epoch = generation; let drainEpoch = drainGeneration
     drainTask = Task { [weak self] in
       guard let self else { return }
-      while !Task.isCancelled, self.generation == epoch, self.drainGeneration == drainEpoch,
-        !self.queue.isEmpty
-      {
+      while !Task.isCancelled, self.generation == epoch, self.drainGeneration == drainEpoch, !self.queue.isEmpty {
         let next = self.queue.removeFirst()
         let terminal = self.surface.terminalView.getTerminal()
         let localSize = (terminal.cols, terminal.rows)
@@ -501,48 +522,27 @@ public final class SessionController: ObservableObject {
         self.surface.feed(next.bytes)
         if next.size != nil { terminal.resize(cols: localSize.0, rows: localSize.1) }
         self.committedCursor = self.cursorValid ? next.cursor : nil
-        self.outputMetrics.addQueued(-next.bytes.count)
-        self.record("consume", bytes: next.bytes.count)
+        self.outputMetrics.addQueued(-next.bytes.count); self.record("consume", bytes: next.bytes.count)
         await Task.yield()
       }
       if self.generation == epoch, self.drainGeneration == drainEpoch { self.drainTask = nil }
     }
   }
 
-  private func clearQueue() {
-    drainGeneration += 1
-    drainTask?.cancel()
-    drainTask = nil
-    queue.removeAll(keepingCapacity: false)
-    outputMetrics.clearQueued()
-    receivedCursor = committedCursor
-  }
-
-  private func halt(_ message: String) {
-    disconnect()
-    failure = message
-    connectionStatus = "连接停止"
-    record("connection.halted")
-  }
-
   private func sendSize() {
     guard !readOnly, connected, let size, size.0 > 0, size.1 > 0 else { return }
     if let sentSize, sentSize == size { return }
     sentSize = size
-    record(
-      "resize",
-      extra: [
-        "cols": size.0, "rows": size.1,
-        "widthPoints": surface.view.bounds.width, "heightPoints": surface.view.bounds.height,
-        "displayScale": surface.view.traitCollection.displayScale,
-      ])
+    record("resize", extra: [
+      "cols": size.0, "rows": size.1, "widthPoints": surface.view.bounds.width,
+      "heightPoints": surface.view.bounds.height, "displayScale": surface.view.traitCollection.displayScale,
+    ])
     send(["type": "resize", "cols": size.0, "rows": size.1])
   }
 
   private func send(_ payload: [String: Any]) {
     guard let socket, let data = try? JSONSerialization.data(withJSONObject: payload),
-      let text = String(data: data, encoding: .utf8)
-    else { return }
+      let text = String(data: data, encoding: .utf8) else { return }
     let epoch = generation
     socket.send(.string(text)) { [weak self] error in
       guard error != nil else { return }
@@ -551,9 +551,7 @@ public final class SessionController: ObservableObject {
         let isInput = payload["type"] as? String == "input"
         if isInput { self.failure = "发送结果未确认；不会自动重发" }
         self.record(isInput ? "input.unconfirmed" : "resize.unconfirmed")
-        self.connected = false
-        self.sentSize = nil
-        // Let the receive loop reconnect. Only viewport state is resent; input is never replayed.
+        self.connected = false; self.sentSize = nil
         socket.cancel(with: .goingAway, reason: nil)
       }
     }
@@ -570,30 +568,23 @@ public final class SessionController: ObservableObject {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     var value: [String: Any] = [
-      "at": formatter.string(from: Date()),
-      "client": "native-ios", "event": event, "bytes": bytes,
+      "at": formatter.string(from: Date()), "client": "native-ios", "event": event, "bytes": bytes,
       "connectionId": api.connectionID, "backendVersion": "unknown",
-      "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        ?? "unknown",
-      "terminalSessionId": terminalID, "generation": generation,
-      "uptime": ProcessInfo.processInfo.systemUptime, "queuedBytes": queuedBytes,
-      "renderer": surface.renderer, "rendererVersion": "1.19.0",
-      "committedOffset": committedCursor?.offset ?? -1,
-      "streamId": committedCursor?.streamId ?? "",
+      "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "terminalSessionId": terminalID, "generation": generation, "uptime": ProcessInfo.processInfo.systemUptime,
+      "queuedBytes": queuedBytes, "renderer": surface.renderer, "rendererVersion": "1.19.0",
+      "committedOffset": committedCursor?.offset ?? -1, "streamId": committedCursor?.streamId ?? "",
     ]
     value.merge(AppBuildMetadata.fields.mapValues { $0 as Any }) { _, next in next }
     value.merge(extra) { _, next in next }
-    if let entry = DiagnosticRecord.terminal(value) {
-      DiagnosticStore.shared.append(scope: api.connectionID, entry)
-    }
+    if let entry = DiagnosticRecord.terminal(value) { DiagnosticStore.shared.append(scope: api.connectionID, entry) }
     events.append(value)
     if events.count > 2000 { events.removeFirst(events.count - 2000) }
   }
 
   private func flushOutputLog() {
     guard !outputLogCounters.isEmpty else { return }
-    let counters = outputLogCounters
-    outputLogCounters.removeAll(keepingCapacity: true)
+    let counters = outputLogCounters; outputLogCounters.removeAll(keepingCapacity: true)
     outputLogAt = ProcessInfo.processInfo.systemUptime
     record("output.summary", extra: counters.mapValues { $0 as Any })
   }

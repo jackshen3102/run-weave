@@ -60,6 +60,8 @@ export interface TerminalScrollState {
   owner: "history" | "application";
   copyMode: boolean;
   offsetRows: number | null;
+  /** 当前滚动归属对应的 tmux paneId；分屏切换时客户端据此立即作废旧 pane 本地历史。 */
+  paneId?: string;
   gestureId?: string;
   sequence?: number;
   status: "state" | "applied" | "cancelled";
