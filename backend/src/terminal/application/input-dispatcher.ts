@@ -177,9 +177,11 @@ async function writePromptReplacePtyInput(
   submit: boolean,
   submitKey: TerminalPromptSubmitKey,
   attachClipboardImages = false,
+  flushPasteBuffer = false,
   operationId?: string,
   beforeWrite?: () => void,
 ): Promise<void> {
+  const submitInput = `${flushPasteBuffer && submitKey === "Enter" ? "\x05" : ""}${submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r"}`;
   if (runtime.hosted) {
     const paste = (attachClipboardImages ? buildClipboardImagePaste(text) : null)
       ?? (submitKey === "Enter" ? text : buildPromptPasteInput(text));
@@ -190,7 +192,7 @@ async function writePromptReplacePtyInput(
       { type: "text", data: "\x0b" }, { type: "delay", ms: PROMPT_REPLACE_CLEAR_DELAY_MS },
       ...(text ? [{ type: "text" as const, data: paste }] : []),
       ...(submit ? [{ type: "delay" as const, ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },
-        { type: "text" as const, data: submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r" }] : []),
+        { type: "text" as const, data: submitInput }] : []),
     ], operationId);
     return;
   }
@@ -211,9 +213,7 @@ async function writePromptReplacePtyInput(
   if (submit) {
     await delay(CODEX_COMPOSER_SUBMIT_DELAY_MS);
     beforeWrite?.();
-    runtime.write(
-      submitKey === "Tab" ? "\t" : submitKey === "M-Enter" ? "\x1b\r" : "\r",
-    );
+    runtime.write(submitInput);
   }
 }
 
@@ -453,6 +453,9 @@ export async function sendInputToSession(
       }
       if (!exitTmuxCopyMode) {
         const attachClipboardImages = getAgentForCommand(session.activeCommand) === "codex";
+        const agent = getAgentForCommand(session.activeCommand) ?? session.terminalState?.agent;
+        const flushPasteBuffer = process.platform === "win32" &&
+          (agent === "codex" || agent === "trae" || agent === "traecli" || agent === "traex");
         if (mode === "prompt_replace") {
           await writePromptReplacePtyInput(
             ensured.runtime,
@@ -460,6 +463,7 @@ export async function sendInputToSession(
             submit === true,
             submitKey,
             attachClipboardImages,
+            flushPasteBuffer,
             operationId,
             options.beforeTextAttachmentWrite,
           );
@@ -469,8 +473,8 @@ export async function sendInputToSession(
             ? buildPromptPasteInput(data, attachClipboardImages)
             : data;
           let submitInput = mode === "prompt_paste" && composerSubmitKey === "Tab" ? "\t" : "\r";
-          // Ctrl+E flushes Codex's Windows paste-burst buffer without editing the prompt.
-          if (mode === "prompt_paste" && process.platform === "win32" && attachClipboardImages)
+          // Codex and TraeX buffer fast Windows paste bursts; flush before submitting.
+          if (flushPasteBuffer || (mode === "prompt_paste" && process.platform === "win32" && attachClipboardImages))
             submitInput = `\x05${submitInput}`;
           if (ensured.runtime.hosted) await ensured.runtime.hosted.writeSteps([
             { type: "text", data: text }, { type: "delay", ms: CODEX_COMPOSER_SUBMIT_DELAY_MS },

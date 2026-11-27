@@ -11,7 +11,7 @@
 | Terminal、Project、输入投递与 Agent 控制                | [terminal-cli.md](./terminal-cli.md)                                                                                                                     |
 | Terminal 快照分享、匿名读取与有效期                     | [terminal-snapshot-share.md](./terminal-snapshot-share.md)                                                                                               |
 | iOS 两台模拟器跨 worktree 复用                          | [ios-simulators.md](./ios-simulators.md)                                                                                                                 |
-| 原生 Agent 历史关键词检索、增量索引与原文定位        | [会话搜索](./session-search.md)                                                                                                                         |
+| 原生 Agent 历史关键词检索、增量索引与原文定位           | [会话搜索](./session-search.md)                                                                                                                          |
 | 普通会话经验检索、历史盘点、增量审查与结果回执          | [experience-cli.md](./experience-cli.md)                                                                                                                 |
 | 本机 Codex 历史用量与执行疑点报告                       | [token-report.md](./token-report.md)                                                                                                                     |
 | 本机 Codex Skill 加载与候选使用统计                     | [skill-report.md](./skill-report.md)                                                                                                                     |
@@ -36,6 +36,11 @@ Dots 等主 Agent 的专用终端派发、观察、验收和接手见[终端任�
 单实例和状态写入锁由操作系统持有，崩溃/重启后自动释放，不根据持久化 PID 判断存活。
 升级旧锁协议及安装依赖的要求见 [飞书部署](../deployment/feishu-app-integration.md)。
 详细合同见 [桌面与飞书完成通知](../architecture/terminal-completion-notifications.md)。
+
+Windows 独立 Server 的自动通知沿用所属实例已登录的 CLI profile，调用
+`POST /api/feishu/notification-policy` 领取原有发送资格，再调用 `/api/feishu/notify`。
+这条路径不依赖长期存活的 PTY Host 是否代理飞书接口；未登录时按认证失败处理，
+不会绕过时长、查看状态或单次领取规则。
 
 ### 屏幕事项冻结导出
 

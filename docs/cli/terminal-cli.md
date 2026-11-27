@@ -230,6 +230,10 @@ Pi 的 `line`、`prompt_paste`、`prompt_replace` 输入先通过当前 Pane 的
 时返回失败，调用方保留草稿；不使用 Ctrl+U 猜测多行编辑器的清空行为。
 默认 Escape 停止当前请求，`/quit` 退出。Pi 尚不支持 Race worker 配置。
 
+Windows PTY 的 Codex / TraeX 在使用 Enter 提交的 `line`、`prompt_paste` 和 `prompt_replace`
+路径中先用 Ctrl+E 刷出原生粘贴缓冲，再发送提交键；长程任务回复复用同一输入序列。
+正文只写入一次，不通过重复发送正文或补发多个 Enter 来重试未知结果。
+
 历史只读取扩展登记的 Pi v3 JSONL 会话文件，并按当前分支展示消息、工具和压缩摘要。
 恢复使用已校验的 `--session <精确文件>`，文件缺失或 header ID 不匹配时失败，
 不会回退到最近会话。

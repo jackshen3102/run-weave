@@ -115,7 +115,15 @@ AI CLI 任务完成
 - **源文件**：`plugins/toolkit/hooks/feishu_stop_notify.sh`。
 - **运行副本**：`electron/resources/hooks/feishu_stop_notify.sh`，由 `pnpm toolkit:sync` 从 toolkit 同步，随 `resources/**` 打进 asar（与 app 图标同机制，无需改打包配置）。
 - **安装拷贝**：Electron 启动时 `installNotifyAssets()` 把它 `copyFile` 到 `~/.runweave/hooks/feishu_stop_notify.sh` 并 `chmod 0755`。
-- **launcher 调用**：`notifyFeishu` 调 `~/.runweave/hooks/feishu_stop_notify.sh`，存在才执行，stdin 传入原始 payload（注入正确 `source`、`terminalSessionId` 和 panel 上下文）。
+- **launcher 调用**：macOS/Linux 的 `notifyFeishu` 调 `feishu_stop_notify.sh`；Windows 用当前 Node 启动同一 `runweave-hook-bridge.cjs` 的通知 worker，避免直接执行 `.sh`，stdin 均传入带 Terminal 上下文的 payload。
+
+Windows 通知 worker 不依赖 Bash 或 jq，优先调用所属实例的 `runtime/bin/bound-cli.cjs`；
+独立 Stable Server 使用同一配置目录下已安装的 `server/rw.cjs`。不搜索全局 CLI 或其他实例。
+时长、查看缓冲和单次领取仍由原有 `rw feishu notify` 执行；失败写所属实例的
+`runtime/feishu-notify.log`。权威实现位于 `packages/agent-bridge/hooks/runweave-hook-bridge.cjs`，
+通过 `pnpm agents:build` 同步 Toolkit、Pi 与 Electron 副本。
+Hosted PTY 的网关不代理飞书接口；CLI 使用所属实例已有登录态访问同一 Backend 的
+资格查询与发送 API，继续执行同一份通知策略，无需重启持有终端的 Host。
 
 ### 集中 Bridge
 
@@ -172,7 +180,7 @@ Terminal 被确认删除时清除本地 topic，exited 状态保留。复用 top
 迁移期间可显式设置 `FEISHU_NOTIFY_TRANSPORT=webhook` 保留旧自定义机器人单向通知。
 两种 transport 互斥，不支持双发。应用模式稳定后可删除群内旧自定义机器人。
 
-### 飞书脚本核心流程
+### 飞书脚本核心流程（macOS/Linux）
 
 1. 从 stdin 读 payload JSON，只处理 `Stop` / `SubagentStop` 事件，其它直接 `return 0`。
 2. 检查绑定的 runtime config root/instance；业务配置由绑定的 `rw` 从实例 `settings.yaml` 读取。

@@ -45,6 +45,7 @@ macOS/Linux 保持原命令识别规则。终端退出只更新运行状态，�
 Backend 从面板元数据核对 provider、threadId 和 pane。仍在前台的空闲 TUI 可使用同一面板的
 `lastThreadId/lastThreadProvider`。Pi 和普通 shell 不展示入口。读设置时，Backend 可先返回持久缓存的
 模型目录并在后台刷新。iOS 按连接和终端读取本地缓存，再请求最新设置。
+Windows Hosted PTY 支持 Codex 和 TraeX，使用当前运行时的屏幕快照与原子输入序列读取或切换设置。
 
 提交时，Backend 在终端输入锁内核对面板身份和设置 revision，并验证所选模型及推理强度。
 

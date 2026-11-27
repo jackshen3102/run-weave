@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveAgyConfiguration } from "@runweave/config-node/agy";
+import headless from "@xterm/headless";
+import unicode11 from "@xterm/addon-unicode11";
 import type {
   TerminalAgentModelOption,
   TerminalAgentSettings,
@@ -10,7 +12,9 @@ import type {
   UpdateTerminalAgentSettingsRequest,
 } from "@runweave/shared/terminal/agent-settings";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
-import type { TmuxPaneTarget, TmuxService } from "../tmux/service";
+import type { TmuxKeySequenceItem, TmuxService } from "../tmux/service";
+import type { TerminalRuntimeRegistry } from "./registry";
+import type { TerminalScreenSnapshot } from "./output-screen";
 import { resolvePanelTarget } from "../application/panel-targets";
 import { beginTerminalReturn, TerminalInputBusyError } from "./input-admission";
 import { codexAppServerClient, traexAppServerClient } from "../../voice/codex-app-server-client";
@@ -34,8 +38,12 @@ export class TerminalAgentSettingsError extends Error {
 
 type Target = {
   session: TerminalSessionRecord;
-  pane: TmuxPaneTarget;
-  panelId: string;
+  terminal: {
+    cancelCopyMode?(): Promise<unknown>;
+    capture(): Promise<string>;
+    send(sequence: TmuxKeySequenceItem[]): Promise<void>;
+  };
+  panelId: string | null;
   threadId: string;
   provider: TerminalAgentSettingsProvider;
 };
@@ -53,15 +61,63 @@ function normalizeProvider(value: string | null | undefined): TerminalAgentSetti
   return null;
 }
 
+async function visibleHostedScreen(snapshot: TerminalScreenSnapshot): Promise<string> {
+  const screen = new headless.Terminal({ cols: snapshot.cols, rows: snapshot.rows, scrollback: 0, allowProposedApi: true });
+  try {
+    screen.loadAddon(new unicode11.Unicode11Addon());
+    screen.unicode.activeVersion = "11";
+    await new Promise<void>(resolve => screen.write(snapshot.data, resolve));
+    const buffer = screen.buffer.active;
+    return Array.from({ length: screen.rows }, (_, row) =>
+      buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "").join("\n");
+  } finally { screen.dispose(); }
+}
+
 async function resolveTarget(
   manager: TerminalSessionManager,
   tmux: TmuxService,
   session: TerminalSessionRecord,
   panelId?: string,
+  runtimeRegistry?: TerminalRuntimeRegistry,
 ): Promise<Target> {
-  if (session.status !== "running" || session.runtimeKind !== "tmux") {
+  if (session.status !== "running") {
     fail(409, "agent_settings_unavailable", "当前终端不可设置模型");
   }
+  if (session.runtimeKind === "pty") {
+    const thread = () => session.threadId
+      ? { id: session.threadId, provider: session.threadProvider }
+      : session.lastThreadId && session.lastThreadStatus === "idle"
+        ? { id: session.lastThreadId, provider: session.lastThreadProvider } : null;
+    const current = thread();
+    const provider = normalizeProvider(current?.provider);
+    const runtime = runtimeRegistry?.getSessionRuntime(session.id);
+    const hosted = runtime?.hosted;
+    if (panelId || !current || !provider || provider === "agy" || normalizeProvider(session.terminalState?.agent) !== provider || !hosted) {
+      fail(409, "agent_settings_unavailable", "当前终端没有可设置的 Codex 或 TraeX 会话");
+    }
+    const validate = () => {
+      const next = thread();
+      if (manager.getSession(session.id) !== session || session.status !== "running" ||
+          runtimeRegistry?.getSessionRuntime(session.id) !== runtime || next?.id !== current.id ||
+          normalizeProvider(next.provider) !== provider || normalizeProvider(session.terminalState?.agent) !== provider) {
+        fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
+      }
+    };
+    const keys: Record<string, string> = { Enter: "\r", Escape: "\x1b", Up: "\x1b[A", Down: "\x1b[B" };
+    return { session, panelId: null, threadId: current.id, provider, terminal: {
+      capture: async () => { validate(); return visibleHostedScreen(await hosted.snapshot()); },
+      send: async (sequence) => {
+        validate();
+        await hosted.writeSteps(sequence.flatMap(item => {
+          const data = item.type === "literal" ? item.value : keys[item.key] ??
+            (/^[1-9]$/.test(item.key) ? item.key : fail(400, "invalid_request", "不支持的模型菜单按键"));
+          return [{ type: "text" as const, data },
+            ...(item.delayAfterMs ? [{ type: "delay" as const, ms: item.delayAfterMs }] : [])];
+        }));
+      },
+    } };
+  }
+  if (session.runtimeKind !== "tmux") fail(409, "agent_settings_unavailable", "当前终端不可设置模型");
   const { panel, paneTarget } = await resolvePanelTarget(
     manager, session, { tmuxService: tmux }, panelId ? { panelId } : {}, "explicit-or-active",
   );
@@ -87,7 +143,11 @@ async function resolveTarget(
     normalizeProvider(panel.terminalState?.agent) !== provider) {
     fail(409, "agent_settings_unavailable", "当前面板没有可设置的 Codex、TraeX 或 AGY 会话");
   }
-  return { session, pane: paneTarget, panelId: panel.id, provider, threadId };
+  return { session, panelId: panel.id, provider, threadId, terminal: {
+    cancelCopyMode: () => tmux.cancelCopyMode(paneTarget, { strict: true }),
+    capture: async () => (await tmux.capturePane(paneTarget, 0)).data,
+    send: sequence => tmux.sendKeySequence(paneTarget, sequence),
+  } };
 }
 
 async function modelsFor(
@@ -185,12 +245,11 @@ async function readAgyThread(threadId: string): Promise<ThreadEntry> {
 
 async function readThread(
   target: Target,
-  tmux: TmuxService,
   models: TerminalAgentModelOption[] | Promise<TerminalAgentModelOption[]>,
 ): Promise<ThreadEntry> {
   const { provider, threadId } = target;
   if (provider === "agy") {
-    const [screen, options] = await Promise.all([capture(tmux, target.pane).catch(() => ""), models]);
+    const [screen, options] = await Promise.all([capture(target).catch(() => ""), models]);
     const selected = readAgyScreenModel(screen, options);
     return selected
       ? { id: threadId, model: selected.id, reasoningEffort: selected.defaultReasoningEffort }
@@ -239,40 +298,41 @@ export async function getTerminalAgentSettings(
   session: TerminalSessionRecord,
   panelId?: string,
   catalogService?: AgentModelCatalogService,
+  runtimeRegistry?: TerminalRuntimeRegistry,
 ): Promise<TerminalAgentSettingsResponse> {
-  const target = await resolveTarget(manager, tmux, session, panelId);
+  const target = await resolveTarget(manager, tmux, session, panelId, runtimeRegistry);
   const pendingModels = modelsFor(target.provider, catalogService);
   const [models, thread] = await Promise.all([
     pendingModels,
-    readThread(target, tmux, pendingModels),
+    readThread(target, pendingModels),
   ]);
-  const latest = await resolveTarget(manager, tmux, session, target.panelId);
+  const latest = await resolveTarget(manager, tmux, session, target.panelId ?? undefined, runtimeRegistry);
   if (latest.threadId !== target.threadId || latest.provider !== target.provider) {
     fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
   }
   return { settings: settingsFor(target, thread, models), models };
 }
 
-async function capture(tmux: TmuxService, pane: TmuxPaneTarget): Promise<string> {
+async function capture(target: Target): Promise<string> {
   // Menus redraw in place. Restrict matching to the visible screen so a prior
   // heading in scrollback cannot satisfy the next menu transition.
-  return (await tmux.capturePane(pane, 0)).data;
+  return target.terminal.capture();
 }
 
-async function waitForMenu(tmux: TmuxService, pane: TmuxPaneTarget, heading: string): Promise<string> {
+async function waitForMenu(target: Target, heading: string): Promise<string> {
   const deadline = Date.now() + MENU_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const text = await capture(tmux, pane);
+    const text = await capture(target);
     if (text.includes(heading)) return text.slice(text.lastIndexOf(heading));
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
   fail(409, "settings_unconfirmed", "Agent 模型菜单未按预期打开");
 }
 
-async function waitForEitherMenu(tmux: TmuxService, pane: TmuxPaneTarget, headings: string[]): Promise<string> {
+async function waitForEitherMenu(target: Target, headings: string[]): Promise<string> {
   const deadline = Date.now() + MENU_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const text = await capture(tmux, pane);
+    const text = await capture(target);
     const heading = headings.find((candidate) => text.includes(candidate));
     if (heading) return text.slice(text.lastIndexOf(heading));
     await new Promise((resolve) => setTimeout(resolve, 120));
@@ -280,12 +340,12 @@ async function waitForEitherMenu(tmux: TmuxService, pane: TmuxPaneTarget, headin
   fail(409, "settings_unconfirmed", "Agent 菜单未按预期切换");
 }
 
-async function press(tmux: TmuxService, pane: TmuxPaneTarget, key: string): Promise<void> {
-  await tmux.sendKeySequence(pane, [{ type: "key", key }]);
+async function press(target: Target, key: string): Promise<void> {
+  await target.terminal.send([{ type: "key", key }]);
 }
 
-async function typeText(tmux: TmuxService, pane: TmuxPaneTarget, value: string): Promise<void> {
-  await tmux.sendKeySequence(pane, [{ type: "literal", value, delayAfterMs: 250 }]);
+async function typeText(target: Target, value: string): Promise<void> {
+  await target.terminal.send([{ type: "literal", value, delayAfterMs: 250 }]);
 }
 
 function findAgyModel(models: TerminalAgentModelOption[], value: string): TerminalAgentModelOption | undefined {
@@ -313,8 +373,8 @@ function agyComposer(screen: string): string | undefined {
   return frame?.startsWith(">") ? frame.slice(1).trim() : undefined;
 }
 
-async function selectAgyModel(tmux: TmuxService, target: Target, model: TerminalAgentModelOption): Promise<void> {
-  const initial = await capture(tmux, target.pane);
+async function selectAgyModel(target: Target, model: TerminalAgentModelOption): Promise<void> {
+  const initial = await capture(target);
   const draft = agyComposer(initial)?.replace(/\s+/g, " ");
   if (!/^\? for shortcuts(?:\s|$)/m.test(initial) ||
     (draft !== "" &&
@@ -326,18 +386,18 @@ async function selectAgyModel(tmux: TmuxService, target: Target, model: Terminal
     fail(409, "model_unavailable", "所选 AGY 模型不可用");
   }
   // An iOS scroll can leave this pane in tmux history mode.
-  await tmux.cancelCopyMode(target.pane, { strict: true });
-  await typeText(tmux, target.pane, `/model ${model.id}`);
-  const composer = agyComposer(await capture(tmux, target.pane));
+  await target.terminal.cancelCopyMode?.();
+  await typeText(target, `/model ${model.id}`);
+  const composer = agyComposer(await capture(target));
   const typedModel = composer?.match(/^\/model\s+([\s\S]+)$/)?.[1];
   // AGY wraps the visible command in narrow panes, even with capture-pane -J.
   if (typedModel?.replace(/[ \t]*\n[ \t]*/g, "") !== model.id) {
     fail(409, "settings_unconfirmed", "AGY 未识别模型切换命令");
   }
-  await press(tmux, target.pane, "Enter");
+  await press(target, "Enter");
   const deadline = Date.now() + MENU_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const screen = await capture(tmux, target.pane);
+    const screen = await capture(target);
     if (agyComposer(screen) === "" && agyModelReplies(screen).at(-1) === model.label) return;
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
@@ -352,8 +412,7 @@ function menuRows(text: string): { number: number; label: string; selected: bool
 }
 
 async function selectRow(
-  tmux: TmuxService,
-  pane: TmuxPaneTarget,
+  target: Target,
   menu: string,
   predicate: (label: string) => boolean,
   searchable: boolean,
@@ -362,18 +421,18 @@ async function selectRow(
   const desired = rows.find((row) => predicate(row.label));
   if (!desired) fail(409, "model_unavailable", "Agent 菜单中未找到所选选项，请刷新设置后重试");
   if (!searchable && desired.number <= 9) {
-    await press(tmux, pane, String(desired.number));
+    await press(target, String(desired.number));
     return;
   }
   const current = rows.findIndex((row) => row.selected);
-  const target = rows.indexOf(desired);
-  if (current < 0 || target < 0 || Math.abs(target - current) > 15) {
+  const targetIndex = rows.indexOf(desired);
+  if (current < 0 || targetIndex < 0 || Math.abs(targetIndex - current) > 15) {
     fail(409, "settings_unconfirmed", "无法安全定位 Agent 菜单选项");
   }
-  for (let index = current; index !== target; index += target > current ? 1 : -1) {
-    await press(tmux, pane, target > current ? "Down" : "Up");
+  for (let index = current; index !== targetIndex; index += targetIndex > current ? 1 : -1) {
+    await press(target, targetIndex > current ? "Down" : "Up");
   }
-  await press(tmux, pane, "Enter");
+  await press(target, "Enter");
 }
 
 function effortLabel(effort: string): string {
@@ -381,45 +440,40 @@ function effortLabel(effort: string): string {
 }
 
 async function chooseEffort(
-  tmux: TmuxService,
-  pane: TmuxPaneTarget,
+  target: Target,
   effort: string,
 ): Promise<void> {
-  let menu = await waitForMenu(tmux, pane, "Select Reasoning Level");
+  let menu = await waitForMenu(target, "Select Reasoning Level");
   const desired = effortLabel(effort);
   if (!menuRows(menu).some((row) => row.label.toLowerCase().startsWith(desired))) {
-    await selectRow(tmux, pane, menu, (label) => label.toLowerCase().startsWith("more reasoning"), false);
-    menu = await waitForMenu(tmux, pane, "Advanced Reasoning");
+    await selectRow(target, menu, (label) => label.toLowerCase().startsWith("more reasoning"), false);
+    menu = await waitForMenu(target, "Advanced Reasoning");
   }
-  await selectRow(tmux, pane, menu, (label) => label.toLowerCase().startsWith(desired), false);
+  await selectRow(target, menu, (label) => label.toLowerCase().startsWith(desired), false);
 }
 
 async function chooseModelAndEffort(
-  tmux: TmuxService,
   target: Target,
   model: TerminalAgentModelOption,
   effort: string,
 ): Promise<void> {
-  const initial = await capture(tmux, target.pane);
+  const initial = await capture(target);
   // Rendered placeholders and projected Agent state do not expose the actual
   // composer buffer. Attempt the native menu and confirm its result instead.
   const wasMax = /\(MAX\)/.test(initial);
   let submitted = false;
   try {
-    await typeText(tmux, target.pane, "/model");
-    await press(tmux, target.pane, "Enter");
+    await typeText(target, "/model");
+    await press(target, "Enter");
+    // Wait for the native menu after submitting the slash command. The PTY
+    // write acknowledgement can precede rendering; a stale autocomplete frame
+    // must never cause a second Enter that selects the current model.
+    let menu = await waitForMenu(target, "Select Model and Effort");
     if (target.provider === "traex") {
-      // TraeX first confirms the slash-command completion, then opens its menu.
-      const prompt = await waitForEitherMenu(tmux, target.pane,
-        ["Select Model and Effort", "/model  choose what model"]);
-      if (!prompt.startsWith("Select Model and Effort")) await press(tmux, target.pane, "Enter");
-    }
-    let menu = await waitForMenu(tmux, target.pane, "Select Model and Effort");
-    if (target.provider === "traex") {
-    await typeText(tmux, target.pane, model.label);
+    await typeText(target, model.label);
     const deadline = Date.now() + MENU_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      menu = await waitForMenu(tmux, target.pane, "Select Model and Effort");
+      menu = await waitForMenu(target, "Select Model and Effort");
       if (menu.split("\n").some((line) => line.trim() === model.label)) break;
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
@@ -427,31 +481,31 @@ async function chooseModelAndEffort(
       fail(409, "settings_unconfirmed", "TraeX 模型搜索未完成");
     }
     // TraeX has a searchable model list. A name match must be visible before Enter.
-    await selectRow(tmux, target.pane, menu,
+    await selectRow(target, menu,
       (label) => label.toLowerCase().startsWith(model.label.toLowerCase()), true);
-    const next = await waitForEitherMenu(tmux, target.pane,
+    const next = await waitForEitherMenu(target,
       ["Select Model and Mode", "Select Reasoning Level"]);
     if (next.startsWith("Select Model and Mode")) {
       const mode = next;
       if (wasMax && !menuRows(mode).some((row) => row.label.includes("/ Max"))) {
         fail(409, "model_unavailable", "目标模型不支持当前 Max 模式");
       }
-      await selectRow(tmux, target.pane, mode,
+      await selectRow(target, mode,
         (label) => label.includes(wasMax ? "/ Max" : "/ Standard"), false);
     }
     } else {
       // Codex renders display names, which can differ from catalog IDs.
       const names = [model.id, model.label].map((name) => name.toLowerCase());
-      await selectRow(tmux, target.pane, menu,
+      await selectRow(target, menu,
         (label) => names.some((name) => {
           const text = label.toLowerCase();
           return text === name || text.startsWith(name + " ");
         }), false);
     }
-    await chooseEffort(tmux, target.pane, effort);
+    await chooseEffort(target, effort);
     submitted = true;
   } finally {
-    if (!submitted) await press(tmux, target.pane, "Escape").catch(() => undefined);
+    if (!submitted) await press(target, "Escape").catch(() => undefined);
   }
 }
 
@@ -461,6 +515,7 @@ export async function updateTerminalAgentSettings(
   session: TerminalSessionRecord,
   request: UpdateTerminalAgentSettingsRequest,
   catalogService?: AgentModelCatalogService,
+  runtimeRegistry?: TerminalRuntimeRegistry,
 ): Promise<TerminalAgentSettingsResponse> {
   let release: () => void;
   try { release = beginTerminalReturn(session); }
@@ -469,12 +524,12 @@ export async function updateTerminalAgentSettings(
     throw error;
   }
   try {
-    const target = await resolveTarget(manager, tmux, session, request.panelId ?? undefined);
+    const target = await resolveTarget(manager, tmux, session, request.panelId ?? undefined, runtimeRegistry);
     if (target.threadId !== request.threadId) fail(409, "settings_changed", "Agent 会话已切换，请刷新设置");
     const pendingModels = modelsFor(target.provider, catalogService, { requireFresh: true });
     const [initialModels, thread] = await Promise.all([
       pendingModels,
-      readThread(target, tmux, pendingModels),
+      readThread(target, pendingModels),
     ]);
     let models = initialModels;
     let model = models.find((option) => option.id === request.model);
@@ -492,17 +547,17 @@ export async function updateTerminalAgentSettings(
       current.model === model.id && current.reasoningEffort === request.reasoningEffort) {
       return { settings: current, models };
     }
-    const latest = await resolveTarget(manager, tmux, session, target.panelId);
+    const latest = await resolveTarget(manager, tmux, session, target.panelId ?? undefined, runtimeRegistry);
     if (latest.threadId !== target.threadId || latest.provider !== target.provider) {
       fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
     }
-    const latestThread = await readThread(latest, tmux, models);
+    const latestThread = await readThread(latest, models);
     if (settingsFor(target, latestThread, models).revision !== current.revision) {
       fail(409, "settings_changed", "模型设置已变化，请刷新后重试");
     }
     if (target.provider === "agy") {
-      await selectAgyModel(tmux, target, model);
-      const confirmed = await resolveTarget(manager, tmux, session, target.panelId);
+      await selectAgyModel(target, model);
+      const confirmed = await resolveTarget(manager, tmux, session, target.panelId ?? undefined, runtimeRegistry);
       if (confirmed.threadId !== target.threadId || confirmed.provider !== target.provider) {
         fail(409, "settings_changed", "当前 Agent 会话已切换，请刷新设置");
       }
@@ -511,10 +566,10 @@ export async function updateTerminalAgentSettings(
       }, models);
       return { settings, models };
     }
-    await chooseModelAndEffort(tmux, target, model, request.reasoningEffort);
+    await chooseModelAndEffort(target, model, request.reasoningEffort);
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline) {
-      const next = await readThread(target, tmux, models);
+      const next = await readThread(target, models);
       const settings = settingsFor(target, next, models);
       if (settings.model === model.id && settings.reasoningEffort === request.reasoningEffort) {
         return { settings, models };
