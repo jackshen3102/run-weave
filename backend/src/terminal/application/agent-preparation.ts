@@ -47,6 +47,8 @@ export interface PrepareTerminalAgentInternalOptions {
   skipInitialPrompt?: boolean;
   /** Scheduled launches can exceed the PTY line limit before shell initialization. */
   stageResumeCommand?: boolean;
+  /** Launch in the fresh Worktree shell, preserving visible setup history. */
+  reuseReadyShell?: boolean;
 }
 
 export async function prepareTerminalAgent(
@@ -242,7 +244,7 @@ export async function prepareTerminalAgent(
     }
 
     try {
-      if (reusingPanel && (!resumingThread || resetPanelBeforeResume)) {
+      if (reusingPanel && !internalOptions?.reuseReadyShell && (!resumingThread || resetPanelBeforeResume)) {
         if (!isInteractiveShellLaunch(session.command, session.args)) {
           throw new Error(
             "Terminal session command is not a persistent interactive shell",
@@ -270,7 +272,7 @@ export async function prepareTerminalAgent(
       }
       if (resetPanelBeforeResume) {
         await options.tmuxService.waitForPaneReady(paneTarget);
-      } else if (createdPanel || (reusingPanel && !resumingThread)) {
+      } else if (createdPanel || (reusingPanel && !resumingThread && !internalOptions?.reuseReadyShell)) {
         await delay(AGENT_SHELL_STARTUP_DELAY_MS);
       }
       assertPreparationTargetCurrent({

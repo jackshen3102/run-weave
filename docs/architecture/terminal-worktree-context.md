@@ -94,14 +94,14 @@ Race 为同一目标的每个 worker 创建独立 Worktree、分支与 Terminal�
 不自动选赢家、合并或推送。当前连接一次只保留一个 Race；结束 Race 停止 worker Terminal 并清除
 Race 记录，但保留 Worktree 与分支供人工比较。实现见 [RaceService](../../backend/src/race/race-service.ts)。
 
-普通 Worktree 删除会先等待 Race 创建结束。专用的
-`DELETE /api/race/:raceId/worktree/:workerId` 仍未等待同一创建屏障，创建期间并发调用可能留下
-指向已删除路径的 worker Session。这是代码侧待处理的生命周期风险；结束 Race 可清理已登记的 Session。
+普通创建、普通删除、Race 创建与专用删除使用规范父项目路径的同一进程内互斥锁。创建锁覆盖 Git 检出、Context 刷新及首终端登记。Race 专用删除等候当前创建结束后重新读取 worker。
 验收入口是 [Race](../testing/terminal/race.testplan.yaml)。
 
 ## API
 
 ```http
+GET /api/terminal/project/:parentProjectId/worktree-create-preview
+POST /api/terminal/project/:parentProjectId/contexts
 GET /api/terminal/project/:parentProjectId/contexts
 PATCH /api/terminal/project/:parentProjectId/contexts/:childProjectId
 DELETE /api/terminal/project/:parentProjectId/contexts/:childProjectId
@@ -115,3 +115,7 @@ Content-Type: application/json
 Preview 仍使用 `/api/terminal/project/:effectiveProjectId/preview/*`，Session create 仍使用现有 `projectId` 字段。Activity 与 Project-scoped Quick Input 继续精确匹配该 ID，父 Project 不隐式汇总子 Project 数据。
 
 验收入口：`docs/testing/terminal/workspace/project-context.testplan.yaml` 与 `docs/testing/terminal/workspace/deletion.testplan.yaml`。
+
+桌面 Rail 和 iOS 新建终端页从预览读取基准引用和父目录的 setup。创建请求在本进程内按父项目和 operationId 保留一小时成功回执。新目录必须是受控 .worktree 下的直接子项，检出现有分支需要显式选择。创建成功返回新 Context、首终端 ID 和 setupStatus，两端直接打开该终端。若检出已成功而终端启动失败，可从 Context 列表重新打开。
+
+初始化批准与执行见[工作区服务配置](./terminal-workspace-services.md)。[创建及初始化验收](../testing/terminal/workspace/provision-and-setup.testplan.yaml)。

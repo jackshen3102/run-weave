@@ -123,3 +123,9 @@ Browser Group，并保持 runtime route unassigned；普通本机 Web 使用新�
 实现验证还应执行 Backend、Frontend、Electron 与 Shared 的 typecheck/lint、
 `pnpm architecture:check`、`pnpm docs:check`。涉及 UI 或 Browser 行为时必须使用受管 Dev Session 和
 Playwright CLI 取证；静态门禁或 verifier 不能替代真实桌面证据。
+
+## Worktree 初始化
+
+`schemaVersion: 1` 允许省略 `services`，默认使用空对象。可选的 `worktree.setup` 包含 `command` 和相对目录 `cwd`（默认 `.`）。Backend 在新 Worktree 检出后使用 `O_NOFOLLOW` 重新打开配置。Windows 使用 `CreateFileW(FILE_FLAG_OPEN_REPARSE_POINT)` 并在同一打开句柄上拒绝重解析点或目录。随后 Backend 解析 cwd 实际目录边界，并对规范化的 `[repositoryId, cwd, command]` 计算 SHA-256。当前请求必须主动选择运行并提交匹配版本。Backend 将批准记录以 0600 原子写入自身 profile，同一仓库同一版本下次默认勾选。版本不匹配时首终端停留在 Shell。
+
+包装进程在首终端打印命令、输出和一次性随机完成标记，并在本次私有临时目录原子发布同一退出标记供 Backend 读取。只有成功退出且原面板未被接管才启动所选 CLI。失败、关闭、用户输入或 15 分钟未收到标记时结束自动交接。入口见[Worktree Context](./terminal-worktree-context.md)。

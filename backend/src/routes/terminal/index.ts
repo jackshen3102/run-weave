@@ -221,6 +221,7 @@ export function createTerminalRouter(
     workspaceServiceManager: options?.workspaceServiceManager,
   });
   registerTerminalProjectContextRoutes(router, terminalSessionManager, {
+    ptyService: options?.ptyService,
     runtimeRegistry: options?.runtimeRegistry,
     terminalStateService: options?.terminalStateService,
     terminalEventService: options?.terminalEventService,

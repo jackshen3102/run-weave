@@ -425,6 +425,7 @@ export async function sendInputToSession(
           buildPromptReplaceSequence(data, submit === true, submitKey, attachClipboardImages),
         );
       } else if (mode === "line") {
+        options.validateSupervisorTarget?.();
         await options.tmuxService.sendKeySequence(
           target,
           buildTerminalLineSequence(data),

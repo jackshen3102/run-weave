@@ -8,6 +8,7 @@ import type {
   TerminalProjectContextBranchStatusResponse,
   TerminalProjectContextListItem,
   TerminalWorktreeDeletionResult,
+  CreateWorktreeContextRequest, CreateWorktreeContextResponse, WorktreeCreatePreviewResponse,
 } from "@runweave/shared/terminal/project-context";
 import { requestJson, requestText, requestVoid } from "../http";
 
@@ -164,5 +165,17 @@ export async function reorderTerminalProjects(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function previewWorktreeCreation(apiBase: string, token: string, parent: string) {
+  return requestJson<WorktreeCreatePreviewResponse>(apiBase,
+    `/api/terminal/project/${encodeURIComponent(parent)}/worktree-create-preview`,
+    { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function createWorktreeContext(apiBase: string, token: string, parent: string, request: CreateWorktreeContextRequest) {
+  return requestJson<CreateWorktreeContextResponse>(apiBase, `/api/terminal/project/${encodeURIComponent(parent)}/contexts`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
   });
 }

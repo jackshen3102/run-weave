@@ -334,7 +334,6 @@ function createHttpApp(
       workspaceServiceManager: services.workspaceServiceManager,
       worktreeDeletionOwnerHooks: {
         beforeDelete: async ({ childProjectId }) => {
-          await services.raceService.waitForWorktreeCreation();
           try {
             return await services.workspaceServiceManager.acquireDeletionGuard([
               childProjectId,

@@ -30,6 +30,7 @@ import {
   updateTerminalProjectContext,
 } from "../../../services/terminal/index";
 import { HttpError } from "../../../services/http";
+import { WorktreeCreateDialog } from "./worktree-create-dialog";
 import { WorktreeDeleteDialog } from "./worktree-delete-dialog";
 import {
   ContextMenu,
@@ -119,6 +120,7 @@ export function TerminalWorktreeRail({
     useState<TerminalBrowserProfilePreferences | null>(null);
   const [pendingDeletion, setPendingDeletion] =
     useState<TerminalProjectContextListItem | null>(null);
+  const [createTarget, setCreateTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [cleanupNotice, setCleanupNotice] = useState<string | null>(null);
@@ -521,6 +523,11 @@ export function TerminalWorktreeRail({
               })}
             </div>
           ) : null}
+          {parentProjectId && <button type="button" aria-label="新建 Worktree" title="新建 Worktree"
+            className="border-t border-slate-800 p-2 text-xs text-sky-400 hover:bg-slate-900"
+            onClick={() => setCreateTarget(JSON.stringify([scope, parentProjectId]))}>
+            {collapsed ? "＋" : "＋ 新建 Worktree"}
+          </button>}
           {!collapsed ? (
             <div
               role="separator"
@@ -537,6 +544,20 @@ export function TerminalWorktreeRail({
             />
           ) : null}
         </aside>
+      )}
+      {parentProjectId && createTarget === JSON.stringify([scope, parentProjectId]) && (
+        <WorktreeCreateDialog key={createTarget} apiBase={apiBase} token={token} parent={parentProjectId}
+          close={() => setCreateTarget(null)} created={result => {
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId) }),
+              queryClient.invalidateQueries({ queryKey: terminalQueryKeys.sessions(scope) }),
+            ]).then(() => {
+              selectProjectContext(parentProjectId, result.context.projectId, result.terminalSessionId);
+              setCollapsed(false);
+              setRequestError(result.setupStatus === "revision_mismatch_skipped" ? "检出的初始化命令与批准版本不符，已跳过。" : null);
+            }).catch(error => setRequestError(String(error)));
+            setCreateTarget(null);
+          }} />
       )}
       <WorktreeDeleteDialog
         pendingDeletion={pendingDeletion}

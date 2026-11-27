@@ -62,3 +62,8 @@ export interface WorkspaceServiceMutationResponse {
   accepted: boolean;
   service: WorkspaceServiceSnapshot;
 }
+
+export interface WorktreeSetupDefinition {
+  command: string;
+  cwd: string;
+}

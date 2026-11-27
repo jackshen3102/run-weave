@@ -8,7 +8,8 @@ import type {
   TerminalState,
 } from "@runweave/shared/terminal-protocol";
 import { aggregateProgramStatus, type TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
-import type { TerminalSessionManager } from "../manager/manager";
+import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
+import type { TerminalProjectContextRecord, TerminalSessionManager } from "../manager/manager";
 import { resolveHostedAgentRecovery } from "../runtime/recovery-policy";
 import { supportsHostedAgentRecovery } from "../runtime/pty-host-client";
 
@@ -212,5 +213,22 @@ export function toPanelWorkspacePayload(
       .listPanels(terminalSessionId)
       .map((panel) => toPanelListItem(panel, workspace.activePanelId)),
     renderMode: workspace.renderMode,
+  };
+}
+
+export function toProjectContextPayload(
+  context: TerminalProjectContextRecord,
+): TerminalProjectContextListItem {
+  return {
+    projectId: context.projectId,
+    parentProjectId: context.parentProjectId,
+    name: context.name,
+    branch: context.branch,
+    head: context.head,
+    path: context.path,
+    isPrimary: context.isPrimary,
+    pinned: context.pinned,
+    pinOrder: context.pinOrder,
+    availability: context.availability,
   };
 }

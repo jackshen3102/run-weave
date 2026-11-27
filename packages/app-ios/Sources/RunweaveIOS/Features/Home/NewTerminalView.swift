@@ -4,6 +4,7 @@ struct NewTerminalView: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject var session: AppSession
   let project: TerminalProject
+  let opened: (WorktreeCreation) -> Void
   let create: (String) -> Void
   @State private var contexts: [TerminalProjectContext] = []
   @State private var selection = ""
@@ -30,6 +31,11 @@ struct NewTerminalView: View {
         }
         if !contexts.isEmpty {
           Section("工作目录") {
+            if project.path != nil {
+              NavigationLink("新建 Worktree…") {
+                NewWorktreeView(session: session, parent: project.id, opened: opened)
+              }.accessibilityIdentifier("new-worktree")
+            }
             ForEach(contexts.filter(\.isPrimary) + contexts.filter { !$0.isPrimary }) { context in
               Button { selection = context.id } label: {
                 HStack {

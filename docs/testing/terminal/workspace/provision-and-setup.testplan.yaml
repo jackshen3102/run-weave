@@ -1,0 +1,81 @@
+version: 1
+name: 一键新建 Worktree 终端与受控 setup 验收
+description: >
+  验证桌面 Worktree Rail 与原生 iOS 新建终端入口可安全创建受控 .worktree 直接子目录并打开终端，
+  严格执行 runweave.json worktree.setup 的 SHA-256 版本批准门禁，并在脚本成功时自动启动目标 Agent、失败时保留排障现场。
+
+cases:
+  - id: WTPROV-001
+    name: 桌面端一键新建合法子 Worktree 并原子切换上下文与终端
+    required: true
+    description: >
+      验证从桌面 Worktree Rail 输入合法目录名与新分支名创建后，生成规范子 projectId、检出正确基准提交并自动聚焦新终端。
+    preconditions:
+      - 隔离测试环境拥有含有效提交历史的 Git 父项目，尚未配置 `runweave.json`。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 点击桌面 Worktree Rail 的新建入口，输入目录名 `wt-feature-a` 与分支 `feat/feature-a` 提交创建。
+      - 确认 `.worktree/wt-feature-a` 真实创建且被 Git 登记，Rail 选中新子项，当前终端 `pwd` 与 `git branch --show-current` 精确匹配新目录与新分支，重复提交相同 `operationId` 只返回同一结果而不重复创建。
+
+  - id: WTPROV-002
+    name: 严格拦截路径逃逸、符号链接越界、选项注入与冲突分支
+    required: true
+    description: >
+      验证包含路径穿越、连字符开头名称、`.worktree` 符号链接越界或已被其他 Worktree 检出的分支请求全部 fail closed 且无残留副作用。
+    preconditions:
+      - 隔离测试环境准备了正常父项目，以及另一个 `.worktree` 被替换为指向外部目录符号链接的测试父项目。
+    steps:
+      - 分别向正常父项目提交 `../escape`、`a/b`、`-bad-flag` 及当前主目录已检出的分支名；确认全部以 400 或 409 拒绝，磁盘未生成新目录且未创建多余终端。
+      - 向 `.worktree` 符号链接越界的项目提交合法名称创建请求；确认以 403 拒绝，外部目录无任何文件写入。
+
+  - id: WTPROV-003
+    name: 未获当前 SHA-256 版本批准时绝不执行 runweave.json setup 脚本
+    required: true
+    description: >
+      验证首次遇到 worktree.setup、未传批准版本号、或目标分支检出后的实际文件哈希与已批准版本不符时，系统绝不执行脚本命令。
+    preconditions:
+      - 隔离 Git 项目的 `runweave.json` 声明了会将哨兵文件写入当前目录的 `worktree.setup` 命令，本机尚无该仓库的批准记录。
+    steps:
+      - 调用新建接口但不传 `approvedSetupRevision`（或传 `runSetup=false`）；确认新 Worktree 与纯 Shell 终端正常建立，但哨兵文件不存在。
+      - 在另一测试分支修改 `runweave.json` 的 `setup.command`，携带主目录旧版本的 `approvedSetupRevision` 基于该测试分支创建 Worktree；确认检出后因实际文件 SHA-256 不匹配而跳过脚本执行并返回 `revision_mismatch_skipped`，新命令未被执行。
+
+  - id: WTPROV-004
+    name: 已批准 setup 在首面板可见执行并在退出码为 0 后启动所选 Agent
+    required: true
+    description: >
+      验证用户勾选批准当前 setupRevision 后，脚本在新建终端首面板可见运行，退出码为 0 时自动在同一面板启动目标 Agent，且同版本再次新建记住已批准状态。
+    preconditions:
+      - 隔离 Git 项目的 `runweave.json` 配置了退出码为 0 且生成标记文件的 `worktree.setup` 命令，测试环境安装了受控 Agent CLI（或可验证启动的本地 CLI）。
+    steps:
+      - 使用 `$toolkit:playwright-cli` 在新建弹窗核对展示的完整 `setup` 命令与哈希，勾选信任并选择完成后启动目标 CLI，点击创建。
+      - 观察新终端面板输出；确认先可见打印并执行 `setup` 命令、生成标记文件，随后自动在同一面板拉起目标 CLI，再次打开新建预览时 `setup.approved` 为 `true`。
+
+  - id: WTPROV-005
+    name: setup 非零退出码时保留终端报错现场且不盲目启动 Agent
+    required: true
+    description: >
+      验证初始化脚本失败（退出码非 0）时终端保持打开并保留完整错误日志，不会继续启动目标编码 Agent 掩盖环境故障。
+    preconditions:
+      - 隔离 Git 项目的 `runweave.json` 配置了输出明确错误信息并以 `exit 1` 退出的已批准 `worktree.setup` 命令。
+    steps:
+      - 请求创建新 Worktree、执行已批准 `setup` 并指定 `launchAgent="codex"`。
+      - 等待脚本结束；确认新终端面板保留清晰错误输出并停留在空闲 Shell，`activeCommand` 不是 `codex`，未产生 Agent 启动进程。
+
+  - id: WTPROV-006
+    name: Worktree 新建与删除共享父项目互斥锁不产生半状态竞态
+    required: true
+    description: >
+      验证同一父项目下并发发起创建与删除操作时串行安全收敛，不会留下孤立注册记录或破坏兄弟 Worktree。
+    preconditions:
+      - 隔离父项目已存在子 Worktree `wt-old`，并准备好创建 `wt-new` 的合法请求。
+    steps:
+      - 并发提交删除 `wt-old` 与创建 `wt-new` 请求，随后刷新 `GET /contexts` 与 `git worktree list`；确认 `wt-old` 已干净移除、`wt-new` 可用且终端正常，两者之间无锁死或 500 异常。
+
+  - id: WTPROV-007
+    name: 原生 iOS 支持在新建终端流程中创建 Worktree 并审阅批准 setup
+    required: true
+    description: >
+      验证原生 iOS 从首页项目加号进入新建 Worktree 时展示 setup 命令全文与信任勾选，创建后直接进入新子上下文终端。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，测试项目含 `runweave.json` 的 `worktree.setup` 配置。
+    steps:
+      - 使用 `$toolkit:agent-device` 在首页点击测试项目的 `＋` 并选择新建 Worktree，确认页面展示 `setup` 命令全文；勾选信任并提交创建，确认自动打开归属新 Worktree 路径的终端会话。

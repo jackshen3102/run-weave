@@ -1,12 +1,14 @@
+import { toProjectContextPayload } from "../../../terminal/application/payloads";
+import { WorktreeCreationService } from "../../../terminal/workspace-service/worktree-creation";
+import { WorktreeProvisionError } from "../../../terminal/workspace-service/worktree-provisioner";
+import type { PtyService } from "../../../terminal/runtime/pty-service";
 import type { Router } from "express";
 import type {
   TerminalProjectContextBranchStatus,
-  TerminalProjectContextListItem,
 } from "@runweave/shared/terminal/project-context";
 import { z } from "zod";
 import { BranchUpdatesTargetChangedError, HomeBranchStatusService } from "../../../terminal/git/home-branch-status";
 import type {
-  TerminalProjectContextRecord,
   TerminalSessionManager,
 } from "../../../terminal/manager/manager";
 import { logger } from "../../../logging/index";
@@ -30,27 +32,11 @@ const updateProjectContextSchema = z
   .object({ pinned: z.boolean() })
   .strict();
 
-function toProjectContextPayload(
-  context: TerminalProjectContextRecord,
-): TerminalProjectContextListItem {
-  return {
-    projectId: context.projectId,
-    parentProjectId: context.parentProjectId,
-    name: context.name,
-    branch: context.branch,
-    head: context.head,
-    path: context.path,
-    isPrimary: context.isPrimary,
-    pinned: context.pinned,
-    pinOrder: context.pinOrder,
-    availability: context.availability,
-  };
-}
-
 export function registerTerminalProjectContextRoutes(
   router: Router,
   terminalSessionManager: TerminalSessionManager,
   options?: {
+    ptyService?: PtyService;
     runtimeRegistry?: TerminalRuntimeRegistry;
     terminalStateService?: TerminalStateService;
     terminalEventService?: TerminalEventService;
@@ -70,6 +56,36 @@ export function registerTerminalProjectContextRoutes(
     tmuxOutputWatcher: options?.tmuxOutputWatcher,
     activity: options?.activity,
     ownerHooks: options?.ownerHooks,
+  });
+
+  const creation = new WorktreeCreationService(terminalSessionManager, options ?? {});
+  const creationSchema = z.object({
+    operationId: z.string().uuid(), name: z.string().transform(value => value.normalize("NFC")).pipe(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u)),
+    branch: z.string().min(1).max(255).optional(), baseRef: z.string().max(512).optional(),
+    checkoutExistingBranch: z.boolean().optional(), runSetup: z.boolean().optional(),
+    approvedSetupRevision: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
+    launchAgent: z.enum(["none", "codex", "claude", "pi", "traex", "agy"]).optional(),
+  }).strict().refine(value => value.checkoutExistingBranch === true || Boolean(value.baseRef?.trim()), {
+    message: "baseRef is required when creating a new branch",
+    path: ["baseRef"],
+  });
+  const creationError = (res: import("express").Response, error: unknown) => {
+    if (error instanceof WorktreeProvisionError) res.status(error.statusCode).json({ message: error.message });
+    else {
+      terminalProjectContextLogger.error("terminal.worktree.create.failed", { error });
+      res.status(500).json({ message: "Worktree creation unavailable" });
+    }
+  };
+  router.get("/project/:parentProjectId/worktree-create-preview", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try { res.json(await creation.preview(req.params.parentProjectId)); }
+    catch (error) { creationError(res, error); }
+  });
+  router.post("/project/:parentProjectId/contexts", async (req, res) => {
+    const parsed = creationSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid Worktree creation request", errors: parsed.error.flatten() }); return; }
+    try { res.status(201).json(await creation.create(req.params.parentProjectId, parsed.data)); }
+    catch (error) { creationError(res, error); }
   });
 
   router.get("/project/:projectId/branch-updates", async (req, res) => {
