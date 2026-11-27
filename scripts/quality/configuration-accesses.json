@@ -1944,6 +1944,30 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；writeFile(this.resolveScrollbackFile(terminalSessionId))"
   },
   {
+    "file": "backend/src/terminal/store/store-recovery.ts",
+    "kind": "file-io",
+    "expression": "handle.writeFile(bytes)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "将终端会话状态或快照写入临时文件，供同步后原子替换目标文件。"
+  },
+  {
+    "file": "backend/src/terminal/store/store-recovery.ts",
+    "kind": "file-io",
+    "expression": "readFile(latestPath)",
+    "count": 1,
+    "category": "runtime-state",
+    "reason": "读取最近一份终端会话快照，比较会话布局以避免重复归档。"
+  },
+  {
+    "file": "backend/src/terminal/store/store-recovery.ts",
+    "kind": "file-io",
+    "expression": "readFile(this.storeFile)",
+    "count": 3,
+    "category": "runtime-state",
+    "reason": "读取终端会话状态文件，用于启动校验、损坏归档和状态快照。"
+  },
+  {
     "file": "backend/src/terminal/tmux/internals.ts",
     "kind": "environment",
     "expression": "env.LANG",
