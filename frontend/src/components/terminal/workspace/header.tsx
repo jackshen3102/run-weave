@@ -377,7 +377,7 @@ export function TerminalWorkspaceHeader({
               {window.electronAPI?.isElectron && <DropdownMenuItem onSelect={() => useTunnelStore.getState().setOpen(true)}>端口与隧道</DropdownMenuItem>}
               {openCodexQuota ? (
                 <DropdownMenuItem onSelect={openCodexQuota}>
-                  Codex 额度
+                  订阅额度
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem

@@ -18,6 +18,7 @@ import type { WebSocketServer } from "ws";
 import { resolveAppServerConfig } from "./config.js";
 import { loadOrCreateToken } from "./auth.js";
 import { AppServerCloudSyncSim } from "./cloud-sync-sim.js";
+import { AgyQuotaService } from "./agy/quota.js";
 import { CodexQuotaService } from "./codex/quota.js";
 import { CodexAppServerClient } from "./codex/client.js";
 import { CodexRolloutLifecycleReader } from "./codex/lifecycle-reader.js";
@@ -145,6 +146,7 @@ export async function startAppServer(prepareRuntime?: () => void): Promise<void>
     piSessionReader,
     codexThreadDetailReader: codexAppServerClient,
     codexQuota: new CodexQuotaService(codexAppServerClient),
+    agyQuota: new AgyQuotaService(),
     threadPreviews,
     conversations,
     claudeConversationReader,

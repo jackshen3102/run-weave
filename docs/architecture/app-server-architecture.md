@@ -252,20 +252,26 @@ WebSocket 推送和 backend consumer 链路。Backend 不再启动自己的 Code
 消费 App Server 事件，并继续通过 `TerminalStateService` 写入终端状态和推送
 `terminal_state_changed`。
 
-## Codex 额度查看
+## 订阅额度查看（Codex 与 AGY）
 
-[额度服务](../../app-server/src/codex/quota.ts)复用本进程的 Codex RPC 客户端，按需读取
+[Codex 额度服务](../../app-server/src/codex/quota.ts)复用本进程的 Codex RPC 客户端，按需读取
 `account/read` 与 `account/rateLimits/read`。仅使用默认 `codex` 额度桶，按窗口时长识别周额度，
 不合并 Spark 等独立额度桶；缺失窗口或重置时间保持未知。
+[AGY 额度服务](../../app-server/src/agy/quota.ts)按需通过 `agy -p "/quota" --output-format json`
+只读查询 Antigravity 模型配额分组（如 `Gemini Models`、`Claude and GPT models`）及其 `weekly` / `5h`
+剩余比例与重置时间；未触发的 `1970-01-01T00:00:00Z` 窗口归一化为 `resetsAt: null`。
 
-鉴权 `GET /codex/quota` 由 [Backend 代理](../../backend/src/app-server/codex-quota.ts)暴露为
-`GET /api/codex/quota`；`refresh=1` 强制刷新。成功样本在 App Server 内存缓存 5 分钟，
+鉴权 `GET /codex/quota` 与 `GET /agy/quota` 分别由
+[Codex Backend 代理](../../backend/src/app-server/codex-quota.ts)与
+[AGY Backend 代理](../../backend/src/app-server/agy-quota.ts)暴露为
+`GET /api/codex/quota` 和 `GET /api/agy/quota`；`refresh=1` 强制刷新。成功样本在 App Server 内存缓存 5 分钟，
 进行中的查询合并；窗口重置时间已到则重新查询，不自行恢复到 100%。失败保留上次成功样本并标识失败，
 确认退出或登录方式不支持时清除旧样本。账号信息仅用于服务端隔离，不进入双端合同。
 
-桌面当前连接菜单和终端更多菜单、iOS 连接管理中的「Codex 额度」打开详情。双端仅在打开或手动刷新时请求，
+桌面当前连接菜单和终端更多菜单、iOS 连接管理中的「订阅额度」打开详情，
+并展示 T3 Code 风格的匀速消耗基准线与进度状态（消耗偏快 / 进度均衡 / 余量充裕）。双端仅在打开或手动刷新时请求，
 关闭取消请求，连接切换隔离旧响应；没有后台轮询、额度 WS、推送、历史存储或账号管理。
-首次使用需确认 App Server 运行环境中的 Codex CLI 登录了预期的 ChatGPT 订阅。
+首次使用需确认 App Server 运行环境中的 Codex CLI / `agy` CLI 已完成对应订阅登录。
 服务未升级或不可用时独立降级，不由 Backend 或 Electron 自动启动、安装 App Server。
 
 ## Consumer Cursor 与 At-Least-Once

@@ -92,7 +92,7 @@ export function ConnectionSwitcher({
           );
         })}
         <DropdownMenuSeparator />
-        {openCodexQuota ? <DropdownMenuItem onSelect={() => { setOpen(false); openCodexQuota(); }}>Codex 额度</DropdownMenuItem> : null}
+        {openCodexQuota ? <DropdownMenuItem onSelect={() => { setOpen(false); openCodexQuota(); }}>订阅额度</DropdownMenuItem> : null}
         {openMobileLogin ? <DropdownMenuItem onSelect={() => { setOpen(false); openMobileLogin(); }}>
           连接手机
         </DropdownMenuItem> : null}

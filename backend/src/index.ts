@@ -17,6 +17,7 @@ import { createKnowledgeInboxRouter } from "./routes/knowledge-inbox";
 import { attachLocalBrowserWebSocketServer } from "./ws/browser-local-server";
 import { createExperienceRouter } from "./routes/experience";
 import { createTerminalSnapshotShareRouter } from "./routes/terminal/snapshot-share";
+import { createAgyQuotaRouter } from "./routes/agy-quota";
 import { createCodexQuotaRouter } from "./routes/codex-quota";
 import { createDeviceNotificationsRouter } from "./routes/device-notifications";
 import { createDeviceStatusRouter } from "./routes/device-status";
@@ -232,6 +233,7 @@ function createHttpApp(
   app.use("/api/browser/local", requireAuth, createLocalBrowserCapabilitiesRouter(services.authService, services.localBrowserService));
   app.use("/api/browser/local/desktop", requireAuth, createDesktopLocalBrowserRouter(services.authService, services.localBrowserService));
   app.use("/api/codex/quota", requireAuth, createCodexQuotaRouter());
+  app.use("/api/agy/quota", requireAuth, createAgyQuotaRouter());
   app.use("/api/device/resources", requireAuth, createResourceMonitorRouter(services.resourceMonitor, services.authService));
   app.use(
     "/api/device",

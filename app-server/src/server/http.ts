@@ -1,4 +1,6 @@
+import type { AgyQuotaService } from "../agy/quota.js";
 import type { CodexQuotaService } from "../codex/quota.js";
+import { emptyAgyQuota } from "@runweave/shared/app-server/agy-quota";
 import { emptyCodexQuota } from "@runweave/shared/app-server/codex-quota";
 import { createThreadReaders } from "../agents/thread-readers.js";
 import { PiSessionReader } from "../pi/session-reader.js";
@@ -141,6 +143,7 @@ export function createHttpApp(options: {
   piSessionReader?: PiSessionReader;
   codexThreadDetailReader: CodexThreadDetailReader;
   codexQuota?: CodexQuotaService;
+  agyQuota?: AgyQuotaService;
   threadPreviews?: ThreadPreviewReader;
   conversations?: ConversationReader;
   claudeConversationReader?: ClaudeConversationReader;
@@ -193,6 +196,17 @@ export function createHttpApp(options: {
     res.json(options.codexQuota
       ? await options.codexQuota.read(req.query.refresh === "1")
       : emptyCodexQuota("unsupported"));
+  });
+
+  app.get("/agy/quota", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (req.query.refresh !== undefined && req.query.refresh !== "1") {
+      res.status(400).json({ message: "Invalid refresh query" });
+      return;
+    }
+    res.json(options.agyQuota
+      ? await options.agyQuota.read(req.query.refresh === "1")
+      : emptyAgyQuota("unsupported"));
   });
 
   app.get("/runtime-status", (_req, res) => {
