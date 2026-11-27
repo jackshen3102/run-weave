@@ -43,6 +43,7 @@ export interface ProcessTerminalAgentHookInput {
   operationId?: string | null;
   agent: TerminalAgentKind;
   hookEvent: AgentHookStateEvent;
+  toolName?: string | null;
   query?: string | null;
   activityEventId?: string;
   threadId?: string | null;
@@ -169,7 +170,7 @@ async function processTerminalAgentHookUnlocked(
   }
   const panel = panelResolution.panel;
   if (panel && input.agent === "codex" &&
-      !(await codexHookBelongsToPrimary(panel, input.threadId, input.hookEvent === "SessionStart"))) {
+      !(await codexHookBelongsToPrimary(panel, input.threadId, input.hookEvent === "SessionStart", session))) {
     return {
       status: "ignored", terminalSessionId: session.id, agent: input.agent,
       hookEvent: input.hookEvent, activeCommand: panel.activeCommand,
@@ -357,6 +358,21 @@ async function processTerminalAgentHookUnlocked(
       };
     }
     agyAlreadyRunning = result.alreadyRunning;
+    if (panel) {
+      const pending = panel.pendingAgyQuestion;
+      if (input.hookEvent === "ToolRequested" && input.toolName === "ask_question") {
+        panel.pendingAgyQuestion = {
+          observedAt: input.agy.observedAt,
+          processGeneration: input.agy.instanceId,
+          conversationId: input.agy.conversationId,
+          eventId: input.agy.eventId,
+        };
+        await options.terminalSessionManager.upsertPanel(panel);
+      } else if (pending && pending.eventId !== input.agy.eventId) {
+        delete panel.pendingAgyQuestion;
+        await options.terminalSessionManager.upsertPanel(panel);
+      }
+    }
     const { status } = result;
     if (!status) {
       return {

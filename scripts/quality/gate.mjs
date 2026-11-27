@@ -23,6 +23,12 @@ const ALL_STEPS = [
     critical: true,
   },
   {
+    id: "context-budget",
+    command: ["pnpm", "context:budget"],
+    layers: ["docs"],
+    critical: true,
+  },
+  {
     id: "architecture",
     command: ["pnpm", "architecture:check"],
     layers: ["architecture"],
@@ -95,6 +101,17 @@ function isCriticalJourneyFile(filePath) {
 
 function isQualityGateFile(filePath) {
   return filePath === "scripts/quality/gate.mjs";
+}
+
+function isContextBudgetFile(filePath) {
+  return (
+    filePath === "AGENTS.md" ||
+    filePath.endsWith("/AGENTS.md") ||
+    filePath.startsWith("plugins/toolkit/") ||
+    filePath.startsWith("packages/runweave-mcp/") ||
+    filePath.startsWith("scripts/quality/context-budget.") ||
+    filePath === "package.json"
+  );
 }
 
 function isDocumentationContentFile(filePath) {
@@ -206,18 +223,46 @@ export function selectLayersForChangedFiles(changedFiles) {
 
 export function selectStepsForChangedFiles(changedFiles) {
   const selectedLayers = selectLayersForChangedFiles(changedFiles);
+  const touchesContextBudget =
+    changedFiles.length === 0 ||
+    changedFiles.some(isContextBudgetFile) ||
+    changedFiles.some(isQualityGateFile);
+  const contextBudgetStep = ALL_STEPS.find(
+    (step) => step.id === "context-budget",
+  );
 
   if (changedFiles.length === 0) {
+    const selectedSteps = expandStepsForLayers(selectedLayers);
+    if (
+      contextBudgetStep &&
+      !selectedSteps.some((step) => step.id === contextBudgetStep.id)
+    ) {
+      selectedSteps.splice(1, 0, contextBudgetStep);
+    }
     return {
       selectedLayers,
-      selectedSteps: expandStepsForLayers(selectedLayers),
+      selectedSteps,
       selectionReason:
         "No changed files detected; ran full docs, architecture, static, and E2E gates.",
       riskLevel: "full",
     };
   }
 
-  if (selectedLayers.length === 0) {
+  const selectedSteps = expandStepsForLayers(selectedLayers);
+  if (
+    touchesContextBudget &&
+    contextBudgetStep &&
+    !selectedSteps.some((step) => step.id === contextBudgetStep.id)
+  ) {
+    const docsIndex = selectedSteps.findIndex((step) => step.id === "docs");
+    if (docsIndex >= 0) {
+      selectedSteps.splice(docsIndex + 1, 0, contextBudgetStep);
+    } else {
+      selectedSteps.unshift(contextBudgetStep);
+    }
+  }
+
+  if (selectedLayers.length === 0 && selectedSteps.length === 0) {
     return {
       selectedLayers,
       selectedSteps: [],
@@ -227,12 +272,15 @@ export function selectStepsForChangedFiles(changedFiles) {
     };
   }
 
-  const selectedSteps = expandStepsForLayers(selectedLayers);
+  const activeLabels =
+    selectedLayers.length > 0
+      ? selectedLayers
+      : selectedSteps.map((step) => step.id);
 
   return {
     selectedLayers,
     selectedSteps,
-    selectionReason: `Selected layers: ${selectedLayers.join(", ")}.`,
+    selectionReason: `Selected layers: ${activeLabels.join(", ")}.`,
     riskLevel:
       selectedLayers.length === LAYER_ORDER.length ? "full" : "reduced",
   };

@@ -28,6 +28,9 @@ export class TerminalManagerAgentActivityRuntime extends TerminalManagerBufferRu
     if (panel?.pendingPermissionRequest && getCompletionSourceForCommand(activeCommand) !== "claude") {
       delete panel.pendingPermissionRequest;
     }
+    if (panel?.pendingAgyQuestion && getCompletionSourceForCommand(activeCommand) !== "agy") {
+      delete panel.pendingAgyQuestion;
+    }
     this.recentAgentActivities.delete(
       buildRecentAgentActivityKey(terminalSessionId, null),
     );

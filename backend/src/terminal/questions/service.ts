@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AnswerTerminalQuestionRequest, TerminalQuestionsResponse } from "@runweave/shared/terminal/questions";
 import type { TerminalSessionManager } from "../manager/manager";
 import type { TmuxService } from "../tmux/service";
+import { buildPaneTarget } from "../application/panel-common";
 import { resolvePanelTarget } from "../application/panel-targets";
 import { resolveReplyThread } from "../completion/reply-preview";
 import { findQuestionExecutor } from "./executor";
@@ -72,6 +73,57 @@ export class TerminalQuestionsService {
       connection.gateway.isPending(origin.turnId, origin.itemId);
   }
 
+  observeQuestion(origin: TerminalQuestionOrigin): void {
+    if (this.closed) return;
+    void (async () => {
+      for (const [id, entry] of this.connections) if (entry.gateway.disposed) this.invalidate(id);
+      const session = this.manager.getSession(origin.terminalId);
+      const panel = this.manager.getPanel(origin.panelId);
+      if (
+        !session ||
+        session.status !== "running" ||
+        session.runtimeKind !== "tmux" ||
+        !panel ||
+        panel.status !== "running" ||
+        panel.terminalSessionId !== session.id ||
+        !panel.tmuxPaneId
+      ) {
+        return;
+      }
+      const paneTarget = buildPaneTarget(session, this.tmux, panel);
+      const { panePid } = await this.tmux.textAttachmentProcessIdentity(paneTarget);
+      const executor = await findQuestionExecutor(panePid);
+      if (!executor || this.closed) return;
+      const identity = JSON.stringify([panel.id, origin.threadId, executor.pid, executor.socket]);
+      let connection = this.connections.get(origin.terminalId);
+      if (connection && connection.identity === identity && !connection.gateway.disposed) {
+        await connection.ready;
+        return;
+      }
+      if (connection) {
+        const activePending = connection.gateway.activePending();
+        if (connection.gateway.connected && activePending) return;
+        this.invalidate(origin.terminalId);
+      }
+      if (this.connections.size >= 128) return;
+      const gateway = new TerminalQuestionGateway(executor.socket, origin.threadId, (request, state) => {
+        this.notifications?.recordEnd({
+          terminalId: origin.terminalId, panelId: panel.id, threadId: origin.threadId,
+          turnId: request.turnId, itemId: request.itemId,
+        }, state);
+      });
+      connection = {
+        identity,
+        panelId: panel.id,
+        threadId: origin.threadId,
+        gateway,
+        ready: gateway.join().catch(() => { gateway.dispose(); }),
+      };
+      this.connections.set(origin.terminalId, connection);
+      await connection.ready;
+    })().catch(() => undefined);
+  }
+
   findActivePendingQuestion(terminalId: string): {
     panelId: string;
     threadId: string;
@@ -86,8 +138,7 @@ export class TerminalQuestionsService {
       (session && this.manager.listPanels(terminalId).length === 1 ? resolveReplyThread(session) : null));
     if (this.closed || !connection || connection.gateway.disposed || !connection.gateway.connected ||
       session?.status !== "running" || panel?.status !== "running" ||
-      this.manager.getPanelWorkspace(terminalId)?.activePanelId !== connection.panelId ||
-      thread?.id !== connection.threadId) return null;
+      (thread != null && thread.id !== connection.threadId)) return null;
     const pending = connection.gateway.activePending();
     if (!pending) return null;
     return {

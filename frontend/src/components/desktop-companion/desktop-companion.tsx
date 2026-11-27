@@ -47,6 +47,7 @@ function statusLabel(slot: AttentionSlot): string {
     if (slot.actionKind === "question") return "需回答";
     if (slot.actionKind === "permission") return "需授权";
     if (slot.actionKind === "auth") return "需认证";
+    if (slot.actionKind === "pr_attention") return "PR 待处理";
     return "需要你处理";
   }
   if (slot.state === "blocked") return "验收受阻";

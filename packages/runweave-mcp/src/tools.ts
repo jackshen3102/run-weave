@@ -1,4 +1,6 @@
 import type { NativeSessions } from "./sessions.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import path from "node:path";
@@ -342,4 +344,53 @@ export function createMcp(context: ToolsContext) {
       }),
   );
   return server;
+}
+
+function sortJsonKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonKeys);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, sortJsonKeys(item)]),
+    );
+  }
+  return value;
+}
+
+export async function inspectMcpSurfaceForBudget() {
+  const server = createMcp({
+    backend: {} as Backend,
+    sessions: {} as NativeSessions,
+    activity: {} as Activity,
+    commands: {} as Commands,
+    evidence: {} as Evidence,
+    files: [],
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "runweave-context-budget", version: "0.1.0" });
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  try {
+    const instructions = client.getInstructions() ?? "";
+    const listed = await client.listTools();
+    const sortedTools = [...listed.tools]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((tool) => sortJsonKeys(tool) as { name: string });
+    const toolsPayload = { tools: sortedTools };
+    return {
+      instructions,
+      instructionsBytes: Buffer.byteLength(instructions.replace(/\r\n/g, "\n"), "utf8"),
+      toolsJsonBytes: Buffer.byteLength(JSON.stringify(toolsPayload), "utf8"),
+      tools: sortedTools.map((tool) => ({
+        name: tool.name,
+        bytes: Buffer.byteLength(JSON.stringify(tool), "utf8"),
+      })),
+    };
+  } finally {
+    await client.close();
+    await server.close();
+  }
 }

@@ -250,7 +250,7 @@ async function main() {
       catch { return; }
       const sameLaunch = context.generation === process.env.RUNWEAVE_CODEX_CONTEXT_GENERATION &&
         context.operationId === process.env.RUNWEAVE_TERMINAL_AGENT_OPERATION_ID;
-      const initialPrimary = normalizedEvent === "sessionstart" && payload.source === "startup" && context.revision === 0;
+      const initialPrimary = normalizedEvent === "sessionstart" && payload.source === "startup" && !context.primaryThreadId;
       if (!sameLaunch || context.closed || (!initialPrimary && context.primaryThreadId !== threadId)) return;
     }
 

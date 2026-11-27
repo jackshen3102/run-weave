@@ -41,6 +41,7 @@ export function registerInternalTerminalRoutes(
       hookToken,
       activity: services.terminalActivity,
       questionNotifications: services.terminalQuestionsService.notifications,
+      terminalQuestionsService: services.terminalQuestionsService,
       hookDiagnostics: services.hookDiagnostics,
     }),
   );

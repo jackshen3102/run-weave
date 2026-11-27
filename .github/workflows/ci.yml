@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -26,6 +28,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Context Budget
+        env:
+          HAS_BUDGET_INCREASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'context-budget-increase') }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ "$HAS_BUDGET_INCREASE_LABEL" = "true" ]; then
+              node ./scripts/quality/context-budget.mjs --compare-git-ref HEAD^1 --allow-increase
+            else
+              node ./scripts/quality/context-budget.mjs --compare-git-ref HEAD^1
+            fi
+          else
+            pnpm context:budget
+          fi
 
       - name: Lint
         run: pnpm lint

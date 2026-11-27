@@ -7736,6 +7736,22 @@
     "reason": "进程状态、业务数据、构建产物或显式迁移源文件，不作为 settings.yaml 的业务配置替代；readFileSync(new URL(\"./configuration-accesses.json\", import.meta.url))"
   },
   {
+    "file": "scripts/quality/context-budget.mjs",
+    "kind": "file-io",
+    "expression": "readFileSync(path.join(REPO_ROOT, relativePath))",
+    "count": 1,
+    "category": "tooling",
+    "reason": "开发门禁与质量检查脚本读取仓库受控源码或预算基线文件；readFileSync(path.join(REPO_ROOT, relativePath))"
+  },
+  {
+    "file": "scripts/quality/context-budget.mjs",
+    "kind": "file-io",
+    "expression": "writeFileSync(BUDGET_FILE_PATH)",
+    "count": 1,
+    "category": "tooling",
+    "reason": "开发门禁与质量检查脚本显式刷新仓库字节预算基线文件；writeFileSync(BUDGET_FILE_PATH)"
+  },
+  {
     "file": "scripts/quality/docs.mjs",
     "kind": "file-io",
     "expression": "readFile(path.join(REPO_ROOT, filePath))",

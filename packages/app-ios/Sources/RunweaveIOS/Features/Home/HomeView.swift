@@ -39,9 +39,9 @@ struct HomeView: View {
 
   private var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   private var attentionSlots: [String: AttentionSlot] {
-    Dictionary(uniqueKeysWithValues: (session.attentionSnapshot?.slots ?? []).map {
+    Dictionary((session.attentionSnapshot?.slots ?? []).map {
       ($0.terminalSessionId, $0)
-    })
+    }, uniquingKeysWith: { first, _ in first })
   }
   private var attention: [HomeTerminal] {
     let online = session.health.status == .online
@@ -105,6 +105,7 @@ struct HomeView: View {
 
   private func refreshHome() async {
     await session.refresh()
+    await session.refreshAttention()
     await branchStatuses.refresh(session: session, terminals: attention, force: true)
   }
 
@@ -226,7 +227,7 @@ struct HomeView: View {
         catch { return }
       }
     }
-    .task(id: "attention:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status.rawValue)") {
+    .task(id: "attention:\(session.generation):\(session.foreground):\(session.authenticated):\(session.health.status.rawValue):\(session.terminal?.id ?? "")") {
       guard session.foreground, session.authenticated, session.health.status == .online,
         session.terminal == nil else { return }
       while !Task.isCancelled {

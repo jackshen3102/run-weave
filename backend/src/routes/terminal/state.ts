@@ -21,6 +21,7 @@ import type { ActivityEventInput } from "@runweave/shared/activity";
 import crypto from "node:crypto";
 import { processTerminalAgentHook } from "../../terminal/application/agent-hook-processor";
 import type { TerminalQuestionNotifications } from "../../terminal/questions/notifications";
+import type { TerminalQuestionsService } from "../../terminal/questions/service";
 import type {
   HookDiagnosticService,
   HookDiagnosticSource,
@@ -122,6 +123,7 @@ export function createInternalTerminalAgentHookRouter(options: {
   hookToken: string | undefined;
   activity?: TerminalActivityDependencies;
   questionNotifications?: TerminalQuestionNotifications;
+  terminalQuestionsService?: Pick<TerminalQuestionsService, "observeQuestion">;
   hookDiagnostics?: HookDiagnosticService;
 }): Router {
   const router = Router();
@@ -176,7 +178,7 @@ export function createInternalTerminalAgentHookRouter(options: {
       }
       if (parsed.data.agent === "codex") {
         const target = resolveHookPanel(options.terminalSessionManager, session.id, parsed.data.panelId ?? null, parsed.data.tmuxPaneId ?? null);
-        if (!target.ok || (target.panel && !(await codexHookBelongsToPrimary(target.panel, parsed.data.threadId)))) {
+        if (!target.ok || (target.panel && !(await codexHookBelongsToPrimary(target.panel, parsed.data.threadId, false, session)))) {
           res.status(202).json({ disposition: "ignored" });
           return;
         }
@@ -184,9 +186,11 @@ export function createInternalTerminalAgentHookRouter(options: {
           target.panel, parsed.data.threadId, parsed.data.operationId);
         const { hookEvent, toolName, threadId, turnId, toolUseId } = parsed.data;
         if (target.panel && hookEvent === "ToolRequested" && toolName === "request_user_input" && threadId && turnId && toolUseId) {
-          options.questionNotifications?.observe({
+          const origin = {
             terminalId: session.id, panelId: target.panel.id, threadId, turnId, itemId: toolUseId,
-          });
+          };
+          options.terminalQuestionsService?.observeQuestion(origin);
+          options.questionNotifications?.observe(origin);
         }
       }
       if (parsed.data.agent === "pi" || parsed.data.agent === "claude" || parsed.data.agent === "agy") {
