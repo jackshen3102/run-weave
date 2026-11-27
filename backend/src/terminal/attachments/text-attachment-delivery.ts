@@ -1,6 +1,7 @@
 import type { CodexInputContext } from "@runweave/shared/terminal/codex-context";
 import { replaceManagedCodexPrompt } from "../runtime/codex-input";
 import { readCodexContext } from "../runtime/codex-context";
+import { usesStandaloneClipboardImagePaste } from "../runtime/clipboard-image-paste";
 import { randomUUID } from "node:crypto";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import type {
@@ -339,7 +340,7 @@ export class TerminalTextAttachmentDelivery {
         if (binding.target.kind === "pty") {
           await pastePtyTextAttachmentReference(
             binding.target.runtime, content, () => recheck(false),
-            getAgentForCommand(binding.target.session.activeCommand) === "codex", request.operationId,
+            usesStandaloneClipboardImagePaste(getAgentForCommand(binding.target.session.activeCommand)), request.operationId,
           );
         } else if (binding.target.codexInputContext) {
           await replaceManagedCodexPrompt({ panel: binding.target.panel, target: binding.target.pane, tmux: this.tmux, expected: binding.target.codexInputContext, supervisor: false, text: content, append: true, submit: false, submitKey: "Enter" });
@@ -348,7 +349,7 @@ export class TerminalTextAttachmentDelivery {
           binding.target.pane,
           content,
           () => recheck(false),
-          getAgentForCommand(binding.target.panel.activeCommand ?? binding.target.session.activeCommand) === "codex",
+          usesStandaloneClipboardImagePaste(getAgentForCommand(binding.target.panel.activeCommand ?? binding.target.session.activeCommand)),
         );
         await this.files.finish(sessionId, request.operationId, "accepted");
       } catch (error) {
