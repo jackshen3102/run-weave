@@ -2,7 +2,7 @@ import { Worker } from "node:worker_threads";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { finishWorkerShutdown } from "../utils/worker-shutdown";
-import type { QualityBatch, QualityContextRequest, QualityContextPage, QualityCoverage, QualityLedger, QualityLedgerCommit, QualityPage, QualityReceipt } from "@runweave/shared/quality-workflow";
+import type { QualityBatch, QualityContextRequest, QualityContextPage, QualityCoverage, QualityEvidence, QualityLatencyBaselinesResponse, QualityLedger, QualityLedgerCommit, QualityPage, QualityReceipt } from "@runweave/shared/quality-workflow";
 import type { LogCheckpoint } from "./database";
 export class QualityStoreError extends Error {
   constructor(readonly status: number, readonly code: string, readonly details?: unknown) { super(code); }
@@ -10,6 +10,7 @@ export class QualityStoreError extends Error {
 export type QualityCommand =
   | { op: "ingest"; batch: QualityBatch; projects: Record<string, string | null>; checkpoint?: LogCheckpoint }
   | { op: "events"; cursor?: string; limit: number } | { op: "coverage" } | { op: "ledger"; issueId?: string }
+  | { op: "latencyBaselines" } | { op: "eventsByIds"; ids: number[] }
   | { op: "context"; request: QualityContextRequest }
   | { op: "commit"; request: QualityLedgerCommit } | { op: "offsets" } | { op: "close" } | { op: "ready" };
 export class QualityStore {
@@ -49,6 +50,8 @@ export class QualityStore {
   context(request: QualityContextRequest) { return this.request<QualityContextPage>({ op: "context", request }); }
   coverage() { return this.request<QualityCoverage>({ op: "coverage" }); }
   ledger(issueId?: string) { return this.request<QualityLedger>({ op: "ledger", issueId }); }
+  latencyBaselines() { return this.request<QualityLatencyBaselinesResponse>({ op: "latencyBaselines" }); }
+  eventsByIds(ids: number[]) { return this.request<{ events: QualityEvidence[]; expiredCount: number }>({ op: "eventsByIds", ids }); }
   commit(request: QualityLedgerCommit) { return this.request<{ revision: number; replayed: boolean }>({ op: "commit", request }); }
   offsets() { return this.request<Record<string, { identity: string; offset: number; missing?: boolean }>>({ op: "offsets" }); }
   dispose(): Promise<void> { return this.disposal ??= this.close(); }

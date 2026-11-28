@@ -52,12 +52,55 @@ export interface QualityLedger {
   readCursor: string | null; analysisCursor: string | null; pending: QualityEvidence[];
   lease: { runKey: string; expiresAt: string } | null; reports: { runKey: string; at: string; summary: string }[];
 }
+export interface QualityLatencyBucket {
+  client: "desktop" | "web" | "ios";
+  action: "terminal_send" | "connection_recover";
+  appVersion: string;
+  buildId: string;
+  sourceRevision: string;
+  sourceState: "clean" | "modified" | "unknown";
+  firstAt: string;
+  lastAt: string;
+  count: number;
+  p50Ms: number;
+  p90Ms: number;
+  maxMs: number;
+  sampleEvidenceIds: number[];
+}
+export interface QualityLatencyBaselinesResponse {
+  schemaVersion: 1;
+  backendId: string;
+  buckets: QualityLatencyBucket[];
+}
 /** Checkpoint pages before analysis; one expiring writer lease protects daily runs. */
 export interface QualityLedgerCommit {
   schemaVersion: 1; backendId: string; runKey: string; commitKey: string; expectedRevision: number;
-  phase: "acquire" | "checkpoint" | "analysis" | "release" | "recovery" | "confirm_close";
+  phase: "acquire" | "checkpoint" | "analysis" | "release" | "recovery" | "mark_fixed" | "confirm_close";
   confirmedIssueIds?: string[];
+  fixedIssueIds?: string[];
+  fixVersion?: string;
+  nextReviewAt?: string;
   readCursor?: string; analysisCursor?: string; pending?: QualityEvidence[]; issues?: QualityIssue[]; summary?: string;
+}
+export type QualityIssueHandoffTargetAgent = "codex" | "claude" | "pi" | "traex" | "agy";
+export interface CreateQualityIssueHandoffRequest {
+  operationId: string;
+  targetProjectId: string;
+  targetAgent: QualityIssueHandoffTargetAgent;
+  prompt?: string;
+  submitPrompt?: boolean;
+  allowHypothesis?: boolean;
+}
+export interface CreateQualityIssueHandoffResponse {
+  issueId: string;
+  terminalSessionId: string;
+  panelId: string;
+  projectId: string;
+  targetAgent: QualityIssueHandoffTargetAgent;
+  handoffFilePath: string;
+  includedEvidenceCount: number;
+  expiredEvidenceCount: number;
+  status: "delivered";
 }
 export function qualityCanonical(value: unknown): string {
   const sort = (item: unknown): unknown => Array.isArray(item) ? item.map(sort) : item && typeof item === "object"

@@ -1,9 +1,10 @@
 import { QUALITY_LIMITS, type QualityBatch, type QualityContextRequest, type QualityLedgerCommit } from "@runweave/shared/quality-workflow";
+import type { QualityIssueHandoffService } from "./handoff";
 import type { QualityStore } from "./store";
 import { QualityStoreError } from "./store";
-import { batchSchema, commitSchema, contextSchema } from "./validation";
+import { batchSchema, commitSchema, contextSchema, issueHandoffSchema } from "./validation";
 export class QualityService {
-  constructor(readonly backendId: string | null, readonly store: QualityStore | null, private projectForTerminal: (id: string) => string | null | undefined, private desktopConfigured = false) {}
+  constructor(readonly backendId: string | null, readonly store: QualityStore | null, private projectForTerminal: (id: string) => string | null | undefined, private desktopConfigured = false, private handoffService?: QualityIssueHandoffService) {}
   capabilities() { return { enabled: Boolean(this.store), schemaVersion: 1, backendId: this.backendId, limits: QUALITY_LIMITS }; }
   private available() { if (!this.store) throw new QualityStoreError(503, "quality_store_unavailable"); return this.store; }
   private target(id: string) { if (id !== this.backendId) throw new QualityStoreError(409, "backend_mismatch"); }
@@ -28,8 +29,16 @@ export class QualityService {
   }
   async coverage() { const value = await this.available().coverage(); return { ...value, logSources: [{ kind: "backend", state: "configured" }, { kind: "desktop", state: this.desktopConfigured ? "configured" : "unconfigured" }] }; }
   ledger(issueId?: string) { return this.available().ledger(issueId); }
+  latencyBaselines() { return this.available().latencyBaselines(); }
   commit(input: unknown) {
     const parsed = commitSchema.safeParse(input); if (!parsed.success) throw new QualityStoreError(400, "invalid_commit");
     const request: QualityLedgerCommit = parsed.data; this.target(request.backendId); return this.available().commit(request);
+  }
+  handoff(issueId: string, input: unknown) {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(issueId)) throw new QualityStoreError(400, "invalid_issue_id");
+    const parsed = issueHandoffSchema.safeParse(input);
+    if (!parsed.success) throw new QualityStoreError(400, "invalid_handoff_request");
+    if (!this.handoffService) throw new QualityStoreError(503, "quality_handoff_unavailable");
+    return this.handoffService.execute(this.available(), issueId, parsed.data);
   }
 }

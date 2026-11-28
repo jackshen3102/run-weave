@@ -32,7 +32,18 @@ export const issueSchema = z.object({ issueId: id, groupKey: z.string().max(512)
   verification: z.array(z.object({ at: time, version: metadata, result: text, evidenceIds }).strict()).max(100),
 }).strict();
 export const commitSchema = z.object({ schemaVersion: z.literal(1), backendId: id, runKey: id, commitKey: id, expectedRevision: integer,
-  phase: z.enum(["acquire", "checkpoint", "analysis", "release", "recovery", "confirm_close"]), readCursor: z.string().max(512).optional(), analysisCursor: z.string().max(512).optional(),
+  phase: z.enum(["acquire", "checkpoint", "analysis", "release", "recovery", "mark_fixed", "confirm_close"]), readCursor: z.string().max(512).optional(), analysisCursor: z.string().max(512).optional(),
   confirmedIssueIds: z.array(id).min(1).max(20).optional(),
+  fixedIssueIds: z.array(id).min(1).max(20).optional(),
+  fixVersion: metadata.optional(),
+  nextReviewAt: time.optional(),
   pending: z.array(evidenceSchema).max(1000).optional(), issues: z.array(issueSchema).max(20).optional(), summary: text.optional(),
+}).strict();
+export const issueHandoffSchema = z.object({
+  operationId: id,
+  targetProjectId: z.string().min(1).max(2_000),
+  targetAgent: z.enum(["codex", "claude", "pi", "traex", "agy"]),
+  prompt: z.string().max(32_768).optional(),
+  submitPrompt: z.boolean().optional(),
+  allowHypothesis: z.boolean().optional(),
 }).strict();

@@ -24,13 +24,15 @@ description: 对指定 Runweave Backend 执行每日质量巡检：自动增量�
    Clarity 只作辅助：沿任务自身 Browser Profile/Group 查项目、页面片段、launch、build；不可用就报告，不借用其他登录态。
    SDK accepted 不能证明云端收录。未实际操作复核不得称已复现产品 Bug。
 5. 对每组给出：现象、因果链、支持、反证/缺口、影响、最小修复建议、下一项验证。归因仅 located 或 hypothesis，并说明理由。
+   标为 located 前必须在 counterEvidence 逐项排除三类反事实：① 服务或桌面重启期间的瞬态拒绝后立即恢复；② 构建处于 sourceState=modified 或 sourceRevision=unknown；③ 关联外部依赖或采集器未启动。任一未排除时必须保持 hypothesis，避免把环境噪声送入默认终端交接池。
+   对 classification=latency_regression 的跨版本慢操作组（clean 构建样本数≥20 且 p90 较上一 clean 基线退化≥50% 同时≥300ms），结合 baselineSummary 执行 `git diff <baseline.sourceRevision>..<current.sourceRevision>` 定位慢路径，不跨端相减墙钟。
    confirmed 的发送仅指输入接受；state_updated 和 ui_updated 分列。连接 confirmed 后 failed 保留建立成功与后续失效，取消不反写失败。
    不用跨端墙钟计算网络耗时；不猜测超时。缺头、缺尾和覆盖截断禁止参与完整失败率与关闭判断。
 6. 写 assessments.json：`{"summary":"每日结果","processedEvidenceIds":[本次已分析的receiveId],"issues":[完整QualityIssue]}`。
    QualityIssue 字段以 `packages/shared/src/monitoring/quality-workflow.ts` 为准：包括稳定 ID、groupKey、首次/最近时间、status、attribution、summary、cause、supporting、counterEvidence、gaps、impact、suggestion、nextAction、evidenceIds、fixVersion、nextReviewAt、verification。
    日常巡检禁止提交 confirm_close；只有真实用户明确确认具体问题和复验结果后，才能另行准备该阶段的请求，填写 confirmedIssueIds 与确认说明，不能用 Agent 自拟文字冒充确认。
-   支持证据引用 receiveId 与源码路径；evidenceIds 累积历史。完成复验须有运行修复版本、原场景复验、完整观察窗口及实际使用证据；只能设 awaiting_confirmation，交用户确认。
-   每轮已有授权内做只读复核；真实输入、手机 UI、修复、部署须沿对应任务授权与技能。本任务不修改产品、部署、重放输入、创建外部问题单或发送消息。
+   支持证据引用 receiveId 与源码路径；evidenceIds 累积历史。到期复验项参考 postFixSummary：仅当已登记 fixVersion、新版本已有真实健康使用覆盖（hasPostFixUsage=true）且无同因新异常（recurringGroupCount=0）时，追加 verification 记录并设 awaiting_confirmation 交用户确认；缺少新版本真实使用数据时保持 observing 并顺延 nextReviewAt。
+   已定位（located）条目的修复由用户按需通过 `rw quality handoff` 交接至独立终端执行，修复发布后通过 `rw quality ledger mark-fixed` 回填 fixVersion。每轮巡检仅在已有授权内做只读复核；本任务不修改产品、部署、重放输入、创建外部问题单或发送消息。
 7. `node <skill>/scripts/daily.mjs finish --instance ... --profile ... --backend-id ... --out ... --file <assessments.json>` 原子提交台账和分析水位后释放租约。
    无问题组时同样 finish（issues和processedEvidenceIds为空），用于推进健康事件水位；无新增与到期项时只输出“无新变化”及覆盖变化。
    失败先读取 ledger 核对已写入状态，重用 session.json 的 runKey；不要用新 issueId 重复建单。

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import { QUALITY_LIMITS, qualityCanonical, type QualityBatch, type QualityContextRequest, type QualityEvidence, type QualityLedger, type QualityLedgerCommit, type QualityRange } from "@runweave/shared/quality-workflow";
+import { QUALITY_LIMITS, qualityCanonical, type QualityBatch, type QualityContextRequest, type QualityEvidence, type QualityLatencyBaselinesResponse, type QualityLatencyBucket, type QualityLedger, type QualityLedgerCommit, type QualityRange } from "@runweave/shared/quality-workflow";
 
 export class QualityError extends Error {
   constructor(readonly status: number, readonly code: string, readonly details?: unknown) { super(code); }
@@ -10,6 +10,7 @@ export class QualityError extends Error {
 interface Stream { sourceId: string; streamId: string; client: QualityBatch["client"]; ackThrough: number; lastReceivedAt: string; droppedRanges: QualityRange[] }
 interface State { storageBlocked?: boolean; epoch: string; backendId: string; cleanedThrough: number; streams: Stream[]; gaps: { kind: string; at: string; sourceId?: string }[]; offsets: Record<string, { identity: string; offset: number; missing?: boolean }>; ledger: QualityLedger }
 interface Row { receiveId: number; body: string; hash: string; bytes: number }
+interface DurationRow { opKey: string; client: "desktop" | "web" | "ios"; action: "terminal_send" | "connection_recover"; appVersion: string; buildId: string; sourceRevision: string; sourceState: "clean" | "modified" | "unknown"; elapsedMs: number; receiveId: number; at: string; live: number }
 export interface LogCheckpoint { key: string; identity: string; offset: number; gap?: string; missing?: boolean }
 export class QualityDatabase {
   private db: Database.Database;
@@ -24,7 +25,9 @@ export class QualityDatabase {
       CREATE TABLE IF NOT EXISTS events (receiveId INTEGER PRIMARY KEY AUTOINCREMENT, sourceId TEXT NOT NULL, streamId TEXT NOT NULL, seq INTEGER NOT NULL, receivedAt TEXT NOT NULL, hash TEXT NOT NULL, bytes INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(sourceId,streamId,seq));
       CREATE INDEX IF NOT EXISTS events_operation ON events(sourceId, json_extract(body,'$.launchId'), json_extract(body,'$.action'), json_extract(body,'$.operationId'), receiveId);
       CREATE TABLE IF NOT EXISTS commits (key TEXT PRIMARY KEY, hash TEXT NOT NULL, revision INTEGER NOT NULL, at TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS fingerprints (key TEXT PRIMARY KEY, hash TEXT NOT NULL, at TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS fingerprints (key TEXT PRIMARY KEY, hash TEXT NOT NULL, at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS operation_durations (opKey TEXT PRIMARY KEY, client TEXT NOT NULL, action TEXT NOT NULL, appVersion TEXT NOT NULL, buildId TEXT NOT NULL, sourceRevision TEXT NOT NULL, sourceState TEXT NOT NULL, elapsedMs INTEGER NOT NULL, receiveId INTEGER NOT NULL, at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS operation_durations_bucket ON operation_durations(client, action, appVersion, buildId, sourceRevision, sourceState, at);`);
     this.db.pragma("user_version = 1");
     if (!this.db.prepare("SELECT 1 FROM state WHERE id=1").get()) this.save({ storageBlocked: false, epoch: randomUUID(), backendId, cleanedThrough: 0, streams: [], gaps: [], offsets: {}, ledger: {
       schemaVersion: 1, revision: 0, issues: [], readCursor: null, analysisCursor: null, pending: [], lease: null, reports: [],
@@ -34,7 +37,7 @@ export class QualityDatabase {
   private state(): State { return JSON.parse((this.db.prepare("SELECT body FROM state WHERE id=1").get() as { body: string }).body); }
   private save(state: State) { this.db.prepare("INSERT OR REPLACE INTO state VALUES(1,?)").run(JSON.stringify(state)); }
   private size(state: State = this.state()) {
-    const indexedBytes = (this.db.prepare("SELECT (SELECT coalesce(sum(bytes),0) FROM events) + (SELECT coalesce(sum(length(key)+length(hash)+length(at)),0) FROM fingerprints) + (SELECT coalesce(sum(length(key)+length(hash)+length(at)+8),0) FROM commits) AS n").get() as { n: number }).n;
+    const indexedBytes = (this.db.prepare("SELECT (SELECT coalesce(sum(bytes),0) FROM events) + (SELECT coalesce(sum(length(key)+length(hash)+length(at)),0) FROM fingerprints) + (SELECT coalesce(sum(length(key)+length(hash)+length(at)+8),0) FROM commits) + (SELECT coalesce(sum(length(opKey)+length(client)+length(action)+length(appVersion)+length(buildId)+length(sourceRevision)+length(sourceState)+length(at)+16),0) FROM operation_durations) AS n").get() as { n: number }).n;
     return indexedBytes + Buffer.byteLength(JSON.stringify(state));
   }
   private receivedSequences(sourceId: string, streamId: string, after: number): number[] {
@@ -49,6 +52,7 @@ export class QualityDatabase {
     const cutoff = new Date(Date.now() - this.retentionDays * 86400_000).toISOString();
     this.db.prepare("DELETE FROM fingerprints WHERE at<? AND key NOT IN (SELECT sourceId||':'||streamId||':'||seq FROM events)").run(cutoff);
     this.db.prepare("DELETE FROM commits WHERE at<?").run(cutoff);
+    this.db.prepare("DELETE FROM operation_durations WHERE at<?").run(cutoff);
     let size = this.size(state);
     for (const row of this.db.prepare("SELECT receiveId,bytes,receivedAt FROM events ORDER BY receiveId").all() as { receiveId: number; bytes: number; receivedAt: string }[]) {
       if (pinned.has(row.receiveId)) continue;
@@ -59,7 +63,35 @@ export class QualityDatabase {
       size -= row.bytes;
       size += String(state.cleanedThrough).length - previousBoundaryBytes;
     }
+    if (this.size(state) + reserve > this.maxBytes) {
+      for (const row of this.db.prepare("SELECT opKey FROM operation_durations ORDER BY at, opKey").all() as { opKey: string }[]) {
+        if (this.size(state) + reserve <= this.maxBytes) break;
+        this.db.prepare("DELETE FROM operation_durations WHERE opKey=?").run(row.opKey);
+      }
+    }
     return this.size(state) + reserve <= this.maxBytes;
+  }
+  private syncOperationDurations(sourceId: string, client: QualityBatch["client"], events: QualityBatch["events"]) {
+    if (client !== "desktop" && client !== "web" && client !== "ios") return;
+    const touched = new Map<string, { launchId: string; action: "terminal_send" | "connection_recover"; operationId: string }>();
+    for (const event of events) {
+      if (event.action === "terminal_send" || event.action === "connection_recover") {
+        touched.set(`${sourceId}|${event.launchId}|${event.action}|${event.operationId}`, { launchId: event.launchId, action: event.action, operationId: event.operationId });
+      }
+    }
+    const query = this.db.prepare(`SELECT receiveId, body FROM events WHERE sourceId=? AND json_extract(body,'$.launchId')=? AND json_extract(body,'$.action')=? AND json_extract(body,'$.operationId')=? ORDER BY receiveId`);
+    const upsert = this.db.prepare(`INSERT OR IGNORE INTO operation_durations(opKey,client,action,appVersion,buildId,sourceRevision,sourceState,elapsedMs,receiveId,at) VALUES(?,?,?,?,?,?,?,?,?,?)`);
+    const remove = this.db.prepare(`DELETE FROM operation_durations WHERE opKey=?`);
+    for (const [opKey, op] of touched) {
+      const rows = query.all(sourceId, op.launchId, op.action, op.operationId) as { receiveId: number; body: string }[];
+      const parsed = rows.map(r => ({ ...(JSON.parse(r.body) as QualityBatch["events"][number]), receiveId: r.receiveId }));
+      if (parsed.some(e => e.stage === "failed" || e.stage === "rejected" || e.stage === "unknown")) { remove.run(opKey); continue; }
+      const started = parsed.find(e => e.stage === "started");
+      const confirmed = parsed.find(e => e.stage === "confirmed");
+      if (started && confirmed && confirmed.elapsedMs > 0 && confirmed.elapsedMs <= 120_000) {
+        upsert.run(opKey, client, op.action, confirmed.appVersion, confirmed.buildId, confirmed.sourceRevision, confirmed.sourceState, confirmed.elapsedMs, confirmed.receiveId, confirmed.at);
+      }
+    }
   }
   ingest(batch: QualityBatch, projects: Record<string, string | null>, checkpoint?: LogCheckpoint) {
     try { return this.db.transaction(() => {
@@ -116,11 +148,16 @@ export class QualityDatabase {
       if (checkpoint) { state.offsets[checkpoint.key] = { identity: checkpoint.identity, offset: checkpoint.offset, ...(checkpoint.missing ? { missing: true } : {}) }; if (checkpoint.gap) state.gaps.push({ kind: checkpoint.gap, at: receivedAt }); }
       state.storageBlocked = false; state.gaps = state.gaps.slice(-1000);
       const reserve = incoming.reduce((bytes, item) => bytes + Buffer.byteLength(item.body) + Buffer.byteLength(`${batch.sourceId}:${batch.streamId}:${item.event.seq}`) + item.hash.length + receivedAt.length, 0);
-      if (!this.prune(state, reserve)) throw new QualityError(503, "storage_full");
+      const durationReserve = (batch.client === "desktop" || batch.client === "web" || batch.client === "ios")
+        ? incoming.filter(item => item.event.action === "terminal_send" || item.event.action === "connection_recover").length * 240
+        : 0;
+      if (!this.prune(state, reserve + durationReserve)) throw new QualityError(503, "storage_full");
       for (const { event, hash, body } of incoming) {
         this.db.prepare("INSERT INTO events(sourceId,streamId,seq,receivedAt,hash,bytes,body) VALUES(?,?,?,?,?,?,?)").run(batch.sourceId, batch.streamId, event.seq, receivedAt, hash, Buffer.byteLength(body), body);
         this.db.prepare("INSERT INTO fingerprints VALUES(?,?,?)").run(`${batch.sourceId}:${batch.streamId}:${event.seq}`, hash, receivedAt);
       }
+      this.syncOperationDurations(batch.sourceId, batch.client, incoming.map(item => item.event));
+      if (this.size(state) > this.maxBytes && !this.prune(state, 0)) throw new QualityError(503, "storage_full");
       this.save(state);
       return { ackThrough: stream.ackThrough, acceptedCount: incoming.length, duplicateCount, receivedAt };
     })(); } catch (error) {
@@ -186,6 +223,48 @@ export class QualityDatabase {
       logSources: [{ kind: "backend", state: "configured" }, { kind: "desktop", state: "unconfigured" }] };
   }
   ledger(issueId?: string) { const ledger = this.state().ledger; return issueId ? { ...ledger, issues: ledger.issues.filter(i => i.issueId === issueId) } : ledger; }
+  latencyBaselines(): QualityLatencyBaselinesResponse {
+    return this.db.transaction(() => {
+      const rows = this.db.prepare(`SELECT d.opKey,d.client,d.action,d.appVersion,d.buildId,d.sourceRevision,d.sourceState,d.elapsedMs,d.receiveId,d.at,
+        EXISTS(SELECT 1 FROM events e WHERE e.receiveId=d.receiveId) AS live
+        FROM operation_durations d ORDER BY d.at ASC, d.receiveId ASC`).all() as DurationRow[];
+      const grouped = new Map<string, { meta: Omit<QualityLatencyBucket, "firstAt" | "lastAt" | "count" | "p50Ms" | "p90Ms" | "maxMs" | "sampleEvidenceIds">; firstAt: string; lastAt: string; durations: number[]; liveIds: number[] }>();
+      for (const row of rows) {
+        const key = [row.client, row.action, row.appVersion, row.buildId, row.sourceRevision, row.sourceState].join("|");
+        let bucket = grouped.get(key);
+        if (!bucket) {
+          bucket = { meta: { client: row.client, action: row.action, appVersion: row.appVersion, buildId: row.buildId, sourceRevision: row.sourceRevision, sourceState: row.sourceState }, firstAt: row.at, lastAt: row.at, durations: [], liveIds: [] };
+          grouped.set(key, bucket);
+        }
+        if (row.at < bucket.firstAt) bucket.firstAt = row.at;
+        if (row.at > bucket.lastAt) bucket.lastAt = row.at;
+        bucket.durations.push(row.elapsedMs);
+        if (row.live) bucket.liveIds.push(row.receiveId);
+      }
+      const buckets: QualityLatencyBucket[] = [...grouped.values()].map(item => {
+        const sorted = [...item.durations].sort((a, b) => a - b);
+        const count = sorted.length;
+        return {
+          ...item.meta, firstAt: item.firstAt, lastAt: item.lastAt, count,
+          p50Ms: sorted[Math.floor((count - 1) * 0.5)]!,
+          p90Ms: sorted[Math.floor((count - 1) * 0.9)]!,
+          maxMs: sorted[count - 1]!,
+          sampleEvidenceIds: [...new Set(item.liveIds)].slice(-5),
+        };
+      }).sort((a, b) => b.lastAt.localeCompare(a.lastAt) || b.firstAt.localeCompare(a.firstAt)).slice(0, 200);
+      return { schemaVersion: 1 as const, backendId: this.backendId, buckets };
+    })();
+  }
+  eventsByIds(ids: number[]) {
+    return this.db.transaction(() => {
+      const unique = [...new Set(ids.filter(id => Number.isSafeInteger(id) && id > 0))].slice(0, 1000);
+      if (!unique.length) return { events: [] as QualityEvidence[], expiredCount: 0 };
+      const rows = this.db.prepare("SELECT receiveId,body FROM events WHERE receiveId IN (SELECT value FROM json_each(?)) ORDER BY receiveId DESC").all(JSON.stringify(unique)) as Row[];
+      const expiredCount = Math.max(0, unique.length - rows.length);
+      const events = rows.slice(0, 50).reverse().map(r => ({ ...JSON.parse(r.body), receiveId: r.receiveId })) as QualityEvidence[];
+      return { events, expiredCount };
+    })();
+  }
   offsets() { return this.state().offsets; }
   commit(request: QualityLedgerCommit) {
     return this.db.transaction(() => {
@@ -197,14 +276,27 @@ export class QualityDatabase {
       if (ledger.revision !== request.expectedRevision) throw new QualityError(409, "revision_conflict");
       const now = new Date().toISOString();
       if (ledger.lease && ledger.lease.runKey !== request.runKey && ledger.lease.expiresAt > now) throw new QualityError(409, "ledger_busy");
-      if (request.phase !== "acquire" && request.phase !== "confirm_close" && ledger.lease?.runKey !== request.runKey) throw new QualityError(409, "lease_required");
+      if (!["acquire", "confirm_close", "mark_fixed"].includes(request.phase) && ledger.lease?.runKey !== request.runKey) throw new QualityError(409, "lease_required");
       if (request.confirmedIssueIds && request.phase !== "confirm_close") throw new QualityError(400, "invalid_confirmation_phase");
+      if ((request.fixedIssueIds || request.fixVersion || request.nextReviewAt) && request.phase !== "mark_fixed") throw new QualityError(400, "invalid_mark_fixed_phase");
       if (request.phase === "confirm_close") {
         if (!request.confirmedIssueIds?.length || !request.summary || request.pending || request.issues || request.readCursor || request.analysisCursor) throw new QualityError(400, "invalid_confirmation");
         for (const id of request.confirmedIssueIds) {
           const issue = ledger.issues.find(item => item.issueId === id);
           if (!issue || issue.status !== "awaiting_confirmation" || !issue.fixVersion || !issue.verification.length) throw new QualityError(409, "issue_not_ready_for_confirmation");
           issue.status = "closed";
+        }
+      } else if (request.phase === "mark_fixed") {
+        if (!request.fixedIssueIds?.length || !request.fixVersion || !request.summary || request.pending || request.issues || request.readCursor || request.analysisCursor || request.confirmedIssueIds) {
+          throw new QualityError(400, "invalid_mark_fixed");
+        }
+        const reviewAt = request.nextReviewAt ?? new Date(Date.parse(now) + 86_400_000).toISOString();
+        for (const id of request.fixedIssueIds) {
+          const issue = ledger.issues.find(item => item.issueId === id);
+          if (!issue || issue.status === "closed") throw new QualityError(409, "issue_not_open_for_fix");
+          issue.status = "observing";
+          issue.fixVersion = request.fixVersion;
+          issue.nextReviewAt = reviewAt;
         }
       } else if (request.phase === "acquire") {
         if (request.pending || request.issues || request.readCursor || request.analysisCursor) throw new QualityError(400, "invalid_acquire");
@@ -238,7 +330,7 @@ export class QualityDatabase {
         ledger.pending = request.pending;
         if (request.analysisCursor) ledger.analysisCursor = request.analysisCursor;
       } else if (request.pending || request.issues || request.readCursor || request.analysisCursor) throw new QualityError(400, "invalid_release");
-      ledger.lease = request.phase === "release" || request.phase === "confirm_close" ? null : { runKey: request.runKey, expiresAt: new Date(Date.now() + 3600_000).toISOString() };
+      ledger.lease = request.phase === "release" || request.phase === "confirm_close" || request.phase === "mark_fixed" ? null : { runKey: request.runKey, expiresAt: new Date(Date.now() + 3600_000).toISOString() };
       if (request.summary) ledger.reports = [...ledger.reports, { runKey: request.runKey, at: now, summary: request.summary }].slice(-90);
       ledger.revision++;
       const commitBytes = Buffer.byteLength(key) + hash.length + now.length + 8;

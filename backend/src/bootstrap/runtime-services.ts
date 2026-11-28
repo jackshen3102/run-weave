@@ -457,7 +457,7 @@ async function assembleRuntimeServices(
   const sessionSearch = new SessionSearchService(path.join(storagePaths.browserProfileDir, "session-search", "index.sqlite"),
     id => terminalSessionManager.getProjectContext(id)?.path ?? terminalSessionManager.getProject(id)?.path);
   resources.defer("session-search", () => sessionSearch.dispose());
-  const qualityRuntime = await (await import("../quality-workflow/runtime")).createQualityRuntime(resources, storagePaths, connectionIdentity, terminalSessionManager);
+  const qualityRuntime = await (await import("../quality-workflow/runtime")).createQualityRuntime(resources, storagePaths, connectionIdentity, terminalSessionManager, { options: { ptyService, runtimeRegistry: terminalRuntimeRegistry, tmuxService, tmuxOutputWatcher, terminalEventService, terminalStateService, activity: terminalActivity }, attachments: textAttachmentDelivery });
   const devResources = new DevResourcesService();
   resources.defer("dev-resources", () => devResources.dispose());
   const runtimeStatus = new BackendRuntimeStatusService(

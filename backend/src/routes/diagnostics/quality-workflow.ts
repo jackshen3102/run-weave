@@ -4,6 +4,7 @@ import { QualityStoreError } from "../../quality-workflow/store";
 export function installQualityWorkflowBodyParsers(app: Express, ...authorize: RequestHandler[]) {
   app.post("/api/quality-workflow/batches", ...authorize, json({ limit: "256kb" }));
   app.post("/api/quality-workflow/events/context", ...authorize, json({ limit: "1mb" }));
+  app.post("/api/quality-workflow/issues/:issueId/handoff", ...authorize, json({ limit: "64kb" }));
 }
 export function createQualityWorkflowRouter(service: QualityService): Router {
   const router = Router();
@@ -31,10 +32,12 @@ export function createQualityWorkflowRouter(service: QualityService): Router {
   }));
   router.post("/events/context", handle(req => service.context(req.body)));
   router.get("/coverage", handle(() => service.coverage()));
+  router.get("/latency-baselines", handle(() => service.latencyBaselines()));
   router.get("/ledger", handle(req => {
     if (req.query.issueId !== undefined && typeof req.query.issueId !== "string") throw new QualityStoreError(400, "invalid_issue_id");
     return service.ledger(req.query.issueId as string | undefined);
   }));
   router.post("/ledger/commit", handle(req => service.commit(req.body)));
+  router.post("/issues/:issueId/handoff", handle(req => service.handoff(String(req.params.issueId ?? ""), req.body)));
   return router;
 }
