@@ -10,6 +10,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import type {
   CreateScheduledTaskRequest,
+  ScheduledQuickInputBackgroundRuntime,
   ScheduledRun,
   ScheduledRunOutput,
   ScheduledTask,
@@ -340,12 +341,14 @@ export class ScheduledTaskService {
     expectedInputUpdatedAt: string,
     idempotencyKey: string,
     quickInputs: TerminalQuickInputService,
+    backgroundRuntime?: ScheduledQuickInputBackgroundRuntime,
   ): Promise<ScheduledRun> {
     this.requireEnabled();
     return startQuickInputRun({
       quickInputId,
       projectId,
       expectedInputUpdatedAt,
+      backgroundRuntime,
       idempotencyKey,
       quickInputs,
       store: this.requireStore(),

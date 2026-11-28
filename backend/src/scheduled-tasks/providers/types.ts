@@ -1,4 +1,5 @@
 import type {
+  ScheduledContinuationPolicy,
   ScheduledTaskProvider,
   ScheduledExecutionPolicy,
   ScheduledTaskOutcome,
@@ -17,6 +18,7 @@ export interface ScheduledProviderRequest {
   model?: string;
   effort?: string;
   executionPolicy?: ScheduledExecutionPolicy;
+  continuationPolicy?: ScheduledContinuationPolicy;
   resumeThreadId?: string;
   maxOutputBytes: number;
   maxWallTimeMs: number;

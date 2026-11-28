@@ -95,7 +95,7 @@ final class BackendQuickInputModel: ObservableObject {
     }
   }
 
-  func save(_ session: AppSession, item: BackendQuickInput?, title: String, body: String) async throws {
+  func save(_ session: AppSession, item: BackendQuickInput?, title: String, body: String, backgroundRuntime: String = "headless") async throws {
     guard canEdit(session) else { throw APIError.offline }
     let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard cleanTitle.count <= 80, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -105,13 +105,14 @@ final class BackendQuickInputModel: ObservableObject {
     let resolvedTitle = cleanTitle.isEmpty
       ? String((body.components(separatedBy: .newlines).first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? body).prefix(40))
       : cleanTitle
+    let resolvedRuntime = backgroundRuntime == "terminal" ? "terminal" : "headless"
     let expected = generation
     saving = true
     defer { if generation == expected { saving = false } }
     let result = try await session.withConnection(reportFailure: false) { api in
       let service = QuickInputService(api: api)
-      if let item { return try await service.update(item, title: resolvedTitle, data: body) }
-      return try await service.create(title: resolvedTitle, data: body)
+      if let item { return try await service.update(item, title: resolvedTitle, data: body, backgroundRuntime: resolvedRuntime) }
+      return try await service.create(title: resolvedTitle, data: body, backgroundRuntime: resolvedRuntime)
     }
     guard current(session), generation == expected else { throw CancellationError() }
     if item == nil { items.append(result) }
@@ -215,7 +216,7 @@ final class BackendQuickInputModel: ObservableObject {
     }
   }
 
-  func start(_ session: AppSession, item: BackendQuickInput, projectId: String) async throws -> ScheduledRun {
+  func start(_ session: AppSession, item: BackendQuickInput, projectId: String, backgroundRuntime: String? = nil) async throws -> ScheduledRun {
     guard canStart(session), !projectId.isEmpty,
       !starting.contains(item.id) else { throw APIError.offline }
     let expected = generation
@@ -226,17 +227,18 @@ final class BackendQuickInputModel: ObservableObject {
     guard current(session), generation == expected, canStart(session), let currentItem = items.first(where: { $0.id == item.id }) else {
       throw APIError.invalidResponse
     }
-    guard currentItem.data == item.data, currentItem.mode == item.mode else {
+    guard currentItem.data == item.data, currentItem.mode == item.mode,
+      backgroundRuntime != nil || currentItem.resolvedBackgroundRuntime == item.resolvedBackgroundRuntime else {
       throw BackendQuickInputFailure(code: "input_changed", message: "Quick input changed")
     }
-    let keyID = item.id + "\u{0}" + projectId
+    let keyID = item.id + "\u{0}" + projectId + "\u{0}" + (backgroundRuntime ?? "default")
     let key = runKeys[keyID] ?? UUID().uuidString
     runKeys[keyID] = key
     MobileAnalytics.actionEvent(.quickCommandBackground, .started)
     let run: ScheduledRun
     do {
       run = try await session.withConnection(reportFailure: false) {
-        try await QuickInputService(api: $0).start(currentItem, projectId: projectId, key: key)
+        try await QuickInputService(api: $0).start(currentItem, projectId: projectId, key: key, backgroundRuntime: backgroundRuntime)
       }
       MobileAnalytics.actionEvent(.quickCommandBackground, .acknowledged)
     } catch {

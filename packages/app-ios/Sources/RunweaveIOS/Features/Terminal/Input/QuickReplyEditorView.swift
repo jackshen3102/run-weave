@@ -9,8 +9,10 @@ struct QuickReplyEditorView: View {
   private let item: BackendQuickInput?
   private let originalTitle: String
   private let originalBody: String
+  private let originalBackgroundRuntime: String
   @State private var title: String
   @State private var text: String
+  @State private var backgroundRuntime: String
   @State private var failure: String?
   @State private var editingBody = false
   @State private var showingExitConfirmation = false
@@ -23,11 +25,15 @@ struct QuickReplyEditorView: View {
     self.item = item
     originalTitle = item?.title ?? ""
     originalBody = item?.data ?? ""
+    originalBackgroundRuntime = item?.resolvedBackgroundRuntime ?? "headless"
     _title = State(initialValue: item?.title ?? "")
     _text = State(initialValue: item?.data ?? initialBody)
+    _backgroundRuntime = State(initialValue: item?.resolvedBackgroundRuntime ?? "headless")
   }
 
-  private var hasChanges: Bool { title != originalTitle || text != originalBody }
+  private var hasChanges: Bool {
+    title != originalTitle || text != originalBody || backgroundRuntime != originalBackgroundRuntime
+  }
   private var canSave: Bool {
     store.canEdit(session) && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
@@ -46,6 +52,17 @@ struct QuickReplyEditorView: View {
         )
         .frame(height: min(maximumBodyHeight, max(minimumBodyHeight, bodyHeight)))
         .accessibilityIdentifier("quick-reply-body")
+      }
+      Section(
+        header: Text("后台运行方式"),
+        footer: Text("临时终端在当前项目新建专用终端，高置信完成后自动关闭；受阻或手动接管时保留现场。")
+      ) {
+        Picker("后台运行方式", selection: $backgroundRuntime) {
+          Text("纯后台").tag("headless")
+          Text("临时终端").tag("terminal")
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("quick-reply-background-runtime")
       }
       if let failure { Section { Text(failure).foregroundColor(.red) } }
       if let error = store.failure { Section { Text(error).foregroundColor(.red) } }
@@ -86,7 +103,7 @@ struct QuickReplyEditorView: View {
     failure = nil
     Task {
       do {
-        try await store.save(session, item: item, title: title, body: text)
+        try await store.save(session, item: item, title: title, body: text, backgroundRuntime: backgroundRuntime)
         dismiss()
       } catch { failure = error.localizedDescription }
     }

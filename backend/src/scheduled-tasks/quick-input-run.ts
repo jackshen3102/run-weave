@@ -3,6 +3,7 @@ import { settingText } from "@runweave/config-node";
 import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
 import type {
   ScheduledExecutionPolicy,
+  ScheduledQuickInputBackgroundRuntime,
   ScheduledRun,
   ScheduledTask,
 } from "@runweave/shared/scheduled-tasks";
@@ -16,6 +17,7 @@ export async function startQuickInputRun(args: {
   quickInputId: string;
   projectId: string;
   expectedInputUpdatedAt: string;
+  backgroundRuntime?: ScheduledQuickInputBackgroundRuntime;
   idempotencyKey: string;
   quickInputs: TerminalQuickInputService;
   store: ScheduledTaskStore;
@@ -36,11 +38,19 @@ export async function startQuickInputRun(args: {
     quickInputId,
     projectId,
     expectedInputUpdatedAt,
+    backgroundRuntime,
     idempotencyKey,
     store,
   } = args;
   const requestHash = createHash("sha256")
-    .update(JSON.stringify({ quickInputId, projectId, expectedInputUpdatedAt }))
+    .update(
+      JSON.stringify({
+        quickInputId,
+        projectId,
+        expectedInputUpdatedAt,
+        ...(backgroundRuntime ? { backgroundRuntime } : {}),
+      }),
+    )
     .digest("hex");
   try {
     const existing = await store.findQuickInputRun(
@@ -135,6 +145,8 @@ export async function startQuickInputRun(args: {
       409,
       "Selected background model or effort is unavailable",
     );
+  const resolvedBackgroundRuntime: ScheduledQuickInputBackgroundRuntime =
+    backgroundRuntime ?? input.backgroundRuntime ?? "headless";
   const now = new Date().toISOString();
   const task: ScheduledTask = {
     id: randomUUID(),
@@ -155,6 +167,7 @@ export async function startQuickInputRun(args: {
       projectName: parent.name,
       worktreeName:
         parseTerminalChildProjectId(projectId)?.worktreeName ?? null,
+      backgroundRuntime: resolvedBackgroundRuntime,
     },
     enabled: false,
     nextRunAt: null,

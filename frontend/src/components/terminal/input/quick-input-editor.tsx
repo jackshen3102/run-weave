@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useMemoizedFn } from "ahooks";
-import type { TerminalQuickInputItem } from "@runweave/shared/terminal/input";
+import type {
+  TerminalQuickInputBackgroundRuntime,
+  TerminalQuickInputItem,
+} from "@runweave/shared/terminal/input";
 import {
   createTerminalQuickInput,
   updateTerminalQuickInput,
@@ -33,6 +36,10 @@ export function QuickInputEditor({
 }) {
   const [title, setTitle] = useState(item?.title ?? "");
   const [data, setData] = useState(item?.data ?? "");
+  const [backgroundRuntime, setBackgroundRuntime] =
+    useState<TerminalQuickInputBackgroundRuntime>(
+      item?.backgroundRuntime === "terminal" ? "terminal" : "headless",
+    );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = useMemoizedFn(async () => {
@@ -43,6 +50,7 @@ export function QuickInputEditor({
       const payload = {
         title: title.trim() || buildQuickInputTitle(data),
         data,
+        backgroundRuntime,
       };
       if (item)
         await updateTerminalQuickInput(apiBase, token, item.id, {
@@ -70,6 +78,7 @@ export function QuickInputEditor({
       }}
     >
       <DialogContent
+        className="max-h-[85dvh] overflow-y-auto"
         onEscapeKeyDown={(event) => {
           if (saving) event.preventDefault();
         }}
@@ -94,12 +103,60 @@ export function QuickInputEditor({
         <label className="space-y-2 text-sm">
           内容
           <textarea
-            className="min-h-48 w-full rounded-md border bg-background p-3 text-sm"
+            className="min-h-32 w-full rounded-md border bg-background p-3 text-sm sm:min-h-48"
             value={data}
             onChange={(event) => setData(event.target.value)}
             disabled={saving}
           />
         </label>
+        <div
+          className="space-y-2 text-sm"
+          role="radiogroup"
+          aria-label="后台运行方式"
+        >
+          <span>后台运行方式</span>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                {
+                  value: "headless",
+                  label: "纯后台运行",
+                  desc: "静默调用后台 CLI，不创建终端",
+                },
+                {
+                  value: "terminal",
+                  label: "临时终端运行",
+                  desc: "新开专用终端，完成即关、受阻保留",
+                },
+              ] as const
+            ).map((option) => {
+              const selected = backgroundRuntime === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={saving}
+                  data-testid={`quick-input-runtime-${option.value}`}
+                  onClick={() => setBackgroundRuntime(option.value)}
+                  className={`rounded-lg border p-2.5 text-left transition-colors ${
+                    selected
+                      ? "border-primary bg-accent text-accent-foreground"
+                      : "border-border bg-background hover:bg-accent/50"
+                  }`}
+                >
+                  <span className="block text-sm font-medium">
+                    {option.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {option.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}

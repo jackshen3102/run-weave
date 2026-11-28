@@ -32,6 +32,14 @@ export function quickInputRunLabel(run: ScheduledRun) {
   if (run.status === "waiting" && run.continuation?.nextAt)
     return "等待自动继续";
   if (run.status === "running" && run.continuation?.count) return "继续处理中";
+  if (
+    quickInputRunNeedsAttention(run) &&
+    run.terminalBinding?.attachmentState === "ready"
+  ) {
+    return run.error?.code === "provider_terminal_taken_over"
+      ? "已接管终端"
+      : "执行受阻 · 终端已保留";
+  }
   if (run.outcome === "blocked") return "执行受阻";
   if (run.outcome === "failed") return "执行失败";
   if (run.status === "completed")
@@ -45,6 +53,11 @@ export function quickInputRunLabel(run: ScheduledRun) {
     cancelled: "已停止",
     skipped: "已跳过",
   }[run.status];
+}
+export function quickInputRunRuntimeLabel(run: ScheduledRun) {
+  return run.snapshot.origin?.backgroundRuntime === "terminal"
+    ? "临时终端"
+    : "纯后台";
 }
 export function quickInputRunProjectLabel(run: ScheduledRun) {
   const origin = run.snapshot.origin;

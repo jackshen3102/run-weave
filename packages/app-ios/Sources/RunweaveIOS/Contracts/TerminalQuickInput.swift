@@ -5,9 +5,11 @@ struct BackendQuickInput: Decodable, Identifiable, Equatable {
   let title: String
   let data: String
   let mode: String
+  let backgroundRuntime: String?
   let projectId: String?
   let pinned: Bool
   let updatedAt: String
+  var resolvedBackgroundRuntime: String { backgroundRuntime == "terminal" ? "terminal" : "headless" }
 }
 
 struct BackendQuickInputPage: Decodable {

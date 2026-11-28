@@ -45,6 +45,7 @@ import {
   quickInputRunLabel,
   quickInputRunNeedsAttention,
   quickInputRunProjectLabel,
+  quickInputRunRuntimeLabel,
 } from "./use-quick-input-background-runs";
 
 export function QuickInputRunRow({
@@ -85,7 +86,7 @@ export function QuickInputRunRow({
           </span>
         </span>
         <span className="block truncate text-xs text-muted-foreground">
-          {quickInputRunProjectLabel(run)}
+          {quickInputRunProjectLabel(run)} · {quickInputRunRuntimeLabel(run)}
         </span>
         {attention ? (
           <span className="block truncate text-xs text-orange-300">
@@ -226,6 +227,8 @@ export function QuickInputRunDetail({
     (!active || waitingContinuation) &&
     run.recoverable &&
     Boolean(run.threadRef);
+  const hasRetainedTerminal =
+    canOpen && run.terminalBinding?.attachmentState === "ready";
   const create = useMutation({
     mutationFn: async () => {
       if (run.executionContext.kind !== "project") throw new Error("本次运行没有项目来源。");
@@ -290,7 +293,7 @@ export function QuickInputRunDetail({
     <div className="space-y-4" data-testid="quick-command-run-detail">
       <h3 className="break-words text-xl font-semibold">{run.snapshot.name}</h3>
       <p className="text-xs text-muted-foreground">
-        {quickInputRunProjectLabel(run)} ·{" "}
+        {quickInputRunProjectLabel(run)} · {quickInputRunRuntimeLabel(run)} ·{" "}
         {displayTime(run.startedAt ?? run.scheduledFor)}
       </p>
       <p
@@ -334,7 +337,9 @@ export function QuickInputRunDetail({
               : canOpen
                 ? waitingContinuation
                   ? "停止自动继续并接管到终端"
-                  : "打开对话并继续追问"
+                  : hasRetainedTerminal
+                    ? "进入已保留的执行终端"
+                    : "打开对话并继续追问"
                 : "新建项目终端"}
           </Button>
         </div>
@@ -368,6 +373,7 @@ export function QuickInputRunDetail({
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">本次执行配置</summary>
         <p className="mt-2">
+          {quickInputRunRuntimeLabel(run)} ·{" "}
           {run.snapshot.model || "默认模型"} ·{" "}
           {run.snapshot.effort || "默认推理"} ·{" "}
           {executionPolicyLabel(run.snapshot.executionPolicy)}

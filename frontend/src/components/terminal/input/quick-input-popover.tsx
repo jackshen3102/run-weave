@@ -2,7 +2,10 @@ import { useMemoizedFn } from "ahooks";
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import type { ScheduledRun } from "@runweave/shared/scheduled-tasks";
-import type { TerminalQuickInputItem } from "@runweave/shared/terminal/input";
+import type {
+  TerminalQuickInputBackgroundRuntime,
+  TerminalQuickInputItem,
+} from "@runweave/shared/terminal/input";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import type { TerminalSessionListItem } from "@runweave/shared/terminal/session";
 import { AlertTriangle, ChevronRight, Plus, Search, Zap } from "lucide-react";
@@ -151,48 +154,66 @@ export function TerminalQuickInputPopover({
     setOpen(false);
     setRunsOpen(true);
   });
-  const start = useMemoizedFn((item: TerminalQuickInputItem) => {
-    const projectId = activeProject?.projectId;
-    if (!projectId || !canTargetTerminal) return;
-    void action(item, async () => {
-      const keyScope = `${scope}:${projectId}:${item.id}:${item.updatedAt}`;
-      const storageKey = `runweave:quick-input-run:${keyScope}`;
-      let savedKey: string | null = null;
-      try {
-        savedKey = sessionStorage.getItem(storageKey);
-      } catch {
-        /* unavailable */
-      }
-      const key =
-        pendingRunKeys.current.get(keyScope) ?? savedKey ?? crypto.randomUUID();
-      pendingRunKeys.current.set(keyScope, key);
-      try {
-        sessionStorage.setItem(storageKey, key);
-      } catch {
-        /* unavailable */
-      }
-      const clearKey = () => {
-        pendingRunKeys.current.delete(keyScope);
+  const start = useMemoizedFn(
+    (
+      item: TerminalQuickInputItem,
+      overrideRuntime?: TerminalQuickInputBackgroundRuntime,
+    ) => {
+      const projectId = activeProject?.projectId;
+      if (!projectId || !canTargetTerminal) return;
+      const effectiveRuntime =
+        overrideRuntime ?? item.backgroundRuntime ?? "headless";
+      void action(item, async () => {
+        const keyScope = `${scope}:${projectId}:${item.id}:${item.updatedAt}:${overrideRuntime ?? "default"}`;
+        const storageKey = `runweave:quick-input-run:${keyScope}`;
+        let savedKey: string | null = null;
         try {
-          sessionStorage.removeItem(storageKey);
+          savedKey = sessionStorage.getItem(storageKey);
         } catch {
           /* unavailable */
         }
-      };
-      setFeedback("提交中");
-      setNeedsBackgroundConfig(false);
-      try {
-        const run = await startTerminalQuickInputRun(
-          apiBase,
-          token,
-          item.id,
-          { projectId, expectedInputUpdatedAt: item.updatedAt },
-          key,
-        );
-        clearKey();
-        runs.upsertBackgroundRun(run);
-        setFeedback("已提交后台运行");
-      } catch (caught) {
+        const key =
+          pendingRunKeys.current.get(keyScope) ??
+          savedKey ??
+          crypto.randomUUID();
+        pendingRunKeys.current.set(keyScope, key);
+        try {
+          sessionStorage.setItem(storageKey, key);
+        } catch {
+          /* unavailable */
+        }
+        const clearKey = () => {
+          pendingRunKeys.current.delete(keyScope);
+          try {
+            sessionStorage.removeItem(storageKey);
+          } catch {
+            /* unavailable */
+          }
+        };
+        setFeedback("提交中");
+        setNeedsBackgroundConfig(false);
+        try {
+          const run = await startTerminalQuickInputRun(
+            apiBase,
+            token,
+            item.id,
+            {
+              projectId,
+              expectedInputUpdatedAt: item.updatedAt,
+              ...(overrideRuntime
+                ? { backgroundRuntime: overrideRuntime }
+                : {}),
+            },
+            key,
+          );
+          clearKey();
+          runs.upsertBackgroundRun(run);
+          setFeedback(
+            effectiveRuntime === "terminal"
+              ? "已启动临时终端运行"
+              : "已提交后台运行",
+          );
+        } catch (caught) {
         const details =
           caught instanceof HttpError
             ? (caught.details as { runId?: unknown } | undefined)

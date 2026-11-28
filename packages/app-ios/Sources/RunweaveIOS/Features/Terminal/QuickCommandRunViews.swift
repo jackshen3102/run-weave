@@ -32,7 +32,7 @@ struct QuickCommandRunRow: View {
             }
           }.font(.system(size: 11, weight: run.needsAttention ? .semibold : .regular)).foregroundColor(statusColor).lineLimit(1)
         }
-        Text(run.quickCommandProjectLabel).font(.caption2).foregroundColor(.secondary).lineLimit(1)
+        Text("\(run.quickCommandProjectLabel) · \(run.runtimeLabel)").font(.caption2).foregroundColor(.secondary).lineLimit(1)
         if run.needsAttention {
           Text(run.error?.message ?? "点按查看原因与输出")
             .font(.caption2).foregroundColor(.orange).lineLimit(1)
@@ -148,7 +148,7 @@ struct QuickCommandRunDetail: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         Text(run.snapshot.name).font(.title2.weight(.semibold))
-        Text("\(run.quickCommandProjectLabel)\n\(session.connection?.name ?? "当前电脑")")
+        Text("\(run.quickCommandProjectLabel) · \(run.runtimeLabel)\n\(session.connection?.name ?? "当前电脑")")
           .font(.caption).foregroundColor(.secondary)
         HStack {
           Label(run.statusLabel, systemImage: run.needsAttention ? "exclamationmark.triangle.fill" : "clock")
@@ -169,7 +169,7 @@ struct QuickCommandRunDetail: View {
             Text("本次运行没有可恢复的对话。可在相同项目和工作区新建终端查看问题，运行输出仍保留在此处。")
               .font(.caption).foregroundColor(.secondary)
           }
-          Button(opening ? (run.canOpen ? "正在恢复对话…" : "正在新建终端…") : (run.canOpen ? (run.waitingContinuation ? "停止自动继续并接管到终端" : "打开对话并继续追问") : "新建项目终端")) { openTerminal() }
+          Button(opening ? (run.canOpen ? "正在恢复对话…" : "正在新建终端…") : (run.canOpen ? (run.waitingContinuation ? "停止自动继续并接管到终端" : (run.hasRetainedTerminal ? "进入已保留的执行终端" : "打开对话并继续追问")) : "新建项目终端")) { openTerminal() }
             .frame(maxWidth: .infinity, minHeight: 44)
             .background(TerminalAppearance.accent.opacity(0.08)).cornerRadius(10)
             .disabled(opening || model.archiving.contains(run.id) || !polling || !session.canWrite)
@@ -187,7 +187,7 @@ struct QuickCommandRunDetail: View {
         .accessibilityIdentifier("quick-command-run-output")
         DisclosureGroup("本次执行配置") {
           VStack(alignment: .leading, spacing: 8) {
-            Text("\(run.snapshot.model ?? "默认模型") · \(TerminalAgentSettingsModel.effortLabel(run.snapshot.effort)) · \(run.snapshot.executionPolicyLabel)")
+            Text("\(run.runtimeLabel) · \(run.snapshot.model ?? "默认模型") · \(TerminalAgentSettingsModel.effortLabel(run.snapshot.effort)) · \(run.snapshot.executionPolicyLabel)")
             Text(run.snapshot.prompt).textSelection(.enabled)
           }.font(.caption).padding(.top, 8)
         }.font(.caption).foregroundColor(.secondary)

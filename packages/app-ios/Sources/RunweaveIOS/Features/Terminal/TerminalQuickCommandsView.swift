@@ -161,10 +161,18 @@ struct TerminalQuickCommandsView: View {
 
   private func commandRow(_ item: BackendQuickInput) -> some View {
     let run = model.run(for: item.id, projectId: projectId)
+    let usesTerminal = item.resolvedBackgroundRuntime == "terminal"
     return HStack(spacing: 6) {
       Button { sheet = .preview(item) } label: {
         VStack(alignment: .leading, spacing: 3) {
-          Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+          HStack(spacing: 5) {
+            Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+            if usesTerminal {
+              Text("临时终端").font(.system(size: 10, weight: .medium)).foregroundColor(TerminalAppearance.accent)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(TerminalAppearance.accent.opacity(0.12)).cornerRadius(4)
+            }
+          }
           Text(item.data.replacingOccurrences(of: "\n", with: " "))
             .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
         }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -177,6 +185,9 @@ struct TerminalQuickCommandsView: View {
         }
       }
       Menu {
+        Button(usesTerminal ? "本次用纯后台运行" : "本次用临时终端运行") {
+          start(item, overrideRuntime: usesTerminal ? "headless" : "terminal")
+        }.disabled((run?.active ?? false) || !currentTerminal || !model.canStart(session) || model.starting.contains(item.id))
         Button("插入输入框") { insert(item) }
           .disabled(!session.canWrite || sending != nil)
         Button("编辑指令") { sheet = .editor(item) }.disabled(!model.canEdit(session))
@@ -201,7 +212,7 @@ struct TerminalQuickCommandsView: View {
         .accessibilityLabel("查看运行 \(item.title)")
     } else {
       Button { start(item) } label: {
-        compactLabel(model.starting.contains(item.id) ? "提交中" : "后台", symbol: "play", primary: false)
+        compactLabel(model.starting.contains(item.id) ? "提交中" : "后台", symbol: item.resolvedBackgroundRuntime == "terminal" ? "terminal" : "play", primary: false)
       }.disabled(!currentTerminal || !model.canStart(session) || model.starting.contains(item.id))
         .accessibilityLabel("后台运行 \(item.title)").accessibilityIdentifier("quick-command-background-\(item.id)")
     }
@@ -240,16 +251,17 @@ struct TerminalQuickCommandsView: View {
     }
   }
 
-  private func start(_ item: BackendQuickInput) {
+  private func start(_ item: BackendQuickInput, overrideRuntime: String? = nil) {
     guard active, currentTerminal else { return }
     failure = nil; notice = nil
     let epoch = session.generation
+    let effectiveRuntime = overrideRuntime ?? item.resolvedBackgroundRuntime
     Task {
       do {
         guard epoch == session.generation, currentTerminal else { throw CancellationError() }
-        _ = try await model.start(session, item: item, projectId: projectId)
+        _ = try await model.start(session, item: item, projectId: projectId, backgroundRuntime: overrideRuntime)
         guard epoch == session.generation else { return }
-        notice = "已提交后台运行"
+        notice = effectiveRuntime == "terminal" ? "已启动临时终端运行" : "已提交后台运行"
       } catch {
         if !(error is CancellationError), epoch == session.generation { failure = displayError(error) }
       }
@@ -257,11 +269,25 @@ struct TerminalQuickCommandsView: View {
   }
 
   private func preview(_ item: BackendQuickInput) -> some View {
-    ScrollView {
-      Text(item.data).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(20)
+    let usesTerminal = item.resolvedBackgroundRuntime == "terminal"
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 12) {
+        Label(
+          usesTerminal ? "后台运行方式：临时终端（完成即关，受阻保留现场）" : "后台运行方式：纯后台（静默调用 CLI，不创建终端）",
+          systemImage: usesTerminal ? "terminal" : "play"
+        )
+        .font(.caption)
+        .foregroundColor(usesTerminal ? TerminalAppearance.accent : .secondary)
+        Text(item.data).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+      }.padding(20)
     }
     .navigationTitle(item.title).navigationBarTitleDisplayMode(.inline)
-    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { sheet = nil } } }
+    .toolbar {
+      ToolbarItem(placement: .cancellationAction) { Button("关闭") { sheet = nil } }
+      ToolbarItem(placement: .confirmationAction) {
+        Button("编辑") { sheet = .editor(item) }.disabled(!model.canEdit(session))
+      }
+    }
     .clarityMask()
   }
 }

@@ -116,7 +116,7 @@ pnpm runtime:pack-and-install
 ## 定时任务运行
 
 定时任务由 Backend 持有，关闭页面不停止调度。普通 Codex `full-access` 任务（含立即运行）
-每轮在专用普通终端执行；其他策略与快捷后台运行仍使用后台适配器。终端生命周期与接管边界见
+每轮在专用普通终端执行；快捷后台运行按指令配置或单次覆盖选择 `headless` 后台适配器或 `terminal` 受监督临时终端（完成即关、受阻保留），其他策略仍使用后台适配器。终端生命周期与接管边界见
 [CLI 执行目录与终端](../cli/scheduled-task-cli.md#执行目录与协议版本)。
 管理与恢复合同见 [定时任务接入](../../frontend/docs/scheduled-tasks.md)，HTTP/DTO 分别以
 [路由](../../backend/src/routes/scheduled-tasks.ts)与 [共享合同](../../packages/shared/src/scheduled-tasks/index.ts)为准。

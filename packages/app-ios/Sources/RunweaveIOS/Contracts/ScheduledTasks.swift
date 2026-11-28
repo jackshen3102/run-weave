@@ -45,6 +45,7 @@ struct ScheduledTaskConfig: Codable, Equatable {
     let projectId: String
     let projectName: String
     let worktreeName: String?
+    let backgroundRuntime: String?
     var label: String { projectName + (worktreeName.map { " / " + $0 } ?? "") }
   }
   var name = ""
@@ -172,9 +173,14 @@ struct ScheduledRun: Decodable, Identifiable {
   var needsAttention: Bool { !active && (outcome == "blocked" || outcome == "failed" || status == "failed" || status == "waiting") }
   var canArchive: Bool { snapshot.origin?.kind == "quick-input" && ["completed", "failed", "cancelled", "skipped"].contains(status) && archivedAt == nil }
   var canOpen: Bool { (!active || waitingContinuation) && recoverable && threadRef != nil }
+  var hasRetainedTerminal: Bool { canOpen && terminalBinding?.attachmentState == "ready" }
+  var runtimeLabel: String { snapshot.origin?.backgroundRuntime == "terminal" ? "临时终端" : "纯后台" }
   var statusLabel: String {
     if waitingContinuation { return "等待自动继续" }
     if status == "running", (continuation?.count ?? 0) > 0 { return "继续处理中" }
+    if needsAttention, terminalBinding?.attachmentState == "ready" {
+      return error?.code == "provider_terminal_taken_over" ? "已接管终端" : "执行受阻 · 终端已保留"
+    }
     if outcome == "blocked" { return "执行受阻" }
     if outcome == "failed" { return "执行失败" }
     if status == "completed" { return outcome == "succeeded" ? "已完成" : "运行已结束" }

@@ -26,6 +26,7 @@ import { verifyMaintenance } from "./maintenance";
 import { verifyContinuation } from "./continuation";
 import { verifyMigrations } from "./migrations";
 import { verifyArchive, verifyConcurrent } from "./concurrent";
+import { verifyQuickInputTerminal } from "./quick-input-terminal";
 
 const selected = readSelectedCase(process.argv.slice(2));
 const cases: Record<string, () => Promise<void>> = {
@@ -50,6 +51,8 @@ const cases: Record<string, () => Promise<void>> = {
     withStore((store, directory) =>
       verifyArchive(store, directory, taskFixture, runFixture),
     ),
+  quickInputTerminal: () =>
+    withStore((store) => verifyQuickInputTerminal(store, taskFixture)),
 };
 
 void main();

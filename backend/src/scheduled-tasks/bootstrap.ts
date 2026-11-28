@@ -1,3 +1,4 @@
+import path from "node:path";
 import { ScheduledTaskMigration } from "./migration";
 import { configuration, settingText } from "@runweave/config-node";
 import type { ScheduledTaskCapabilities } from "@runweave/shared/scheduled-tasks";
@@ -10,6 +11,7 @@ import { ScheduledTaskStore } from "./storage/store";
 import { ScheduledTerminalAttachment } from "./terminal-attachment";
 import type { TerminalSessionCreationOptions } from "../terminal/application/create-session";
 import { CodexTerminalScheduledTaskProvider } from "./providers/codex-terminal";
+import { QuickInputTerminalScheduledTaskProvider } from "./providers/quick-input-terminal";
 
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 60_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 16 * 1_024 * 1_024;
@@ -85,6 +87,11 @@ export async function createScheduledTaskSubsystem(params: {
       enabled,
       { maxConcurrentRuns, timeoutMs, maxOutputBytes },
       new CodexTerminalScheduledTaskProvider(params.terminalSessionManager, params.terminalOptions),
+      new QuickInputTerminalScheduledTaskProvider(
+        params.terminalSessionManager,
+        params.terminalOptions,
+        path.join(path.dirname(params.databasePath), "quick-input-classification"),
+      ),
     );
     await runtime.initialize();
     const service = new ScheduledTaskService(
