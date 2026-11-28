@@ -459,6 +459,8 @@ export abstract class TerminalManagerBase {
     if (active.provider === "codex") {
       return provider === "codex";
     }
+    if (active.provider === "claude") return provider === "claude";
+    if (active.provider === "agy") return provider === "agy";
     return (
       provider === "trae" || provider === "traex" || provider === "traecli"
     );

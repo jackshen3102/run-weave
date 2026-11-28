@@ -1,6 +1,9 @@
 import type { Router, Response } from "express";
 import { z } from "zod";
 import {
+  HANDOFF_CONTEXT_SCOPES,
+  HANDOFF_MAX_PLAN_FILES,
+  HANDOFF_PLACEMENTS,
   HANDOFF_PROMPT_BYTES,
   HANDOFF_TARGET_AGENTS,
 } from "@runweave/shared/terminal/context-handoff";
@@ -20,6 +23,12 @@ const schema = z
     targetAgent: z.enum(HANDOFF_TARGET_AGENTS),
     targetProjectId: z.string().min(1).max(1024),
     mode: z.enum(["native_fork", "portable_handoff"]),
+    placement: z.enum(HANDOFF_PLACEMENTS).default("new_terminal"),
+    contextScope: z.enum(HANDOFF_CONTEXT_SCOPES).default("full_conversation"),
+    planFilePaths: z
+      .array(z.string().min(1).max(1024))
+      .max(HANDOFF_MAX_PLAN_FILES)
+      .default([]),
     submitPrompt: z.boolean(),
     prompt: z
       .string()

@@ -18,6 +18,10 @@ export function clearCodexContext(terminalSessionId: string, panelId: string): v
     rmSync(codexContextPath(terminalSessionId, panelId), { force: true });
 }
 
+export function forceClearCodexContext(terminalSessionId: string, panelId: string): void {
+  rmSync(codexContextPath(terminalSessionId, panelId), { force: true });
+}
+
 /** null = unmanaged; managed without a valid live snapshot must fail closed. */
 export function readCodexContext(panel: Pick<TerminalPanelRecord, "id" | "terminalSessionId">): {
   managed: boolean;

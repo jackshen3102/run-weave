@@ -5,10 +5,18 @@ import { settingText } from "@runweave/config-node";
 import type {
   CreateTerminalContextHandoffRequest as Request,
   CreateTerminalContextHandoffResponse as Result,
+  HandoffContextScope,
+  HandoffPlacement,
   TerminalContextHandoffPreview,
 } from "@runweave/shared/terminal/context-handoff";
+import { applyPlanFilesToHandoffDocument } from "@runweave/shared/terminal/handoff-budgeter";
 import type { TerminalTextAttachmentDelivery } from "../attachments/text-attachment-delivery";
-import type { TerminalSessionManager } from "../manager/manager";
+import type {
+  TerminalPanelRecord,
+  TerminalSessionManager,
+  TerminalSessionRecord,
+} from "../manager/manager";
+import { isInteractiveShellLaunch } from "../tmux/output-watcher-helpers";
 import { TerminalAgentForkService } from "./agent-fork";
 import { prepareTerminalAgent } from "./agent-preparation";
 import { readTerminalConversation } from "./conversation";
@@ -18,16 +26,58 @@ import {
 } from "./create-session";
 import { handoffSnapshot } from "./handoff-budgeter";
 import { deliverHandoff } from "./handoff-delivery";
+import { detectPlanFiles, validatePlanFilePaths } from "./handoff-plan-files";
 import { getSessionOrThrow, TerminalPanelError } from "./panel-common";
 
 export class HandoffConflict extends TerminalPanelError {
   constructor(
     readonly code: string,
     message: string,
-    details?: { terminalSessionId: string },
+    details?: {
+      terminalSessionId: string;
+      panelId?: string;
+      placement?: HandoffPlacement;
+    },
   ) {
     super(409, message, details);
   }
+}
+
+function evaluateInPlaceEligibility(
+  session: TerminalSessionRecord,
+  panel: TerminalPanelRecord | undefined,
+  tmuxAvailable: boolean,
+): { canInPlaceHandoff: boolean; inPlaceUnavailableReason: string | null } {
+  if (session.runtimeKind !== "tmux" || !tmuxAvailable) {
+    return {
+      canInPlaceHandoff: false,
+      inPlaceUnavailableReason: "当前终端未使用 tmux，仅支持交接到新终端",
+    };
+  }
+  if (!isInteractiveShellLaunch(session.command, session.args)) {
+    return {
+      canInPlaceHandoff: false,
+      inPlaceUnavailableReason:
+        "当前终端启动命令不是持久交互式 Shell，仅支持交接到新终端",
+    };
+  }
+  if (!panel || panel.status !== "running" || !panel.tmuxPaneId) {
+    return {
+      canInPlaceHandoff: false,
+      inPlaceUnavailableReason: "当前终端面板不可用，仅支持交接到新终端",
+    };
+  }
+  if (
+    panel.terminalState?.state === "agent_running" ||
+    panel.terminalState?.state === "agent_starting"
+  ) {
+    return {
+      canInPlaceHandoff: false,
+      inPlaceUnavailableReason:
+        "当前 Agent 正在执行中，请等待空闲后再原位切换，或改用交接到新终端",
+    };
+  }
+  return { canInPlaceHandoff: true, inPlaceUnavailableReason: null };
 }
 const changed = () =>
   new HandoffConflict(
@@ -98,6 +148,12 @@ export class TerminalContextHandoffService {
       target.provider === "codex"
         ? await this.nativeFork.target(id).catch(() => null)
         : null;
+    const tmuxAvailable = Boolean(
+      this.options.tmuxService && (await this.options.tmuxService.isAvailable()),
+    );
+    const panel = this.manager.getPanel(panelId);
+    const eligibility = evaluateInPlaceEligibility(session, panel, tmuxAvailable);
+    const detectedPlanFiles = await detectPlanFiles(cwd, document);
     const preview: TerminalContextHandoffPreview = {
       sourceTerminalId: id,
       sourcePanelId: panelId,
@@ -117,9 +173,12 @@ export class TerminalContextHandoffService {
       ],
       canNativeCodexFork:
         native?.panelId === panelId && native.threadId === target.threadId,
+      canInPlaceHandoff: eligibility.canInPlaceHandoff,
+      inPlaceUnavailableReason: eligibility.inPlaceUnavailableReason,
+      detectedPlanFiles,
       ...coverage,
     };
-    return { preview, document, cwd, contexts, native };
+    return { preview, document, cwd, contexts, native, eligibility };
   }
 
   async preview(id: string) {
@@ -183,6 +242,137 @@ export class TerminalContextHandoffService {
         )?.path;
     if (!cwd) throw new TerminalPanelError(404, "目标工作区不可用");
     const { mode, targetAgent } = request;
+    const placement: HandoffPlacement = request.placement ?? "new_terminal";
+    const contextScope: HandoffContextScope =
+      request.contextScope ?? "full_conversation";
+    const planFilePaths = request.planFilePaths ?? [];
+    if (contextScope === "plan_focused" && planFilePaths.length === 0) {
+      throw new TerminalPanelError(400, "以计划为主交接时至少选择一份计划文件");
+    }
+    const planFiles =
+      planFilePaths.length > 0
+        ? await validatePlanFilePaths(source.cwd, planFilePaths)
+        : [];
+    const handoffDocument =
+      mode === "portable_handoff"
+        ? applyPlanFilesToHandoffDocument(source.document, {
+            contextScope,
+            planFiles,
+          })
+        : null;
+
+    if (placement === "in_place") {
+      if (!same) {
+        throw new HandoffConflict(
+          "handoff_in_place_requires_same_workspace",
+          "跨工作区交接仅支持交接到新终端",
+        );
+      }
+      if (mode === "native_fork") {
+        throw new HandoffConflict(
+          "handoff_in_place_incompatible_mode",
+          "原位切换不支持 Codex 原生 Fork，请使用便携交接或交接到新终端",
+        );
+      }
+      if (!source.eligibility.canInPlaceHandoff) {
+        throw new HandoffConflict(
+          "handoff_in_place_unavailable",
+          source.eligibility.inPlaceUnavailableReason ??
+            "当前面板暂不支持原位切换，请改用交接到新终端",
+        );
+      }
+      if (
+        !this.attachments ||
+        !(await this.options.tmuxService?.isAvailable())
+      ) {
+        throw new TerminalPanelError(503, "终端附件或 tmux 服务不可用");
+      }
+      await assertManagedDirectory(this.attachments.files.root);
+
+      const liveSession = getSessionOrThrow(this.manager, id);
+      const livePanel = this.manager.getPanel(request.panelId);
+      const liveEligibility = evaluateInPlaceEligibility(
+        liveSession,
+        livePanel,
+        true,
+      );
+      if (
+        liveSession.projectId !== preview.sourceProjectId ||
+        (this.manager.getPanelWorkspace(id)?.activePanelId ?? "default") !==
+          request.panelId
+      ) {
+        throw changed();
+      }
+      if (!liveEligibility.canInPlaceHandoff) {
+        throw new HandoffConflict(
+          "handoff_in_place_unavailable",
+          liveEligibility.inPlaceUnavailableReason ??
+            "当前面板暂不支持原位切换，请改用交接到新终端",
+        );
+      }
+
+      let switchedInPlace = false;
+      try {
+        const started = await prepareTerminalAgent(
+          this.manager,
+          liveSession,
+          this.options,
+          {
+            agent: targetAgent,
+            panelId: request.panelId,
+            cwd,
+            command:
+              targetAgent === "pi"
+                ? "pi"
+                : (settingText(`agents.${targetAgent}.binary`) ?? targetAgent),
+            prompt: "",
+          },
+          {
+            resetPanelBeforeLaunch: true,
+            skipInitialPrompt: true,
+            execInNewPane: false,
+            onPanelRespawned: () => {
+              switchedInPlace = true;
+            },
+          },
+        );
+        switchedInPlace = true;
+        const handoffFilePath = await deliverHandoff(
+          this.manager,
+          this.options,
+          this.attachments,
+          getSessionOrThrow(this.manager, id),
+          request.panelId,
+          request,
+          handoffDocument,
+          started.operationId,
+        );
+        return {
+          terminalSessionId: id,
+          panelId: request.panelId,
+          projectId,
+          targetAgent,
+          mode,
+          placement,
+          handoffFilePath,
+          status: "delivered",
+        };
+      } catch (error) {
+        if (switchedInPlace) {
+          throw new HandoffConflict(
+            "handoff_delivery_unconfirmed",
+            "当前面板已切换为目标 Agent，但交接上下文投递未确认，请核对终端输出；原会话仍保留在本地历史中",
+            {
+              terminalSessionId: id,
+              panelId: request.panelId,
+              placement: "in_place",
+            },
+          );
+        }
+        throw error;
+      }
+    }
+
     let createdId: string | undefined;
     try {
       let panelId: string;
@@ -208,6 +398,7 @@ export class TerminalContextHandoffService {
             terminalSessionId: createdId,
             panelId,
             mode,
+            placement,
             targetAgent,
             projectId,
             handoffFilePath: null,
@@ -261,7 +452,7 @@ export class TerminalContextHandoffService {
         getSessionOrThrow(this.manager, createdId),
         panelId,
         request,
-        mode === "portable_handoff" ? source.document : null,
+        handoffDocument,
         generation,
       );
       return {
@@ -270,6 +461,7 @@ export class TerminalContextHandoffService {
         projectId,
         targetAgent,
         mode,
+        placement,
         handoffFilePath,
         status: "delivered",
       };
@@ -283,7 +475,7 @@ export class TerminalContextHandoffService {
         throw new HandoffConflict(
           "handoff_delivery_unconfirmed",
           "交接投递未确认，请核对新终端",
-          { terminalSessionId },
+          { terminalSessionId, placement: "new_terminal" },
         );
       throw error;
     }

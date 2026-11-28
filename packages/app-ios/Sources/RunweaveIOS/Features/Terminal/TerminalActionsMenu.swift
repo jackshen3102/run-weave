@@ -47,8 +47,9 @@ struct TerminalActionsMenu: View, Equatable {
 
   var body: some View {
     Menu {
-      Button { handoff = true } label: { Label("交接到新终端…", systemImage: "arrowshape.turn.up.right") }
+      Button { handoff = true } label: { Label("换 Agent / 交接…", systemImage: "arrow.left.arrow.right") }
         .disabled(!session.canEditTerminal(terminalID))
+        .accessibilityIdentifier("terminal-menu-handoff")
       Text(cwd)
       Button(action: review) { Label(reviewAgain ? "重新 Review" : "代码 Review", systemImage: "checkmark.bubble") }
         .disabled(!canReview).accessibilityIdentifier("terminal-menu-code-review")

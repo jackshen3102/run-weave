@@ -46,6 +46,10 @@ export interface PrepareTerminalAgentInternalOptions {
   supervisorInput?: boolean;
   validateSupervisorTarget?: () => void;
   resetPanelBeforeResume?: boolean;
+  /** Respawn an existing idle tmux panel in-place and clear prior agent state before launching a new CLI. */
+  resetPanelBeforeLaunch?: boolean;
+  /** Invoked immediately after respawnPane succeeds so callers can track irreversible pane replacement. */
+  onPanelRespawned?: () => void;
   skipInitialPrompt?: boolean;
   /** Scheduled launches can exceed the PTY line limit before shell initialization. */
   stageResumeCommand?: boolean;
@@ -71,6 +75,8 @@ export async function prepareTerminalAgent(
   const resumeThreadId = request.resumeThreadId?.trim() || null;
   const resetPanelBeforeResume =
     internalOptions?.resetPanelBeforeResume === true;
+  const resetPanelBeforeLaunch =
+    internalOptions?.resetPanelBeforeLaunch === true;
   if (resumeThreadId && !request.panelId) {
     throwPreparationError({
       phase: "cli_launch",
@@ -248,7 +254,11 @@ export async function prepareTerminalAgent(
     }
 
     try {
-      if (reusingPanel && !internalOptions?.reuseReadyShell && (!resumingThread || resetPanelBeforeResume)) {
+      if (
+        reusingPanel &&
+        !internalOptions?.reuseReadyShell &&
+        (!resumingThread || resetPanelBeforeResume || resetPanelBeforeLaunch)
+      ) {
         if (!isInteractiveShellLaunch(session.command, session.args)) {
           throw new Error(
             "Terminal session command is not a persistent interactive shell",
@@ -268,13 +278,22 @@ export async function prepareTerminalAgent(
               options.tmuxService.buildSessionName(session.id),
           }),
         });
-        await terminalSessionManager.updatePanelTerminalState(
-          panel.id,
-          { state: "shell_idle", agent: null },
-          operationId,
-        );
+        internalOptions?.onPanelRespawned?.();
+        if (resetPanelBeforeLaunch) {
+          await terminalSessionManager.resetPanelAgentContextForInPlaceSwitch(
+            session.id,
+            panel.id,
+            operationId,
+          );
+        } else {
+          await terminalSessionManager.updatePanelTerminalState(
+            panel.id,
+            { state: "shell_idle", agent: null },
+            operationId,
+          );
+        }
       }
-      if (resetPanelBeforeResume) {
+      if (resetPanelBeforeResume || resetPanelBeforeLaunch) {
         await options.tmuxService.waitForPaneReady(paneTarget);
       } else if (createdPanel || (reusingPanel && !resumingThread && !internalOptions?.reuseReadyShell)) {
         await delay(AGENT_SHELL_STARTUP_DELAY_MS);
@@ -509,7 +528,7 @@ function buildAgentLaunchCommand(
       ? `RUNWEAVE_CODEX_CONFIG_ARGS=${shellQuote(JSON.stringify(args))} RUNWEAVE_CODEX_EXECUTABLE=${shellQuote(command)} `
       : "";
   if (execInNewPane) return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}exec ${invocation}`;
-  return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}${invocation}; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
+  return `RUNWEAVE_TERMINAL_AGENT_OPERATION_ID=${shellQuote(operationId)} ${codexContext}${invocation} ; __runweave_agent_exit=$?; tmux set-option -p -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_EXIT_OPTION} "exit:${operationId}:$__runweave_agent_exit"; tmux set-option -p -u -t "$TMUX_PANE" ${TMUX_AGENT_PREPARE_COMMAND_OPTION}`;
 }
 
 function withCodexSkipUpdateOnStartupArgs(

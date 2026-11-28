@@ -11,6 +11,7 @@ import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-c
 import {
   Activity,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowRight,
   BookOpen,
   CalendarClock,
@@ -322,6 +323,12 @@ export function TerminalWorkspaceHeader({
               scope, sessionId: activeSession.terminalSessionId, panelId: activePanelId ?? null,
             }); }}><BookOpen className="h-3.5 w-3.5" />阅读会话</Button>
         </Tooltip> : null}
+        {!isMobileMonitor ? <Tooltip content="换 Agent / 交接执行">
+          <Button variant="ghost" size="sm" aria-label="换 Agent" disabled={loading || !activeSessionId}
+            className="h-6 shrink-0 gap-1.5 px-2 text-sky-200 hover:bg-slate-800 hover:text-sky-100"
+            onClick={() => { if (activeSessionId) setHandoff(activeSessionId); }}>
+            <ArrowLeftRight className="h-3.5 w-3.5" />换 Agent</Button>
+        </Tooltip> : null}
         <Tooltip content="随记">
           <Button
             type="button"
@@ -366,7 +373,7 @@ export function TerminalWorkspaceHeader({
               </DropdownMenuTrigger>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuItem disabled={loading || !activeSessionId} onSelect={() => setHandoff(activeSessionId)}>交接到新终端…</DropdownMenuItem>
+              <DropdownMenuItem disabled={loading || !activeSessionId} onSelect={() => setHandoff(activeSessionId)}>换 Agent / 交接…</DropdownMenuItem>
               <DropdownMenuGroup>
                 <DropdownMenuItem disabled={loading || !activeSession || codeReviewAction?.pending || reviewBusy} onSelect={() => void startCodeReview()}>
                   {latestReview?.caseStatus === "open" && latestReview.reportId ? "重新 Review" : "代码 Review"}

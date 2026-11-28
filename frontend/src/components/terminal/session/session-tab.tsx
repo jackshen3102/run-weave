@@ -303,7 +303,7 @@ export function TerminalSessionTab({
             <MessageCircle className="size-4" />
             旁聊{sideChat.state.unread ? " · 新回复" : ""}
           </ContextMenuItem>
-          <ContextMenuItem disabled={mutationLoading} onSelect={() => setHandoff(true)}>交接到新终端…</ContextMenuItem>
+          <ContextMenuItem disabled={mutationLoading} onSelect={() => setHandoff(true)}>换 Agent / 交接…</ContextMenuItem>
           {(session.tmuxSessionName || forkState?.agent === "codex") && <ContextMenuItem className="gap-2" disabled={!canFork || forking || mutationLoading}
             title={canFork ? undefined : "请等待当前 Codex 会话空闲后再 Fork"}
             onSelect={() => { void fork(); }}>

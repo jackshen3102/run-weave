@@ -1,4 +1,5 @@
 import { invalidateTerminalInput } from "../runtime/input-admission";
+import { forceClearCodexContext } from "../runtime/codex-context";
 import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
 import type { TerminalAgentKind, TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
@@ -358,6 +359,71 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     this.notifyPanelMutation(panel, { operationId });
     if (inputSession && (previousAgent === "codex" || terminalState.agent === "codex")) {
       this.observer.onPanelProgramStatusChanged?.(inputSession, panel);
+    }
+    return panel;
+  }
+
+  async resetPanelAgentContextForInPlaceSwitch(
+    terminalSessionId: string,
+    panelId: string,
+    operationId?: string | null,
+  ): Promise<TerminalPanelRecord | undefined> {
+    const panel = this.panels.get(panelId);
+    const session = this.sessions.get(terminalSessionId);
+    if (!panel || !session || panel.terminalSessionId !== terminalSessionId) {
+      return undefined;
+    }
+
+    const previousAgent = panel.terminalState?.agent;
+    const previousThreadIds = new Set(
+      [panel.threadId, panel.lastThreadId].filter(
+        (value): value is string => Boolean(value),
+      ),
+    );
+    delete panel.threadId;
+    delete panel.threadProvider;
+    delete panel.codexContext;
+    forceClearCodexContext(terminalSessionId, panelId);
+    delete panel.claude;
+    delete panel.pi;
+    delete panel.piLastCompletionKey;
+    delete panel.agy;
+    delete panel.pendingPermissionRequest;
+    delete panel.pendingAgyQuestion;
+    delete panel.oscProgramStatus;
+    delete panel.preview;
+    delete panel.latestReply;
+    delete panel.lastThreadId;
+    delete panel.lastThreadProvider;
+    delete panel.lastThreadStatus;
+    delete panel.lastThreadUpdatedAt;
+    panel.activeCommand = null;
+    panel.terminalState = { state: "shell_idle", agent: null };
+
+    await this.clearRecentAgentActivity(terminalSessionId, panelId);
+    await this.upsertPanel(panel);
+    this.notifyPanelMutation(panel, { operationId });
+    if (previousAgent === "codex") {
+      this.observer.onPanelProgramStatusChanged?.(session, panel);
+    }
+
+    const workspace = this.panelWorkspaces.get(terminalSessionId);
+    const sessionPanelCount = Array.from(this.panels.values()).filter(
+      (candidate) => candidate.terminalSessionId === terminalSessionId,
+    ).length;
+    if (workspace?.activePanelId === panelId || sessionPanelCount <= 1) {
+      delete session.claude;
+      delete session.pi;
+      delete session.agy;
+      delete session.latestReply;
+      if (session.lastThreadId && previousThreadIds.has(session.lastThreadId)) {
+        delete session.lastThreadId;
+        delete session.lastThreadProvider;
+        delete session.lastThreadStatus;
+        delete session.lastThreadUpdatedAt;
+      }
+      await this.updateSessionThreadId(terminalSessionId, null, null);
+      await this.updateSessionPreview(terminalSessionId, null);
     }
     return panel;
   }
