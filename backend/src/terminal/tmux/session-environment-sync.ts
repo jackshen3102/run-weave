@@ -83,6 +83,7 @@ export async function syncExistingTmuxSessionEnvironments(
                       projectId: session.projectId,
                       source: session.source,
                       tmuxSessionName: session.target.sessionName,
+                      tmuxSocketPath: session.target.socketPath,
                     },
                     env,
                   ),

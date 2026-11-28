@@ -9,6 +9,7 @@ import {
   RemoteAccessVerificationError,
 } from "./remote-access.js";
 import { logDesktopIncident } from "../desktop/diagnostics.js";
+import { isSshAuthErrorCode } from "./ssh-process.js";
 export interface RemoteAccessOwner {
   config: TunnelHostConfig;
   runtime: TunnelHostRuntime;
@@ -145,7 +146,7 @@ export async function refreshRemoteAccess(
       h.remote = null;
       h.runtime.remoteAccess = {
         ...state(
-          detail.code === "SSH_AUTH_FAILED" ? "needs_auth" : "failed",
+          isSshAuthErrorCode(detail.code) ? "needs_auth" : "failed",
           detail,
         ),
         address: null,

@@ -9,10 +9,16 @@ export interface AppServerCliLogger {
   warn(event: string, details?: Record<string, unknown>): void;
 }
 
+export interface ObservedAppServerConnection extends AppServerConnectionInfo {
+  home: string | null;
+  lockPath: string | null;
+  pid: number | null;
+}
+
 export async function checkAppServerAvailability(options: {
   env: NodeJS.ProcessEnv;
   logger?: AppServerCliLogger;
-}): Promise<AppServerConnectionInfo | null> {
+}): Promise<ObservedAppServerConnection | null> {
   const status = await getAppServerStatus({ env: options.env });
   if (!status.available) {
     options.logger?.warn("appServer.unavailable", {
@@ -41,5 +47,10 @@ export async function checkAppServerAvailability(options: {
     pid: status.pid,
     releaseId: status.lock?.releaseId ?? null,
   });
-  return connection;
+  return {
+    ...connection,
+    home: status.stateDir ?? null,
+    lockPath: status.lockPath ?? null,
+    pid: status.pid ?? null,
+  };
 }

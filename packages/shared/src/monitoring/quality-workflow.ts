@@ -9,7 +9,7 @@ export interface QualityEvent {
   terminalSessionId?: string; attemptId?: string; relatedOperationId?: string;
   failureCode?: string; status?: number; closeCode?: number;
 }
-export interface QualityRange { from: number; through: number; reason: "overflow" | "corruption" }
+export interface QualityRange { from: number; through: number; reason: "overflow" | "corruption" | "rejected" }
 export interface QualityBatch {
   schemaVersion: 1; backendId: string; sourceId: string; streamId: string;
   client: "desktop" | "web" | "ios" | "backend"; uploadedAt: string;

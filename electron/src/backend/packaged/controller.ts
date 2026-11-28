@@ -77,6 +77,9 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
     const sharedAppServerPid = Number(
       process.env.RUNWEAVE_SHARED_APP_SERVER_PID ?? "",
     );
+    const observedAppServer = stoppedAt
+      ? null
+      : desktopRuntime.appServerConnection;
     const appPath = app.isPackaged
       ? path.resolve(path.dirname(process.execPath), "../..")
       : null;
@@ -114,13 +117,22 @@ export function writeBetaDesktopStatus(stoppedAt: string | null = null): void {
             runtimeSource: desktopRuntime.packagedBackendState.runtimeSource,
           },
           appServer: {
-            baseUrl: process.env.RUNWEAVE_APP_SERVER_URL ?? null,
-            home: process.env.RUNWEAVE_APP_SERVER_HOME ?? null,
-            lockPath: process.env.RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH ?? null,
+            baseUrl:
+              process.env.RUNWEAVE_APP_SERVER_URL ??
+              observedAppServer?.baseUrl ??
+              null,
+            home:
+              process.env.RUNWEAVE_APP_SERVER_HOME ??
+              observedAppServer?.home ??
+              null,
+            lockPath:
+              process.env.RUNWEAVE_SHARED_APP_SERVER_LOCK_PATH ??
+              observedAppServer?.lockPath ??
+              null,
             pid:
               Number.isInteger(sharedAppServerPid) && sharedAppServerPid > 0
                 ? sharedAppServerPid
-                : null,
+                : (observedAppServer?.pid ?? null),
           },
           cli: {
             configPath: process.env.RUNWEAVE_CONFIG_FILE ?? null,
@@ -261,10 +273,20 @@ export async function checkAppServerForPackagedBackend(
 export async function checkAndNotifyAppServerAvailability(
   env: NodeJS.ProcessEnv,
 ): Promise<Awaited<ReturnType<typeof checkAppServerAvailability>>> {
-  return await checkAppServerAvailability({
+  const connection = await checkAppServerAvailability({
     env,
     logger: desktopRuntime.incidentLogger ?? undefined,
   });
+  desktopRuntime.appServerConnection = connection
+    ? {
+        baseUrl: connection.baseUrl,
+        home: connection.home,
+        lockPath: connection.lockPath,
+        pid: connection.pid,
+      }
+    : null;
+  writeBetaDesktopStatus();
+  return connection;
 }
 
 export async function startPackagedBackendRuntime(): Promise<PackagedBackendConnectionState> {
@@ -373,6 +395,9 @@ export async function connectExternalBackendRuntime(): Promise<PackagedBackendCo
     }
     if (usesInstalledServer && desktopRuntime.cdpProxy) {
       await publishExternalBackendCdpEndpoint(desktopRuntime.cdpProxy.endpoint, backendUrl);
+    }
+    if (usesInstalledServer && !desktopRuntime.appServerConnection) {
+      await checkAndNotifyAppServerAvailability(process.env).catch(() => null);
     }
     return setPackagedBackendState(
       createAvailablePackagedBackendState(backendUrl, {

@@ -264,6 +264,7 @@ async function ensureTerminalRuntimeInternal(
           projectId: currentSession.projectId,
           source: currentSession.source,
           tmuxSessionName: target.sessionName,
+          tmuxSocketPath: target.socketPath,
         });
         const actualLaunch = await options.tmuxService!.createDetachedSession(
           target,
@@ -318,6 +319,7 @@ async function ensureTerminalRuntimeInternal(
           projectId: currentSession.projectId,
           source: currentSession.source,
           tmuxSessionName: target.sessionName,
+          tmuxSocketPath: target.socketPath,
         }),
       );
       await options.tmuxOutputWatcher?.watchSession(currentSession);

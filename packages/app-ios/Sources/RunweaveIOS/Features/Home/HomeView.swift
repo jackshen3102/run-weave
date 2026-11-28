@@ -66,9 +66,10 @@ struct HomeView: View {
     initializedGeneration = session.generation
   }
 
-  private func row(_ terminal: HomeTerminal, projectName: String? = nil) -> some View {
+  private func row(_ terminal: HomeTerminal, projectName: String? = nil, inAttentionSection: Bool = false) -> some View {
     let record = session.home.record(terminal.id)
     return HomeTerminalRow(session: session, terminal: terminal, projectName: projectName,
+      inAttentionSection: inAttentionSection,
       attentionSlot: attentionSlots[terminal.id],
       branchStatus: projectName == nil ? nil : branchStatuses.status(for: terminal, generation: session.generation, online: session.health.status == .online),
       showBranchUpdates: {
@@ -125,7 +126,7 @@ struct HomeView: View {
           ForEach(attention) { terminal in
             row(terminal, projectName: session.overview?.projects.first {
               $0.id == HomeOverview.parentProjectID(terminal.projectId)
-            }?.name)
+            }?.name, inAttentionSection: true)
           }
         }
       }

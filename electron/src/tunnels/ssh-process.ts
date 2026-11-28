@@ -4,6 +4,79 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+export const SSH_AUTH_ERROR_CODES = new Set([
+  "SSH_AUTH_FAILED",
+  "SSH_GSSAPI_AUTH_FAILED",
+  "SSH_PUBLICKEY_AUTH_FAILED",
+  "SSH_HOST_KEY_FAILED",
+  "SSH_HOST_KEY_CHANGED",
+]);
+
+export function isSshAuthErrorCode(code: string | null | undefined): boolean {
+  return Boolean(code && SSH_AUTH_ERROR_CODES.has(code));
+}
+
+function extractSshAuthDetail(stderr: string): string | null {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const match =
+    lines.find((line) =>
+      /permission denied|host key verification failed|REMOTE HOST IDENTIFICATION|matching credential not found/i.test(
+        line,
+      ),
+    ) ?? null;
+  if (!match) return null;
+  // Strip any leading "user@host:" prefix so only the protocol diagnostic remains.
+  const stripped = match
+    .replace(/^@+\s*WARNING:\s*/i, "")
+    .replace(/\s*@+$/, "")
+    .replace(/^[^\s:]+@[^\s:]+:\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped) return null;
+  return stripped.length > 120 ? `${stripped.slice(0, 117)}...` : stripped;
+}
+
+export function classifySshExitError(stderr: string): string {
+  if (
+    /address already in use|cannot listen to port|EADDRINUSE|remote port forwarding failed/i.test(
+      stderr,
+    )
+  ) {
+    return "PORT_IN_USE: 通道端口已被占用，请修改端口或稍后重试";
+  }
+  const detail = extractSshAuthDetail(stderr);
+  const suffix = detail ? `（${detail}）` : "";
+  if (/REMOTE HOST IDENTIFICATION|Offending .* key/i.test(stderr)) {
+    return `SSH_HOST_KEY_CHANGED: 远端主机密钥已变更，请核对主机身份并更新本机 known_hosts${suffix}`;
+  }
+  if (/host key verification failed/i.test(stderr)) {
+    return `SSH_HOST_KEY_FAILED: 主机密钥验证失败，请先在终端通过 ssh 确认主机指纹并写入 known_hosts${suffix}`;
+  }
+  if (
+    /permission denied[^\r\n]*gssapi|gssapi-with-mic[^\r\n]*permission denied|matching credential not found/i.test(
+      stderr,
+    )
+  ) {
+    return `SSH_GSSAPI_AUTH_FAILED: Kerberos/GSSAPI 凭据验证失败（票据可能已过期），请执行 kinit 续票后重试${suffix}`;
+  }
+  if (/permission denied\s*\([^)\r\n]*publickey/i.test(stderr)) {
+    return `SSH_PUBLICKEY_AUTH_FAILED: SSH 公钥认证失败，请检查本机密钥、ssh-agent 或 ~/.ssh/config${suffix}`;
+  }
+  if (/permission denied/i.test(stderr)) {
+    return `SSH_AUTH_FAILED: SSH 身份认证失败，请检查本机 SSH 凭据与配置${suffix}`;
+  }
+  if (/EADDRNOTAVAIL/.test(stderr)) {
+    return "RELAY_ADDRESS_INVALID: 服务器没有此内网地址，请修改中转服务器地址";
+  }
+  if (/node:.*not found|node:.*command not found/i.test(stderr)) {
+    return "RELAY_NODE_MISSING: 中转服务器需要安装 Node.js，并可通过 SSH 执行 node";
+  }
+  return "SSH_DISCONNECTED: 服务器不可达或连接中断，请检查网络、VPN 和 SSH 配置";
+}
+
 export interface SshProcess {
   child: ChildProcessWithoutNullStreams;
   ready: Promise<void>;
@@ -118,23 +191,7 @@ export function startSsh(
       finish(new Error("SSH_START_FAILED: 无法启动系统 SSH")),
     );
     child.once("exit", () =>
-      finish(
-        new Error(
-          /address already in use|cannot listen to port|EADDRINUSE|remote port forwarding failed/i.test(
-            stderr,
-          )
-            ? "PORT_IN_USE: 通道端口已被占用，请修改端口或稍后重试"
-            : /permission denied|host key verification failed|REMOTE HOST IDENTIFICATION/i.test(
-                  stderr,
-                )
-              ? "SSH_AUTH_FAILED: SSH 身份或主机密钥验证失败，请检查本机 SSH 配置"
-              : /EADDRNOTAVAIL/.test(stderr)
-                ? "RELAY_ADDRESS_INVALID: 服务器没有此内网地址，请修改中转服务器地址"
-                : /node:.*not found|node:.*command not found/i.test(stderr)
-                  ? "RELAY_NODE_MISSING: 中转服务器需要安装 Node.js，并可通过 SSH 执行 node"
-                  : "SSH_DISCONNECTED: 服务器不可达或连接中断，请检查网络、VPN 和 SSH 配置",
-        ),
-      ),
+      finish(new Error(classifySshExitError(stderr))),
     );
   });
   // Callers attach immediately, but cancellation may happen before they await readiness.

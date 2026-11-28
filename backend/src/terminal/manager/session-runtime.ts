@@ -17,7 +17,17 @@ import { isExistingDirectory } from "./path";
 import { getAgentForCommand } from "../state/terminal-state-service";
 import { TerminalManagerAgentActivityRuntime } from "./agent-activity-runtime";
 
+const MAX_RECENTLY_DELETED_TERMINALS = 2_000;
+
 export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityRuntime {
+  private readonly recentlyDeletedTerminalProjects = new Map<string, string | null>();
+
+  getKnownTerminalProjectId(terminalSessionId: string): string | null | undefined {
+    const live = this.sessions.get(terminalSessionId);
+    if (live) return live.projectId ?? null;
+    return this.recentlyDeletedTerminalProjects.get(terminalSessionId);
+  }
+
   setSessionProgramStatus(terminalSessionId: string, status?: Omit<TerminalProgramStatus, "source">): void {
     const session = this.sessions.get(terminalSessionId);
     if (!session || session.runtimeKind !== "pty" || session.status !== "running") return;
@@ -539,6 +549,13 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     this.clearRecentAgentActivitiesForSession(terminalSessionId);
     this.clearPanelAgentOperationState(terminalSessionId);
     invalidateTerminalInput(session);
+    this.recentlyDeletedTerminalProjects.delete(terminalSessionId);
+    this.recentlyDeletedTerminalProjects.set(terminalSessionId, session.projectId ?? null);
+    while (this.recentlyDeletedTerminalProjects.size > MAX_RECENTLY_DELETED_TERMINALS) {
+      const oldest = this.recentlyDeletedTerminalProjects.keys().next().value;
+      if (oldest === undefined) break;
+      this.recentlyDeletedTerminalProjects.delete(oldest);
+    }
     this.sessions.delete(terminalSessionId);
     for (const panel of this.panels.values()) {
       if (panel.terminalSessionId === terminalSessionId) {

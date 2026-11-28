@@ -1,6 +1,6 @@
 version: 1
 name: 独立代码 Review 无 Hooks 审核弹窗启动
-description: 验证 Reviewer 在保留受信任及管理员托管 Hooks 的前提下不等待启动审核，且不会自动执行已启用的未信任 Hook。仅适用于具备原生 hooks/list 的 Codex。
+description: 验证 Reviewer 在保留受信任及管理员托管 Hooks 的前提下不等待启动审核，并按实例开关处理已启用的未信任 Hook。仅适用于具备原生 hooks/list 的 Codex。
 cases:
   - id: ICH-001
     name: 已停用且内容变更的 Hooks 不阻塞 Reviewer 启动
@@ -18,6 +18,7 @@ cases:
     required: true
     description: 一次性启动参数不能使未获授权的启用 Hook 执行，配置不可核验时也必须明确阻塞。
     preconditions:
+      - agents.codex.allowUntrustedReviewerHooks 使用默认值 false。
       - 本例独立 Git 项目已有正常目录信任，可临时配置一个未信任的项目 Hook；其唯一副作用是写本例自有标记文件。
       - 本例来源终端归属已确认，原生 hooks/list 可以观察该 Hook 的启用与未信任状态。
     steps:
@@ -35,3 +36,13 @@ cases:
       - 使用 toolkit:playwright-cli 在本例来源终端更多菜单发起 Review，确认无启动审核弹窗且来源 Agent 未承担调度。
       - 核对独立 Reviewer 的真实工具调用、关联轮次 completed final 与 idle，确认报告持久化后才进入回传。
       - 确认来源保持原 panel、thread 和启动代次并且只收到一次报告，delivery 为 written；保存原生轮次和界面证据后清理本例环境。
+  - id: ICH-004
+    name: 实例允许未信任 Hook 后可启动独立 Reviewer
+    required: true
+    description: 显式开启开关的实例在下次启动 Reviewer 时接受新增或修改过的已启用 Hook。
+    preconditions:
+      - 独立测试实例中已启用一个未信任的无害 Hook，触发时写入本例的标记文件。
+      - 实例已将 agents.codex.allowUntrustedReviewerHooks 设为 true 并重启 Backend。
+    steps:
+      - 从有可审变更的来源终端发起 Review，确认独立 Reviewer 已进入原生会话并收到首轮任务。
+      - 触发该 Hook，确认标记文件出现，且启动过程未要求人工信任 Hook。

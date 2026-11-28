@@ -5,8 +5,16 @@ import type { PackagedBackendRuntime } from "../backend/runtime.js";
 import type { DesktopIncidentLogger } from "./incident-logger.js";
 import type { RuntimeRelease } from "../runtime/release.js";
 
+export interface DesktopObservedAppServer {
+  baseUrl: string;
+  home: string | null;
+  lockPath: string | null;
+  pid: number | null;
+}
+
 export const desktopRuntime = {
   packagedBackend: null as PackagedBackendRuntime | null,
+  appServerConnection: null as DesktopObservedAppServer | null,
   cdpProxy: null as CdpProxyRuntime | null,
   mainWindow: null as BrowserWindow | null,
   activeRelease: null as RuntimeRelease | null,

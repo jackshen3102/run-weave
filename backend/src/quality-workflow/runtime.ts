@@ -31,7 +31,7 @@ export class QualityRuntime {
 export async function createQualityRuntime(resources: import("../bootstrap/resource-scope").ResourceScope, paths: import("../utils/path").StoragePaths, identity: import("../auth/connection-identity").ConnectionIdentityService, manager: import("../terminal/manager/manager").TerminalSessionManager, handoffDeps?: { options: TerminalSessionCreationOptions; attachments?: TerminalTextAttachmentDelivery }) {
   const handoff = handoffDeps ? new QualityIssueHandoffService(manager, handoffDeps.options, handoffDeps.attachments) : undefined;
   const runtime = await QualityRuntime.create(paths.qualityWorkflowDir, paths.backendLogDir, identity.identity()?.identityId ?? null,
-    id => { const terminal = manager.getSession(id); return terminal ? terminal.projectId ?? null : undefined; }, handoff);
+    id => manager.getKnownTerminalProjectId(id), handoff);
   resources.defer("quality-workflow", () => runtime.dispose());
   return runtime;
 }

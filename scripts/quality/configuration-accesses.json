@@ -2522,6 +2522,14 @@
   {
     "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
     "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SOCKET_PATH",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SOCKET_PATH：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/pi/bridge/runweave-hook-bridge.cjs",
+    "kind": "environment",
     "expression": "process.env.TMUX",
     "count": 1,
     "category": "system",
@@ -2734,6 +2742,14 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SOCKET_PATH",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SOCKET_PATH：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
     "file": "electron/resources/hooks/runweave-hook-bridge.cjs",
@@ -4186,6 +4202,14 @@
   {
     "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
     "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SOCKET_PATH",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SOCKET_PATH：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "packages/agent-bridge/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
     "expression": "process.env.TMUX",
     "count": 1,
     "category": "system",
@@ -5518,6 +5542,14 @@
     "count": 1,
     "category": "runtime-context",
     "reason": "RUNWEAVE_TMUX_SESSION_NAME：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
+  },
+  {
+    "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
+    "kind": "environment",
+    "expression": "process.env.RUNWEAVE_TMUX_SOCKET_PATH",
+    "count": 1,
+    "category": "runtime-context",
+    "reason": "RUNWEAVE_TMUX_SOCKET_PATH：绑定实例的启动/进程上下文；不作为持久配置默认值；作用仅限此调用点。"
   },
   {
     "file": "plugins/toolkit/hooks/runweave-hook-bridge.cjs",
@@ -13868,7 +13900,7 @@
     "file": "frontend/src/features/diagnostic-logs/quality-queue.ts",
     "kind": "device-or-env-loader",
     "expression": "localStorage.setItem(this.key, JSON.stringify(next))",
-    "count": 2,
+    "count": 4,
     "category": "device-adapter",
     "reason": "持久化按目标 Backend 隔离的诊断队列和损坏备份，不保存业务正文、端点或凭据，不作为实例配置。"
   },
