@@ -79,7 +79,7 @@ struct TerminalQuestionHandoffView: View {
       questions.openNotification(target)
       // The notification may have selected a different saved computer.
       let deadline = Date().addingTimeInterval(8)
-      while (!activeComputer || !session.foreground || session.checking || session.health.status == .checking) && Date() < deadline {
+      while (!activeComputer || !session.foreground || session.checking || session.replacingTransport || session.health.status == .checking) && Date() < deadline {
         do { try await Task.sleep(nanoseconds: 150_000_000) } catch { return }
       }
     } else if activeComputer && !canRead {
@@ -93,8 +93,10 @@ struct TerminalQuestionHandoffView: View {
     }
     await questions.refreshNotification(api: api, target: target)
     guard !Task.isCancelled else { return }
-    if questions.notificationStatus == .unavailable, questions.notificationTerminalOnly,
-      let terminalID = questions.notificationTerminalID {
+    let directOpen =
+      (questions.notificationStatus == .unavailable && questions.notificationTerminalOnly)
+      || (questions.notificationStatus == .closed && !questions.hasNotificationOperation(target))
+    if directOpen, let terminalID = questions.notificationTerminalID {
       await openTerminal(terminalID, panelID: questions.notificationPanelID, focusPanel: true)
       guard !Task.isCancelled else { return }
       if activeComputer, session.terminal?.id == terminalID {
@@ -118,22 +120,6 @@ struct TerminalQuestionHandoffView: View {
 
   private func openTerminal(_ id: String, panelID: String?, focusPanel: Bool) async {
     guard canRead else { return }
-    var focused = false
-    if focusPanel, session.canWrite, let api = session.api, let panelID, !panelID.isEmpty {
-      do {
-        try await api.focusTerminalPanel(terminalID: id, panelID: panelID)
-        _ = await session.reload()
-        focused = true
-      } catch APIError.http(404), APIError.http(409) {
-        _ = await session.reload()
-      } catch {}
-    }
-    guard canRead else { return }
-    session.showingScheduledTasks = false
-    session.showingEnergyMonitor = false
-    session.showingDevelopmentResources = false
-    if session.terminal?.id != id || focused {
-      await session.openTerminal(id)
-    }
+    await session.openNotificationTerminal(id, panelID: panelID, focusPanel: focusPanel)
   }
 }

@@ -100,7 +100,7 @@ public struct RootView: View {
       remoteDesktop.setScenePhase(scenePhase)
       if connections.active == nil { managingConnections = true }
       notifications.consume(in: connections)
-      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+      openPendingNotificationTargets()
       notifications.foreground(connections: connections.connections)
     }
     .onChange(of: session.generation) { _ in
@@ -114,22 +114,24 @@ public struct RootView: View {
       }
       else {
         notifications.refreshAutomaticTasks(connections: connections.connections)
-        Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+        openPendingNotificationTargets()
       }
     }
     .onChange(of: connections.connections.map(\.scope).joined(separator: "|")) { _ in
       notifications.refreshAutomaticTasks(connections: connections.connections)
     }
-    .onChange(of: notifications.pendingHostID) { _ in
+    .onChange(of: notifications.tapRevision) { _ in
+      managingConnections = false
+      showingSettings = false
       notifications.consume(in: connections)
-      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+      openPendingNotificationTargets()
     }
     .onChange(of: connections.active?.scope) { _ in
       remoteDesktop.invalidate(reason: "computer_changed")
-      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+      openPendingNotificationTargets()
     }
     .onChange(of: session.health.status) { _ in
-      Task { await notifications.openPendingScheduledRun(in: session, store: connections) }
+      openPendingNotificationTargets()
     }
     .alert("电脑提醒", isPresented: Binding(get: { notifications.message != nil }, set: { if !$0 { notifications.message = nil } })) {
       Button("好") { notifications.message = nil }
@@ -137,8 +139,12 @@ public struct RootView: View {
     .onChange(of: scenePhase) { phase in
       session.setScenePhase(phase)
       remoteDesktop.setScenePhase(phase)
-      if phase == .active { notifications.foreground(connections: connections.connections) }
-      else { notifications.suspend() }
+      if phase == .active {
+        notifications.foreground(connections: connections.connections)
+        openPendingNotificationTargets()
+      } else {
+        notifications.suspend()
+      }
     }
     .task(id: ConnectionCompletionStore.RefreshKey(connections: connections.connections,
       generation: session.generation, enabled: session.foreground && session.authenticated)) {
@@ -179,6 +185,13 @@ public struct RootView: View {
     .mobileAnalyticsScreen(session.checking ? .connecting : session.authenticated ? .home : .login)
     .environmentObject(quickInputs)
     .environmentObject(remoteDesktop)
+  }
+
+  private func openPendingNotificationTargets() {
+    Task {
+      await notifications.openPendingScheduledRun(in: session, store: connections)
+      await notifications.openPendingTerminalReply(in: session, store: connections)
+    }
   }
 }
 

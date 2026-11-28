@@ -379,8 +379,8 @@ final class AppSession: ObservableObject {
       }
       closeTerminal()
       let controller = SessionController(api: api, terminalID: id)
-      terminalController = controller
-      terminal = details
+      terminalController = controller; terminal = details
+      showingScheduledTasks = false; showingEnergyMonitor = false; showingDevelopmentResources = false; scheduledSource = nil
       if health.status == .online, foreground { controller.connect() }
       clearBellMarker(id)
       await acknowledgeTerminal(id, revision: revision)

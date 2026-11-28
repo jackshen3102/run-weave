@@ -1,7 +1,8 @@
-import type {
-  PushDeliveryResult,
-  PushNotificationResult,
-  PushNotificationRequest,
+import {
+  pushNotificationIdentity,
+  type PushDeliveryResult,
+  type PushNotificationResult,
+  type PushNotificationRequest,
 } from "@runweave/shared/push-notifications";
 import type { APNsTransport } from "./apns";
 import { encodePayload } from "./apns";
@@ -40,14 +41,13 @@ export async function deliver(
     );
     notification = {
       notificationId: hash(
-        JSON.stringify([
-          "notification-v1",
+        pushNotificationIdentity(
           sender.hostId,
           subscription.installationId,
-          ...(event.category === "terminal.question" ? [] : [subscription.environment]),
+          subscription.environment,
           event.category,
           event.eventId,
-        ]),
+        ),
       ),
       category: event.category,
       title: event.title,

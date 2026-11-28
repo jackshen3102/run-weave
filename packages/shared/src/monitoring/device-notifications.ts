@@ -21,3 +21,7 @@ export interface DeviceNotificationSubscription {
   gatewayURL: string | null;
   revokeToken?: string | null;
 }
+
+export type TerminalReplyNotificationResponse =
+  | { status: "available"; terminalId: string; panelId: string | null }
+  | { status: "closed"; terminalId: string };

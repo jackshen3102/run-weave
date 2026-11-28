@@ -1,6 +1,7 @@
 import type { Router } from "express";
 import { z } from "zod";
 import type { TerminalQuestionsService } from "../../terminal/questions/service";
+import type { TerminalMobileReplies } from "../../terminal/completion/mobile-replies";
 import { QuestionConflict } from "../../terminal/questions/gateway";
 import { sendTerminalPanelRouteError } from "./panels/common";
 import type { AuthService } from "../../auth/service";
@@ -13,12 +14,28 @@ const answerSchema = z.object({
 }).strict();
 
 const refSchema = z.string().uuid();
+const notificationIdSchema = z.string().regex(/^[0-9a-f]{64}$/i);
 
 export function registerTerminalQuestionRoutes(
   router: Router,
   service: TerminalQuestionsService | undefined,
   auth?: AuthService,
+  getMobileReplies?: () => TerminalMobileReplies | undefined,
 ): void {
+  router.get("/replies/notifications/:notificationId", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const notificationId = notificationIdSchema.safeParse(req.params.notificationId);
+    const installation = refSchema.safeParse(req.header("x-runweave-installation-id"));
+    if (!notificationId.success || !installation.success) { res.status(400).json({ code: "invalid_request" }); return; }
+    const identity = auth?.verifyAccessToken(readBearerToken(req) ?? "");
+    const result = identity && getMobileReplies?.()?.resolveNotification?.(
+      notificationId.data.toLowerCase(),
+      installation.data,
+      identity.sessionId,
+    );
+    if (!result) { res.status(404).json({ code: "reply_not_found" }); return; }
+    res.json(result);
+  });
   router.get("/questions/notifications/:questionRef", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const ref = refSchema.safeParse(req.params.questionRef);

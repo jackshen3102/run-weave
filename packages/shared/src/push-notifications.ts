@@ -37,6 +37,24 @@ export interface PushBadgeSnapshot {
 }
 
 /** Hash this canonical input with SHA-256 in the owning Node runtime. */
+export function pushNotificationIdentity(
+  hostId: string,
+  installationId: string,
+  environment: PushEnvironment,
+  category: string,
+  eventId: string,
+): string {
+  return JSON.stringify([
+    "notification-v1",
+    hostId,
+    installationId,
+    ...(category === "terminal.question" ? [] : [environment]),
+    category,
+    eventId,
+  ]);
+}
+
+/** Hash this canonical input with SHA-256 in the owning Node runtime. */
 export function pushBadgeTargetIdentity(environment: PushEnvironment, installationId: string): string {
   return JSON.stringify(["badge-target-v1", environment, installationId]);
 }
