@@ -408,7 +408,7 @@ public final class NotificationCoordinator: ObservableObject {
       await disable(binding.connection, kind: binding.kind ?? .battery, reportFailure: false)
     }
     if bindings.values.contains(where: { $0.enabled && !$0.pendingRevoke }) {
-      await NotificationBadgeAuthorization.requestIfNeeded(canRegister: environment != nil)
+      await NotificationBadgeSettings.requestIfNeeded(canRegister: environment != nil)
     }
     if tokenConfirmed, let deviceToken, let environment {
       for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {
@@ -481,14 +481,6 @@ public final class NotificationCoordinator: ObservableObject {
       }
     }
   }
-  private func setBadge(_ count: Int) async throws {
-    if #available(iOS 16.0, *) {
-      try await UNUserNotificationCenter.current().setBadgeCount(count)
-    } else {
-      UIApplication.shared.applicationIconBadgeNumber = count
-    }
-  }
-
   private func reportBadgeIssue(_ issue: String?, code: String? = nil, details: [String: String] = [:]) {
     if badgeIssue != issue { badgeIssue = issue }
     guard let code else { lastBadgeDiagnostic = nil; return }
@@ -513,11 +505,11 @@ public final class NotificationCoordinator: ObservableObject {
       reportBadgeIssue(nil)
       if bindings.values.contains(where: { $0.kind == .terminalUnread }),
         !bindings.values.contains(where: { $0.kind == .terminalUnread && $0.pendingRevoke }) {
-        try? await setBadge(0)
+        try? await NotificationBadgeSettings.setCount(0)
       }
       return
     }
-    if let issue = await NotificationBadgeAuthorization.currentIssue() {
+    if let issue = await NotificationBadgeSettings.currentIssue() {
       reportBadgeIssue(issue.message, code: issue.code)
       return
     }
@@ -550,7 +542,7 @@ public final class NotificationCoordinator: ObservableObject {
           bindings[key(binding.connection, .terminalUnread)]?.subscription?.subscriptionId == subscription.subscriptionId,
           bindings[key(binding.connection, .terminalUnread)]?.enabled == true,
           value.count >= 0, value.revision >= (badgeRevisions[raw] ?? 0) else { return }
-        try await setBadge(value.count)
+        try await NotificationBadgeSettings.setCount(value.count)
         badgeRevisions[raw] = value.revision
         reportBadgeIssue(nil)
         return

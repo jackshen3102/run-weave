@@ -2,7 +2,7 @@ import UIKit
 import UserNotifications
 
 @MainActor
-enum NotificationBadgeAuthorization {
+enum NotificationBadgeSettings {
   static func requestIfNeeded(canRegister: Bool) async {
     guard UIApplication.shared.applicationState == .active else { return }
     let center = UNUserNotificationCenter.current()
@@ -25,5 +25,12 @@ enum NotificationBadgeAuthorization {
       )
     }
     return nil
+  }
+  static func setCount(_ count: Int) async throws {
+    if #available(iOS 16.0, *) {
+      try await UNUserNotificationCenter.current().setBadgeCount(count)
+    } else {
+      UIApplication.shared.applicationIconBadgeNumber = count
+    }
   }
 }
