@@ -7,7 +7,11 @@ import { observeCodexPane, publishCodexPanelStatus } from "../terminal/applicati
 import { createFeishuNode } from "../feishu/runtime";
 import { createAuthRuntime } from "./auth-runtime";
 import { DevResourcesService } from "../dev-resources/service";
-import { createTerminalTaskMonitoring, createTerminalTaskServices } from "./terminal-task-monitoring";
+import {
+  createTerminalCompletionEvents,
+  createTerminalTaskMonitoring,
+  createTerminalTaskServices,
+} from "./terminal-task-monitoring";
 import { createDeviceMonitoringRuntime } from "./device-monitoring-runtime";
 import { TerminalQuestionsService } from "../terminal/questions/service";
 import { TerminalTextAttachmentService } from "../terminal/attachments/text-attachment-service";
@@ -41,7 +45,6 @@ import { TmuxOutputWatcher } from "../terminal/tmux/output-watcher";
 import { TmuxService } from "../terminal/tmux/service";
 import { TerminalSessionManager } from "../terminal/manager/manager";
 import { RuntimeStatusWorkspaceServiceManager } from "../runtime-status/workspace-service-manager";
-import { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { TerminalStateService } from "../terminal/state/terminal-state-service";
 import { TerminalStateStore } from "../terminal/state/terminal-state-store";
@@ -237,13 +240,11 @@ async function assembleRuntimeServices(
   const { appServerHistoryGateway, taskHandoffService, taskSupervisionService } = await createTerminalTaskMonitoring(
     storagePaths.browserProfileDir, terminalSessionManager, activityStore, resources,
   );
-  const terminalCompletionEventService = new TerminalCompletionEventService(
+  const terminalCompletionEventService = createTerminalCompletionEvents(
     terminalEventService,
     terminalSessionManager,
-    async (event) => {
-      await experienceLearning.enqueue(event);
-      if (event.kind === "completion" && event.terminalSessionId) await taskHandoffService?.completed(event.terminalSessionId, event.payload.panelId ?? null);
-    },
+    experienceLearning,
+    taskHandoffService,
   );
   const terminalRuntimeRegistry = new TerminalRuntimeRegistry();
   const tmuxLifecycleCoordinator = new TmuxLifecycleCoordinator();

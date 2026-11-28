@@ -13,12 +13,44 @@ import {
 } from "../terminal/runtime/input-admission";
 import path from "node:path";
 import type { ActivityStore } from "../activity/recording/store";
+import type { ExperienceLearningRuntime } from "../experience/learning-runtime";
 import { TaskHandoffService } from "../task-handoff/service";
 import { TaskSupervisionService } from "../task-supervision/service";
 import { resolveSupervisionTarget } from "../task-supervision/target";
+import { TerminalCompletionEventService } from "../terminal/completion/event-service";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import { AppServerHistoryGateway } from "../work-history/app-server-history-gateway";
 import type { ResourceScope } from "./resource-scope";
+
+export function createTerminalCompletionEvents(
+  terminalEventService: TerminalEventService,
+  terminalSessionManager: TerminalSessionManager,
+  experienceLearning: Pick<ExperienceLearningRuntime, "enqueue">,
+  taskHandoffService?: Pick<TaskHandoffService, "completed">,
+): TerminalCompletionEventService {
+  return new TerminalCompletionEventService(
+    terminalEventService,
+    terminalSessionManager,
+    async (event) => {
+      let enqueueError: unknown;
+      try {
+        await experienceLearning.enqueue(event);
+      } catch (error) {
+        enqueueError = error;
+      }
+      if (event.kind === "completion" && event.terminalSessionId) {
+        await taskHandoffService?.completed(
+          event.terminalSessionId,
+          event.payload.panelId ?? null,
+        );
+      }
+      if (enqueueError !== undefined) {
+        throw enqueueError;
+      }
+    },
+  );
+}
 
 export async function createTerminalTaskMonitoring(
   directory: string,
