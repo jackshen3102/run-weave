@@ -2,6 +2,7 @@ import { CodexAppServerClient, resolveCodexLaunchPlan } from "../../voice/codex-
 import { logger } from "../../logging/index";
 import { settingText } from "@runweave/config-node";
 import type { ForkTerminalAgentRequest, ForkTerminalAgentResponse, TerminalAgentForkTarget } from "@runweave/shared/terminal/agent-fork";
+import type { TerminalSessionSource } from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager, TerminalSessionRecord } from "../manager/manager";
 import { resolveReplyThread } from "../completion/reply-preview";
 import { prepareTerminalAgent } from "./agent-preparation";
@@ -51,7 +52,11 @@ export class TerminalAgentForkService {
       revision: this.revision(terminalId, panel.id, thread.id) };
   }
 
-  fork(terminalId: string, request: ForkTerminalAgentRequest): Promise<ForkTerminalAgentResponse> {
+  fork(
+    terminalId: string,
+    request: ForkTerminalAgentRequest,
+    source?: TerminalSessionSource,
+  ): Promise<ForkTerminalAgentResponse> {
     const fingerprint = JSON.stringify([terminalId, request.panelId, request.expectedThreadId, request.expectedRevision]);
     const existing = this.operations.get(request.operationId);
     if (existing) {
@@ -66,7 +71,12 @@ export class TerminalAgentForkService {
     const panelKey = JSON.stringify([terminalId, request.panelId]);
     if (this.pendingPanels.has(panelKey)) throw new TerminalPanelError(409, "这个会话正在 Fork，请先核对新终端");
     this.pendingPanels.add(panelKey);
-    const operation: Operation = { fingerprint, result: this.create(terminalId, request) };
+    const resolvedSource: TerminalSessionSource = source ?? {
+      type: "terminal",
+      terminalSessionId: terminalId,
+      relation: "agent-fork",
+    };
+    const operation: Operation = { fingerprint, result: this.create(terminalId, request, resolvedSource) };
     this.operations.set(request.operationId, operation);
     void operation.result.finally(() => {
       operation.settledAt = Date.now();
@@ -124,16 +134,20 @@ export class TerminalAgentForkService {
     }
   }
 
-  private async create(terminalId: string, request: ForkTerminalAgentRequest): Promise<ForkTerminalAgentResponse> {
+  private async create(
+    terminalId: string,
+    request: ForkTerminalAgentRequest,
+    source: TerminalSessionSource,
+  ): Promise<ForkTerminalAgentResponse> {
     const target = await this.target(terminalId);
     this.assertSource(terminalId, request);
     if (target.panelId !== request.panelId) throw new TerminalPanelError(409, "来源终端面板已切换");
     if (this.manager.getSession(terminalId)?.runtimeKind === "pty") {
-      return this.createPtyFork(terminalId, request, target);
+      return this.createPtyFork(terminalId, request, target, source);
     }
     const session = await createTerminalSession(this.manager, {
       inheritFromTerminalSessionId: terminalId, cwd: target.cwd, runtimePreference: "tmux",
-    }, { ...this.options, strictDefaultPanel: true });
+    }, { ...this.options, strictDefaultPanel: true }, source);
     try {
       const panelId = this.manager.getPanelWorkspace(session.id)?.activePanelId;
       if (!panelId) throw new Error("新终端面板尚未就绪");
@@ -169,7 +183,10 @@ export class TerminalAgentForkService {
   }
 
   private async createPtyFork(
-    terminalId: string, request: ForkTerminalAgentRequest, target: TerminalAgentForkTarget,
+    terminalId: string,
+    request: ForkTerminalAgentRequest,
+    target: TerminalAgentForkTarget,
+    source: TerminalSessionSource,
   ): Promise<ForkTerminalAgentResponse> {
     const { command } = resolveCodexLaunchPlan(process.env, "codex");
     let forkedThreadId: string | undefined;
@@ -189,7 +206,7 @@ export class TerminalAgentForkService {
           await this.manager.updateSessionTerminalState(id, { state: "agent_starting", agent: "codex" });
           this.assertSource(terminalId, request);
         },
-      });
+      }, source);
       createdId = session.id;
       if (session.status !== "running") throw new Error("Codex 启动已退出");
       return { terminalSessionId: session.id, panelId: PTY_PANEL_ID, threadId,

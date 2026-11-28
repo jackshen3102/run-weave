@@ -239,8 +239,21 @@ export class CodeReviewService {
           throw new CodeReviewError(409, "restart_requires_human", "已有终端仅恢复观察，不自动重启 Reviewer");
         const launch = await prepareReviewerLaunch(record.source.rootPath);
         const usePty = process.platform === "win32";
-        const task = await this.tasks.create({ taskId: record.reviewerTaskId, projectId: record.source.projectId,
-          cwd: record.source.rootPath, goal: `Independent code review ${id}` }, usePty ? launch : undefined);
+        const task = await this.tasks.create(
+          {
+            taskId: record.reviewerTaskId,
+            projectId: record.source.projectId,
+            cwd: record.source.rootPath,
+            goal: `Independent code review ${id}`,
+            sourceTerminalSessionId: record.source.terminalId,
+          },
+          usePty ? launch : undefined,
+          {
+            type: "terminal",
+            terminalSessionId: record.source.terminalId,
+            relation: "code-review",
+          },
+        );
         run.reviewerTerminalId = task.terminalSessionId; run.reviewerPanelId = task.panelId;
         run.phase = "starting"; record.startedAt = Date.now(); await this.touch(record);
         if (task.terminalSessionId) await this.manager.updateSessionAlias(task.terminalSessionId, `Review · ${id.slice(0, 8)}`);

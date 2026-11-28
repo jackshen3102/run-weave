@@ -4,12 +4,14 @@ import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { CodexConversationContext } from "@runweave/shared/terminal/codex-context";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
-import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type {
+  TerminalLastThreadStatus,
+  TerminalSessionSource,
+} from "@runweave/shared/terminal/session";
 import type { TerminalReplySnapshot } from "../store/store";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalProgramStatus } from "@runweave/shared/terminal/program-status";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
-import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
 import type {
   PersistedTerminalProjectRecord,
@@ -49,7 +51,7 @@ interface CodexNativeTurn {
 export interface TerminalSessionRecord {
   browserBinding?: TerminalBrowserBindingOwner;
   feishuNotificationState?: FeishuNotificationState;
-  source?: ScheduledTaskSource;
+  source?: TerminalSessionSource;
   pinnedAt?: string | null;
   id: string;
   projectId: string;
@@ -150,7 +152,7 @@ export interface RuntimeTerminalSessionRecord extends Omit<
 }
 
 export interface CreateTerminalSessionOptions {
-  source?: ScheduledTaskSource;
+  source?: TerminalSessionSource;
   projectId?: string;
   command: string;
   args?: string[];

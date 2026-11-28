@@ -3,11 +3,13 @@ import type { ClaudeAgentContext } from "@runweave/shared/terminal/claude-agent"
 import type { PtyHostBinding } from "@runweave/shared/terminal/pty-host";
 import type { FeishuNotificationState } from "../completion/feishu-state";
 import type { PiAgentContext } from "@runweave/shared/terminal/pi-agent";
-import type { TerminalLastThreadStatus } from "@runweave/shared/terminal/session";
+import type {
+  TerminalLastThreadStatus,
+  TerminalSessionSource,
+} from "@runweave/shared/terminal/session";
 import type { TerminalState } from "@runweave/shared/terminal/state";
 import type { TerminalAgentKind } from "@runweave/shared/terminal/state";
 import type { TerminalCompletionEvent } from "@runweave/shared/terminal/completion";
-import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
 
 /** Backend projection; text is null when history has no completed reply yet. */
 export interface TerminalReplySnapshot {
@@ -40,7 +42,7 @@ export interface TerminalBrowserBindingOwner {
 export interface PersistedTerminalSessionRecord {
   browserBinding?: TerminalBrowserBindingOwner;
   feishuNotificationState?: FeishuNotificationState;
-  source?: ScheduledTaskSource;
+  source?: TerminalSessionSource;
   pinnedAt?: string | null;
   id: string;
   projectId: string;

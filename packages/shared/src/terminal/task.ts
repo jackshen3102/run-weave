@@ -7,6 +7,7 @@ export interface CreateTerminalTaskRequest {
   projectId: string;
   cwd: string;
   goal: string;
+  sourceTerminalSessionId?: string;
 }
 
 export interface TerminalTaskDispatch {
@@ -35,6 +36,7 @@ export interface TerminalTask {
   projectId: string;
   cwd: string;
   goal: string;
+  sourceTerminalSessionId?: string;
   terminalSessionId: string | null;
   panelId: string | null;
   provider: "codex";

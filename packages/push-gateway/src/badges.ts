@@ -111,7 +111,7 @@ export class BadgeDelivery {
     for (const [key, target] of Object.entries(data.badgeTargets ?? {})) {
       if (!badgeSnapshotReady(data, target)) continue;
       const source = data.subscriptions[target.subscriptionId];
-      if (!source || source.revoked || source.invalidToken === target.deviceToken) continue;
+      if (!source || source.invalidToken === target.deviceToken) continue;
       if (this.flights.has(key) || target.revision <= target.deliveredRevision || target.nextAttemptAt > Date.now()) continue;
       const flight = this.send(key).catch(() => undefined).finally(() => {
         this.flights.delete(key);
@@ -138,18 +138,18 @@ export class BadgeDelivery {
     if (this.stopped) return;
     this.store.update((data) => {
       const current = data.badgeTargets![key]!;
-      if ("invalidToken" in result && result.invalidToken) {
-        for (const sub of Object.values(data.subscriptions)) {
-          if (targetKey(sub) === key && sub.hostId === subscription.hostId &&
-              sub.version === subscription.version && sub.deviceToken === target.deviceToken) {
-            sub.invalidToken = target.deviceToken;
-          }
-        }
-      }
       if (result.state === "accepted" || result.state === "failed") {
         current.deliveredRevision = Math.max(current.deliveredRevision, target.revision);
       } else if (current.revision === target.revision) {
         current.nextAttemptAt = Date.now() + Math.max(30_000, "retryAfterMs" in result ? result.retryAfterMs ?? 0 : 0);
+      }
+      if ("invalidToken" in result && result.invalidToken) {
+        for (const sub of Object.values(data.subscriptions)) {
+          if (targetKey(sub) === key && (sub.deviceToken === target.deviceToken || (sub.id === target.subscriptionId && sub.revoked))) {
+            sub.invalidToken = target.deviceToken;
+          }
+        }
+        reconcile(data, subscription);
       }
     });
   }

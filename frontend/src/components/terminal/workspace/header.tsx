@@ -5,7 +5,7 @@ import { useTunnelStore } from "../../../features/tunnels/store";
 import { useOpenCodexQuota } from "../../../features/codex-quota/context";
 import { useSuijiDrawer } from "../../../features/suiji/drawer-state";
 import { useEnterScheduledTasks } from "../../../features/scheduled-tasks/navigation";
-import { ScheduledTaskSourceLink } from "../../../features/scheduled-tasks/source-link";
+import { TerminalSourceLink } from "../session/source-link";
 import type { TerminalProjectListItem } from "@runweave/shared/terminal/project";
 import { parseTerminalChildProjectId } from "@runweave/shared/terminal/project-context";
 import {
@@ -293,8 +293,8 @@ export function TerminalWorkspaceHeader({
         onRequestEditProject={requestEditProject}
         onSelectProject={onSelectProject}
       />
-      {activeSession?.source?.type === "scheduled-task" ? (
-        <ScheduledTaskSourceLink source={activeSession.source} />
+      {activeSession?.source ? (
+        <TerminalSourceLink source={activeSession.source} />
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {!isMobileMonitor ? (

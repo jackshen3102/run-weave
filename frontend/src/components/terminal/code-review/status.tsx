@@ -1,7 +1,9 @@
 import type { CodeReviewRun } from "@runweave/shared/terminal/code-review";
+import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { useMemoizedFn } from "ahooks";
 import { codeReviewError, useCloseCodeReview, useCodeReviewActionState, useCodeReviews } from "../../../features/terminal/queries/code-review";
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
+import { EMPTY_TERMINAL_SESSIONS, useTerminalSessionsQuery } from "../../../features/terminal/queries/workspace";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import { Button } from "../../ui/button";
@@ -20,10 +22,22 @@ export function CodeReviewStatus({ sessionId }: { sessionId: string | null }) {
   const action = useCodeReviewActionState(sessionId);
   const close = useCloseCodeReview(sessionId);
   const { scope } = useTerminalRuntime();
+  const sessions = useTerminalSessionsQuery().data ?? EMPTY_TERMINAL_SESSIONS;
   const run = query.data?.runs[0];
   const openReport = useMemoizedFn(() => { if (run) useTerminalPreviewStore.getState().openCodeReview({ scope, reviewId: run.reviewId }); });
   const openTerminal = useMemoizedFn(() => {
-    if (run?.reviewerTerminalId) useTerminalWorkspaceStore.getState().setActiveSessionId(run.reviewerTerminalId);
+    if (!run?.reviewerTerminalId) return;
+    const target = sessions.find((item) => item.terminalSessionId === run.reviewerTerminalId);
+    const store = useTerminalWorkspaceStore.getState();
+    if (target) {
+      store.selectProjectContext(
+        resolveTerminalParentProjectId(target.projectId),
+        target.projectId,
+        target.terminalSessionId,
+      );
+      return;
+    }
+    store.setActiveSessionId(run.reviewerTerminalId);
   });
   const closeError = close.isError && close.variables === run?.reviewId ? codeReviewError(close.error) : null;
   const ended = run?.caseStatus === "closed" || run?.caseStatus === "passed";

@@ -381,12 +381,20 @@ export class TerminalContextHandoffService {
           !native
         )
           throw changed();
-        const result = await this.nativeFork.fork(id, {
-          panelId: native.panelId,
-          operationId: request.operationId,
-          expectedThreadId: native.threadId,
-          expectedRevision: native.revision,
-        });
+        const result = await this.nativeFork.fork(
+          id,
+          {
+            panelId: native.panelId,
+            operationId: request.operationId,
+            expectedThreadId: native.threadId,
+            expectedRevision: native.revision,
+          },
+          {
+            type: "terminal",
+            terminalSessionId: id,
+            relation: "context-handoff",
+          },
+        );
         createdId = result.terminalSessionId;
         panelId = result.panelId;
         if (!request.prompt)
@@ -418,6 +426,11 @@ export class TerminalContextHandoffService {
           this.manager,
           { projectId, cwd, runtimePreference: "tmux" },
           { ...this.options, strictDefaultPanel: true },
+          {
+            type: "terminal",
+            terminalSessionId: id,
+            relation: "context-handoff",
+          },
         );
         createdId = session.id;
         const workspace = this.manager.getPanelWorkspace(session.id);

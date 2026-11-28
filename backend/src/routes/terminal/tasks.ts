@@ -6,7 +6,7 @@ import { TerminalInputBusyError } from "../../terminal/runtime/input-admission";
 const key = z.string().trim().min(1).max(160);
 const revision = z.number().int().nonnegative();
 const schemas = {
-  create: z.object({ taskId: key, projectId: key, cwd: z.string().min(1).max(4096), goal: z.string().trim().min(1).max(16000) }).strict(),
+  create: z.object({ taskId: key, projectId: key, cwd: z.string().min(1).max(4096), goal: z.string().trim().min(1).max(16000), sourceTerminalSessionId: key.optional() }).strict(),
   start: z.object({ expectedRevision: revision, commandLine: z.string().trim().min(1).max(4096).optional() }).strict(),
   send: z.object({ expectedRevision: revision, dispatchId: key, text: z.string().min(1).max(64000), delivery: z.enum(["when_idle", "queue"]).default("when_idle") }).strict(),
   control: z.object({ expectedRevision: revision, control: z.enum(["supervisor", "human"]), draftCleared: z.boolean().optional() }).strict(),

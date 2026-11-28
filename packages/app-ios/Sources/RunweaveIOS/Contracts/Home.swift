@@ -123,8 +123,61 @@ struct HomeConversationPreviewsResponse: Decodable {
   let sessions: [Item]
 }
 
+struct TerminalOriginSource: Codable, Equatable, Hashable {
+  let terminalSessionId: String
+  let relation: String?
+}
+
+enum TerminalSessionSource: Codable, Equatable, Hashable {
+  case scheduledTask(ScheduledTaskSource)
+  case terminal(TerminalOriginSource)
+  case unknown(String)
+
+  var scheduledTask: ScheduledTaskSource? {
+    if case .scheduledTask(let value) = self { return value }
+    return nil
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case type, taskId, runId, terminalSessionId, relation
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let type = try container.decode(String.self, forKey: .type)
+    switch type {
+    case "scheduled-task":
+      let taskId = try container.decode(String.self, forKey: .taskId)
+      let runId = try container.decode(String.self, forKey: .runId)
+      self = .scheduledTask(ScheduledTaskSource(type: type, taskId: taskId, runId: runId))
+    case "terminal":
+      let terminalSessionId = try container.decode(String.self, forKey: .terminalSessionId)
+      let relation = try container.decodeIfPresent(String.self, forKey: .relation)
+      self = .terminal(TerminalOriginSource(terminalSessionId: terminalSessionId, relation: relation))
+    default:
+      self = .unknown(type)
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .scheduledTask(let value):
+      try container.encode(value.type, forKey: .type)
+      try container.encode(value.taskId, forKey: .taskId)
+      try container.encode(value.runId, forKey: .runId)
+    case .terminal(let value):
+      try container.encode("terminal", forKey: .type)
+      try container.encode(value.terminalSessionId, forKey: .terminalSessionId)
+      try container.encodeIfPresent(value.relation, forKey: .relation)
+    case .unknown(let type):
+      try container.encode(type, forKey: .type)
+    }
+  }
+}
+
 struct TerminalDetails: Decodable, Identifiable {
-  var source: ScheduledTaskSource? = nil
+  var source: TerminalSessionSource? = nil
   let terminalSessionId: String
   var projectId: String
   var alias: String?

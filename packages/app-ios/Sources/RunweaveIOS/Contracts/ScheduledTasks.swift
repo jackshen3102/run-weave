@@ -99,7 +99,7 @@ struct ScheduledTaskRecord: Decodable, Identifiable {
     config = try ScheduledTaskConfig(from: decoder)
   }
 }
-struct ScheduledTaskSource: Codable, Equatable {
+struct ScheduledTaskSource: Codable, Equatable, Hashable {
   let type: String
   let taskId: String
   let runId: String
