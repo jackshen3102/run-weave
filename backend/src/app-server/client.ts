@@ -12,7 +12,10 @@ export class AppServerClient {
     const url = new URL(`${this.connection.baseUrl}/threads/${encodeURIComponent(threadID)}/analysis-evidence`);
     if (cursor) url.searchParams.set("cursor",cursor);
     const response = await fetch(url,{ headers: this.headers(),signal,cache: "no-store" });
-    if (!response.ok) throw new AppServerConversationError(response.status);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { code?: string; message?: string };
+      throw new AppServerConversationError(response.status, body.message, body.code);
+    }
     return await response.json() as import("@runweave/shared/screen-recording").ScreenAgentEventPage;
   }
   async getConversation(threadId: string, signal?: AbortSignal, query: AppServerConversationQuery = {}): Promise<AppServerConversationResponse> {
@@ -24,7 +27,10 @@ export class AppServerClient {
     });
     if (query.handoffCwd && response.status === 400)
       return this.getConversation(threadId, signal, { provider: query.provider });
-    if (!response.ok) throw new AppServerConversationError(response.status);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { code?: string; message?: string };
+      throw new AppServerConversationError(response.status, body.message, body.code);
+    }
     return await response.json() as AppServerConversationResponse;
   }
 

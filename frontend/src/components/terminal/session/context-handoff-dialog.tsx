@@ -127,7 +127,8 @@ export function ContextHandoffDialog({
         setError("");
       })
       .catch((err) => {
-        if (!controller.signal.aborted) setError(String(err));
+        if (!controller.signal.aborted)
+          setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       active.current = false;

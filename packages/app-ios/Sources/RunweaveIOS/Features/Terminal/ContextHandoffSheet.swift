@@ -239,7 +239,13 @@ struct ContextHandoffSheet: View {
   private func load() async {
     guard let api = session.api, epoch == session.generation else { return }
     do {
-      let value: ContextHandoffPreview = try await api.authorized(path + "handoff-preview")
+      let value: ContextHandoffPreview = try await api.authorized(
+        path + "handoff-preview",
+        decodeError: { status, data in
+          guard status < 500 else { return nil }
+          return try? JSONDecoder().decode(TerminalAgentForkFailure.self, from: data)
+        }
+      )
       guard epoch == session.generation, !Task.isCancelled else { return }
       preview = value
       if !agentTouched {

@@ -57,7 +57,10 @@ function failure(res: Response, error: unknown) {
       });
   else if (error instanceof TerminalConversationError)
     res.status(error.status).json({
-      code: error.status === 409 ? "handoff_source_changed" : error.code,
+      code:
+        error.status === 409 && error.code === "CONVERSATION_TARGET_CHANGED"
+          ? "handoff_source_changed"
+          : error.code,
       message: error.message,
     });
   else if (!sendTerminalPanelRouteError(res, error))

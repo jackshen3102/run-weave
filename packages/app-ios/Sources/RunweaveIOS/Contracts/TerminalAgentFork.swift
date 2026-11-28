@@ -18,7 +18,7 @@ struct ForkTerminalAgentResponse: Decodable {
 
 struct TerminalAgentForkFailure: Decodable, LocalizedError {
   struct Details: Decodable {
-    let terminalSessionId: String
+    let terminalSessionId: String?
     let panelId: String?
     let placement: String?
   }
