@@ -168,7 +168,7 @@ export async function verifyQuickInputTerminal(
     // Use `sleep 30` via shell script wrapper as fake interactive TUI binary so it stays alive until closed/interrupted
     const fakeCodexPath = path.join(root, "fake-codex.sh");
     const argsLogPath = path.join(root, "codex-args.log");
-    const { writeFile, chmod, readFile } = await import("node:fs/promises");
+    const { access, writeFile, chmod, readFile } = await import("node:fs/promises");
     await writeFile(
       fakeCodexPath,
       `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsLogPath}"\nexec sleep 60\n`,
@@ -193,8 +193,14 @@ export async function verifyQuickInputTerminal(
             if (!session || !panel) return;
             const generation = manager.getPanelAgentOperationGeneration(sessionId, panel.id);
             if (generation && panel.terminalState?.state === "agent_starting") {
-              // Wait briefly for fake-codex.sh to write argsLogPath inside tmux
-              await new Promise((r) => setTimeout(r, 300));
+              while (Date.now() < deadline) {
+                try {
+                  await access(argsLogPath);
+                  break;
+                } catch {
+                  await new Promise((r) => setTimeout(r, 50));
+                }
+              }
               const threadId = `thread-${sessionId}`;
               threads.set(threadId, {
                 provider: "codex",
@@ -314,6 +320,10 @@ export async function verifyQuickInputTerminal(
       assert.ok(loggedArgs.includes("danger-full-access"), "must apply full-access sandbox");
       assert.ok(loggedArgs.includes('approval_policy="never"'), "must disable interactive approval prompts");
       assert.ok(loggedArgs.includes('tui.resume_cwd="current"'), "must keep current cwd");
+      assert.ok(
+        loggedArgs.some((arg) => arg.includes('.trust_level="trusted"')),
+        "must pre-trust registered Runweave project/worktree directory in Codex TUI",
+      );
       assert.equal(loggedArgs.at(-1), "/review 检查当前改动", "must pass prompt verbatim without raw JSON wrapper");
 
       // Verify Case 3: In-place `continue` -> then `completed` in the same terminal -> auto-closes!

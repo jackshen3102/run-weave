@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { settingText } from "@runweave/config-node";
 import type { PreviousSupervisionContinuation } from "@runweave/shared/task-supervision";
@@ -146,6 +148,9 @@ export class QuickInputTerminalScheduledTaskProvider
         }
       };
 
+      const resolvedWorkingDirectory = resolveRealWorkingDirectory(
+        request.workingDirectory,
+      );
       const prepared = await prepareTerminalAgent(
         this.manager,
         session,
@@ -162,7 +167,18 @@ export class QuickInputTerminalScheduledTaskProvider
           ...(request.resumeThreadId
             ? { resumeThreadId: request.resumeThreadId }
             : {}),
-          args: [...codexScheduledArgs(request), "-c", 'tui.resume_cwd="current"'],
+          args: [
+            ...codexScheduledArgs(request),
+            "-c",
+            'tui.resume_cwd="current"',
+            ...(!resolvedWorkingDirectory.includes(".") &&
+            !resolvedWorkingDirectory.includes("=")
+              ? [
+                  "-c",
+                  `projects.${resolvedWorkingDirectory}.trust_level="trusted"`,
+                ]
+              : []),
+          ],
         },
         {
           supervisorInput: true,
@@ -529,5 +545,13 @@ export class QuickInputTerminalScheduledTaskProvider
     if (!owned()) return false;
     await stopTerminalChildren([...children, ...afterInterrupt]);
     return !takenOver();
+  }
+}
+
+function resolveRealWorkingDirectory(workingDirectory: string): string {
+  try {
+    return realpathSync(workingDirectory);
+  } catch {
+    return path.resolve(workingDirectory);
   }
 }
