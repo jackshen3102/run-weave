@@ -22,6 +22,8 @@ export async function verifyProvider() {
   const failures: Error[] = [];
   let expectedBody = "18%，正在使用电池，请连接电源。";
   let expectedCategory = "battery.low";
+  let expectedBadge: number | undefined;
+  let expectedBadgeRevision: number | undefined;
   const collapseIds: string[] = [];
   server.on("stream", (stream, headers) => {
     let body = "";
@@ -35,7 +37,11 @@ export async function verifyProvider() {
         assert.equal(headers["apns-topic"], "com.runweave.app.native");
         assert.equal(headers["apns-push-type"], "alert");
         assert.equal(headers["apns-priority"], "10");
-        assert.equal(headers["apns-expiration"], "0");
+        if (expectedBadge === undefined) {
+          assert.equal(headers["apns-expiration"], "0");
+        } else {
+          assert.ok(Number(headers["apns-expiration"]) > Math.floor(Date.now() / 1000));
+        }
         assert.ok(String(headers["apns-collapse-id"]).length <= 64);
         collapseIds.push(String(headers["apns-collapse-id"]));
         const jwt = String(headers.authorization).slice(7).split(".");
@@ -61,7 +67,14 @@ export async function verifyProvider() {
         assert.equal(notification.hostId, subscription.hostId);
         assert.equal(notification.notificationId.length, 64);
         assert.ok(Buffer.byteLength(body) <= 4096);
-        assert.equal(notification.aps.alert.body, expectedBody);
+        if (expectedBadge === undefined) {
+          assert.equal(notification.aps.alert.body, expectedBody);
+        } else {
+          assert.equal(notification.aps.badge, expectedBadge);
+          assert.equal(notification.aps.alert, undefined);
+          assert.equal(notification.aps.sound, undefined);
+          assert.equal(notification.badgeRevision, expectedBadgeRevision);
+        }
         assert.equal(notification.aps["content-available"], undefined);
         assert.equal(notification.url, undefined);
       } catch (error) {
@@ -150,6 +163,23 @@ export async function verifyProvider() {
       transport(subscription, { ...generic, body: "中".repeat(2000) }),
     );
     assert.equal(calls, 4, "oversized UTF-8 payload never reaches provider");
+    expectedCategory = "terminal.unread";
+    expectedBadge = 3;
+    expectedBadgeRevision = 7;
+    assert.equal(
+      (await transport(subscription, {
+        notificationId: "ef".repeat(32),
+        category: expectedCategory,
+        title: "",
+        body: "",
+        occurredAt: new Date().toISOString(),
+        badge: 3,
+        badgeRevision: 7,
+        collapseId: "badge-collapse",
+      })).state,
+      "accepted",
+    );
+    assert.equal(calls, 5);
     if (failures.length) throw failures[0];
     process.stdout.write(
       "PASS real provider HTTP/2 + TLS, ES256 JWT, battery + generic APNs payloads/headers and 429/410 mapping (local APNs boundary)\n",

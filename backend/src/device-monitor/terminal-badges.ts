@@ -1,5 +1,5 @@
 import type { TerminalUnreadSnapshot } from "@runweave/shared/terminal-unread";
-import type { TerminalSessionManager } from "../terminal/manager/manager";
+import type { TerminalSessionManager, TerminalSessionRecord } from "../terminal/manager/manager";
 import type { TerminalEventService } from "../terminal/state/terminal-event-service";
 import type { DeviceSubscriptions } from "./subscriptions";
 
@@ -11,17 +11,25 @@ export class TerminalBadges {
   private stopped = false;
   private again = false;
   private sent = new Map<string, string>();
+  private pendingPrompt?: (session: TerminalSessionRecord) => boolean;
 
   constructor(
     private sessions: TerminalSessionManager,
     private events: TerminalEventService,
     private subscriptions: DeviceSubscriptions,
-  ) {}
+    pendingPrompt?: (session: TerminalSessionRecord) => boolean,
+  ) {
+    this.pendingPrompt = pendingPrompt;
+  }
+
+  setPendingPromptCheck(check: (session: TerminalSessionRecord) => boolean): void {
+    this.pendingPrompt = check;
+  }
 
   async snapshot(): Promise<TerminalUnreadSnapshot> {
     const store = this.subscriptions.store;
     const count = () => this.sessions.listSessions().filter(
-      (s) => s.completionRevision > s.acknowledgedCompletionRevision,
+      (s) => s.completionRevision > s.acknowledgedCompletionRevision || Boolean(this.pendingPrompt?.(s)),
     ).length;
     if (store.snapshot().unread?.count !== count()) {
       await store.update((data) => {

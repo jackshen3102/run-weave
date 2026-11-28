@@ -9,6 +9,7 @@ public final class NotificationCoordinator: ObservableObject {
   // Retain old-scope records without letting them renew, revoke, or poll a new subscription.
   private var legacyBindings: [String: NotificationBinding] = [:]
   @Published private(set) var refreshFailures: [String: String] = [:]
+  @Published private(set) var badgeIssue: String?
   @Published var message: String?
   @Published var pendingHostID: String?
   @Published private(set) var tapRevision = 0
@@ -38,6 +39,7 @@ public final class NotificationCoordinator: ObservableObject {
   private var tokenConfirmed = false
   private var badgeTask: Task<Void, Never>?
   private var badgeRevisions: [String: Int] = [:]
+  private var lastBadgeDiagnostic: String?
   private var resumeTask: Task<Void, Never>?
   private var automaticConnections: [BackendConnection] = []
   func binding(_ connection: BackendConnection, kind: NotificationKind) -> NotificationBinding? {
@@ -405,6 +407,15 @@ public final class NotificationCoordinator: ObservableObject {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       await disable(binding.connection, kind: binding.kind ?? .battery, reportFailure: false)
     }
+    if bindings.values.contains(where: { $0.enabled && !$0.pendingRevoke }),
+      UIApplication.shared.applicationState == .active {
+      let settings = await UNUserNotificationCenter.current().notificationSettings()
+      if settings.authorizationStatus == .notDetermined,
+        (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true,
+        environment != nil {
+        UIApplication.shared.registerForRemoteNotifications()
+      }
+    }
     if tokenConfirmed, let deviceToken, let environment {
       for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {
         guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
@@ -484,17 +495,49 @@ public final class NotificationCoordinator: ObservableObject {
     }
   }
 
+  private func reportBadgeIssue(_ issue: String?, code: String? = nil, details: [String: String] = [:]) {
+    if badgeIssue != issue { badgeIssue = issue }
+    guard let code else { lastBadgeDiagnostic = nil; return }
+    guard lastBadgeDiagnostic != code else { return }
+    lastBadgeDiagnostic = code
+    record(code, details)
+  }
+
+  func syncBadgeSoon() {
+    guard UIApplication.shared.applicationState != .background else { return }
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 350_000_000)
+      await self?.refreshBadge()
+    }
+  }
+
   private struct BadgeSnapshot: Decodable { let revision: Int; let count: Int }
 
   private func refreshBadge() async {
     let candidates = bindings.values.filter { $0.kind == .terminalUnread && $0.enabled && !$0.pendingRevoke }
-    if candidates.isEmpty, bindings.values.contains(where: { $0.kind == .terminalUnread }),
-      !bindings.values.contains(where: { $0.kind == .terminalUnread && $0.pendingRevoke }) {
-      try? await setBadge(0)
+    if candidates.isEmpty {
+      reportBadgeIssue(nil)
+      if bindings.values.contains(where: { $0.kind == .terminalUnread }),
+        !bindings.values.contains(where: { $0.kind == .terminalUnread && $0.pendingRevoke }) {
+        try? await setBadge(0)
+      }
+      return
+    }
+    let settings = await UNUserNotificationCenter.current().notificationSettings()
+    if settings.authorizationStatus == .denied {
+      reportBadgeIssue("系统通知未允许，桌面图标无法显示小红点；请在 iOS 设置中开启", code: "notifications.badge.denied")
+      return
+    }
+    if settings.authorizationStatus != .notDetermined, settings.badgeSetting != .enabled {
+      reportBadgeIssue("系统「标记」未开启，桌面图标不会显示小红点；请在 iOS「设置 → 通知 → Runweave」中开启「标记」", code: "notifications.badge.disabled")
       return
     }
     let gateways = Set(candidates.compactMap { $0.subscription?.gatewayURL })
     // The system has one badge per installation. Independent gateways cannot each own its total.
+    if gateways.count > 1 {
+      reportBadgeIssue("已连接电脑使用了不同推送网关，无法合并桌面未读红点", code: "notifications.badge.gateway_conflict", details: ["gateways": String(gateways.count)])
+      return
+    }
     guard gateways.count == 1 else { return }
     for binding in candidates {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background,
@@ -518,10 +561,16 @@ public final class NotificationCoordinator: ObservableObject {
           bindings[key(binding.connection, .terminalUnread)]?.subscription?.subscriptionId == subscription.subscriptionId,
           bindings[key(binding.connection, .terminalUnread)]?.enabled == true,
           value.count >= 0, value.revision >= (badgeRevisions[raw] ?? 0) else { return }
-        badgeRevisions[raw] = value.revision
         try await setBadge(value.count)
+        badgeRevisions[raw] = value.revision
+        reportBadgeIssue(nil)
         return
-      } catch { /* Keep the last count while offline. */ }
+      } catch {
+        if (error as NSError).domain == UNErrorDomain {
+          reportBadgeIssue("桌面未读角标更新被系统拒绝，请检查 iOS 通知「标记」设置", code: "notifications.badge.set_failed", details: DiagnosticRecord.errorFields(error))
+        }
+        /* Keep the last count while offline. */
+      }
     }
   }
 

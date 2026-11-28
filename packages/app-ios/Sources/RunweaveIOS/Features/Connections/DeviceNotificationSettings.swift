@@ -39,6 +39,9 @@ struct DeviceNotificationSettings: View {
       } else if notifications.binding(connection, kind: .battery)?.subscription?.state == "pending" {
         Text("提醒正在同步，尚未启用").foregroundColor(.secondary)
       }
+      if let badgeIssue = notifications.badgeIssue ?? notifications.refreshFailure(connection, kind: .terminalUnread) {
+        Text(badgeIssue).foregroundColor(.orange)
+      }
     }
     .font(.caption)
   }

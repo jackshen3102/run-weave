@@ -32,7 +32,9 @@ function reconcile(data: GatewayData, source: Subscription): void {
   const count = [...hosts].reduce((sum, host) =>
     sum + (data.badgeContributions?.[`${key}:${host}`]?.count ?? 0), 0);
   const previous = data.badgeTargets?.[key];
-  const deliverySource = subscriptions.sort((a, b) => (b.registeredAt ?? 0) - (a.registeredAt ?? 0))[0];
+  const validSubscriptions = subscriptions.filter((s) => s.invalidToken !== s.deviceToken);
+  const deliverySource = (validSubscriptions.length ? validSubscriptions : subscriptions)
+    .sort((a, b) => (b.registeredAt ?? 0) - (a.registeredAt ?? 0))[0];
   const deviceToken = deliverySource?.deviceToken ?? previous?.deviceToken;
   if (!deviceToken) return;
   if (previous && previous.count === count && previous.deviceToken === deviceToken) {
@@ -108,6 +110,8 @@ export class BadgeDelivery {
     const data = this.store.snapshot();
     for (const [key, target] of Object.entries(data.badgeTargets ?? {})) {
       if (!badgeSnapshotReady(data, target)) continue;
+      const source = data.subscriptions[target.subscriptionId];
+      if (!source || source.revoked || source.invalidToken === target.deviceToken) continue;
       if (this.flights.has(key) || target.revision <= target.deliveredRevision || target.nextAttemptAt > Date.now()) continue;
       const flight = this.send(key).catch(() => undefined).finally(() => {
         this.flights.delete(key);
@@ -134,6 +138,14 @@ export class BadgeDelivery {
     if (this.stopped) return;
     this.store.update((data) => {
       const current = data.badgeTargets![key]!;
+      if ("invalidToken" in result && result.invalidToken) {
+        for (const sub of Object.values(data.subscriptions)) {
+          if (targetKey(sub) === key && sub.hostId === subscription.hostId &&
+              sub.version === subscription.version && sub.deviceToken === target.deviceToken) {
+            sub.invalidToken = target.deviceToken;
+          }
+        }
+      }
       if (result.state === "accepted" || result.state === "failed") {
         current.deliveredRevision = Math.max(current.deliveredRevision, target.revision);
       } else if (current.revision === target.revision) {

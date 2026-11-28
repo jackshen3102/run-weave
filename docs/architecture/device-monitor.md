@@ -82,7 +82,7 @@ Backend 从本 profile 的 `device-monitor/push.json` 读取持久推送配置�
 
 ## 统一未读总数
 
-终端已读版本保存在各 Backend；[未读上报](../../backend/src/device-monitor/terminal-badges.ts)发送带版本的绝对数量，
+终端已读版本与待回答/待确认阻塞态保存在各 Backend；[未读上报](../../backend/src/device-monitor/terminal-badges.ts)按终端去重后发送带版本的绝对数量，
 [推送网关](../../packages/push-gateway/src/badges.ts)按手机安装/环境汇总、按 hostId 去重。
 手机现有前台查询和 APNs 与 Mac Dock 使用同一份网关总数。已注册 host 首次快照未齐时等待，
 不能将未知贡献当成 0。已读请求仍发到具体终端所属 Backend，不在网关保存第二套已读状态。

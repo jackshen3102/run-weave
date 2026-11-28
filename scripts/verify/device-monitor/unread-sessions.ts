@@ -8,8 +8,9 @@ import { pause, type fixture } from "./fixture";
 /** Actual persisted completion/ack state -> Backend publisher -> HTTPS gateway. No agent process is started. */
 export async function verifyUnreadSessions(f: Awaited<ReturnType<typeof fixture>>, read: () => Promise<Response>) {
   const file = path.join(f.directory, "unread-sessions.json");
+  const blockedIds = new Set<string>();
   let sessions = new TerminalSessionManager(new LowDbTerminalSessionStore(file));
-  const badges = new TerminalBadges(sessions, f.events, f.subscriptions);
+  const badges = new TerminalBadges(sessions, f.events, f.subscriptions, (s) => blockedIds.has(s.id));
   const expectCount = async (count: number) => {
     const until = Date.now() + 10_000;
     while (true) {
@@ -38,6 +39,13 @@ export async function verifyUnreadSessions(f: Awaited<ReturnType<typeof fixture>
     await sessions.acknowledgeSessionCompletion(a.id, seen);
     assert.equal((await badges.snapshot()).count, 1, "old acknowledgement cannot move read state backwards");
     await sessions.acknowledgeSessionCompletion(b.id, b.completionRevision);
+    await expectCount(0);
+    blockedIds.add(a.id);
+    await sessions.recordSessionCompletion(a.id);
+    assert.equal((await badges.snapshot()).count, 1, "unread completion + actionable prompt on the same terminal count once");
+    await sessions.acknowledgeSessionCompletion(a.id, a.completionRevision);
+    assert.equal((await badges.snapshot()).count, 1, "actionable prompt stays counted while still pending");
+    blockedIds.delete(a.id);
     await expectCount(0);
     await badges.dispose();
     await sessions.dispose();

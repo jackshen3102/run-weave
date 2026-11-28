@@ -197,6 +197,21 @@ export class TerminalQuestionNotifications implements TerminalMobilePrompts {
     }
   }
 
+  hasActivePrompt(terminalId: string): boolean {
+    if (this.abort.signal.aborted) return false;
+    for (const [key, active] of this.activePrompts) {
+      if (active.terminalId !== terminalId) continue;
+      if (this.isPromptPending(key, active.eventId, {
+        terminalId: active.terminalId,
+        panelId: active.panelId,
+        threadId: active.source,
+        turnId: active.actionKind,
+        itemId: active.toolUseId ?? active.dedupeKey.slice(0, 128),
+      })) return true;
+    }
+    return false;
+  }
+
   closeTerminal(terminalId: string): void {
     if (this.abort.signal.aborted) return;
     for (const [key, active] of this.activePrompts) {
