@@ -79,8 +79,14 @@ struct ConversationReaderView: View {
               }
             }
             if model.data?.turns.isEmpty != false {
-              Text(model.loading ? "正在读取会话…" : emptyText).foregroundColor(.secondary)
-                .frame(maxWidth: .infinity).padding(.vertical, 48)
+              VStack(spacing: 12) {
+                Text(model.loading ? "正在读取会话…" : emptyText).foregroundColor(.secondary)
+                if model.targetChanged, !model.loading {
+                  Button("读取当前会话") { model.reopen() }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("conversation-reopen-current")
+                }
+              }.frame(maxWidth: .infinity).padding(.vertical, 48)
             }
           }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
             .background(ConversationScrollProbe(anchor: anchor).frame(width: 0, height: 0))
@@ -97,9 +103,12 @@ struct ConversationReaderView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("终端", action: close) }
         ToolbarItem(placement: .navigationBarTrailing) {
-          Button { anchor.capture(); model.refresh() } label: {
+          Button {
+            if model.targetChanged { model.reopen(); return }
+            anchor.capture(); model.refresh()
+          } label: {
             if model.loading { ProgressView() } else { Image(systemName: "arrow.clockwise") }
-          }.disabled(model.loading).accessibilityLabel("刷新").accessibilityIdentifier("conversation-refresh")
+          }.disabled(model.loading).accessibilityLabel(model.targetChanged ? "读取当前会话" : "刷新").accessibilityIdentifier("conversation-refresh")
         }
       }
     }.navigationViewStyle(.stack).tint(TerminalAppearance.accent).clarityMask()
@@ -152,6 +161,7 @@ struct ConversationReaderView: View {
     }
   }
   private var emptyText: String {
+    if model.targetChanged { return "当前终端已切换到新会话" }
     if model.failure != nil && model.data == nil { return "点击刷新重试" }
     switch model.data?.availability {
     case "no_thread": return "当前终端暂无关联会话"

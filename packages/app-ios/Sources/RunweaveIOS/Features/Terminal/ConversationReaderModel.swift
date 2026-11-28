@@ -6,6 +6,7 @@ import RunweaveBrowser
   @Published private(set) var loading = false
   @Published private(set) var failure: String?
   @Published private(set) var unchanged = false
+  @Published private(set) var targetChanged = false
   private weak var session: AppSession?
   private weak var controller: SessionController?
   private let terminalID: String
@@ -33,6 +34,12 @@ import RunweaveBrowser
       && session.terminalController === controller
   }
   func open() { guard !started else { return }; started = true; refresh() }
+  func reopen() {
+    guard current else { return }
+    sequence += 1; operation?.cancel(); operation = nil
+    loading = false; data = nil; boundTarget = nil; targetChanged = false
+    refresh()
+  }
   func refresh() {
     guard current, !loading, let session else { return }
     sequence += 1
@@ -53,8 +60,9 @@ import RunweaveBrowser
           self.loading = false; self.operation = nil; return
         }
         if let previousTarget = self.boundTarget, previousTarget != response.target {
-          self.data = nil; self.failure = "会话已变化，请关闭后重新打开阅读页"
+          self.data = nil; self.targetChanged = true; self.failure = "会话已变化，请关闭后重新打开阅读页"
         } else {
+          self.targetChanged = false
           self.unchanged = previous?.turns == response.turns && previous?.availability == response.availability
           self.boundTarget = self.boundTarget ?? response.target
           self.data = response
@@ -64,7 +72,9 @@ import RunweaveBrowser
         guard session.generation == generation else {
           self.loading = false; self.operation = nil; return
         }
-        if (error as? TerminalConversationFailure)?.code == "CONVERSATION_TARGET_CHANGED" { self.data = nil }
+        if (error as? TerminalConversationFailure)?.code == "CONVERSATION_TARGET_CHANGED" {
+          self.data = nil; self.targetChanged = true
+        }
         self.failure = displayError(error)
       }
       guard let self, self.sequence == ticket else { return }
@@ -73,6 +83,6 @@ import RunweaveBrowser
   }
   func cancel() {
     sequence += 1; operation?.cancel(); operation = nil
-    loading = false; data = nil
+    loading = false; data = nil; targetChanged = false
   }
 }

@@ -40,7 +40,7 @@ export class AgyConversationReader {
         const type = readString(record.type);
         if (source === "SYSTEM" || type === "SYSTEM_MESSAGE") return;
         const id = readString(record.id) ?? `${thread.threadId}:${index}`;
-        const createdAt = readString(record.timestamp);
+        const createdAt = readString(record.timestamp) ?? readString(record.created_at);
 
         if (source === "USER_EXPLICIT" && type === "USER_INPUT") {
           const raw = readString(record.content) ?? "";
