@@ -156,6 +156,144 @@ export function resolveTerminalParentProjectId(projectId: string): string {
   return parseTerminalChildProjectId(projectId)?.parentProjectId ?? projectId;
 }
 
+export type WorktreeGovernanceBucket =
+  | "pinned"
+  | "active"
+  | "idle_hot_slot"
+  | "cleanable_merged"
+  | "cleanable_stale"
+  | "dirty_abandoned";
+
+export type WorktreePrState =
+  | "open"
+  | "merged"
+  | "closed"
+  | "none"
+  | "unknown";
+
+export interface WorktreeGovernancePolicy {
+  autoReclaimEnabled: boolean;
+  maxIdleWorktrees: number;
+  mergedGraceMinutes: number;
+  maxUnpinnedSoftLimit: number;
+  deleteMergedLocalBranches: boolean;
+  autoPruneMetadata: boolean;
+  staleDays: number;
+  autoCleanupStaleArtifacts: boolean;
+}
+
+export const DEFAULT_WORKTREE_GOVERNANCE_POLICY: WorktreeGovernancePolicy = {
+  autoReclaimEnabled: true,
+  maxIdleWorktrees: 1,
+  mergedGraceMinutes: 10,
+  maxUnpinnedSoftLimit: 3,
+  deleteMergedLocalBranches: true,
+  autoPruneMetadata: true,
+  staleDays: 7,
+  autoCleanupStaleArtifacts: false,
+};
+
+export interface WorktreeGovernanceItem {
+  projectId: string;
+  name: string;
+  branch: string | null;
+  head: string | null;
+  pinned: boolean;
+  bucket: WorktreeGovernanceBucket;
+  isDirty: boolean;
+  dirtyPreviewFiles: string[];
+  changedFilesCount: number;
+  untrackedFilesCount: number;
+  mergedIntoBase: boolean | null;
+  prState: WorktreePrState;
+  prNumber: number | null;
+  prUrl: string | null;
+  runningAgentCount: number;
+  terminalCount: number;
+  lastActivityAt: string | null;
+  diskUsageBytes: number | null;
+  canSafeDelete: boolean;
+  canForceDeleteWithConfirm: boolean;
+  canRecycle: boolean;
+  canShareParallel: boolean;
+  blockReason: string | null;
+}
+
+export interface PrunableWorktreeRecord {
+  worktreePath: string;
+  branch: string | null;
+  reason: string;
+}
+
+export interface WorktreeGovernanceResponse {
+  parentProjectId: string;
+  baseRef: string | null;
+  generatedAt: string;
+  items: WorktreeGovernanceItem[];
+  prunable: PrunableWorktreeRecord[];
+  policy: WorktreeGovernancePolicy;
+}
+
+export interface BatchCleanupWorktreesRequest {
+  operationId: string;
+  childProjectIds: string[];
+  forceConfirmedProjectIds?: string[];
+  deleteMergedLocalBranches?: boolean;
+  pruneMetadata?: boolean;
+}
+
+export interface BatchCleanupWorktreeItemResult {
+  childProjectId: string;
+  status: "deleted" | "failed";
+  branchDeleted?: boolean;
+  cleanupWarnings?: TerminalWorktreeCleanupWarning[];
+  errorCode?: string;
+  message?: string;
+}
+
+export interface BatchCleanupWorktreesResponse {
+  results: BatchCleanupWorktreeItemResult[];
+  prunedCount: number;
+}
+
+export interface RecycleWorktreeRequest {
+  operationId: string;
+  newBranch: string;
+  baseRef: string;
+  fetchBase?: boolean;
+  deletePreviousBranch?: boolean;
+  closeIdleTerminals?: boolean;
+  runSetup?: boolean;
+  approvedSetupRevision?: string;
+  launchAgent?: "none" | "codex" | "claude" | "pi" | "traex" | "agy";
+}
+
+export interface RecycleWorktreeResponse {
+  context: TerminalProjectContextListItem;
+  previousBranch: string | null;
+  previousBranchDeleted: boolean;
+  terminalSessionId: string | null;
+  setupStatus: "skipped" | "running" | "revision_mismatch_skipped";
+}
+
+export interface RecyclableWorktreeSlot {
+  childProjectId: string;
+  name: string;
+  branch: string | null;
+  pinned: boolean;
+  lastActivityAt: string | null;
+  prState: WorktreePrState;
+}
+
+export interface ShareableWorktreeContext {
+  projectId: string;
+  name: string;
+  branch: string | null;
+  pinned: boolean;
+  runningAgentCount: number;
+  isDirty: boolean;
+}
+
 export interface WorktreeCreatePreviewResponse {
   parentProjectId: string;
   defaultBaseRef: string;
@@ -166,6 +304,10 @@ export interface WorktreeCreatePreviewResponse {
     revision: string;
     approved: boolean;
   }) | null;
+  recyclableSlots?: RecyclableWorktreeSlot[];
+  shareableContexts?: ShareableWorktreeContext[];
+  unpinnedWorktreeCount?: number;
+  maxUnpinnedSoftLimit?: number;
 }
 
 export interface CreateWorktreeContextRequest {

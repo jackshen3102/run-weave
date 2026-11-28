@@ -321,7 +321,11 @@ export async function verifyQuickInputTerminal(
       assert.ok(loggedArgs.includes('approval_policy="never"'), "must disable interactive approval prompts");
       assert.ok(loggedArgs.includes('tui.resume_cwd="current"'), "must keep current cwd");
       assert.ok(
-        loggedArgs.some((arg) => arg.includes('.trust_level="trusted"')),
+        loggedArgs.some(
+          (arg) =>
+            arg.startsWith("projects={") &&
+            arg.includes('={trust_level="trusted"}}'),
+        ),
         "must pre-trust registered Runweave project/worktree directory in Codex TUI",
       );
       assert.equal(loggedArgs.at(-1), "/review 检查当前改动", "must pass prompt verbatim without raw JSON wrapper");

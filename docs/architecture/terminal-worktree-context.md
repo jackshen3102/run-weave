@@ -67,7 +67,7 @@ desktop 在父 Project header 下渲染可折叠 Worktree rail；主节点永久
 无可用远端或无共同历史时不推断为零。零落后仅表示所选远端主分支没有当前 HEAD 缺少的提交，
 不表示分支完全相同、工作区干净或改动已经合并。
 
-删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用和运行中 Agent；失败不使用 `--force`。通过检查后，对 source.root 匹配目标的全部未释放 Dev Session 使用其源码 CLI 尽力停止，全部清理共享 30 秒期限；普通停止发现身份漂移后仅重试一次 stale cleanup。清理失败、超时或身份信息缺失不阻止删除，也不把未释放的 Session 标为 stopped。当前处理删除请求的 Session 不会停止自身 Backend。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点；存在清理警告时，rail 显示可关闭的“Worktree 已删除，部分服务未清理”提示。
+删除只移除当前父 Project 的 `.worktree/<name>` 直接子 Worktree，保留分支、Activity 和 Work History。已置顶（`pinned: true`）的子 Worktree 在手动删除、批量清理与强制删除路径下均受保护拒绝删除（需先取消置顶）；干净已合入的置顶槽位仍可通过 `recycle` 原地切新分支复用并保留置顶状态，且 `recycle` 严禁重置当前未合并 HEAD 或已有未合并本地分支。最终确认时 Backend 重新校验 Git 登记、路径边界、工作区干净状态、detached HEAD 引用和运行中 Agent；失败不使用 `--force`。通过检查后，对 source.root 匹配目标的全部未释放 Dev Session 使用其源码 CLI 尽力停止，全部清理共享 30 秒期限；普通停止发现身份漂移后仅重试一次 stale cleanup。清理失败、超时或身份信息缺失不阻止删除，也不把未释放的 Session 标为 stopped。当前处理删除请求的 Session 不会停止自身 Backend。普通 Terminal 会在删除前停止，当前 Context 删除成功后 Web 切回父 Project 主节点；存在清理警告时，rail 显示可关闭的“Worktree 已删除，部分服务未清理”提示。
 
 `contextProjectIdByParentProjectId` 恢复每个父 Project 上次选中的 context，`projectSessionIds` 继续按生效 Project ID 恢复 Terminal。Preview store 原本已按 `projectId` 分桶，不增加复合 key。
 
@@ -101,7 +101,10 @@ Race 记录，但保留 Worktree 与分支供人工比较。实现见 [RaceServi
 
 ```http
 GET /api/terminal/project/:parentProjectId/worktree-create-preview
+GET /api/terminal/project/:parentProjectId/worktree-governance[?includeDiskUsage=true]
+POST /api/terminal/project/:parentProjectId/worktree-cleanup-batch
 POST /api/terminal/project/:parentProjectId/contexts
+POST /api/terminal/project/:parentProjectId/contexts/:childProjectId/recycle
 GET /api/terminal/project/:parentProjectId/contexts
 PATCH /api/terminal/project/:parentProjectId/contexts/:childProjectId
 DELETE /api/terminal/project/:parentProjectId/contexts/:childProjectId
@@ -114,8 +117,8 @@ Content-Type: application/json
 
 Preview 仍使用 `/api/terminal/project/:effectiveProjectId/preview/*`，Session create 仍使用现有 `projectId` 字段。Activity 与 Project-scoped Quick Input 继续精确匹配该 ID，父 Project 不隐式汇总子 Project 数据。
 
-验收入口：`docs/testing/terminal/workspace/project-context.testplan.yaml` 与 `docs/testing/terminal/workspace/deletion.testplan.yaml`。
+验收入口：`docs/testing/terminal/workspace/project-context.testplan.yaml`、`docs/testing/terminal/workspace/deletion.testplan.yaml` 与 `docs/testing/terminal/worktree-governance-and-recycle.testplan.yaml`。
 
-桌面 Rail 和 iOS 新建终端页从预览读取基准引用和父目录的 setup。创建请求在本进程内按父项目和 operationId 保留一小时成功回执。新目录必须是受控 .worktree 下的直接子项，检出现有分支需要显式选择。创建成功返回新 Context、首终端 ID 和 setupStatus，两端直接打开该终端。若检出已成功而终端启动失败，可从 Context 列表重新打开。
+桌面 Rail 和 iOS 新建终端页从预览读取基准引用、父目录的 setup 以及可复用槽位（`recyclableSlots` / `shareableContexts`）。创建与原地复用请求均在本进程内按父项目和 operationId 保留一小时成功回执。新目录必须是受控 .worktree 下的直接子项，检出现有分支需要显式选择。已置顶（`pinned`）的 Worktree 永不在 Rail 中折叠，也拒绝批量删除和强制删除，但处于干净、已合入且无运行中 Agent 状态时允许原地复用切新分支（复用后保持 `pinned` 状态），处于忙碌或有改动状态时允许不切分支同目录新开并行终端。批量清理在父项目互斥锁内二次校验工作区干净与运行态；含未提交/未跟踪文件的未置顶目录仅在显式列入 `forceConfirmedProjectIds` 后允许 `git worktree remove --force`，本地分支删除始终使用小写 `git branch -d` 绝不强删未合并分支。
 
 初始化批准与执行见[工作区服务配置](./terminal-workspace-services.md)。[创建及初始化验收](../testing/terminal/workspace/provision-and-setup.testplan.yaml)。
