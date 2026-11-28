@@ -2,6 +2,7 @@ import type { TerminalEventEnvelope } from "@runweave/shared/terminal/events";
 import type { ExperienceLearningStatus } from "@runweave/shared/experience";
 import type { ActivityStore } from "../activity/recording/store";
 import type { ExperienceService } from "./service";
+import { ExperienceError } from "./errors";
 import { ExperienceLearningAnalysis } from "./learning-analysis";
 import { ExperienceLearningQueue, digest } from "./learning-queue";
 import { LearningDeferred } from "./learning-segments";
@@ -43,7 +44,18 @@ export class ExperienceLearningRuntime {
       !["codex", "pi"].includes(p.source)
     )
       return;
-    const scope = await this.service.scope(p.cwd);
+    let scope: Awaited<ReturnType<ExperienceService["scope"]>>;
+    try {
+      scope = await this.service.scope(p.cwd);
+    } catch (error) {
+      if (
+        error instanceof ExperienceError &&
+        error.message === "experience_git_repository_required"
+      ) {
+        return;
+      }
+      throw error;
+    }
     const snapshot = await this.activity?.facts({
       threadId: p.threadId,
       terminalSessionId: event.terminalSessionId,

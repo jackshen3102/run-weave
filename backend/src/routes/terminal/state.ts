@@ -32,6 +32,14 @@ import type {
 const terminalStateLogger = logger.child({ component: "terminal-state" });
 const AGENT_HOOKS = ["codex", "claude", "trae", "traecli", "traex", "pi", "agy"] as const;
 
+function boundHookText(value: string): string {
+  if (value.length <= 8_000) return value;
+  const suffix = "\n...[truncated]";
+  let end = 8_000 - suffix.length;
+  if (/[\uD800-\uDBFF]/.test(value[end - 1] ?? "")) end -= 1;
+  return `${value.slice(0, end)}${suffix}`;
+}
+
 const agentHookStateSchema = z
   .object({
     agy: z.custom<import("@runweave/shared/terminal/agy-agent").AgyAgentContext>(isAgyAgentContext).optional(),
@@ -52,8 +60,8 @@ const agentHookStateSchema = z
     commandName: z.string().trim().min(1).nullable().optional(),
     rawHookEvent: z.string().trim().min(1).max(128).optional(),
     sessionSource: z.enum(["startup", "resume"]).optional(),
-    query: z.string().max(8_000).optional(),
-    response: z.string().max(8_000).optional(),
+    query: z.string().transform(boundHookText).optional(),
+    response: z.string().transform(boundHookText).optional(),
     agent: z.enum(AGENT_HOOKS),
     hookEvent: z.enum([
       "SessionStart",
