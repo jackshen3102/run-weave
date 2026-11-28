@@ -10,9 +10,20 @@ import { writeOutput } from "../output/format.js";
 import { readFile } from "node:fs/promises";
 import type {
   CreateTerminalQuickInputRequest,
+  TerminalQuickInputBackgroundRuntime,
   TerminalQuickInputMode,
   UpdateTerminalQuickInputRequest,
 } from "@runweave/shared/terminal/input";
+
+function parseBackgroundRuntime(
+  value: string | undefined,
+): TerminalQuickInputBackgroundRuntime | undefined {
+  if (value === undefined) return undefined;
+  if (value !== "headless" && value !== "terminal") {
+    throw new CliError("--background-runtime must be headless or terminal", 2);
+  }
+  return value;
+}
 
 export async function runQuickInputCommand(
   command: string | undefined,
@@ -23,7 +34,7 @@ export async function runQuickInputCommand(
   },
 ): Promise<void> {
   const usage =
-    "Usage: rw quick-input list [--project-id <id>] [--kind all|pinned|recent] [--q <text>] [--limit 1..100] | rw quick-input create --title <title> --text-file <path> --client-import-id <UUID> [--mode line|codex_slash_command|prompt_paste] | rw quick-input update <id> --text-file <path> --expected-updated-at <timestamp> | rw quick-input run <id> --project-id <id> --expected-updated-at <timestamp> --idempotency-key <key> [--json]";
+    "Usage: rw quick-input list [--project-id <id>] [--kind all|pinned|recent] [--q <text>] [--limit 1..100] | rw quick-input create --title <title> --text-file <path> --client-import-id <UUID> [--mode line|codex_slash_command|prompt_paste] [--background-runtime headless|terminal] | rw quick-input update <id> [--text-file <path>] [--background-runtime headless|terminal] --expected-updated-at <timestamp> | rw quick-input run <id> --project-id <id> --expected-updated-at <timestamp> --idempotency-key <key> [--background-runtime headless|terminal] [--json]";
   if (
     command !== "list" &&
     command !== "run" &&
@@ -42,10 +53,21 @@ export async function runQuickInputCommand(
     ...(command === "list"
       ? ["project-id", "kind", "q", "limit"]
       : command === "create"
-        ? ["title", "text-file", "mode", "client-import-id"]
+        ? [
+            "title",
+            "text-file",
+            "mode",
+            "background-runtime",
+            "client-import-id",
+          ]
         : command === "update"
-          ? ["text-file", "expected-updated-at"]
-          : ["project-id", "expected-updated-at", "idempotency-key"]),
+          ? ["text-file", "background-runtime", "expected-updated-at"]
+          : [
+              "project-id",
+              "expected-updated-at",
+              "idempotency-key",
+              "background-runtime",
+            ]),
   ]);
   if (
     positionals.length !==
@@ -62,14 +84,25 @@ export async function runQuickInputCommand(
     );
     if (!Number.isFinite(Date.parse(expectedUpdatedAt)))
       throw new CliError("Invalid --expected-updated-at", 2);
-    const data = await readFile(
-      requireStringOption(options, "text-file"),
-      "utf8",
+    const textFile = getStringOption(options, "text-file");
+    const backgroundRuntime = parseBackgroundRuntime(
+      getStringOption(options, "background-runtime"),
     );
-    if (!data.trim())
-      throw new CliError("--text-file must contain nonempty UTF-8 text", 2);
+    if (!textFile && !backgroundRuntime) {
+      throw new CliError(
+        "update requires --text-file and/or --background-runtime",
+        2,
+      );
+    }
+    let data: string | undefined;
+    if (textFile) {
+      data = await readFile(textFile, "utf8");
+      if (!data.trim())
+        throw new CliError("--text-file must contain nonempty UTF-8 text", 2);
+    }
     const payload: UpdateTerminalQuickInputRequest = {
-      data,
+      ...(data !== undefined ? { data } : {}),
+      ...(backgroundRuntime ? { backgroundRuntime } : {}),
       expectedUpdatedAt,
     };
     route += `/${encodeURIComponent(positionals[0]!)}`;
@@ -81,6 +114,9 @@ export async function runQuickInputCommand(
   } else if (command === "create") {
     const title = requireStringOption(options, "title").trim();
     const mode = getStringOption(options, "mode") ?? "line";
+    const backgroundRuntime = parseBackgroundRuntime(
+      getStringOption(options, "background-runtime"),
+    );
     const clientImportId = requireStringOption(options, "client-import-id");
     if (!title || title.length > 120)
       throw new CliError("--title must contain 1..120 characters", 2);
@@ -105,6 +141,7 @@ export async function runQuickInputCommand(
       title,
       data,
       mode: mode as TerminalQuickInputMode,
+      ...(backgroundRuntime ? { backgroundRuntime } : {}),
       clientImportId,
     };
     init = {
@@ -135,6 +172,9 @@ export async function runQuickInputCommand(
     const timestamp = requireStringOption(options, "expected-updated-at");
     if (!Number.isFinite(Date.parse(timestamp)))
       throw new CliError("Invalid --expected-updated-at", 2);
+    const backgroundRuntime = parseBackgroundRuntime(
+      getStringOption(options, "background-runtime"),
+    );
     route += `/${encodeURIComponent(positionals[0]!)}/run`;
     init = {
       method: "POST",
@@ -142,6 +182,7 @@ export async function runQuickInputCommand(
       body: JSON.stringify({
         projectId: requireStringOption(options, "project-id"),
         expectedInputUpdatedAt: timestamp,
+        ...(backgroundRuntime ? { backgroundRuntime } : {}),
       }),
     };
   }

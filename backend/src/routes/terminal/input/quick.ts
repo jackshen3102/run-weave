@@ -15,6 +15,8 @@ const quickInputModeSchema = z.enum([
   "prompt_paste",
 ]);
 
+const quickInputBackgroundRuntimeSchema = z.enum(["headless", "terminal"]);
+
 const listQuickInputsSchema = z.object({
   projectId: z.string().trim().min(1).optional(),
   scope: z.literal("global").optional(),
@@ -37,6 +39,7 @@ const createQuickInputSchema = z
     title: z.string().trim().max(120),
     data: z.string(),
     mode: quickInputModeSchema,
+    backgroundRuntime: quickInputBackgroundRuntimeSchema.optional(),
     projectId: z.string().trim().min(1).nullable().optional(),
     terminalSessionId: z.string().trim().min(1).nullable().optional(),
     cwd: z.string().trim().min(1).nullable().optional(),
@@ -51,6 +54,7 @@ const updateQuickInputSchema = z
     pinned: z.boolean().optional(),
     data: z.string().optional(),
     mode: quickInputModeSchema.optional(),
+    backgroundRuntime: quickInputBackgroundRuntimeSchema.optional(),
     expectedUpdatedAt: z.string().datetime().optional(),
   })
   .strict();
@@ -66,6 +70,7 @@ export function registerTerminalQuickInputRoutes(
       const body = z.object({
         projectId: z.string().trim().min(1),
         expectedInputUpdatedAt: z.string().datetime(),
+        backgroundRuntime: quickInputBackgroundRuntimeSchema.optional(),
       }).strict().parse(req.body);
       const key = req.headers["idempotency-key"];
       if (typeof key !== "string" || !key.trim() || key.length > 200)
@@ -76,6 +81,7 @@ export function registerTerminalQuickInputRoutes(
         body.expectedInputUpdatedAt,
         key.trim(),
         quickInputService,
+        body.backgroundRuntime,
       ));
     } catch (error) {
       if (error instanceof z.ZodError) {

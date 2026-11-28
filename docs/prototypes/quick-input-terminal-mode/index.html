@@ -1,0 +1,1579 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="runweave-visual-plan" content="1">
+<meta name="color-scheme" content="light">
+<title>快捷指令双后台模式方案 · Runweave</title>
+<style>
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-subtle: #edf1f7;
+  --ink: #142033;
+  --muted: #526178;
+  --line: #d4dce8;
+  --accent: #1d4ed8;
+  --accent-soft: #dbeafe;
+  --teal: #0f766e;
+  --teal-soft: #ccfbf1;
+  --amber: #b45309;
+  --amber-soft: #fef3c7;
+  --rose: #be123c;
+  --ui-bg: #020617;
+  --ui-panel: #0f172a;
+  --ui-card: #111c33;
+  --ui-line: #1e293b;
+  --ui-text: #f1f5f9;
+  --ui-muted: #94a3b8;
+  --ui-sky: #7dd3fc;
+  --ui-orange: #fdba74;
+  --ui-emerald: #6ee7b7;
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  overflow-wrap: anywhere;
+}
+h1, h2, h3, h4, p, ul, ol { margin: 0; }
+a { color: var(--accent); text-underline-offset: 0.2em; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--surface-subtle);
+  padding: 0.1em 0.38em;
+  border-radius: 5px;
+}
+
+.container {
+  width: min(1120px, calc(100% - 40px));
+  margin-inline: auto;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(244, 246, 249, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 20px;
+  padding-block: 8px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  min-height: 44px;
+}
+.brand-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 0.85rem;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+}
+nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 550;
+}
+nav a:hover { color: var(--accent); text-decoration: underline; }
+
+header.hero {
+  scroll-margin-top: 76px;
+  padding: 36px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+.eyebrow {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+h1 {
+  font-size: clamp(1.75rem, 4vw, 2.55rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+.lead {
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 860px;
+}
+
+section.block {
+  scroll-margin-top: 76px;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--line);
+}
+section.block h2 {
+  font-size: clamp(1.3rem, 2.6vw, 1.65rem);
+  line-height: 1.3;
+  margin-bottom: 8px;
+}
+.section-sub {
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 0;
+}
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.tag-existing { background: var(--surface-subtle); color: var(--muted); }
+.tag-proposed { background: var(--teal-soft); color: var(--teal); }
+.tag-decision { background: var(--amber-soft); color: var(--amber); }
+
+.card ul {
+  padding-left: 20px;
+  margin-top: 10px;
+  color: var(--ink);
+}
+.card li + li { margin-top: 6px; }
+
+.flow-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.flow-step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.flow-step strong {
+  display: block;
+  font-size: 0.98rem;
+  margin-bottom: 4px;
+}
+.flow-step p {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.flow-step.highlight {
+  border-color: #fdba74;
+  background: #fffbeb;
+}
+
+.wide {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+th, td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  font-size: 0.95rem;
+}
+th {
+  background: var(--surface-subtle);
+  font-weight: 650;
+  color: var(--ink);
+}
+tr:last-child td { border-bottom: 0; }
+.pill-close {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 650;
+  font-size: 0.84rem;
+}
+.pill-keep {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-weight: 650;
+  font-size: 0.84rem;
+}
+
+/* Sandbox controls (explicitly outside product UI) */
+.sandbox-controls {
+  background: #eef2ff;
+  border: 1px dashed #818cf8;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.sandbox-controls-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sandbox-controls-header strong {
+  font-size: 0.95rem;
+  color: #312e81;
+}
+.sandbox-controls-header span {
+  font-size: 0.86rem;
+  color: #4338ca;
+}
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.control-row + .control-row { margin-top: 10px; }
+.control-label {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: #3730a3;
+  margin-right: 4px;
+}
+.seg-btn {
+  min-height: 44px;
+  padding: 6px 13px;
+  border-radius: 8px;
+  border: 1px solid #a5b4fc;
+  background: #fff;
+  color: #1e1b4b;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.seg-btn[aria-pressed="true"] {
+  background: #312e81;
+  border-color: #312e81;
+  color: #fff;
+}
+.reset-btn {
+  min-height: 44px;
+  padding: 6px 13px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* Operable Product UI Preview (Pure Proposed Product Copy Inside) */
+.product-shell {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.18);
+}
+.product-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 10px 16px;
+  background: #090f1f;
+  border-bottom: 1px solid var(--ui-line);
+}
+.product-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--ui-muted);
+}
+.product-topbar-title strong { color: var(--ui-text); }
+.product-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 390px;
+  min-height: 470px;
+}
+.ui-sidebar {
+  border-right: 1px solid var(--ui-line);
+  padding: 14px;
+  background: #070d1c;
+}
+.ui-section-label {
+  font-size: 0.78rem;
+  color: var(--ui-muted);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ui-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ui-session-item {
+  width: 100%;
+  text-align: left;
+  min-height: 44px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ui-session-item[data-active="true"] {
+  border-color: #38bdf8;
+  background: #0c213b;
+}
+.ui-session-item[data-blocked="true"] {
+  border-color: rgba(251, 146, 60, 0.65);
+  background: rgba(154, 52, 18, 0.22);
+}
+.ui-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.ui-session-meta {
+  font-size: 0.76rem;
+  color: var(--ui-muted);
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot-idle { background: #64748b; }
+.dot-running { background: #38bdf8; }
+.dot-blocked { background: #fb923c; }
+.dot-taken { background: #34d399; }
+
+.ui-terminal-stage {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  border-right: 1px solid var(--ui-line);
+  min-width: 0;
+}
+.ui-terminal-screen {
+  flex: 1;
+  background: #050914;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+  padding: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+}
+.ui-terminal-composer {
+  display: flex;
+  gap: 8px;
+}
+.ui-terminal-composer input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  padding: 0 12px;
+  font-size: 0.9rem;
+}
+.ui-btn {
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-card);
+  color: var(--ui-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.ui-btn-primary {
+  background: #e2e8f0;
+  color: #020617;
+  border-color: #e2e8f0;
+}
+.ui-btn-sky {
+  background: rgba(14, 116, 144, 0.2);
+  border-color: #0369a1;
+  color: var(--ui-sky);
+}
+.ui-btn-orange {
+  background: rgba(194, 65, 12, 0.22);
+  border-color: rgba(251, 146, 60, 0.55);
+  color: var(--ui-orange);
+}
+
+.ui-popover-pane {
+  padding: 16px;
+  background: #050a18;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.ui-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ui-popover-header h3 {
+  font-size: 0.95rem;
+}
+.ui-link-btn {
+  background: none;
+  border: 0;
+  color: var(--ui-sky);
+  font-size: 0.84rem;
+  min-height: 44px;
+  padding: 0 6px;
+}
+.ui-run-card {
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ui-run-card[data-attention="true"] {
+  border-color: rgba(249, 115, 22, 0.45);
+  background: rgba(249, 115, 22, 0.08);
+}
+.ui-run-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.ui-run-sub {
+  font-size: 0.78rem;
+  color: var(--ui-muted);
+}
+.ui-run-alert {
+  font-size: 0.79rem;
+  color: var(--ui-orange);
+}
+.ui-cmd-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+}
+.ui-cmd-info {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.ui-cmd-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ui-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+.ui-mode-badge[data-mode="terminal"] {
+  border-color: #0e7490;
+  background: rgba(8, 145, 178, 0.18);
+  color: #67e8f9;
+}
+.ui-cmd-preview {
+  font-size: 0.78rem;
+  color: var(--ui-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.ui-cmd-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ui-modal-box {
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ui-radio-group {
+  display: grid;
+  gap: 8px;
+}
+.ui-radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ui-line);
+  background: #091122;
+  cursor: pointer;
+  min-height: 44px;
+}
+.ui-radio-card[data-selected="true"] {
+  border-color: #38bdf8;
+  background: #0c213b;
+}
+.ui-radio-card input {
+  margin-top: 4px;
+  width: 17px;
+  height: 17px;
+  accent-color: #38bdf8;
+}
+
+/* Decisions section */
+.decision-list {
+  display: grid;
+  gap: 16px;
+}
+.decision-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+}
+.decision-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.choice-btn {
+  flex: 1 1 260px;
+  text-align: left;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.choice-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.choice-btn strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 3px;
+}
+.choice-btn span {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.decision-summary-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+footer.page-footer {
+  padding: 28px 0 44px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 980px) {
+  .product-layout {
+    grid-template-columns: 1fr;
+  }
+  .ui-sidebar, .ui-terminal-stage {
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-line);
+  }
+  .flow-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .container { width: calc(100% - 28px); }
+  .grid-2, .flow-strip { grid-template-columns: 1fr; }
+  .card, .decision-card { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body id="top">
+<div class="topbar">
+  <div class="container topbar-inner">
+    <a class="brand" href="#goal">
+      <span class="brand-badge">RW</span>
+      <span>快捷指令双后台方案</span>
+    </a>
+    <nav aria-label="方案章节导航">
+      <a href="#modes">两种方式</a>
+      <a href="#lifecycle">开关状态机</a>
+      <a href="#interactive-preview">交互沙盒</a>
+      <a href="#decisions">待拍板取舍</a>
+      <a href="#code-mapping">源码改动</a>
+      <a href="#verification">验证计划</a>
+    </nav>
+  </div>
+</div>
+
+<main class="container">
+  <header class="hero" id="goal">
+    <span class="eyebrow">可视化方案评审 · 源码基线 d1ec2fa8 · 尚未进入实现</span>
+    <h1 id="plan-title">快捷指令的两种后台方式：纯后台调用 + 临时终端「完结即焚、受阻保留」</h1>
+    <p class="lead" id="problem-summary">
+      在保留现有「纯后台静默运行」的基础上，为需要真实终端环境的快捷指令新增「临时终端」模式：像全权限定时任务一样在当前项目/Worktree 新开专用 <code>tmux</code> 终端执行，顺利完成后自动关掉终端；一旦遇到受阻或人工接管则原样保留终端不关闭，方便直接切入现场处理。
+    </p>
+  </header>
+
+  <section class="block" id="modes">
+    <h2>一、两种后台执行方式的分工（现状 vs 拟新增）</h2>
+    <p class="section-sub">
+      经核对源码，当前快捷指令一律走非交互子进程；而普通定时任务虽已有专用终端适配器，但显式排除了快捷指令，且受阻时仍会删除终端。
+    </p>
+    <div class="grid-2">
+      <article class="card" id="mode-headless-card">
+        <div class="card-header">
+          <h3>1. 纯后台方式（<code>headless</code>）</h3>
+          <span class="tag tag-existing">当前已有 · 默认</span>
+        </div>
+        <p>由 <code>CodexScheduledTaskProvider</code> 直接启动非交互 <code>codex exec --json --output-schema</code> 进程，后台读取结构化事件流。</p>
+        <ul>
+          <li><strong>不创建 PTY 或 tmux 会话</strong>，主动剥离 <code>RUNWEAVE_TERMINAL_SESSION_ID</code> 与 <code>TMUX_PANE</code>。</li>
+          <li><strong>优势</strong>：零终端列表噪音、完全静默，适合研究总结、文档整理、纯静态检查等任务。</li>
+          <li><strong>边界</strong>：遇到依赖当前终端身份、绑定终端右侧 Browser 通道或需要 TUI 原生交互的指令无法执行。</li>
+        </ul>
+      </article>
+
+      <article class="card" id="mode-terminal-card">
+        <div class="card-header">
+          <h3>2. 临时终端方式（<code>terminal</code>）</h3>
+          <span class="tag tag-proposed">本次拟新增 · 已选旁路裁判</span>
+        </div>
+        <p>在发起快捷指令的<strong>原项目 / Worktree</strong> 下新建专用 <code>tmux</code> 终端启动原生 Codex TUI，<strong>原样发送快捷指令（不拼接裸 JSON 协议，保留自然语言与 <code>/slash</code> 兼容）</strong>。</p>
+        <ul>
+          <li><strong>具备完整终端身份</strong>：拥有真实 <code>terminalSessionId</code>、<code>panelId</code> 与交互式 Shell/TUI 环境。</li>
+          <li><strong>旁路独立裁判完结即关</strong>：到达 <code>agent_idle</code> 后复用 <code>TaskSupervisionClassifier</code> 只读分类，仅高置信确认 <code>completed</code> 时自动回收终端。</li>
+          <li><strong>「宁留勿删」保留现场</strong>：硬信号阻塞、判定 <code>blocked</code>、置信不足（<code>hold</code>）、报错或人工按键介入时<strong>一律不关终端</strong>，写入 <code>terminalBinding(ready)</code> 直达人话现场。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="block" id="lifecycle">
+    <h2>二、怎么判断「执行完成 vs 受阻」？（已选定路线 B：硬信号 + 旁路独立裁判 + 宁留勿删）</h2>
+    <p class="section-sub">
+      交互式 TUI 无法挂载底层 <code>--output-schema</code>，且强迫执行 Agent 吐裸 JSON 会破坏 <code>/slash</code> 命令与现场可读性。方案采用<strong>两层判定 +「宁留勿删」保守关窗原则</strong>：
+    </p>
+
+    <div class="flow-strip" aria-label="临时终端主路径">
+      <div class="flow-step" id="step-spawn">
+        <strong>① 免打扰参数拉起新终端</strong>
+        <p>沿用定时任务参数（禁启动升级检查、免审批、跳过 Hook 信任确认）拉起 Codex TUI，原样提交指令。</p>
+      </div>
+      <div class="flow-step" id="step-observe">
+        <strong>② 层 1：轮次中硬信号监测</strong>
+        <p>实时监测提问 Hook、权限请求、<code>OSC 7501 blocked</code> 与终端人工按键（<code>takenOver</code>）。</p>
+      </div>
+      <div class="flow-step" id="step-close">
+        <strong>③ 层 2：空闲后旁路结构化裁判</strong>
+        <p>进入 <code>agent_idle</code> 后调用只读 <code>TaskSupervisionClassifier</code>（<code>--output-schema</code> + 分差门禁）核对完成条件。</p>
+      </div>
+      <div class="flow-step highlight" id="step-retain">
+        <strong>④ 宁留勿删处置</strong>
+        <p>仅高置信 <code>completed</code> 自动关终端；<code>continue</code> 原终端续跑；<code>blocked / hold / 报错</code> 一律保留现场。</p>
+      </div>
+    </div>
+
+    <div class="wide" tabindex="0" aria-label="临时终端六种结束分支对照表">
+      <table>
+        <thead>
+          <tr>
+            <th>判定分支</th>
+            <th>信号来源与触发条件</th>
+            <th>临时终端处置</th>
+            <th>看板与终端绑定状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>高置信完成 (<code>completed</code>)</strong></td>
+            <td><code>agent_idle</code> + 旁路分类器 <code>disposition="apply"</code> 且全部完成条件 <code>reported_done/waived</code>（得分 ≥ 0.70、分差 ≥ 0.20）</td>
+            <td><span class="pill-close">自动关闭终端</span></td>
+            <td><code>completed</code>，保留自然语言最终回复摘要；事后仍可按原 <code>threadId</code> 恢复新终端</td>
+          </tr>
+          <tr>
+            <td><strong>仍有获准剩余步骤 (<code>continue</code>)</strong></td>
+            <td><code>agent_idle</code> + 旁路分类器判定原授权内尚有明确下一步（未超 3 次且有进展）</td>
+            <td><span class="pill-keep">同一终端内续跑</span></td>
+            <td><code>running</code>；直接在当前临时终端追发具体下一步，无需销毁重建，全部完成后再自动关闭</td>
+          </tr>
+          <tr>
+            <td><strong>业务受阻 / 反问用户 (<code>blocked</code>)</strong></td>
+            <td><code>agent_idle</code> + 旁路分类器判定缺用户输入、缺登录/权限、遇冲突反问，或续接满 3 次仍未完成</td>
+            <td><span class="pill-keep">保留不关闭</span></td>
+            <td>看板置顶「需处理 · 终端已保留」，写入 <code>terminalBinding(ready)</code>；切过去看到的是干净的人话现场</td>
+          </tr>
+          <tr>
+            <td><strong>置信不足 / 报错兜底 (<code>hold / error</code>)</strong></td>
+            <td>旁路分类器覆盖不全、分差接近（<code>hold</code>），或 CLI 异常退出 / 分类超时</td>
+            <td><span class="pill-keep">保守保留不关闭</span></td>
+            <td><strong>宁留勿删</strong>：只要不确定已全部完成，最坏仅多留一个终端供你扫一眼关闭，绝不误删现场</td>
+          </tr>
+          <tr>
+            <td><strong>轮次内硬信号挂起</strong></td>
+            <td>未到空闲，卡在 <code>request_user_input</code> / <code>PermissionRequest</code> / <code>OSC 7501 state=blocked</code></td>
+            <td><span class="pill-keep">保持打开等待</span></td>
+            <td>复用既有待确认通知；进终端按键即转已接管保留；若通过手机回复辅助答完并最终 <code>completed</code> 仍自动关窗</td>
+          </tr>
+          <tr>
+            <td><strong>用户中途接管 / 主动停止</strong></td>
+            <td>运行中用户在终端按键（<code>takenOver</code>）；或主动点「停止运行」</td>
+            <td>人工接管 → <span class="pill-keep">保留</span><br>主动停止 → <span class="pill-close">关闭</span></td>
+            <td>人工接管立即解除自动关窗；主动停止在确认中断进程树后回收终端（未确认则保留并标 <code>stopping</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" id="interactive-preview">
+    <h2>三、可操作交互沙盒：体验两种方式与「受阻保留」</h2>
+    <p class="section-sub">
+      下方深色框内为拟落地产品界面（复用现有快捷指令浮层、终端侧栏与详情结构）；紫色虚线框为本地演示开关，不进入实际产品。
+    </p>
+
+    <div class="sandbox-controls" aria-label="演示场景控制（非产品控件）">
+      <div class="sandbox-controls-header">
+        <strong>演示场景控制（本地行为模拟，非产品 UI 控件）</strong>
+        <span id="sandbox-hint">点击下方快捷指令的「后台」按钮观察左侧终端列表变化</span>
+      </div>
+      <div class="control-row" role="group" aria-label="预览界面切换">
+        <span class="control-label">查看界面：</span>
+        <button type="button" class="seg-btn" id="view-tab-workspace" aria-pressed="true">工作区 + 快捷指令面板</button>
+        <button type="button" class="seg-btn" id="view-tab-editor" aria-pressed="false">编辑快捷指令（选方式）</button>
+        <button type="button" class="seg-btn" id="view-tab-detail" aria-pressed="false">运行详情（受阻保留态）</button>
+      </div>
+      <div class="control-row" role="group" aria-label="临时终端结果模拟">
+        <span class="control-label">当点「临时终端」指令时的模拟结局：</span>
+        <button type="button" class="seg-btn" id="sim-succeed" aria-pressed="true">顺利完成 → 自动关终端</button>
+        <button type="button" class="seg-btn" id="sim-block" aria-pressed="false">遇到受阻 → 保留终端不关</button>
+        <button type="button" class="seg-btn" id="sim-takeover" aria-pressed="false">运行中人工接管 → 保留终端</button>
+        <button type="button" class="reset-btn" id="sim-reset">重置演示状态</button>
+      </div>
+    </div>
+
+    <div class="product-shell" id="product-preview">
+      <div class="product-topbar">
+        <div class="product-topbar-title">
+          <strong>MacBook Pro</strong>
+          <span>·</span>
+          <span>browser-viewer / wt-1</span>
+        </div>
+        <div class="product-topbar-title">
+          <span id="ui-top-status">当前活跃终端：主开发会话</span>
+        </div>
+      </div>
+
+      <!-- View 1: Workspace + Popover -->
+      <div class="product-layout" id="ui-view-workspace">
+        <aside class="ui-sidebar" aria-label="项目终端列表">
+          <div class="ui-section-label">
+            <span>终端会话 (browser-viewer / wt-1)</span>
+            <span id="ui-session-count">1 个</span>
+          </div>
+          <div class="ui-session-list" id="ui-session-list"></div>
+        </aside>
+
+        <div class="ui-terminal-stage" aria-label="当前终端视图">
+          <div class="ui-terminal-screen" id="ui-terminal-screen"></div>
+          <form class="ui-terminal-composer" id="ui-terminal-form">
+            <input type="text" id="ui-terminal-input" placeholder="在当前查看的终端输入内容（运行中输入将触发用户接管保留）…" aria-label="终端输入">
+            <button type="submit" class="ui-btn ui-btn-primary">发送</button>
+          </form>
+        </div>
+
+        <div class="ui-popover-pane" aria-label="快捷指令浮层">
+          <section aria-label="后台任务看板">
+            <div class="ui-popover-header">
+              <h3>后台任务 <span style="color:#94a3b8;font-weight:400" id="ui-runs-count">· 0</span></h3>
+              <button type="button" class="ui-link-btn" id="ui-open-detail-link">查看详情 →</button>
+            </div>
+            <div id="ui-runs-list" style="display:flex;flex-direction:column;gap:8px;margin-top:6px"></div>
+          </section>
+
+          <section style="border-top:1px solid #1e293b;padding-top:12px;display:flex;flex-direction:column;gap:8px" aria-label="快捷指令列表">
+            <div class="ui-popover-header">
+              <h3>快捷指令</h3>
+              <button type="button" class="ui-link-btn" id="ui-open-editor-link">+ 编辑运行方式</button>
+            </div>
+            <p style="font-size:0.78rem;color:#94a3b8">当前执行位置：browser-viewer / wt-1</p>
+            <div id="ui-commands-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- View 2: Quick Input Editor -->
+      <div id="ui-view-editor" hidden style="padding:20px;max-width:620px;margin:auto">
+        <div class="ui-modal-box">
+          <div>
+            <h3 style="font-size:1.08rem">编辑快捷指令</h3>
+            <p style="font-size:0.82rem;color:#94a3b8;margin-top:2px">MacBook Pro · 全局快捷指令</p>
+          </div>
+          <label style="display:grid;gap:6px;font-size:0.86rem">
+            <span>标题</span>
+            <input id="editor-title" type="text" value="浏览器验收并提交 PR" style="min-height:44px;border-radius:8px;border:1px solid #1e293b;background:#091122;color:#f1f5f9;padding:0 12px">
+          </label>
+          <div style="display:grid;gap:6px;font-size:0.86rem" role="radiogroup" aria-label="后台运行方式">
+            <span>后台运行方式</span>
+            <div class="ui-radio-group">
+              <label class="ui-radio-card" id="editor-opt-headless" data-selected="false">
+                <input type="radio" name="bg-mode" value="headless">
+                <span>
+                  <strong style="display:block;font-size:0.9rem">纯后台运行（默认）</strong>
+                  <span style="display:block;font-size:0.8rem;color:#94a3b8">通过后台 CLI/SDK 静默调用，不打开终端；适合无需终端上下文的任务。</span>
+                </span>
+              </label>
+              <label class="ui-radio-card" id="editor-opt-terminal" data-selected="true">
+                <input type="radio" name="bg-mode" value="terminal" checked>
+                <span>
+                  <strong style="display:block;font-size:0.9rem">新开临时终端运行</strong>
+                  <span style="display:block;font-size:0.8rem;color:#94a3b8">在当前项目新建专用终端执行，完成后自动关闭；遇到受阻或手动接管时保留终端不关闭。</span>
+                </span>
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+            <button type="button" class="ui-btn" id="editor-back-btn">返回面板</button>
+            <button type="button" class="ui-btn ui-btn-primary" id="editor-save-btn">保存指令设置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- View 3: Blocked Run Detail -->
+      <div id="ui-view-detail" hidden style="padding:20px;max-width:640px;margin:auto">
+        <div class="ui-modal-box" id="ui-detail-content"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="decisions">
+    <h2>四、关键决策状态（判定路线已拍板，余 2 项轻量交互确认）</h2>
+    <p class="section-sub">
+      核心难点「完成 vs 受阻判定」已确认为路线 B；其余两项交互细节默认采用推荐项即可直接进入实现：
+    </p>
+
+    <div class="decision-list">
+      <article class="decision-card" id="decision-failed-retention">
+        <div class="card-header">
+          <h3>已确认决策：怎么判断「执行完成 vs 受阻」？</h3>
+          <span class="tag tag-proposed">已拍板：路线 B（旁路独立裁判 + 宁留勿删）</span>
+        </div>
+        <p>
+          <strong>不向原终端拼接裸 JSON 输出协议</strong>，保持 TUI 对话与 <code>/slash</code> 指令纯净可读；结合轮次内硬信号（Hook / <code>OSC 7501</code> / 人工按键）与轮次空闲后的只读 <code>TaskSupervisionClassifier</code>（<code>--output-schema</code> + <code>assessClassification</code> 置信门禁）：<strong>只有高置信确认 <code>completed</code>（或主动停止）才自动关闭临时终端；<code>blocked</code>、<code>hold</code>（不确定）及运行报错一律保留终端现场</strong>。
+        </p>
+      </article>
+
+      <article class="decision-card" id="decision-config-scope">
+        <div class="card-header">
+          <h3>待确认 1：后台方式配置在哪里？</h3>
+          <span class="tag tag-decision">默认推荐：按每条快捷指令保存</span>
+        </div>
+        <p>同一台电脑上，「研究一次」适合纯后台，而「浏览器验收 / 更新桌面端 / 提交 PR」需要终端，是否依赖终端由指令内容本身决定。</p>
+        <div class="decision-options" role="group" aria-label="决策 1 选项">
+          <button type="button" class="choice-btn" data-decision="scope" data-value="per-command" aria-pressed="true">
+            <strong>方案 A（推荐）：保存在每条快捷指令上 + 保持一键启动</strong>
+            <span>新增/编辑指令时选「纯后台」或「临时终端」（旧指令默认纯后台）；列表点「后台」直接按已存方式跑，<code>...</code> 菜单可临时换另一方式跑一次。</span>
+          </button>
+          <button type="button" class="choice-btn" data-decision="scope" data-value="ask-every-time" aria-pressed="false">
+            <strong>方案 B：不绑指令，每次点「后台」展开二级菜单二选一</strong>
+            <span>无需改快捷指令编辑表单，但每次点后台都要多点一次选择运行方式。</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="decision-card" id="decision-focus-policy">
+        <div class="card-header">
+          <h3>待确认 2：新开临时终端时，是否抢占当前正在看的终端焦点？</h3>
+          <span class="tag tag-decision">默认推荐：静默新建，受阻再切</span>
+        </div>
+        <p>普通定时任务当前使用 <code>activate: true</code> 自动切入新终端；但快捷指令通常是在你正盯着某个终端干活时顺手点开的。</p>
+        <div class="decision-options" role="group" aria-label="决策 3 选项">
+          <button type="button" class="choice-btn" data-decision="focus" data-value="silent-create" aria-pressed="true">
+            <strong>方案 A（推荐）：静默在同项目下新建（<code>activate: false</code>），不打断当前终端</strong>
+            <span>你在原终端继续干活；临时终端在侧栏跑完自动消失，只有受阻需处理或你主动点开时才切换过去。</span>
+          </button>
+          <button type="button" class="choice-btn" data-decision="focus" data-value="auto-focus" aria-pressed="false">
+            <strong>方案 B：创建后立即自动切换到该临时终端（<code>activate: true</code>）</strong>
+            <span>点完后台立刻看到 TUI 实时跑动，跑完关闭后再回退原终端。</span>
+          </button>
+        </div>
+      </article>
+    </div>
+
+    <div class="decision-summary-box" id="decision-summary" role="status"></div>
+  </section>
+
+  <section class="block" id="code-mapping">
+    <h2>五、真实源码改动链路（待确认后实施）</h2>
+    <p class="section-sub">完全复用现有 <code>ScheduledTaskService</code> 队列、幂等、SQLite 存储与 <code>terminalBinding</code> 接管协议，不另起第二套任务存储：</p>
+    <div class="wide" tabindex="0" aria-label="源码改动模块映射表">
+      <table>
+        <thead>
+          <tr>
+            <th>模块与真实文件</th>
+            <th>当前事实</th>
+            <th>拟改动内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>共享合同</strong><br><code>packages/shared/src/terminal/runtime/input.ts</code><br><code>packages/shared/src/scheduled-tasks/types.ts</code></td>
+            <td><code>TerminalQuickInputItem</code> 无后台方式字段；<code>ScheduledTaskConfig</code> 仅存 <code>executionPolicy</code></td>
+            <td>新增可选 <code>backgroundRuntime?: "headless" | "terminal"</code>（缺省 <code>"headless"</code> 兼容旧记录），启动时冻结入 <code>ScheduledTaskConfig</code>，并在单次 <code>StartQuickInputRunRequest</code> 支持可选覆盖。</td>
+          </tr>
+          <tr>
+            <td><strong>快捷运行入队与调度路由</strong><br><code>backend/src/scheduled-tasks/quick-input-run.ts</code><br><code>backend/src/scheduled-tasks/runtime.ts</code></td>
+            <td><code>runtime.ts:244</code> 写了 <code>!initial.snapshot.origin</code>，强制所有快捷指令走无终端 <code>codex exec</code></td>
+            <td>当快捷运行快照为 <code>backgroundRuntime === "terminal"</code>（且 <code>full-access</code> + <code>tmux</code> 可用）时路由至 <code>CodexTerminalScheduledTaskProvider</code>；纯后台模式保持原路径不变。</td>
+          </tr>
+          <tr>
+            <td><strong>新终端启动参数（完全对齐定时任务）</strong><br><code>backend/src/scheduled-tasks/providers/codex-options.ts</code><br><code>backend/src/terminal/application/agent-preparation.ts</code></td>
+            <td>定时任务终端已通过 <code>prepareTerminalAgent</code> + <code>codexScheduledArgs</code> 注入完整免打扰参数</td>
+            <td>直接复用同一参数链：<br>① 禁升级弹窗：<code>-c check_for_update_on_startup=false</code><br>② 免审批与全权限：<code>--sandbox danger-full-access --config approval_policy="never"</code>（随快照策略）<br>③ 跳过 Hook 信任拦截：<code>--dangerously-bypass-hook-trust</code><br>④ 锁定模型/推理强度/目录：<code>--model</code>、<code>model_reasoning_effort</code>、<code>-c tui.resume_cwd="current"</code> + <code>stageResumeCommand</code> 防截断。</td>
+          </tr>
+          <tr>
+            <td><strong>受监督临时终端执行器（核心）</strong><br><code>backend/src/scheduled-tasks/providers/</code><br><code>backend/src/task-supervision/classifier.ts</code><br><code>backend/src/attention/attention-service.ts</code></td>
+            <td><code>codex-terminal.ts</code> 靠尾部注入裸 JSON 要求解析结果，且 <code>blocked</code> 仍会删终端；<code>TaskSupervisionClassifier</code> 已具备带 <code>--output-schema</code> 的三分类与 <code>assessClassification</code> 置信门禁</td>
+            <td>快捷临时终端<strong>原样提交用户指令（不注入裸 JSON 要求）</strong>；轮次中结合硬阻塞信号（Hook / <code>OSC 7501</code> / <code>takenOver</code>），进入 <code>agent_idle</code> 后调用旁路分类器：高置信 <code>completed</code> 自动关窗；<code>continue</code> 原终端内续跑（最多 3 次）；<code>blocked / hold / 报错</code> 一律调用 <code>onTerminalRetained(ready)</code> 保留干净的人话终端。</td>
+          </tr>
+          <tr>
+            <td><strong>终端恢复与防双跑</strong><br><code>backend/src/scheduled-tasks/terminal-attachment.ts</code><br><code>packages/shared/src/scheduled-tasks/recovery.ts</code></td>
+            <td><code>terminal-attachment.ts:108</code> 已支持识别存活的 <code>ready</code> 绑定直接返回原终端；<code>scheduledReplyUnavailable</code> 已阻止后台双跑</td>
+            <td>直接复用！保留下来的终端天然具备 <code>attachmentState: "ready"</code>，从看板或通知点开零等待进入原终端，且后台不会并发拉起第二个进程。</td>
+          </tr>
+          <tr>
+            <td><strong>Web / iOS / CLI 入口</strong><br><code>frontend/src/components/terminal/input/*</code><br><code>packages/app-ios/.../TerminalQuickCommandsView.swift</code><br><code>packages/runweave-cli/src/commands/quick-input.ts</code></td>
+            <td>编辑器只有标题与正文；运行详情按钮统一写「打开对话并继续追问」</td>
+            <td>编辑器增加「纯后台 / 临时终端」选择；指令行标注轻量终端徽标；当 <code>run.terminalBinding?.attachmentState === "ready"</code> 时详情按钮明确显示「进入已保留的执行终端」；CLI <code>rw quick-input</code> 支持 <code>--background-runtime</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" id="verification">
+    <h2>六、可验证结果与验收计划</h2>
+    <div class="card">
+      <ul>
+        <li><strong>纯后台回归不退化</strong>：<code>headless</code> 快捷指令点击后不产生新 <code>TerminalSession</code>，原终端草稿与焦点不变（对应 <code>BGC-001</code>）。</li>
+        <li><strong>临时终端完结自动回收</strong>：<code>terminal</code> 快捷指令启动后在目标 Worktree 下创建专用 <code>tmux</code> 会话；返回 <code>succeeded</code> 后会话从 <code>TerminalSessionManager</code> 与 <code>tmux ls</code> 中确认消失，摘要与输出保留在运行记录。</li>
+        <li><strong>受阻原样保留且单实例接管</strong>：返回不可自动续接的 <code>blocked</code>（或中途在终端输入接管）后，原 <code>tmux</code> 会话与 Codex TUI 保持存活，<code>run.terminalBinding.attachmentState === "ready"</code>；点开直接进入同一 <code>terminalSessionId</code>，不新建第二个终端，后台 <code>continue</code> 明确拒绝并发双跑。</li>
+        <li><strong>静态与真实验收门禁</strong>：实施阶段依次执行 <code>shared/backend/frontend</code> typecheck &amp; lint、<code>pnpm architecture:check</code>、<code>pnpm docs:check</code>、<code>pnpm scheduled-tasks:verify-runtime</code>，并在隔离 Dev Session 补充扩展 <code>docs/testing/background-commands/core.testplan.yaml</code> 用例取证。</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    <span>版本：QITM-PLAN-1 · 供阅读与元素评审讨论使用</span>
+    <a href="#goal">↑ 返回顶部</a>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var state = {
+    view: "workspace",
+    simOutcome: "succeed",
+    activeSessionId: "main-dev",
+    commands: [
+      {
+        id: "cmd-research",
+        title: "研究一次并生成摘要",
+        data: "$research-desk 采集最新多智能体调度论文并整理中文总结",
+        runtime: "headless"
+      },
+      {
+        id: "cmd-pr",
+        title: "浏览器验收并提交 PR",
+        data: "使用右侧浏览器完成页面交互核对，通过后走 github-pr 提单合并",
+        runtime: "terminal"
+      }
+    ],
+    sessions: [
+      {
+        id: "main-dev",
+        title: "主开发会话",
+        kind: "user",
+        status: "idle",
+        meta: "你正在使用的终端 · 草稿保留",
+        screen: "$ git status -sb\n## feat/quick-commands\n\n[主开发会话] 你正在这里编写代码，点击右侧快捷指令的「后台」不会打断这里的输入。"
+      }
+    ],
+    runs: [],
+    decisions: {
+      scope: "per-command",
+      failure: "retain-non-success",
+      focus: "silent-create"
+    },
+    timer: null
+  };
+
+  var els = {
+    viewWorkspace: document.getElementById("ui-view-workspace"),
+    viewEditor: document.getElementById("ui-view-editor"),
+    viewDetail: document.getElementById("ui-view-detail"),
+    tabWorkspace: document.getElementById("view-tab-workspace"),
+    tabEditor: document.getElementById("view-tab-editor"),
+    tabDetail: document.getElementById("view-tab-detail"),
+    simSucceed: document.getElementById("sim-succeed"),
+    simBlock: document.getElementById("sim-block"),
+    simTakeover: document.getElementById("sim-takeover"),
+    simReset: document.getElementById("sim-reset"),
+    sandboxHint: document.getElementById("sandbox-hint"),
+    topStatus: document.getElementById("ui-top-status"),
+    sessionCount: document.getElementById("ui-session-count"),
+    sessionList: document.getElementById("ui-session-list"),
+    terminalScreen: document.getElementById("ui-terminal-screen"),
+    terminalForm: document.getElementById("ui-terminal-form"),
+    terminalInput: document.getElementById("ui-terminal-input"),
+    runsCount: document.getElementById("ui-runs-count"),
+    runsList: document.getElementById("ui-runs-list"),
+    commandsList: document.getElementById("ui-commands-list"),
+    openDetailLink: document.getElementById("ui-open-detail-link"),
+    openEditorLink: document.getElementById("ui-open-editor-link"),
+    editorTitle: document.getElementById("editor-title"),
+    editorOptHeadless: document.getElementById("editor-opt-headless"),
+    editorOptTerminal: document.getElementById("editor-opt-terminal"),
+    editorBackBtn: document.getElementById("editor-back-btn"),
+    editorSaveBtn: document.getElementById("editor-save-btn"),
+    detailContent: document.getElementById("ui-detail-content"),
+    decisionSummary: document.getElementById("decision-summary")
+  };
+
+  function clearSimTimer() {
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+  }
+
+  function setView(view) {
+    state.view = view;
+    els.viewWorkspace.hidden = view !== "workspace";
+    els.viewEditor.hidden = view !== "editor";
+    els.viewDetail.hidden = view !== "detail";
+    els.tabWorkspace.setAttribute("aria-pressed", String(view === "workspace"));
+    els.tabEditor.setAttribute("aria-pressed", String(view === "editor"));
+    els.tabDetail.setAttribute("aria-pressed", String(view === "detail"));
+    render();
+  }
+
+  function startRun(cmd) {
+    clearSimTimer();
+    var existing = state.runs.find(function (r) {
+      return r.cmdId === cmd.id && r.status === "running";
+    });
+    if (existing) {
+      setView("detail");
+      return;
+    }
+
+    var runId = "run-" + Math.random().toString(36).slice(2, 7);
+    if (cmd.runtime === "headless") {
+      var hRun = {
+        id: runId,
+        cmdId: cmd.id,
+        title: cmd.title,
+        runtime: "headless",
+        status: "running",
+        project: "browser-viewer / wt-1",
+        note: "纯后台 SDK/CLI 执行中（未创建终端）",
+        retainedSessionId: null
+      };
+      state.runs.unshift(hRun);
+      els.sandboxHint.textContent = "已启动「纯后台」运行：左侧终端列表保持 1 个不变，后台静默处理…";
+      render();
+      state.timer = setTimeout(function () {
+        hRun.status = "completed";
+        hRun.note = "已完成 · 整理出 3 篇论文对比摘要";
+        els.sandboxHint.textContent = "纯后台运行完成：全程零终端开销，结果已写入看板。";
+        render();
+      }, 1100);
+      return;
+    }
+
+    var termId = "temp-" + runId;
+    var tempSession = {
+      id: termId,
+      title: "快捷 · " + cmd.title,
+      kind: "ephemeral",
+      status: "running",
+      meta: "临时专用终端 · 完成后自动关闭",
+      screen: "[Codex TUI · 专用临时终端 " + termId + "]\ncwd: ./browser-viewer (wt-1)\n> " + cmd.data + "\n\n正在附着当前电脑 Terminal Browser 核对页面状态…"
+    };
+    state.sessions.push(tempSession);
+    if (state.decisions.focus === "auto-focus") {
+      state.activeSessionId = termId;
+    }
+
+    var tRun = {
+      id: runId,
+      cmdId: cmd.id,
+      title: cmd.title,
+      runtime: "terminal",
+      status: "running",
+      project: "browser-viewer / wt-1",
+      note: "临时终端执行中 · 完成后将自动关闭",
+      retainedSessionId: termId
+    };
+    state.runs.unshift(tRun);
+    els.sandboxHint.textContent = "已在左侧新开「" + tempSession.title + "」终端执行中…（也可切过去打字体验人工接管）";
+    render();
+
+    state.timer = setTimeout(function () {
+      if (tRun.status !== "running") return;
+      if (state.simOutcome === "succeed") {
+        state.sessions = state.sessions.filter(function (s) { return s.id !== termId; });
+        if (state.activeSessionId === termId) state.activeSessionId = "main-dev";
+        tRun.status = "completed";
+        tRun.retainedSessionId = null;
+        tRun.note = "已完成 · 临时终端已自动关闭";
+        els.sandboxHint.textContent = "顺利完成！临时终端已自动关闭回收，左侧列表恢复干净，结果保存在后台看板。";
+      } else if (state.simOutcome === "takeover") {
+        tempSession.status = "taken";
+        tempSession.meta = "用户已接管 · 停止自动关闭";
+        tempSession.screen += "\n\n$ 继续执行并跳过可选部署\n[检测到终端人工输入：调度器已移交控制权并保留本终端，不再自动关闭]";
+        tRun.status = "taken";
+        tRun.note = "你已接管执行终端 · 已停止自动回收";
+        els.sandboxHint.textContent = "检测到人工接管！已触发 takenOver 保护，临时终端保留在左侧不被自动关闭。";
+      } else {
+        tempSession.status = "blocked";
+        tempSession.meta = "受阻已保留 · 等待你处理（不会自动关闭）";
+        tempSession.screen += "\n\nAgent：检测到测试环境登录态已过期，右侧浏览器停留在登录页。请先完成登录，或者告诉我是否改用本地账号？\n\n[旁路分类器判定：blocked (needs-input) · 遵循「宁留勿删」保留本终端，terminalBinding = ready]";
+        tRun.status = "blocked";
+        tRun.note = "受阻：测试环境登录态已过期 · 临时终端已保留";
+        els.sandboxHint.textContent = "旁路分类器判定受阻！终端内保留干净的自然语言对话，未关闭，点击即可直接进入处理。";
+      }
+      render();
+    }, 1800);
+  }
+
+  function renderSessions() {
+    els.sessionCount.textContent = state.sessions.length + " 个";
+    els.sessionList.innerHTML = "";
+    state.sessions.forEach(function (s) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ui-session-item";
+      btn.dataset.active = String(state.activeSessionId === s.id);
+      btn.dataset.blocked = String(s.status === "blocked");
+      var dotClass = s.status === "running" ? "dot-running" : s.status === "blocked" ? "dot-blocked" : s.status === "taken" ? "dot-taken" : "dot-idle";
+      var row = document.createElement("span");
+      row.className = "ui-session-row";
+      var nameSpan = document.createElement("span");
+      nameSpan.textContent = s.title;
+      var dot = document.createElement("span");
+      dot.className = "dot " + dotClass;
+      row.appendChild(nameSpan);
+      row.appendChild(dot);
+
+      var meta = document.createElement("span");
+      meta.className = "ui-session-meta";
+      meta.textContent = s.meta;
+
+      btn.appendChild(row);
+      btn.appendChild(meta);
+      btn.addEventListener("click", function () {
+        state.activeSessionId = s.id;
+        render();
+      });
+      els.sessionList.appendChild(btn);
+    });
+
+    var active = state.sessions.find(function (s) { return s.id === state.activeSessionId; }) || state.sessions[0];
+    els.topStatus.textContent = "当前查看终端：" + active.title;
+    els.terminalScreen.textContent = active.screen;
+  }
+
+  function renderRuns() {
+    els.runsCount.textContent = "· " + state.runs.length;
+    els.runsList.innerHTML = "";
+    if (!state.runs.length) {
+      var empty = document.createElement("p");
+      empty.style.cssText = "font-size:0.8rem;color:#94a3b8;padding:4px 0";
+      empty.textContent = "暂无后台任务，点下方指令右侧「后台」体验";
+      els.runsList.appendChild(empty);
+      return;
+    }
+    state.runs.slice(0, 3).forEach(function (r) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ui-run-card";
+      var attention = r.status === "blocked" || r.status === "taken";
+      btn.dataset.attention = String(attention);
+
+      var top = document.createElement("span");
+      top.className = "ui-run-top";
+      var t = document.createElement("span");
+      t.textContent = r.title;
+      var st = document.createElement("span");
+      st.style.color = attention ? "#fdba74" : "#7dd3fc";
+      st.style.fontSize = "0.78rem";
+      st.textContent = r.status === "running" ? "运行中" : r.status === "blocked" ? "需处理 · 终端已保留" : r.status === "taken" ? "已接管终端" : "已完成";
+      top.appendChild(t);
+      top.appendChild(st);
+
+      var sub = document.createElement("span");
+      sub.className = "ui-run-sub";
+      sub.textContent = r.project + " · " + (r.runtime === "terminal" ? "临时终端" : "纯后台");
+
+      var note = document.createElement("span");
+      note.className = attention ? "ui-run-alert" : "ui-run-sub";
+      note.textContent = r.note;
+
+      btn.appendChild(top);
+      btn.appendChild(sub);
+      btn.appendChild(note);
+      btn.addEventListener("click", function () {
+        if (r.retainedSessionId) {
+          state.activeSessionId = r.retainedSessionId;
+          setView("workspace");
+        } else {
+          setView("detail");
+        }
+      });
+      els.runsList.appendChild(btn);
+    });
+  }
+
+  function renderCommands() {
+    els.commandsList.innerHTML = "";
+    state.commands.forEach(function (cmd) {
+      var card = document.createElement("div");
+      card.className = "ui-cmd-card";
+
+      var info = document.createElement("div");
+      info.className = "ui-cmd-info";
+      var titleRow = document.createElement("div");
+      titleRow.className = "ui-cmd-title";
+      var name = document.createElement("span");
+      name.textContent = cmd.title;
+      var badge = document.createElement("span");
+      badge.className = "ui-mode-badge";
+      badge.dataset.mode = cmd.runtime;
+      badge.textContent = cmd.runtime === "terminal" ? "临时终端" : "纯后台";
+      titleRow.appendChild(name);
+      titleRow.appendChild(badge);
+
+      var preview = document.createElement("p");
+      preview.className = "ui-cmd-preview";
+      preview.textContent = cmd.data;
+      info.appendChild(titleRow);
+      info.appendChild(preview);
+
+      var actions = document.createElement("div");
+      actions.className = "ui-cmd-actions";
+      var sendBtn = document.createElement("button");
+      sendBtn.type = "button";
+      sendBtn.className = "ui-btn ui-btn-primary";
+      sendBtn.textContent = "发送";
+      sendBtn.addEventListener("click", function () {
+        var active = state.sessions.find(function (s) { return s.id === state.activeSessionId; }) || state.sessions[0];
+        active.screen += "\n\n> " + cmd.data + "\n[已直接发送到当前终端]";
+        render();
+      });
+
+      var running = state.runs.some(function (r) { return r.cmdId === cmd.id && r.status === "running"; });
+      var bgBtn = document.createElement("button");
+      bgBtn.type = "button";
+      bgBtn.className = "ui-btn ui-btn-sky";
+      bgBtn.id = "run-bg-" + cmd.id;
+      bgBtn.textContent = running ? "查看" : "后台";
+      bgBtn.addEventListener("click", function () { startRun(cmd); });
+
+      actions.appendChild(sendBtn);
+      actions.appendChild(bgBtn);
+      card.appendChild(info);
+      card.appendChild(actions);
+      els.commandsList.appendChild(card);
+    });
+  }
+
+  function renderDetail() {
+    var target = state.runs[0] || {
+      id: "run-demo",
+      title: "浏览器验收并提交 PR",
+      runtime: "terminal",
+      status: "blocked",
+      project: "browser-viewer / wt-1",
+      note: "受阻：测试环境登录态已过期 · 临时终端已保留",
+      retainedSessionId: null
+    };
+    var hasRetained = Boolean(target.retainedSessionId && state.sessions.some(function (s) { return s.id === target.retainedSessionId; }));
+    els.detailContent.innerHTML = "";
+
+    var h = document.createElement("h3");
+    h.style.fontSize = "1.1rem";
+    h.textContent = target.title;
+
+    var meta = document.createElement("p");
+    meta.style.cssText = "font-size:0.82rem;color:#94a3b8";
+    meta.textContent = target.project + " · 执行方式：" + (target.runtime === "terminal" ? "临时终端（受阻保留）" : "纯后台");
+
+    var banner = document.createElement("p");
+    banner.style.cssText = "padding:10px 12px;border-radius:9px;background:#1e293b;font-size:0.88rem;color:" + (target.status === "completed" ? "#6ee7b7" : "#fdba74");
+    banner.textContent = target.note;
+
+    var guard = document.createElement("p");
+    guard.style.cssText = "font-size:0.8rem;color:#94a3b8";
+    guard.textContent = hasRetained
+      ? "原临时终端仍保持打开（attachmentState: ready），后台不会同时启动第二个执行进程。"
+      : target.runtime === "terminal" && target.status === "completed"
+        ? "本次任务顺利完成，临时终端已自动关闭；如需追问可按原 threadId 恢复对话。"
+        : "可查看本次输出，或打开对话继续处理。";
+
+    var btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;flex-wrap:wrap;gap:8px";
+    var mainBtn = document.createElement("button");
+    mainBtn.type = "button";
+    mainBtn.className = hasRetained ? "ui-btn ui-btn-orange" : "ui-btn ui-btn-primary";
+    mainBtn.textContent = hasRetained ? "进入已保留的执行终端" : "打开对话并继续追问";
+    mainBtn.addEventListener("click", function () {
+      if (hasRetained) state.activeSessionId = target.retainedSessionId;
+      setView("workspace");
+    });
+
+    var backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "ui-btn";
+    backBtn.textContent = "返回工作区";
+    backBtn.addEventListener("click", function () { setView("workspace"); });
+
+    btnRow.appendChild(mainBtn);
+    btnRow.appendChild(backBtn);
+    els.detailContent.appendChild(h);
+    els.detailContent.appendChild(meta);
+    els.detailContent.appendChild(banner);
+    els.detailContent.appendChild(guard);
+    els.detailContent.appendChild(btnRow);
+  }
+
+  function renderDecisionSummary() {
+    var labels = {
+      scope: state.decisions.scope === "per-command" ? "按每条快捷指令绑定默认方式（保持一键启动）" : "每次点击后台时弹二级菜单选择",
+      focus: state.decisions.focus === "silent-create" ? "静默新建临时终端，不抢当前终端焦点" : "新建临时终端时立即自动切换焦点"
+    };
+    els.decisionSummary.textContent =
+      "当前方案组合：① 完结/受阻判定：路线 B（旁路独立裁判 + 宁留勿删，已确认）；② 配置位置：" + labels.scope + "；③ 焦点策略：" + labels.focus + "。";
+  }
+
+  function render() {
+    renderSessions();
+    renderRuns();
+    renderCommands();
+    renderDetail();
+    renderDecisionSummary();
+  }
+
+  els.tabWorkspace.addEventListener("click", function () { setView("workspace"); });
+  els.tabEditor.addEventListener("click", function () { setView("editor"); });
+  els.tabDetail.addEventListener("click", function () { setView("detail"); });
+  els.openEditorLink.addEventListener("click", function () { setView("editor"); });
+  els.openDetailLink.addEventListener("click", function () { setView("detail"); });
+  els.editorBackBtn.addEventListener("click", function () { setView("workspace"); });
+
+  function setSimOutcome(outcome) {
+    state.simOutcome = outcome;
+    els.simSucceed.setAttribute("aria-pressed", String(outcome === "succeed"));
+    els.simBlock.setAttribute("aria-pressed", String(outcome === "block"));
+    els.simTakeover.setAttribute("aria-pressed", String(outcome === "takeover"));
+  }
+  els.simSucceed.addEventListener("click", function () { setSimOutcome("succeed"); });
+  els.simBlock.addEventListener("click", function () { setSimOutcome("block"); });
+  els.simTakeover.addEventListener("click", function () { setSimOutcome("takeover"); });
+
+  els.simReset.addEventListener("click", function () {
+    clearSimTimer();
+    state.activeSessionId = "main-dev";
+    state.sessions = [state.sessions[0]];
+    state.sessions[0].screen = "$ git status -sb\n## feat/quick-commands\n\n[主开发会话] 你正在这里编写代码，点击右侧快捷指令的「后台」不会打断这里的输入。";
+    state.runs = [];
+    els.sandboxHint.textContent = "已重置：点击下方快捷指令的「后台」按钮观察左侧终端列表变化";
+    setView("workspace");
+  });
+
+  function markActiveEphemeralTakenOver(reasonLine) {
+    var active = state.sessions.find(function (s) { return s.id === state.activeSessionId; });
+    if (!active || active.kind !== "ephemeral" || active.status !== "running") return false;
+    clearSimTimer();
+    active.status = "taken";
+    active.meta = "用户已接管 · 停止自动关闭";
+    active.screen += "\n" + reasonLine;
+    var run = state.runs.find(function (r) { return r.retainedSessionId === active.id; });
+    if (run) {
+      run.status = "taken";
+      run.note = "你已接管执行终端 · 已停止自动回收";
+    }
+    els.sandboxHint.textContent = "检测到你在临时终端内手动输入！已触发 takenOver 保护，终端将保留不被自动关掉。";
+    return true;
+  }
+
+  els.terminalInput.addEventListener("input", function () {
+    if (els.terminalInput.value.length > 0 && markActiveEphemeralTakenOver("[检测到终端按键输入：调度器已移交控制权并保留本终端，不再自动关闭]")) {
+      render();
+    }
+  });
+
+  els.terminalForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = els.terminalInput.value.trim();
+    if (!text) return;
+    els.terminalInput.value = "";
+    var active = state.sessions.find(function (s) { return s.id === state.activeSessionId; });
+    if (!active) return;
+    active.screen += "\n\n$ " + text;
+    markActiveEphemeralTakenOver("[检测到终端人工输入：调度器已移交控制权并保留本终端，不再自动关闭]");
+    render();
+  });
+
+  document.querySelectorAll('input[name="bg-mode"]').forEach(function (radio) {
+    radio.addEventListener("change", function () {
+      var mode = radio.value;
+      els.editorOptHeadless.dataset.selected = String(mode === "headless");
+      els.editorOptTerminal.dataset.selected = String(mode === "terminal");
+    });
+  });
+
+  els.editorSaveBtn.addEventListener("click", function () {
+    var selected = document.querySelector('input[name="bg-mode"]:checked');
+    var mode = selected ? selected.value : "terminal";
+    var prCmd = state.commands[1];
+    prCmd.title = els.editorTitle.value.trim() || prCmd.title;
+    prCmd.runtime = mode;
+    els.sandboxHint.textContent = "已更新「" + prCmd.title + "」的默认后台方式为：" + (mode === "terminal" ? "临时终端" : "纯后台");
+    setView("workspace");
+  });
+
+  document.querySelectorAll(".choice-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var group = btn.dataset.decision;
+      var value = btn.dataset.value;
+      state.decisions[group] = value;
+      document.querySelectorAll('.choice-btn[data-decision="' + group + '"]').forEach(function (peer) {
+        peer.setAttribute("aria-pressed", String(peer === btn));
+      });
+      renderDecisionSummary();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -23,16 +23,17 @@ struct QuickInputService {
     return page
   }
 
-  func create(title: String, data: String) async throws -> BackendQuickInput {
+  func create(title: String, data: String, backgroundRuntime: String = "headless") async throws -> BackendQuickInput {
     let body: [String: Any] = [
-      "title": title, "data": data, "mode": "line", "projectId": NSNull(), "source": "ios_quick_reply",
+      "title": title, "data": data, "mode": "line", "backgroundRuntime": backgroundRuntime,
+      "projectId": NSNull(), "source": "ios_quick_reply",
     ]
     return try await request("", method: "POST", body: body)
   }
 
-  func update(_ item: BackendQuickInput, title: String, data: String) async throws -> BackendQuickInput {
+  func update(_ item: BackendQuickInput, title: String, data: String, backgroundRuntime: String = "headless") async throws -> BackendQuickInput {
     try await request("/\(APIClient.pathComponent(item.id))", method: "PATCH", body: [
-      "title": title, "data": data, "expectedUpdatedAt": item.updatedAt,
+      "title": title, "data": data, "backgroundRuntime": backgroundRuntime, "expectedUpdatedAt": item.updatedAt,
     ])
   }
 
@@ -50,11 +51,13 @@ struct QuickInputService {
     try await request("/\(APIClient.pathComponent(id))/used", method: "POST", body: [:])
   }
 
-  func start(_ item: BackendQuickInput, projectId: String, key: String) async throws -> ScheduledRun {
+  func start(_ item: BackendQuickInput, projectId: String, key: String, backgroundRuntime: String? = nil) async throws -> ScheduledRun {
     _ = try await ScheduledTasksService(api: api).capabilities()
-    return try await request("/\(APIClient.pathComponent(item.id))/run", method: "POST", body: [
+    var body: [String: Any] = [
       "projectId": projectId, "expectedInputUpdatedAt": item.updatedAt,
-    ], key: key, headers: ["X-Runweave-Task-Context-Version": "2"])
+    ]
+    if let backgroundRuntime { body["backgroundRuntime"] = backgroundRuntime }
+    return try await request("/\(APIClient.pathComponent(item.id))/run", method: "POST", body: body, key: key, headers: ["X-Runweave-Task-Context-Version": "2"])
   }
 
   func runs(projectId: String? = nil, cursor: String? = nil) async throws -> ScheduledPage<ScheduledRun> {

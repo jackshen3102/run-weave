@@ -21,12 +21,16 @@ export type ScheduledMisfirePolicy =
   | { mode: "skip" }
   | { mode: "catch-up-latest"; maxDelaySeconds: number };
 
+export type ScheduledQuickInputBackgroundRuntime = "headless" | "terminal";
+
 export interface ScheduledQuickInputOrigin {
   kind: "quick-input";
   quickInputId: string;
   projectId: string;
   projectName: string;
   worktreeName: string | null;
+  /** Absent on legacy runs: defaults to "headless". */
+  backgroundRuntime?: ScheduledQuickInputBackgroundRuntime;
 }
 
 export interface ScheduledTaskConfig {

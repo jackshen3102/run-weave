@@ -49,7 +49,7 @@ validate 不创建目录。`ScheduledRun.executionContext` 保存实际执行位
 调度器同时确认原生业务轮次完成、执行侧空闲与有效结构化结果后回收终端，不以进程仍在或退出码代替业务结果。
 停止、超时和启动失败也清理本轮自有终端；停止中断未确认时保留终端与 stopping 状态，阻止同任务重入。
 用户输入或切换 Agent/对话即停止自动管理并保留终端。自动续接在新终端恢复同一 thread，
-沿用原目录、模型、权限和累计预算；快捷后台运行及其他策略仍走后台适配器。
+沿用原目录、模型、权限和累计预算；快捷后台运行默认 `headless` 走后台适配器，显式选择 `terminal` 时在原项目下静默创建受监督临时终端（高置信完成即关，受阻/不确定/接管保留）。
 接入事实见[定时任务接入](../../frontend/docs/scheduled-tasks.md)。
 
 需要操作仓库时在完整提示词中说明目标、规则和验收条件。描述中的目录不会扩大执行权限；默认 sandbox
@@ -151,16 +151,16 @@ rw scheduled-task run archive <run-id> --json
 快捷指令通过以下命令创建、发现并执行：
 
 ```bash
-rw quick-input create --title '研究一次' --text-file /absolute/path/research-prompt.txt --client-import-id <本次导入的UUID> --json
-rw quick-input update <input-id> --text-file /absolute/path/research-prompt.txt --expected-updated-at <读取到的updatedAt> --json
+rw quick-input create --title '研究一次' --text-file /absolute/path/research-prompt.txt --background-runtime headless --client-import-id <本次导入的UUID> --json
+rw quick-input update <input-id> --text-file /absolute/path/research-prompt.txt --background-runtime terminal --expected-updated-at <读取到的updatedAt> --json
 rw quick-input list --project-id <project-id> --kind pinned --limit 50 --json
 rw quick-input run <input-id> --project-id <project-id> --expected-updated-at <list 返回的 updatedAt> --idempotency-key <本次唯一 UUID> --json
 ```
 
-`quick-input create` 创建全局固定指令，正文从 UTF-8 文件读取，默认 `--mode line`；还支持
+`quick-input create` 创建全局固定指令，正文从 UTF-8 文件读取，默认 `--mode line`、`--background-runtime headless`（可选 `terminal`）；还支持
 `codex_slash_command` 和 `prompt_paste`。同一次导入重试必须沿用 `--client-import-id`，Backend
 返回已有记录，不覆盖其后续人工修改；保存后核对返回的正文和模式。该命令不执行指令，也不创建定时任务。
-`quick-input update` 只修改正文，要求 `--expected-updated-at`；版本冲突时保留当前记录，不擅自覆盖或重试。
+`quick-input update` 支持修改正文（`--text-file`）和/或默认后台运行方式（`--background-runtime`），要求 `--expected-updated-at`；版本冲突时保留当前记录，不擅自覆盖或重试。
 
-`quick-input run` 要求原指令版本和精确项目身份，模型与权限沿用当前 Backend 已配置的
+`quick-input run` 要求原指令版本和精确项目身份，可选 `--background-runtime headless|terminal` 覆盖单次运行方式；模型与权限沿用当前 Backend 已配置的
 后台运行策略；CLI 不隐式修改指令或任务定义。运行结果继续用上面的 `scheduled-task run` 命令读取。

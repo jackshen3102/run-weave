@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
+import type { CreateTerminalQuickInputRequest, ListTerminalQuickInputsResponse, TerminalQuickInputBackgroundRuntime, TerminalQuickInputItem, TerminalQuickInputListKind, TerminalQuickInputMode, TerminalQuickInputSource, UpdateTerminalQuickInputRequest } from "@runweave/shared/terminal/input";
 import { resolveTerminalParentProjectId } from "@runweave/shared/terminal/project-context";
 import { logger } from "../../logging/index";
 import type {
@@ -11,6 +11,10 @@ const QUICK_INPUT_MODES = new Set<string>([
   "line",
   "codex_slash_command",
   "prompt_paste",
+]);
+const QUICK_INPUT_BACKGROUND_RUNTIMES = new Set<string>([
+  "headless",
+  "terminal",
 ]);
 const MAX_QUICK_INPUT_BYTES = 64 * 1024;
 const MAX_RECENT_ITEMS = 200;
@@ -63,6 +67,7 @@ interface NormalizedQuickInput {
   title: string;
   data: string;
   mode: TerminalQuickInputMode;
+  backgroundRuntime: TerminalQuickInputBackgroundRuntime;
   projectId: string | null;
   terminalSessionId: string | null;
   cwd: string | null;
@@ -165,6 +170,7 @@ export class TerminalQuickInputService {
         result = {
           ...existing,
           title: normalized.title,
+          backgroundRuntime: normalized.backgroundRuntime,
           projectId: normalized.projectId,
           terminalSessionId: normalized.terminalSessionId,
           cwd: normalized.cwd,
@@ -179,6 +185,7 @@ export class TerminalQuickInputService {
           title: normalized.title,
           data: normalized.data,
           mode: normalized.mode,
+          backgroundRuntime: normalized.backgroundRuntime,
           projectId: normalized.projectId,
           terminalSessionId: normalized.terminalSessionId,
           cwd: normalized.cwd,
@@ -213,14 +220,18 @@ export class TerminalQuickInputService {
       }
       const data = patch.data ?? item.data;
       const mode = patch.mode ?? item.mode;
+      const backgroundRuntime = normalizeBackgroundRuntime(
+        patch.backgroundRuntime ?? item.backgroundRuntime,
+      );
       if (patch.data !== undefined || patch.mode !== undefined) {
-        normalizePersistableInput({ title: patch.title ?? item.title, data, mode, projectId: item.projectId });
+        normalizePersistableInput({ title: patch.title ?? item.title, data, mode, backgroundRuntime, projectId: item.projectId });
       }
       const next: TerminalQuickInputItem = {
         ...item,
         title: patch.title !== undefined ? patch.title.trim() : item.title,
         data,
         mode,
+        backgroundRuntime,
         projectId: normalizeProjectScopeProjectId(item.projectId ?? null),
         pinned: patch.pinned !== undefined ? patch.pinned : item.pinned,
         updatedAt: nextTimestamp(item.updatedAt),
@@ -372,12 +383,23 @@ export class TerminalQuickInputService {
   }
 }
 
+function normalizeBackgroundRuntime(
+  value: string | undefined,
+): TerminalQuickInputBackgroundRuntime {
+  if (value === undefined) return "headless";
+  if (!QUICK_INPUT_BACKGROUND_RUNTIMES.has(value)) {
+    throw new TerminalQuickInputValidationError("Unsupported background runtime");
+  }
+  return value as TerminalQuickInputBackgroundRuntime;
+}
+
 function normalizePersistableInput(
   input: CreateTerminalQuickInputRequest,
 ): NormalizedQuickInput {
   if (!QUICK_INPUT_MODES.has(input.mode)) {
     throw new TerminalQuickInputValidationError("Unsupported input mode");
   }
+  const backgroundRuntime = normalizeBackgroundRuntime(input.backgroundRuntime);
   const trimmedData = input.data.trim();
   if (!trimmedData) {
     throw new TerminalQuickInputValidationError("Input data is required");
@@ -392,6 +414,7 @@ function normalizePersistableInput(
     title: input.title.trim() || buildTitle(input.data),
     data: input.data,
     mode: input.mode,
+    backgroundRuntime,
     projectId: normalizeProjectScopeProjectId(
       normalizeNullableText(input.projectId),
     ),

@@ -41,7 +41,17 @@ struct QuickReplyLibraryView: View {
                 edit(item)
               } label: {
                 VStack(alignment: .leading, spacing: 6) {
-                  Text(item.title).font(.headline).foregroundColor(.primary)
+                  HStack(spacing: 6) {
+                    Text(item.title).font(.headline).foregroundColor(.primary).lineLimit(1)
+                    if item.resolvedBackgroundRuntime == "terminal" {
+                      Text("临时终端")
+                        .font(.caption2.weight(.medium))
+                        .foregroundColor(.accentColor)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.12))
+                        .cornerRadius(4)
+                    }
+                  }
                   Text(item.data).font(.subheadline).foregroundColor(.secondary).lineLimit(3)
                 }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
               }

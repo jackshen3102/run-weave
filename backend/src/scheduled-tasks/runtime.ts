@@ -40,6 +40,7 @@ export class ScheduledTaskRuntime {
     private readonly enabled: boolean,
     private readonly limits: ScheduledTaskRuntimeLimits,
     private readonly terminalProvider?: ScheduledProviderAdapter,
+    private readonly quickInputTerminalProvider?: ScheduledProviderAdapter,
   ) {}
 
   async initialize(): Promise<void> {
@@ -243,6 +244,14 @@ export class ScheduledTaskRuntime {
       if (!provider) throw new Error("provider_unavailable");
       if (initial.snapshot.provider === "codex" && initial.snapshot.executionPolicy === "full-access" &&
           !initial.snapshot.origin && this.terminalProvider) provider = this.terminalProvider;
+      if (
+        initial.snapshot.provider === "codex" &&
+        initial.snapshot.origin?.kind === "quick-input" &&
+        initial.snapshot.origin.backgroundRuntime === "terminal" &&
+        this.quickInputTerminalProvider
+      ) {
+        provider = this.quickInputTerminalProvider;
+      }
       const budget = initial.executionBudget ?? this.limits;
       const remainingMs =
         budget.timeoutMs - (initial.continuation?.activeMs ?? 0);
@@ -267,6 +276,7 @@ export class ScheduledTaskRuntime {
         model: initial.snapshot.model,
         effort: initial.snapshot.effort,
         executionPolicy: initial.snapshot.executionPolicy,
+        continuationPolicy: initial.snapshot.continuationPolicy,
         maxOutputBytes: remainingBytes,
         maxWallTimeMs: remainingMs,
         signal: controller.signal,
@@ -319,6 +329,9 @@ export class ScheduledTaskRuntime {
       await this.store.finishExecution(initial.id, this.ownerId, {
         finishedAt: new Date().toISOString(),
         activeMs: Date.now() - executionStarted,
+        ...(code === "provider_terminal_taken_over"
+          ? { outcome: "blocked" as const }
+          : {}),
         summary: null,
         error: {
           code: code === "provider_cancelled" ? "cancelled" : code,

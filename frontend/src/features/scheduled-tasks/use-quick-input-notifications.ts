@@ -14,11 +14,20 @@ function noticeFor(run: ScheduledRun): QuickInputNotice {
   const origin = run.snapshot.origin!;
   const project = `${origin.projectName}${origin.worktreeName ? ` / ${origin.worktreeName}` : ""}`;
   const success = run.status === "completed" && run.outcome === "succeeded";
+  const retained = run.terminalBinding?.attachmentState === "ready";
+  const takenOver = retained && run.error?.code === "provider_terminal_taken_over";
+  const detail = success
+    ? "打开查看结果"
+    : takenOver
+      ? "已在终端接管，打开查看详情"
+      : retained
+        ? "执行受阻 · 终端已保留，打开进入处理"
+        : "失败或受阻，打开查看原因";
   return {
     runId: run.id,
     taskId: run.taskId,
     title: `${project} · ${success ? "已完成" : "需要处理"}`.slice(-120),
-    body: `${run.snapshot.name} · ${success ? "打开查看结果" : "失败或受阻，打开查看原因"}`.slice(0, 240),
+    body: `${run.snapshot.name} · ${detail}`.slice(0, 240),
   };
 }
 

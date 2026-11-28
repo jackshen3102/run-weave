@@ -1,0 +1,33 @@
+version: 1
+name: iOS 快捷指令双后台模式与临时终端验收
+description: >
+  验证手机端快捷指令支持纯后台与临时终端两种后台运行方式：可新增与编辑默认运行方式、
+  在快捷指令卡片与快捷指令库展示临时终端标记、通过更多菜单单次切换运行方式，并在临时终端
+  受阻保留时从手机运行详情一键进入已保留的执行终端。
+cases:
+  - id: IOSBGC-001
+    name: 手机配置临时终端运行方式与单次覆盖启动
+    required: true
+    description: >
+      验证手机端新增与编辑快捷指令可配置纯后台或临时终端运行方式并同步到 Backend，
+      卡片与快捷指令库展示临时终端标记，卡片更多菜单支持单次切换另一运行方式而不改写默认配置。
+    preconditions:
+      - 独占新 Backend 已登录并配置有效后台模型，手机打开实际项目或 worktree 的安全终端。
+      - 可核对 Backend 快捷指令 backgroundRuntime 字段及运行记录 snapshot.origin.backgroundRuntime。
+    steps:
+      - 用 toolkit:agent-device 打开快捷指令新增页，选择后台运行方式为“临时终端”并保存；确认快捷指令 Tab 卡片及“设置 → 快捷指令”列表均显示“临时终端”标记，Backend 记录 backgroundRuntime 为 terminal。
+      - 点击该指令“后台”按钮一次；确认提示“已启动临时终端运行”，Backend 创建快照 origin.backgroundRuntime 为 terminal 的专用临时终端运行，高置信完成后临时终端自动关闭且看板归入历史记录。
+      - 在同一指令卡片菜单点击“本次用纯后台运行”；确认本次运行快照 origin.backgroundRuntime 为 headless 且未新增终端，原快捷指令默认 backgroundRuntime 仍保持 terminal。
+  - id: IOSBGC-002
+    name: 手机查看受阻保留终端并一键进入现场
+    required: true
+    description: >
+      验证临时终端快捷指令在受阻或需人工补充信息时保留执行终端，手机看板展示“执行受阻 · 终端已保留”与“临时终端”来源，
+      运行详情提示原会话已由终端接管并提供“进入已保留的执行终端”直接跳转至原执行终端。
+    preconditions:
+      - 独占新 Backend 已登录并配置有效后台模型，有一条 backgroundRuntime 为 terminal 且执行后需用户提供前置输入才能继续的全局快捷指令。
+      - 手机当前打开实际项目安全终端，可读取终端列表与 ScheduledRun 状态。
+    steps:
+      - 用 toolkit:agent-device 在手机快捷指令 Tab 启动该指令并等待轮询收敛；确认看板顶部高亮显示“执行受阻 · 终端已保留”及“临时终端”标签，Backend 对应临时终端仍存活且 terminalBinding.attachmentState 为 ready。
+      - 点开该条运行详情；确认显示“原会话已由终端接管，后台不会同时启动第二个执行器。”，主操作按钮文案为“进入已保留的执行终端”。
+      - 点击“进入已保留的执行终端”；确认手机切换并附着至该保留终端会话且未额外新建第二个终端，终端内保留干净自然语言上下文供继续输入。

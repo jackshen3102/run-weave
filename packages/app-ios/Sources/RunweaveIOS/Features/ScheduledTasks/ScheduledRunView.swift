@@ -25,7 +25,7 @@ struct ScheduledRunView: View {
         Text(run.statusLabel).font(.caption).foregroundColor(run.outcome == "blocked" || run.status == "failed" ? .orange : .secondary)
       }
       Text(run.snapshot.origin?.kind == "quick-input"
-        ? "\(run.snapshot.origin?.label ?? "") · 后台运行"
+        ? "\(run.snapshot.origin?.label ?? "") · \(run.runtimeLabel)"
         : "\(run.trigger == "manual" ? "手动运行" : "定时触发") · 配置版本 \(run.taskRevision)")
         .font(.caption).foregroundColor(.secondary)
       ScheduledContinuationView(session: session, run: run) { await model.refresh() }
@@ -70,7 +70,7 @@ struct ScheduledRunView: View {
           .buttonStyle(.borderless).disabled(!model.canWrite || stopping || run.status == "stopping")
       }
       if run.canOpen {
-        Button(opening ? "正在恢复对话…" : (run.waitingContinuation ? "停止自动继续并接管到终端" : "打开对话并继续追问")) { open() }
+        Button(opening ? "正在恢复对话…" : (run.waitingContinuation ? "停止自动继续并接管到终端" : (run.hasRetainedTerminal ? "进入已保留的执行终端" : "打开对话并继续追问"))) { open() }
           .buttonStyle(.borderless).disabled(opening || !active || !session.canWrite)
       }
       if let message = failure ?? (run.terminalBinding?.attachmentState == "failed" && !opening ? run.terminalBinding?.error ?? "恢复失败，请重试" : nil) {

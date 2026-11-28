@@ -1,4 +1,5 @@
 import type {
+  ScheduledQuickInputBackgroundRuntime,
   ScheduledTaskConfig,
   ScheduledExecutionPolicy,
   ScheduledTaskProvider,
@@ -42,6 +43,7 @@ export interface ScheduledTaskFilter {
 export interface StartQuickInputRunRequest {
   projectId: string;
   expectedInputUpdatedAt: string;
+  backgroundRuntime?: ScheduledQuickInputBackgroundRuntime;
 }
 export interface QuickInputRunFilter {
   source: "quick-input";

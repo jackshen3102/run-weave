@@ -1,4 +1,7 @@
-import type { TerminalQuickInputItem } from "@runweave/shared/terminal/input";
+import type {
+  TerminalQuickInputBackgroundRuntime,
+  TerminalQuickInputItem,
+} from "@runweave/shared/terminal/input";
 import {
   ArrowDown,
   ArrowUp,
@@ -6,6 +9,7 @@ import {
   MoreHorizontal,
   Play,
   Send,
+  SquareTerminal,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import {
@@ -46,10 +50,14 @@ export function TerminalQuickInputRow({
   onCopy: (item: TerminalQuickInputItem) => void;
   onEdit: (item: TerminalQuickInputItem) => void;
   onDelete: (item: TerminalQuickInputItem) => void;
-  onBackgroundRun: (item: TerminalQuickInputItem) => void;
+  onBackgroundRun: (
+    item: TerminalQuickInputItem,
+    overrideRuntime?: TerminalQuickInputBackgroundRuntime,
+  ) => void;
   onViewRun: () => void;
   onMove: (direction: -1 | 1) => void;
 }) {
+  const usesTerminal = item.backgroundRuntime === "terminal";
   return (
     <div
       className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3"
@@ -61,9 +69,16 @@ export function TerminalQuickInputRow({
         onClick={() => onEdit(item)}
         aria-label={`查看全文 ${item.title}`}
       >
-        <p className="truncate text-sm font-medium text-slate-100">
-          {item.title}
-        </p>
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium text-slate-100">
+            {item.title}
+          </span>
+          {usesTerminal ? (
+            <span className="shrink-0 rounded border border-cyan-800/80 bg-cyan-950/60 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">
+              临时终端
+            </span>
+          ) : null}
+        </span>
         <p className="mt-1 truncate text-xs text-slate-400">
           {item.data.replaceAll("\n", " ")}
         </p>
@@ -95,7 +110,7 @@ export function TerminalQuickInputRow({
         <>
           <Button
             size="sm"
-            className="h-8 gap-1 px-2 text-xs"
+            className="h-8 shrink-0 gap-1 px-2 text-xs"
             disabled={busy || !canTargetTerminal}
             onClick={() => onSend(item)}
             aria-label={`发送到终端 ${item.title}`}
@@ -106,13 +121,15 @@ export function TerminalQuickInputRow({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 gap-1 border-sky-900 px-2 text-xs text-sky-300"
+            className="h-8 shrink-0 gap-1 border-sky-900 px-2 text-xs text-sky-300"
             disabled={busy || (!running && !canBackgroundRun)}
             onClick={() => (running ? onViewRun() : onBackgroundRun(item))}
             aria-label={`${running ? "查看运行" : "后台运行"} ${item.title}`}
           >
             {running ? (
               <Clock className="h-3 w-3" />
+            ) : usesTerminal ? (
+              <SquareTerminal className="h-3 w-3" />
             ) : (
               <Play className="h-3 w-3" />
             )}
@@ -123,7 +140,7 @@ export function TerminalQuickInputRow({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-6"
+                className="h-8 w-6 shrink-0"
                 disabled={busy}
                 aria-label={`管理 ${item.title}`}
               >
@@ -133,6 +150,14 @@ export function TerminalQuickInputRow({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => onEdit(item)}>
                 查看全文 / 编辑
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={running || !canBackgroundRun}
+                onSelect={() =>
+                  onBackgroundRun(item, usesTerminal ? "headless" : "terminal")
+                }
+              >
+                {usesTerminal ? "本次用纯后台运行" : "本次用临时终端运行"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canTargetTerminal || !canInsertRaw(item)}

@@ -18,6 +18,8 @@ export type TerminalQuickInputMode =
   | "codex_slash_command"
   | "prompt_paste";
 
+export type TerminalQuickInputBackgroundRuntime = "headless" | "terminal";
+
 export type TerminalQuickInputSource =
   | "web_terminal_quick_input"
   | "web_git_submit"
@@ -30,6 +32,8 @@ export interface TerminalQuickInputItem {
   title: string;
   data: string;
   mode: TerminalQuickInputMode;
+  /** Absent on legacy records: defaults to "headless". */
+  backgroundRuntime?: TerminalQuickInputBackgroundRuntime;
   projectId?: string | null;
   terminalSessionId?: string | null;
   cwd?: string | null;
@@ -54,6 +58,7 @@ export interface CreateTerminalQuickInputRequest {
   title: string;
   data: string;
   mode: TerminalQuickInputMode;
+  backgroundRuntime?: TerminalQuickInputBackgroundRuntime;
   projectId?: string | null;
   terminalSessionId?: string | null;
   cwd?: string | null;
@@ -66,6 +71,7 @@ export interface UpdateTerminalQuickInputRequest {
   pinned?: boolean;
   data?: string;
   mode?: TerminalQuickInputMode;
+  backgroundRuntime?: TerminalQuickInputBackgroundRuntime;
   expectedUpdatedAt?: string;
 }
 

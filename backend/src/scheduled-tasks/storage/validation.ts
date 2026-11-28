@@ -54,6 +54,7 @@ const config = z.object({
       projectId: text,
       projectName: text,
       worktreeName: text.nullable(),
+      backgroundRuntime: z.enum(["headless", "terminal"]).optional(),
     })
     .optional(),
 });

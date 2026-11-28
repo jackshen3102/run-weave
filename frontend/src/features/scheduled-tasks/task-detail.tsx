@@ -1,5 +1,8 @@
 import { RunContinuation } from "./run-continuation";
-import { quickInputRunLabel } from "./use-quick-input-background-runs";
+import {
+  quickInputRunLabel,
+  quickInputRunRuntimeLabel,
+} from "./use-quick-input-background-runs";
 import { useEffect, useRef, useState } from "react";
 import { useMemoizedFn } from "ahooks";
 import { useSearchParams } from "react-router-dom";
@@ -65,7 +68,7 @@ export function RunRecord({
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           {run.snapshot.origin?.kind === "quick-input"
-            ? `${run.snapshot.origin.projectName}${run.snapshot.origin.worktreeName ? ` / ${run.snapshot.origin.worktreeName}` : ""} · 后台运行`
+            ? `${run.snapshot.origin.projectName}${run.snapshot.origin.worktreeName ? ` / ${run.snapshot.origin.worktreeName}` : ""} · ${quickInputRunRuntimeLabel(run)}`
             : `${run.trigger === "manual" ? "手动运行" : "定时触发"} · 配置版本 ${run.taskRevision}`}
         </p>
       </button>
