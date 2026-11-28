@@ -32,7 +32,9 @@ iPhone 图标与 Mac Dock 使用 Backend 的未读终端绝对计数，不统计
 
 推送只面向发起输入的有效手机登录订阅，按轮次与手机安装去重；注销、撤销订阅或删除目标后
 不再投递。资格与投递意图持久化，发送前先领取，进程重启后的在途投递转为 unknown；仅明确
-可重试的结果在 5 分钟内最多尝试 4 次。点击通知沿用现有电脑连接定位。
+可重试的结果在 5 分钟内最多尝试 4 次。点击通知先选择来源电脑，再由当前安装的
+`X-Runweave-Installation-ID` 调用 `GET /api/terminal/replies/notifications/:notificationId`
+核对归属该登录与安装的投递记录，自动聚焦原 `panelId` 并直接打开对应终端（原面板已关闭时回退打开该终端当前面板，终端已删除时提示「原终端已关闭」，旧版 Backend 返回 404 时平滑降级为仅切换电脑连接）。
 入口为 [terminal-replies.ts](../../backend/src/device-monitor/terminal-replies.ts)；APNs 接受与手机实际收到须分别验证。
 
 ## 背景

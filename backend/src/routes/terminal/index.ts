@@ -182,7 +182,12 @@ export function createTerminalRouter(
   });
   registerTerminalTaskRoutes(router, options?.terminalTaskService);
   registerTerminalCodeReviewRoutes(router, options?.codeReviewService);
-  registerTerminalQuestionRoutes(router, options?.terminalQuestionsService, options?.authService);
+  registerTerminalQuestionRoutes(
+    router,
+    options?.terminalQuestionsService,
+    options?.authService,
+    () => terminalSessionManager.mobileReplies,
+  );
   registerContextHandoffRoutes(router, new TerminalContextHandoffService(terminalSessionManager, options ?? {}, options?.textAttachmentDelivery));
   registerTerminalAgentForkRoutes(router, new TerminalAgentForkService(terminalSessionManager, options ?? {}));
 

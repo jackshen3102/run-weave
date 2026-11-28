@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { TerminalReplyNotificationResponse } from "@runweave/shared/device-notifications";
+import { pushNotificationIdentity } from "@runweave/shared/push-notifications";
 import type { RecordTerminalCompletionEventInput } from "../terminal/completion/events";
 import type { TerminalMobileReplies } from "../terminal/completion/mobile-replies";
 import type { TerminalSessionManager } from "../terminal/manager/manager";
@@ -182,6 +184,34 @@ export class TerminalReplyNotifications implements TerminalMobileReplies {
   private targetExists(delivery: { terminalSessionId: string; panelId: string | null }): boolean {
     return !!this.sessions.getSession(delivery.terminalSessionId) &&
       (!delivery.panelId || this.sessions.getPanel(delivery.panelId)?.terminalSessionId === delivery.terminalSessionId);
+  }
+
+  resolveNotification(
+    notificationId: string,
+    installationId: string,
+    sessionId: string,
+  ): TerminalReplyNotificationResponse | null {
+    const data = this.subscriptions.store.snapshot();
+    for (const delivery of Object.values(data.terminalReplies?.deliveries ?? {})) {
+      if (!delivery.attempts || delivery.state === "cancelled" || delivery.sessionId !== sessionId) continue;
+      const subscription = data.subscriptions[delivery.subscriptionId];
+      if (!subscription || subscription.sessionId !== sessionId ||
+          subscription.installationId.toLowerCase() !== installationId.toLowerCase() ||
+          subscription.kind !== "terminal-reply" || !subscription.confirmed || !this.subscriptions.valid(subscription)) {
+        continue;
+      }
+      const expected = createHash("sha256").update(
+        pushNotificationIdentity(data.hostId, subscription.installationId, subscription.environment, "terminal.reply", delivery.id),
+      ).digest("hex");
+      if (expected !== notificationId) continue;
+      const session = this.sessions.getSession(delivery.terminalSessionId);
+      if (!session) return { status: "closed", terminalId: delivery.terminalSessionId };
+      const panelId = delivery.panelId && this.sessions.getPanel(delivery.panelId)?.terminalSessionId === session.id
+        ? delivery.panelId
+        : null;
+      return { status: "available", terminalId: session.id, panelId };
+    }
+    return null;
   }
 
   async dispose(): Promise<void> {

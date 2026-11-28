@@ -32,11 +32,18 @@ struct NotificationBinding: Codable {
   var enabled: Bool
   var pendingRevoke: Bool
 }
+struct TerminalReplyNotificationResponse: Decodable {
+  enum Status: String, Decodable { case available, closed }
+  let status: Status
+  let terminalId: String
+  let panelId: String?
+}
 struct BatteryPush {
   let hostID: String
   let notificationID: String
   let scheduledRunID: String?
   let questionRef: String?
+  let replyNotificationID: String?
   init?(_ info: [AnyHashable: Any]) {
     guard (info["protocolVersion"] as? Int) == 1,
       let host = info["hostId"] as? String, UUID(uuidString: host) != nil,
@@ -45,8 +52,9 @@ struct BatteryPush {
     else { return nil }
     hostID = host
     notificationID = id
+    let category = info["category"] as? String
     let target = info["target"] as? [String: String]
-    if info["category"] as? String == "terminal.question" {
+    if category == "terminal.question" {
       guard target?["resourceType"] == "terminal-question",
         let ref = target?["resourceId"], UUID(uuidString: ref) != nil else { return nil }
       questionRef = ref
@@ -61,9 +69,18 @@ struct BatteryPush {
     } else {
       scheduledRunID = nil
     }
+    replyNotificationID = category == "terminal.reply" && target == nil ? id.lowercased() : nil
   }
 }
 extension APIClient {
+  func terminalReplyNotification(id: String, installation: String) async throws
+    -> TerminalReplyNotificationResponse
+  {
+    try await authorized(
+      "/api/terminal/replies/notifications/\(Self.pathComponent(id))",
+      requestTimeout: 8,
+      additionalHeaders: ["X-Runweave-Installation-ID": installation])
+  }
   func notificationStatus() async throws -> DeviceNotificationStatus {
     try await authorized("/api/device/notifications/status?unread=1&replies=1&questions=1")
   }

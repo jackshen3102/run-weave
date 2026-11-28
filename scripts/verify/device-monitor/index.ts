@@ -10,6 +10,7 @@ import { DeviceMonitorStore } from "../../../backend/src/device-monitor/store";
 import { GatewayStore } from "../../../packages/push-gateway/src/store";
 import { deliverNotification } from "../../../packages/push-gateway/src/notifications";
 import { verifyNotifications, verifyScheduledNotifications } from "./notifications";
+import { verifyTerminalReplyNotifications } from "./terminal-replies";
 import type { APNsResult } from "../../../packages/push-gateway/src/apns";
 import type { ProviderNotification } from "../../../packages/push-gateway/src/types";
 import { fixture, eventually, pause } from "./fixture";
@@ -574,13 +575,12 @@ async function confirmationBoundary() {
 }
 async function main() {
   if (process.argv.includes("--unread")) return verifyUnread();
-  if (process.argv.includes("--cadence")) {
-    await verifyCadence();
-    return;
-  }
+  if (process.argv.includes("--cadence")) return verifyCadence();
   if (process.argv.includes("--scheduled")) return verifyScheduledNotifications();
+  if (process.argv.includes("--replies")) return verifyTerminalReplyNotifications();
   await verifyUnread();
   await verifyScheduledNotifications();
+  await verifyTerminalReplyNotifications();
   await verifyProvider();
   await verifyNotifications();
   await physicalSample();

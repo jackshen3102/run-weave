@@ -11,10 +11,18 @@ public final class NotificationCoordinator: ObservableObject {
   @Published private(set) var refreshFailures: [String: String] = [:]
   @Published var message: String?
   @Published var pendingHostID: String?
+  @Published private(set) var tapRevision = 0
   @Published var questionHandoff: TerminalQuestionHandoff?
   private var pendingQuestionRef: String?
   private var pendingScheduledRun: (hostID: String, runID: String)?
   private var openingScheduledRun = false
+  private struct PendingTerminalReply {
+    let hostID: String
+    let notificationID: String
+    let expiresAt: Date
+  }
+  private var pendingTerminalReply: PendingTerminalReply?
+  private var openingTerminalReply = false
   private let vault = CredentialStore()
   private let account = "native.notifications.v1"
   private var installation = UUID().uuidString
@@ -101,6 +109,8 @@ public final class NotificationCoordinator: ObservableObject {
         (successfulAt[$0.scope] ?? .distantPast) < (successfulAt[$1.scope] ?? .distantPast)
       }
     guard let selected else {
+      pendingScheduledRun = nil
+      pendingTerminalReply = nil
       message = "此电脑连接已移除"
       return
     }
@@ -132,6 +142,46 @@ public final class NotificationCoordinator: ObservableObject {
       guard pendingScheduledRun?.runID == target.runID else { return }
       pendingScheduledRun = nil
       message = "无法打开此运行记录：\(displayError(error))"
+    }
+  }
+  func openPendingTerminalReply(in session: AppSession, store: ConnectionStore) async {
+    if let target = pendingTerminalReply, Date() >= target.expiresAt {
+      pendingTerminalReply = nil
+      return
+    }
+    guard !openingTerminalReply, let target = pendingTerminalReply,
+      let active = store.active, knownHosts[active.scope] == target.hostID,
+      session.authenticated, session.foreground, !session.replacingTransport,
+      session.health.status == .online, session.connection?.id == active.id else { return }
+    openingTerminalReply = true
+    defer { openingTerminalReply = false }
+    do {
+      let location = try await session.withConnection(reportFailure: false) {
+        try await $0.terminalReplyNotification(id: target.notificationID, installation: installation)
+      }
+      guard pendingTerminalReply?.notificationID == target.notificationID,
+        store.active?.id == active.id, session.connection?.id == active.id,
+        session.authenticated else { return }
+      pendingTerminalReply = nil
+      switch location.status {
+      case .available:
+        await session.openNotificationTerminal(location.terminalId, panelID: location.panelId, focusPanel: true)
+      case .closed:
+        message = "原终端已关闭"
+      }
+    } catch APIError.http(404) {
+      if pendingTerminalReply?.notificationID == target.notificationID {
+        pendingTerminalReply = nil
+      }
+    } catch {
+      guard pendingTerminalReply?.notificationID == target.notificationID else { return }
+      if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+      if Date() < target.expiresAt,
+        (!session.foreground || session.replacingTransport || session.health.status != .online) {
+        return
+      }
+      pendingTerminalReply = nil
+      message = "无法打开对应终端：\(displayError(error))"
     }
   }
   func enable(_ connection: BackendConnection, kind: NotificationKind = .battery) async throws {
@@ -490,9 +540,13 @@ public final class NotificationCoordinator: ObservableObject {
     guard let push = BatteryPush(info) else { return false }
     if tapped {
       pendingScheduledRun = push.scheduledRunID.map { (push.hostID, $0) }
+      pendingTerminalReply = push.replyNotificationID.map {
+        PendingTerminalReply(hostID: push.hostID, notificationID: $0, expiresAt: Date().addingTimeInterval(15))
+      }
       pendingQuestionRef = push.questionRef
       if push.questionRef == nil { questionHandoff = nil }
       pendingHostID = push.hostID
+      tapRevision += 1
     }
     guard !seen.contains(push.notificationID) else { return false }
     seen.append(push.notificationID)

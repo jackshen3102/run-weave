@@ -56,6 +56,10 @@ final class TerminalQuestionsModel: ObservableObject {
     handoff = nil
   }
 
+  func hasNotificationOperation(_ target: TerminalQuestionHandoff) -> Bool {
+    handoff?.id == target.id && operations[target.reference] != nil
+  }
+
   var notificationSubmissionNeedsCheck: Bool {
     guard let handoff else { return false }
     return operations[handoff.reference] != nil && !notificationResolved

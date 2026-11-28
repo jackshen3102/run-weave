@@ -47,9 +47,9 @@ WebSocket；不接受或拒绝其他审批，也不改变模型、模式、工�
 
 iOS 通过 `questions=1` 协商 `terminal-question` 订阅。点击通知先选择来源电脑，再用当前安装的 `X-Runweave-Installation-ID` 调用 `GET /api/terminal/questions/notifications/:questionRef`。只有绑定该安装的已授权登录能读取定位，定位在 15 分钟后结束：
 
-- 结构化 `pending` 打开回复辅助表单；
-- 仍处于等待态的 `terminalOnly` 定位自动聚焦目标 `panelId`、打开原终端并收起中转弹层（旧版 iOS 降级展示「回原终端查看」按钮，不发生解码错误）；
-- 已在电脑端处理或已结束的通知展示「问题已处理」/「问题已结束」，保留回原终端查看入口；断线不可达时保留「暂时无法核对」与「重新检查」。
+- 结构化 `pending` 打开回复辅助表单；表单内提交后在当前弹层展示「问题已处理」；
+- 仍处于等待态的 `terminalOnly` 定位，以及点击时已在电脑端处理或已结束（`closed`）的通知，均自动聚焦目标 `panelId`、直接打开原终端并收起中转弹层（仅当原终端已被删除无法打开时保留「问题已处理」/「问题已结束」兜底页；旧版 iOS 对 `terminalOnly` 降级展示「回原终端查看」按钮，不发生解码错误）；
+- 断线不可达时保留「暂时无法核对」与「重新检查」。
 
 部署依次更新 Push Gateway、Backend 和 iOS。回滚前在 Backend 将
 `services.terminalQuestionNotifications.enabled` 改为 `false` 并重载配置。待答订阅与既有订阅在磁盘上
