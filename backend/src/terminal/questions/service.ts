@@ -189,6 +189,10 @@ export class TerminalQuestionsService {
     };
   }
 
+  hasActiveMobilePrompt(terminalId: string): boolean {
+    return this.notifications?.hasActivePrompt(terminalId) ?? false;
+  }
+
   async read(terminalId: string, panelId?: string, expectedThreadId?: string): Promise<TerminalQuestionsResponse> {
     for (const [id, connection] of this.connections) if (connection.gateway.disposed) this.invalidate(id);
     const target = this.closed ? null : await this.target(terminalId, panelId, expectedThreadId);

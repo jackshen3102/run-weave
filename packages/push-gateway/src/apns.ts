@@ -79,7 +79,7 @@ export function createAPNsTransport(
           authorization: `bearer ${token}`,
           "apns-topic": config.topic,
           "apns-push-type": "alert",
-          "apns-priority": alert.badge === undefined ? "10" : "5",
+          "apns-priority": "10",
           "apns-expiration": alert.badge === undefined ? "0" : String(Math.floor(Date.now() / 1000) + 86400),
           "apns-collapse-id": alert.collapseId ?? alert.notificationId,
         });

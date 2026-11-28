@@ -71,7 +71,9 @@ export class AttentionService {
     private readonly terminalSessionManager: TerminalSessionManager,
     private readonly completionEventService: TerminalCompletionEventService,
     private readonly terminalStateService: TerminalStateService,
-    private readonly terminalQuestionsService?: Pick<TerminalQuestionsService, "findActivePendingQuestion"> | null,
+    private readonly terminalQuestionsService?: (Pick<TerminalQuestionsService, "findActivePendingQuestion"> & {
+      hasActiveMobilePrompt?: (terminalId: string) => boolean;
+    }) | null,
     private readonly prWatches?: Pick<import("../pr-watch/service").PrWatchService, "get">,
   ) {}
 
@@ -122,6 +124,26 @@ export class AttentionService {
         (panelId === null || slot.panelId === null || slot.panelId === panelId),
     );
     return blocking?.slot ?? null;
+  }
+
+  hasActionablePrompt(session: TerminalSessionRecord): boolean {
+    if (session.status !== "running") return false;
+    if (this.terminalQuestionsService?.findActivePendingQuestion(session.id)) return true;
+    if (this.terminalQuestionsService?.hasActiveMobilePrompt?.(session.id)) return true;
+    const panels = this.terminalSessionManager.listPanels(session.id);
+    if (panels.length === 0) return session.oscProgramStatus?.state === "blocked";
+    return panels.some((panel) =>
+      panel.status === "running" && (
+        Boolean(panel.pendingPermissionRequest &&
+          panel.claude?.instanceId === panel.pendingPermissionRequest.processGeneration &&
+          panel.claude.sessionId === panel.pendingPermissionRequest.sessionId) ||
+        Boolean(panel.pendingAgyQuestion &&
+          panel.agy?.instanceId === panel.pendingAgyQuestion.processGeneration &&
+          panel.agy.conversationId === panel.pendingAgyQuestion.conversationId) ||
+        panel.pi?.event === "ui_prompt_start" ||
+        panel.oscProgramStatus?.state === "blocked"
+      ),
+    );
   }
 
   async snapshot(): Promise<AttentionSnapshot> {

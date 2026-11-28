@@ -494,12 +494,10 @@ async function assembleRuntimeServices(
     await terminalQuestionsService.dispose();
   });
   const attentionService = new AttentionService(
-    terminalSessionManager,
-    terminalCompletionEventService,
-    terminalStateService,
-    terminalQuestionsService,
-    terminalTaskServices.prWatchService,
+    terminalSessionManager, terminalCompletionEventService, terminalStateService,
+    terminalQuestionsService, terminalTaskServices.prWatchService,
   );
+  terminalBadges?.setPendingPromptCheck((session) => attentionService.hasActionablePrompt(session));
   const mobileLoginService = new MobileLoginService(authService);
   resources.defer("mobile-login", () => mobileLoginService.dispose());
   const localBrowserService = new LocalBrowserService((authId, terminalId) =>

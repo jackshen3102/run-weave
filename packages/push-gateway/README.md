@@ -66,9 +66,9 @@ Backend 状态接口只在 `replies=1` 时返回该类型，避免旧 iOS 的枚
 
 ## 应用未读角标
 
-Runweave 的角标只统计 `completionRevision > acknowledgedCompletionRevision` 的终端，每终端计 1。
+Runweave 的角标统计未读完成的终端（`completionRevision > acknowledgedCompletionRevision`）及处于待回答/待确认阻塞状态的运行中终端，每终端最多计 1。
 Backend 提供 `GET /api/terminal/unread` 的 `{ hostId, revision, count }` 持久化绝对快照；
-打开终端或标记已读只确认当时的完成版本，打开首页不清零。已读确认广播
+打开终端或标记已读确认当时的完成版本，回答或解除阻塞后自动扣减，打开首页不清零。已读确认广播
 `completion_acknowledged`，删除与重连也重新计算。离线保留最近值。
 
 iPhone 使用独立 `terminal-unread` 绑定，类别为 `terminal.unread`，不覆盖电量/任务通知。
@@ -82,7 +82,7 @@ iPhone 使用独立 `terminal-unread` 绑定，类别为 `terminal.unread`，不
   只能更新自己的贡献。数值、总版本和待发送状态持久化；撤销绑定重新计算，最后一个撤销发送 0。
 - `GET /v1/badges/:subscriptionId` 可用该绑定 revokeToken 或所属 host 发送凭据读取
   `{ revision, count }` 总快照；这是 iOS 前台校准入口，已撤销绑定不能读取。
-- 角标更新只含 `aps.badge`，不弹横幅或响铃。使用 alert push type、priority 5、
+- 角标更新只含 `aps.badge`，不弹横幅或响铃。使用 alert push type、priority 10、
   24 小时 expiration 和每安装固定 collapse-id；同目标串行投递，过时待发送版本合并。
   不复用普通通知的事件幂等/每分钟 4 次额度；结果未知时可重发当前绝对状态，最少间隔 30 秒。
   APNs 接受不等于手机已显示，系统权限、设备离线与 Apple 投递仍影响实际到达。

@@ -66,6 +66,7 @@ extension AppSession {
       let value = try await api.acknowledgeTerminal(id: id, revision: target)
       guard generation == epoch, !Task.isCancelled else { return }
       mergeCompletionAcknowledgement(value)
+      NotificationCoordinator.shared.syncBadgeSoon()
     } catch {
       if generation == epoch {
         await handle(error, epoch: epoch)
