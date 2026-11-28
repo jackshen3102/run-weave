@@ -1,5 +1,7 @@
-import type { CreateTerminalSessionRequest } from "@runweave/shared/terminal/session";
-import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
+import type {
+  CreateTerminalSessionRequest,
+  TerminalSessionSource,
+} from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager } from "../manager/manager";
 import type { TerminalActivityDependencies } from "../runtime/activity-events";
 import { recordTerminalSessionCreated } from "../runtime/activity-events";
@@ -41,7 +43,7 @@ export async function createTerminalSession(
   manager: TerminalSessionManager,
   request: CreateTerminalSessionRequest,
   options: TerminalSessionCreationOptions,
-  source?: ScheduledTaskSource,
+  source?: TerminalSessionSource,
 ) {
   const defaults = resolveTerminalCreateDefaults(request, manager);
   const session = await manager.createSession({ ...defaults, source });

@@ -68,6 +68,7 @@ export async function verifyUnread() {
     assert.equal((await first.gatewayRequest("/v1/badges/" + alias, { revision: 3, count: 4 }, "PUT", h.credential)).status, 409);
     console.log("PASS unread aggregation: 3 hosts, alias dedupe, pending snapshots, version replay and conflict");
     await verifyUnreadCompatibility(first.directory, first.gatewayStore.snapshot(), h.binding.subscriptionId, h.credential);
+    await verifyCrossHostInvalidToken(first.directory);
 
     for (const host of hosts) {
       const targets = await (await host.f.request(targetsPath, host.desktop.accessToken)).json();
@@ -182,5 +183,104 @@ export async function verifyUnread() {
   } finally {
     client?.dispose();
     for (const f of fixtures.reverse()) await f.dispose();
+  }
+}
+
+async function verifyCrossHostInvalidToken(parentDirectory: string) {
+  const directory = path.join(parentDirectory, "cross-host-invalid-token");
+  const store = new GatewayStore(directory);
+  const deadToken = "dead".repeat(24);
+  const freshToken = "beef".repeat(24);
+  const staleToken = "cafe".repeat(24);
+  const liveToken = "face".repeat(24);
+  const attempts: Array<{ hostId: string; token: string; badge?: number }> = [];
+  let holdStale = false;
+  let releaseStale: (() => void) | undefined;
+  const server = createGateway(store, async (subscription, notification) => {
+    attempts.push({ hostId: subscription.hostId, token: subscription.deviceToken, badge: notification.badge });
+    if (subscription.deviceToken === staleToken && holdStale) {
+      await new Promise<void>((resolve) => { releaseStale = resolve; });
+    }
+    if (subscription.deviceToken === deadToken || subscription.deviceToken === staleToken) {
+      return { state: "failed", invalidToken: true };
+    }
+    return { state: "accepted" };
+  });
+  const port = await listen(server);
+  const request = (route: string, token: string, method = "GET", body?: unknown) =>
+    fetch(`http://localhost:${port}${route}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  try {
+    const tokenA = randomUUID(), tokenB = randomUUID();
+    const hostA = randomUUID(), hostB = randomUUID();
+    store.update((data) => {
+      data.senders[hash(tokenA)] = { hostId: hostA, environments: ["sandbox"] };
+      data.senders[hash(tokenB)] = { hostId: hostB, environments: ["sandbox"] };
+    });
+    const installationId = randomUUID(), subA = randomUUID(), subB = randomUUID();
+    assert.equal((await request(`/v1/subscriptions/${subA}`, tokenA, "PUT", {
+      installationId, environment: "sandbox", deviceToken: deadToken, displayName: "Host A", version: 1, categories: ["terminal.unread"],
+    })).status, 200);
+    await pause(5);
+    assert.equal((await request(`/v1/subscriptions/${subB}`, tokenB, "PUT", {
+      installationId, environment: "sandbox", deviceToken: deadToken, displayName: "Host B", version: 1, categories: ["terminal.unread"],
+    })).status, 200);
+    assert.equal((await request(`/v1/badges/${subA}`, tokenA, "PUT", { revision: 1, count: 1 })).status, 204);
+    assert.equal((await request(`/v1/badges/${subB}`, tokenB, "PUT", { revision: 1, count: 2 })).status, 204);
+    await eventually(() =>
+      attempts.length === 1 &&
+      store.snapshot().subscriptions[subA]?.invalidToken === deadToken &&
+      store.snapshot().subscriptions[subB]?.invalidToken === deadToken,
+    );
+    assert.equal(attempts[0]?.hostId, hostB);
+    assert.equal((await request(`/v1/badges/${subA}`, tokenA, "PUT", { revision: 2, count: 4 })).status, 204);
+    assert.equal((await request(`/v1/badges/${subB}`, tokenB, "PUT", { revision: 2, count: 3 })).status, 204);
+    await pause(150);
+    assert.equal(attempts.length, 1, "shared dead token must not be re-submitted by sibling host aliases");
+    assert.equal((await (await request(`/v1/badges/${subA}`, tokenA)).json()).count, 7);
+
+    assert.equal((await request(`/v1/subscriptions/${subA}`, tokenA, "PUT", {
+      installationId, environment: "sandbox", deviceToken: freshToken, displayName: "Host A", version: 2, categories: ["terminal.unread"],
+    })).status, 200);
+    await eventually(() => attempts.length === 2);
+    assert.deepEqual(attempts[1], { hostId: hostA, token: freshToken, badge: 7 });
+    assert.equal(store.snapshot().subscriptions[subA]?.invalidToken, undefined);
+    assert.equal(store.snapshot().subscriptions[subB]?.invalidToken, deadToken);
+
+    const installation2 = randomUUID(), subA2 = randomUUID(), subB2 = randomUUID();
+    holdStale = true;
+    assert.equal((await request(`/v1/subscriptions/${subA2}`, tokenA, "PUT", {
+      installationId: installation2, environment: "sandbox", deviceToken: staleToken, displayName: "Host A", version: 1, categories: ["terminal.unread"],
+    })).status, 200);
+    await pause(5);
+    assert.equal((await request(`/v1/subscriptions/${subB2}`, tokenB, "PUT", {
+      installationId: installation2, environment: "sandbox", deviceToken: staleToken, displayName: "Host B", version: 1, categories: ["terminal.unread"],
+    })).status, 200);
+    assert.equal((await request(`/v1/badges/${subA2}`, tokenA, "PUT", { revision: 1, count: 2 })).status, 204);
+    assert.equal((await request(`/v1/badges/${subB2}`, tokenB, "PUT", { revision: 1, count: 1 })).status, 204);
+    await eventually(() => releaseStale !== undefined);
+    assert.equal((await request(`/v1/subscriptions/${subA2}`, tokenA, "PUT", {
+      installationId: installation2, environment: "sandbox", deviceToken: liveToken, displayName: "Host A", version: 2, categories: ["terminal.unread"],
+    })).status, 200);
+    holdStale = false;
+    releaseStale!();
+    await eventually(() => attempts.length === 4);
+    assert.deepEqual(attempts[3], { hostId: hostA, token: liveToken, badge: 3 });
+    assert.equal(store.snapshot().subscriptions[subA2]?.invalidToken, undefined);
+    assert.equal(store.snapshot().subscriptions[subB2]?.invalidToken, staleToken);
+
+    assert.equal((await request(`/v1/subscriptions/${subB2}`, tokenB, "DELETE")).status, 204);
+    assert.equal((await request(`/v1/subscriptions/${subA2}`, tokenA, "DELETE")).status, 204);
+    await eventually(() => attempts.at(-1)?.badge === 0);
+    assert.deepEqual(attempts.at(-1), { hostId: hostA, token: liveToken, badge: 0 });
+    console.log("PASS cross-host invalidToken: shared token invalidated once across host aliases, rotated token preserved, final revoke clears badge");
+  } finally {
+    releaseStale?.();
+    await server.disposeBadges();
+    await close(server);
+    store.close();
   }
 }

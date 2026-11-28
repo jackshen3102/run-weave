@@ -146,7 +146,8 @@ export class BrowserAssistanceService {
       !binding ||
       binding.terminalSessionId !== sessionId ||
       binding.attachmentState !== "ready" ||
-      session?.source?.runId !== run.id ||
+      session?.source?.type !== "scheduled-task" ||
+      session.source.runId !== run.id ||
       run.activeAttemptId ||
       !run.threadRef ||
       recovery.browser.browserGroupId !== scheduledBrowserGroupId(run.id)

@@ -4,6 +4,20 @@ import type { TerminalAgentKind, TerminalState } from "./state";
 import type { TerminalAgentRecoveryTarget } from "./agent-preparation";
 import type { TerminalProgramStatus } from "./program-status";
 
+export type TerminalSourceRelation =
+  | "code-review"
+  | "context-handoff"
+  | "agent-fork"
+  | "task";
+
+export interface TerminalOriginSource {
+  type: "terminal";
+  terminalSessionId: string;
+  relation?: TerminalSourceRelation;
+}
+
+export type TerminalSessionSource = ScheduledTaskSource | TerminalOriginSource;
+
 export type TerminalRuntimePreference = "auto" | "tmux" | "pty";
 
 export interface CreateTerminalSessionRequest {
@@ -46,7 +60,7 @@ export interface TerminalSessionStatusQuery {
 }
 
 export interface TerminalSessionStatusResponse {
-  source?: ScheduledTaskSource;
+  source?: TerminalSessionSource;
   terminalSessionId: string;
   projectId: string;
   alias?: string | null;
@@ -93,7 +107,7 @@ export interface TerminalAnsiScrollbackResponse {
 export interface TerminalSessionListItem {
   /** Explicit restore target approved by this Backend; not a current Agent binding. */
   agentRecovery?: TerminalAgentRecoveryTarget;
-  source?: ScheduledTaskSource;
+  source?: TerminalSessionSource;
   /** Backend-generated UTC timestamp; missing/null means unpinned. */
   pinnedAt?: string | null;
   terminalSessionId: string;

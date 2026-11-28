@@ -16,7 +16,16 @@ export async function runTerminalTaskCommand(
   };
   if (action === "list") return client.listTasks();
   if (!id) throw new CliError("Usage: rw terminal task <create|start|observe|wait|send|control|review|interrupt> <taskId>", 2);
-  if (action === "create") return client.createTask({ taskId: id, projectId: required("project-id"), cwd: required("cwd"), goal: required("goal") });
+  if (action === "create") {
+    const sourceTerminalSessionId = option("source-terminal");
+    return client.createTask({
+      taskId: id,
+      projectId: required("project-id"),
+      cwd: required("cwd"),
+      goal: required("goal"),
+      ...(sourceTerminalSessionId ? { sourceTerminalSessionId } : {}),
+    });
+  }
   if (action === "observe") return client.observeTask(id, option("after-turn"));
   if (action === "start" || action === "wait") {
     const waitMs = Number(option("wait-ms") ?? (action === "start" ? "120000" : "30000"));

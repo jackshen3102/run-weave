@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AppServerThreadDetailTurn } from "@runweave/shared/app-server-events";
+import type { TerminalSessionSource } from "@runweave/shared/terminal/session";
 import type {
   CreateTerminalTaskRequest, StartTerminalTaskRequest, SendTerminalTaskRequest,
   ControlTerminalTaskRequest, ReviewTerminalTaskRequest, InterruptTerminalTaskRequest,
@@ -119,12 +120,21 @@ export class TerminalTaskService {
     return `初始化任务终端。只回复 ${this.bootstrap(task)}，不要执行其他工作。`;
   }
 
-  create(request: CreateTerminalTaskRequest, ptyLaunch?: { command: string; args: string[] }): Promise<TerminalTask> {
+  create(
+    request: CreateTerminalTaskRequest,
+    ptyLaunch?: { command: string; args: string[] },
+    sessionSource?: TerminalSessionSource,
+  ): Promise<TerminalTask> {
     return this.exclusive(request.taskId, async () => {
       this.store.assertWritable();
       const existing = this.store.tasks.get(request.taskId);
       if (existing) {
-        if (existing.projectId !== request.projectId || existing.cwd !== request.cwd || existing.goal !== request.goal)
+        if (
+          existing.projectId !== request.projectId ||
+          existing.cwd !== request.cwd ||
+          existing.goal !== request.goal ||
+          existing.sourceTerminalSessionId !== request.sourceTerminalSessionId
+        )
           conflict("task_conflict", "Task key already exists with different creation arguments");
         return structuredClone(existing);
       }
@@ -140,10 +150,15 @@ export class TerminalTaskService {
           ? { runtimePreference: "pty" as const, command: ptyLaunch.command,
               args: ["-c", "check_for_update_on_startup=false", ...ptyLaunch.args, this.bootstrapPrompt(task)] }
           : { runtimePreference: "tmux" as const };
+        const source: TerminalSessionSource | undefined =
+          sessionSource ??
+          (request.sourceTerminalSessionId
+            ? { type: "terminal", terminalSessionId: request.sourceTerminalSessionId, relation: "task" }
+            : undefined);
         const session = await createTerminalSession(this.manager, { projectId: task.projectId, cwd: task.cwd, ...launch }, {
           ...this.options, strictDefaultPanel: true,
           onSessionCreated: async (id) => { task.terminalSessionId = id; await this.touch(task); },
-        });
+        }, source);
         if (ptyLaunch) {
           const runtime = this.options.runtimeRegistry?.getSessionRuntime(session.id);
           if (runtime) {

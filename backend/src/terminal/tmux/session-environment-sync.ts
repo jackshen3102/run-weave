@@ -1,4 +1,4 @@
-import type { ScheduledTaskSource } from "@runweave/shared/scheduled-tasks";
+import type { TerminalSessionSource } from "@runweave/shared/terminal/session";
 import type { TerminalSessionManager } from "../manager/manager";
 import { buildTmuxSessionRuntimeEnvironment } from "../runtime/environment";
 import {
@@ -22,7 +22,7 @@ export async function syncExistingTmuxSessionEnvironments(
     Array<{
       terminalSessionId: string;
       projectId: string;
-      source?: ScheduledTaskSource;
+      source?: TerminalSessionSource;
       target: TmuxTarget;
     }>
   >();

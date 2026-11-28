@@ -124,15 +124,14 @@ struct TerminalScreen: View {
       if let error = session.error {
         Text(error).font(.caption).foregroundColor(.red).padding(.horizontal)
       }
-      if let source = details.source, source.type == "scheduled-task" {
-        Button {
-          // Pop the nested destination before disposing its terminal controller.
-          // Home owns an in-place destination replacement and must not pop.
-          if sourceIsParent { dismiss() }
-          session.openScheduledSource(source)
-        } label: {
-          Label("来源：\(scheduledSourceName ?? "定时任务")", systemImage: "calendar.badge.clock").font(.caption).lineLimit(1)
-        }.padding(.vertical, 5).accessibilityIdentifier("scheduled-task-source")
+      if let source = details.source {
+        TerminalSourceBanner(
+          session: session,
+          source: source,
+          sourceIsParent: sourceIsParent,
+          scheduledSourceName: scheduledSourceName,
+          dismiss: dismiss
+        )
       }
       tabs
       TerminalMonitoringStrips(codeReview: codeReview, supervision: supervision, session: session,
@@ -212,8 +211,8 @@ struct TerminalScreen: View {
       changes.cancel()
       browser.unregisterHostPresentation(id: browserPresentationID, hostID: ObjectIdentifier(controller))
     }
-    .task(id: details.source?.taskId) {
-      guard let source = details.source, source.type == "scheduled-task" else { return }
+    .task(id: details.source?.scheduledTask?.taskId) {
+      guard let source = details.source?.scheduledTask else { return }
       do {
         let task = try await session.withConnection(reportFailure: false) { try await ScheduledTasksService(api: $0).task(source.taskId) }
         try Task.checkCancellation()
