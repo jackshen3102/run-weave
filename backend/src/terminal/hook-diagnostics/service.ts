@@ -46,11 +46,21 @@ export class HookDiagnosticService {
     source: HookDiagnosticSource;
     expectedSession: string;
     actualSession: string;
+    expectedSocket?: string;
+    actualSocket?: string;
   }): void {
     const now = Date.now();
     this.prune(now);
-    const expectedFingerprint = this.fingerprint(input.expectedSession);
-    const actualFingerprint = this.fingerprint(input.actualSession);
+    const expectedFingerprint = this.fingerprint(
+      input.expectedSocket
+        ? `${input.expectedSession}@${input.expectedSocket}`
+        : input.expectedSession,
+    );
+    const actualFingerprint = this.fingerprint(
+      input.actualSocket
+        ? `${input.actualSession}@${input.actualSocket}`
+        : input.actualSession,
+    );
     for (let index = this.foreign.length - 1; index >= 0; index -= 1) {
       const current = this.foreign[index]!;
       if (now - current.observedAt > DEDUPE_MS) break;

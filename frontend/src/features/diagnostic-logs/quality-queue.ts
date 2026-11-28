@@ -48,5 +48,49 @@ export class QualityQueue {
     next.events = next.events.filter(e => e.seq > ack); next.droppedRanges = next.droppedRanges.filter(r => r.through > ack).map(r => ({ ...r, from: Math.max(r.from, ack + 1) }));
     localStorage.setItem(this.key, JSON.stringify(next)); this.state = next;
   }); }
+  dropRejectedTerminals(terminalSessionIds: string[], fallbackBatchSeqs: number[] = []) { return this.locked(() => {
+    const next = structuredClone(this.state);
+    if (terminalSessionIds.length > 0) {
+      const rejected = new Set(terminalSessionIds);
+      const kept: QualityEvent[] = [];
+      const droppedSeqs: number[] = [];
+      for (const event of next.events) {
+        if (event.terminalSessionId && rejected.has(event.terminalSessionId)) droppedSeqs.push(event.seq);
+        else kept.push(event);
+      }
+      if (!droppedSeqs.length) return 0;
+      next.events = kept;
+      for (const seq of droppedSeqs) next.droppedRanges.push({ from: seq, through: seq, reason: "rejected" });
+      next.droppedRanges = mergeRanges(next.droppedRanges);
+      localStorage.setItem(this.key, JSON.stringify(next)); this.state = next;
+      return droppedSeqs.length;
+    }
+    const batchSeqs = new Set(fallbackBatchSeqs);
+    const kept = next.events.filter(e => !(e.terminalSessionId && batchSeqs.has(e.seq)));
+    const removed = next.events.length - kept.length;
+    if (!removed) return 0;
+    // Older Backends omit terminalSessionIds and predate the "rejected" gap reason;
+    // rotate streamId so remaining valid events upload cleanly without sequence gaps.
+    next.streamId = crypto.randomUUID();
+    next.events = kept.map((event, index) => ({ ...event, seq: index + 1 }));
+    next.droppedRanges = [];
+    next.nextSeq = next.events.length + 1;
+    localStorage.setItem(this.key, JSON.stringify(next)); this.state = next;
+    return removed;
+  }); }
   block(reason: string) { return this.locked(() => { this.state.blocked = reason; this.persist(); }); }
+}
+
+function mergeRanges(ranges: QualityRange[]): QualityRange[] {
+  const sorted = [...ranges].sort((a, b) => a.from - b.from || a.through - b.through);
+  const merged: QualityRange[] = [];
+  for (const range of sorted) {
+    const previous = merged.at(-1);
+    if (previous && previous.reason === range.reason && range.from <= previous.through + 1) {
+      previous.through = Math.max(previous.through, range.through);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return merged;
 }

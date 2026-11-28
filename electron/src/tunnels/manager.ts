@@ -12,7 +12,7 @@ import {
   writePrivateJson,
 } from "../desktop/local-state.js";
 import { desktopProxySummaries } from "../browser/profile/network-summary.js";
-import { startSsh, freePort } from "./ssh-process.js";
+import { startSsh, freePort, isSshAuthErrorCode } from "./ssh-process.js";
 import { BrowserChannel } from "./browser-channel.js";
 import { TunnelStore } from "./store.js";
 import { TunnelCredentials } from "./credentials.js";
@@ -172,7 +172,7 @@ export class TunnelManager {
     }
   }
   private schedule(h: Host) {
-    if (h.runtime.error?.code === "SSH_AUTH_FAILED") {
+    if (isSshAuthErrorCode(h.runtime.error?.code)) {
       h.retryAt = 0;
       return;
     }

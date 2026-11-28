@@ -134,6 +134,7 @@ export async function createTerminalPanelSplit(
         source: session.source,
         tmuxSessionName:
           session.tmuxSessionName ?? tmuxService.buildSessionName(session.id),
+        tmuxSocketPath: session.tmuxSocketPath ?? tmuxService.socketPath,
       }),
     },
   );

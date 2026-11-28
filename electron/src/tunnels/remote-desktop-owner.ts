@@ -2,6 +2,7 @@ import type { TunnelHostConfig, TunnelHostRuntime } from "@runweave/shared/tunne
 import { RemoteDesktopChannel } from "./remote-desktop-channel.js";
 import { getLocalRemoteDesktopInfo } from "./local-remote-desktop.js";
 import { childState, failure } from "./runtime-state.js";
+import { isSshAuthErrorCode } from "./ssh-process.js";
 
 export interface RemoteDesktopOwner {
   config: TunnelHostConfig;
@@ -75,7 +76,7 @@ export async function refreshRemoteDesktop(h: RemoteDesktopOwner, current: () =>
       h.remoteDesktopTimeouts = 0;
       h.remoteDesktopChecked = Date.now();
       h.runtime.remoteDesktop = {
-        ...childState(detail.code === "SSH_AUTH_FAILED" ? "needs_auth" : "failed", detail),
+        ...childState(isSshAuthErrorCode(detail.code) ? "needs_auth" : "failed", detail),
         address: null, checkedAt: Date.now(),
       };
     }

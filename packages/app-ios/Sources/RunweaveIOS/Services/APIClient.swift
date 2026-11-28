@@ -386,6 +386,7 @@ public actor APIClient {
     _ path: String, method: String = "GET", body: [String: Any]? = nil,
     retryUnauthorized: Bool = true, idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     additionalHeaders: [String: String] = [:],
+    decodeForbiddenError: Bool = false,
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil,
     download: ((URL) throws -> T)? = nil
@@ -404,7 +405,7 @@ public actor APIClient {
     guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
     do {
       let value: T = try await request(path, method: method, body: body, bearer: current.accessToken,
-        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeError: decodeError, decode: decode, download: download)
+        idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeForbiddenError: decodeForbiddenError, decodeError: decodeError, decode: decode, download: download)
       guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
       return value
     } catch APIError.http(401) {
@@ -417,7 +418,7 @@ public actor APIClient {
       guard retryUnauthorized else { throw APIError.writeRequiresRetry }
       do {
         let value: T = try await request(path, method: method, body: body, bearer: renewed.accessToken,
-          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeError: decodeError, decode: decode, download: download)
+          idempotencyKey: idempotencyKey, requestTimeout: try remainingTimeout(), additionalHeaders: additionalHeaders, decodeForbiddenError: decodeForbiddenError, decodeError: decodeError, decode: decode, download: download)
         guard !closed, transportAccess.enabled, initial.revision == (try await credentials.snapshot()).revision, !Task.isCancelled else { throw CancellationError() }
         return value
       } catch APIError.http(401) {
@@ -440,6 +441,7 @@ public actor APIClient {
     idempotencyKey: String? = nil, requestTimeout: TimeInterval? = nil,
     connectionIDOverride: String? = nil,
     additionalHeaders: [String: String] = [:],
+    decodeForbiddenError: Bool = false,
     decodeError: ((Int, Data) -> Error?)? = nil,
     decode: ((Data) throws -> T)? = nil,
     download: ((URL) throws -> T)? = nil
@@ -514,7 +516,7 @@ public actor APIClient {
       }
       guard (200..<300).contains(http.statusCode) else {
         // Authentication errors retain their existing refresh and permission handling.
-        if http.statusCode != 401, http.statusCode != 403,
+        if http.statusCode != 401, (http.statusCode != 403 || decodeForbiddenError),
           let failure = decodeError?(http.statusCode, data)
         { throw failure }
         throw APIError.http(http.statusCode)

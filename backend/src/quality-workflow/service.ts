@@ -15,10 +15,19 @@ export class QualityService {
     // Client claims cannot impersonate trusted local log readers.
     if (batch.client === "backend") throw new QualityStoreError(403, "reserved_source");
     const projects: Record<string, string | null> = {};
+    const unknownTerminals = new Set<string>();
     for (const event of batch.events) if (event.terminalSessionId) {
       const project = this.projectForTerminal(event.terminalSessionId);
-      if (project === undefined) throw new QualityStoreError(403, "terminal_not_owned");
+      if (project === undefined) {
+        unknownTerminals.add(event.terminalSessionId);
+        continue;
+      }
       projects[event.terminalSessionId] = project;
+    }
+    if (unknownTerminals.size > 0) {
+      throw new QualityStoreError(403, "terminal_not_owned", {
+        terminalSessionIds: [...unknownTerminals],
+      });
     }
     return this.available().ingest(batch, projects);
   }

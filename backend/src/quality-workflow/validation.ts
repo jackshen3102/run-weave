@@ -11,7 +11,7 @@ export const eventSchema = z.object({
   terminalSessionId: id.optional(), attemptId: id.optional(), relatedOperationId: id.optional(),
   failureCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional(), status: integer.max(999).optional(), closeCode: integer.max(65535).optional(),
 }).strict();
-export const rangeSchema = z.object({ from: integer.positive(), through: integer.positive(), reason: z.enum(["overflow", "corruption"]) }).strict().refine(v => v.through >= v.from);
+export const rangeSchema = z.object({ from: integer.positive(), through: integer.positive(), reason: z.enum(["overflow", "corruption", "rejected"]) }).strict().refine(v => v.through >= v.from);
 export const batchSchema = z.object({ schemaVersion: z.literal(1), backendId: id, sourceId: id, streamId: id,
   client: z.enum(["desktop", "web", "ios", "backend"]), uploadedAt: time,
   events: z.array(eventSchema).max(QUALITY_LIMITS.batchEvents), droppedRanges: z.array(rangeSchema).max(128),

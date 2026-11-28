@@ -93,21 +93,91 @@ import IOSDiagnostics
       await self?.flush(id)
     }
   }
+  private enum UploadFailure: Error {
+    case terminalNotOwned([String])
+  }
+  private struct TerminalNotOwnedPayload: Decodable {
+    struct Details: Decodable { let terminalSessionIds: [String]? }
+    let code: String?
+    let details: Details?
+  }
+
+  private static func decodeUploadError(status: Int, data: Data) -> Error? {
+    guard status == 403,
+      let payload = try? JSONDecoder().decode(TerminalNotOwnedPayload.self, from: data),
+      payload.code == "terminal_not_owned"
+    else { return nil }
+    return UploadFailure.terminalNotOwned(payload.details?.terminalSessionIds ?? [])
+  }
+
+  private static func mergeRanges(_ ranges: [QualityRange]) -> [QualityRange] {
+    let sorted = ranges.sorted { $0.from != $1.from ? $0.from < $1.from : $0.through < $1.through }
+    var merged: [QualityRange] = []
+    for range in sorted {
+      if let last = merged.last, last.reason == range.reason, range.from <= last.through + 1 {
+        merged[merged.count - 1].through = max(last.through, range.through)
+      } else {
+        merged.append(range)
+      }
+    }
+    return merged
+  }
+
   private func flush(_ id: String) async {
     guard !busy.contains(id), let api = clients[id], let queue = queues[id], queue.blocked == nil else { return }
     guard !queue.events.isEmpty || !queue.droppedRanges.isEmpty else { schedule(id, seconds: 30); return }
     busy.insert(id); defer { busy.remove(id) }
     let events = Array(queue.events.prefix(64)); let ranges = Array(queue.droppedRanges.prefix(128))
+    let sentSeqs = Set(events.map(\.seq))
     let through = max(events.map(\.seq).max() ?? 0, ranges.map(\.through).max() ?? 0)
     let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let batch = QualityBatch(backendId: id, sourceId: queue.sourceId, streamId: queue.streamId, uploadedAt: formatter.string(from: Date()), events: events, droppedRanges: ranges)
     do {
       guard let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(batch)) as? [String: Any] else { throw APIError.invalidResponse }
-      let receipt: QualityReceipt = try await api.authorized("/api/quality-workflow/batches", method: "POST", body: body, requestTimeout: 10)
+      let receipt: QualityReceipt = try await api.authorized(
+        "/api/quality-workflow/batches", method: "POST", body: body, requestTimeout: 10,
+        decodeForbiddenError: true, decodeError: Self.decodeUploadError)
       guard receipt.ackThrough >= 0, receipt.ackThrough <= through, var current = queues[id], current.streamId == queue.streamId else { throw APIError.invalidResponse }
       current.events.removeAll { $0.seq <= receipt.ackThrough }
       current.droppedRanges = current.droppedRanges.filter { $0.through > receipt.ackThrough }.map { QualityRange(from: max($0.from, receipt.ackThrough + 1), through: $0.through, reason: $0.reason) }
       try save(current); queues[id] = current; failures[id] = 0; schedule(id, seconds: current.events.isEmpty ? 30 : 1.1)
+    } catch UploadFailure.terminalNotOwned(let rejectedIDs) {
+      guard var current = queues[id], current.streamId == queue.streamId else { schedule(id, seconds: 60); return }
+      var removed = 0
+      if !rejectedIDs.isEmpty {
+        let rejected = Set(rejectedIDs)
+        var kept: [QualityEvent] = []
+        for event in current.events {
+          if let tid = event.terminalSessionId, rejected.contains(tid) {
+            current.droppedRanges.append(QualityRange(from: event.seq, through: event.seq, reason: "rejected"))
+            removed += 1
+          } else {
+            kept.append(event)
+          }
+        }
+        if removed > 0 {
+          current.events = kept
+          current.droppedRanges = Self.mergeRanges(current.droppedRanges)
+          try? save(current); queues[id] = current
+        }
+      } else {
+        let kept = current.events.filter { !(($0.terminalSessionId != nil) && sentSeqs.contains($0.seq)) }
+        removed = current.events.count - kept.count
+        if removed > 0 {
+          current.streamId = UUID().uuidString
+          current.events = kept.enumerated().map { index, event in
+            QualityEvent(seq: index + 1, at: event.at, action: event.action, stage: event.stage,
+              operationId: event.operationId, launchId: event.launchId, elapsedMs: event.elapsedMs,
+              appVersion: event.appVersion, buildId: event.buildId, sourceRevision: event.sourceRevision,
+              sourceState: event.sourceState, terminalSessionId: event.terminalSessionId, attemptId: event.attemptId,
+              relatedOperationId: event.relatedOperationId, failureCode: event.failureCode, status: event.status, closeCode: event.closeCode)
+          }
+          current.droppedRanges = []
+          current.nextSeq = current.events.count + 1
+          try? save(current); queues[id] = current
+        }
+      }
+      schedule(id, seconds: removed > 0 ? 1.1 : 60)
     } catch APIError.http(let status) where [400, 409, 413].contains(status) {
       var current = queues[id]!; current.blocked = "HTTP_\(status)"; try? save(current); queues[id] = current
     } catch {

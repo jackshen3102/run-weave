@@ -1023,6 +1023,20 @@ Codex 可执行文件
 | 约束              | 按字段类型校验                                                           |
 | 显式迁移来源      | CODEX_BIN、RUNWEAVE_CODEX_BIN                                            |
 
+### agents.codex.allowUntrustedReviewerHooks
+
+允许独立 Reviewer 启动并执行所有已启用的 Codex Hooks，包括新增或修改后尚未信任的 Hook
+
+| 属性              | 合同                         |
+| ----------------- | ---------------------------- |
+| 类型              | boolean；允许 null 恢复默认  |
+| 默认              | false                        |
+| 所属模块          | backend/terminal/code-review |
+| 生效              | 所属进程重启                 |
+| 敏感 / 远端可修改 | 否 / 否                      |
+| 约束              | 按字段类型校验               |
+| 显式迁移来源      | new-field:no-legacy-source   |
+
 ### agents.codex.sessionsDirectory
 
 外部 Codex 会话目录引用

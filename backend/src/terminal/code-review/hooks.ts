@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { settingText } from "@runweave/config-node";
+import { setting, settingText } from "@runweave/config-node";
 import { z } from "zod";
 import { resolveProviderBinary } from "../../evolution/providers/launch";
 import { resolveTerminalExecutable } from "../runtime/default-shell";
@@ -73,9 +73,6 @@ async function listReviewerHooks(cwd: string, command: string): Promise<unknown>
   }
 }
 
-/** Codex 0.166 prompts even for disabled, changed plugin hooks. Skip that UI only
- * after proving that every enabled hook is already trusted or administrator-managed.
- * The flag never enables the disabled hooks and does not persist trust decisions. */
 export async function prepareReviewerLaunch(cwd: string): Promise<{ command: string; args: string[] }> {
   const binary = settingText("agents.codex.binary")?.trim() || "codex";
   const resolved = process.platform === "win32"
@@ -89,6 +86,7 @@ export async function prepareReviewerLaunch(cwd: string): Promise<{ command: str
       parsed.data.data[0]!.errors.length || parsed.data.data[0]!.warnings.length)
     throw new CodeReviewError(503, "reviewer_hooks_unavailable", "Reviewer Hooks 配置不完整，未启动交互进程");
   const unsafe = parsed.data.data[0]!.hooks.some((hook) => hook.enabled && !hook.isManaged && hook.trustStatus !== "trusted");
-  if (unsafe) throw new CodeReviewError(409, "reviewer_hooks_untrusted", "存在已启用但尚未信任的 Hooks，未自动授权或启动 Reviewer");
+  if (unsafe && setting("agents.codex.allowUntrustedReviewerHooks") !== true)
+    throw new CodeReviewError(409, "reviewer_hooks_untrusted", "存在已启用但尚未信任的 Hooks。请在 Codex 中信任这些 Hooks，或开启 agents.codex.allowUntrustedReviewerHooks 后重启 Backend");
   return { command, args: ["--sandbox", "danger-full-access", "--ask-for-approval", "never", "--dangerously-bypass-hook-trust"] };
 }

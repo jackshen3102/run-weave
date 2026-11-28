@@ -276,6 +276,7 @@ export async function prepareTerminalAgent(
             tmuxSessionName:
               session.tmuxSessionName ??
               options.tmuxService.buildSessionName(session.id),
+            tmuxSocketPath: paneTarget.socketPath,
           }),
         });
         internalOptions?.onPanelRespawned?.();

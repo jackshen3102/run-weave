@@ -203,11 +203,11 @@ CLI 回传绑定发起时的面板、会话和执行环境。原 Agent 忙时由
 构建、API、浏览器与 iOS 交互、真实 Reviewer、自动回传、重启与草稿保护需分别取证；
 格式校验通过不代表该计划的 20 个用例已经执行。
 
-Reviewer 启动先通过原生 `hooks/list` 只读核对该工作区的配置。仅当所有**已启用** Hook 都已受
-信任或由管理员托管时，才给本轮进程传入 `--dangerously-bypass-hook-trust`，略过 Codex 对已
-停用但内容变更的插件副本显示的启动审核。停用项继续停用，不写全局信任状态，不更换模型。
-存在已启用且未受信任的 Hook、配置读取不完整或原生能力不可用时，在 Backend 明确阻塞，
-不启动一个等待用户处理 Hooks 弹窗的 Reviewer。这个选项只用于独立 Review 进程。
+Reviewer 启动前通过原生 `hooks/list` 核对工作区配置。默认要求所有已启用的 Hook 都已受信任或由管理员托管。
+在实例配置中将 `agents.codex.allowUntrustedReviewerHooks` 设为 `true` 并重启 Backend 后，
+该实例新启动的独立 Reviewer 允许执行所有已启用的 Hook，包括新增或内容已变更的 Hook。
+预检通过后，Reviewer 使用进程参数 `--dangerously-bypass-hook-trust` 跳过启动审核。
+已停用的 Hook 继续停用，Codex 的持久信任记录保留原值。配置不可核验时，Backend 会拒绝启动。
 预检解析 `agents.codex.binary`（缺省为 PATH 中的 Codex）后，将同一绝对可执行路径用于
 Hooks 查询和 Reviewer 启动，避免预检与实际启动使用不同版本；解析失败时停止启动。
 对应行为验收见 [Reviewer Hooks 启动计划](../testing/terminal/independent-code-review-hooks.testplan.yaml)。

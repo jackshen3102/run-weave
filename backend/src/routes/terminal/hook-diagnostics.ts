@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import path from "node:path";
 import { Router } from "express";
 import { z } from "zod";
 import type { TerminalSessionManager } from "../../terminal/manager/manager";
@@ -14,17 +16,20 @@ const source = z.enum([
   "agy",
   "unknown",
 ]);
-const sessionToken = z
-  .string()
-  .trim()
-  .min(1)
-  .max(128)
-  .refine((value) =>
-    Array.from(value).every((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 32 && code !== 127;
-    }),
-  );
+const printableToken = (maxLength: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(maxLength)
+    .refine((value) =>
+      Array.from(value).every((character) => {
+        const code = character.charCodeAt(0);
+        return code >= 32 && code !== 127;
+      }),
+    );
+const sessionToken = printableToken(128);
+const socketToken = printableToken(512);
 const body = z
   .object({
     terminalSessionId: z.string().trim().min(1).max(128),
@@ -32,9 +37,20 @@ const body = z
     reason: z.literal("foreign_tmux_session"),
     expectedSession: sessionToken,
     actualSession: sessionToken,
+    expectedSocket: socketToken.optional(),
+    actualSocket: socketToken.optional(),
     observedAt: z.number().int().nonnegative(),
   })
   .strict();
+
+function normalizeSocketPath(value: string): string {
+  const resolved = path.resolve(value);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
 
 export function createHookDiagnosticsRouter(options: {
   hookToken: string | undefined;
@@ -72,11 +88,35 @@ export function createHookDiagnosticsRouter(options: {
       res.status(409).json({ message: "Terminal session identity changed" });
       return;
     }
-    if (parsed.data.actualSession === expected) {
+    const expectedSocket = session.tmuxSocketPath ?? options.tmuxService.socketPath;
+    const normalizedExpectedSocket = parsed.data.expectedSocket
+      ? normalizeSocketPath(parsed.data.expectedSocket)
+      : null;
+    if (
+      normalizedExpectedSocket &&
+      normalizedExpectedSocket !== normalizeSocketPath(expectedSocket)
+    ) {
+      res.status(409).json({ message: "Terminal session identity changed" });
+      return;
+    }
+    const normalizedActualSocket = parsed.data.actualSocket
+      ? normalizeSocketPath(parsed.data.actualSocket)
+      : null;
+    const isForeignSession = parsed.data.actualSession !== expected;
+    const isForeignSocket = Boolean(
+      normalizedExpectedSocket &&
+        normalizedActualSocket &&
+        normalizedActualSocket !== normalizedExpectedSocket,
+    );
+    if (!isForeignSession && !isForeignSocket) {
       res.status(400).json({ message: "Foreign session required" });
       return;
     }
-    options.diagnostics.recordForeign(parsed.data);
+    options.diagnostics.recordForeign({
+      ...parsed.data,
+      expectedSocket: normalizedExpectedSocket ?? undefined,
+      actualSocket: normalizedActualSocket ?? undefined,
+    });
     res.status(202).json({ accepted: true });
   });
   return router;

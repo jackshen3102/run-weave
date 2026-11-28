@@ -38,14 +38,21 @@ class QualityUploader {
     const snapshot = this.queue.snapshot(); if (snapshot.blocked) return;
     if (!snapshot.events.length && !snapshot.droppedRanges.length) { this.schedule(30_000); return; }
     this.busy = true;
+    let sentBatchSeqs: number[] = [];
     try {
       const events = snapshot.events.slice(0, QUALITY_LIMITS.batchEvents); const droppedRanges = snapshot.droppedRanges.slice(0, 128);
-      const sentThrough = Math.max(0, ...events.map(e => e.seq), ...droppedRanges.map(r => r.through));
+      sentBatchSeqs = events.map(e => e.seq);
+      const sentThrough = Math.max(0, ...sentBatchSeqs, ...droppedRanges.map(r => r.through));
       const receipt = await qualityApi(this.apiBase, this.token).upload({ schemaVersion: 1, backendId: snapshot.backendId, sourceId: snapshot.sourceId, streamId: snapshot.streamId, client: window.electronAPI?.isElectron ? "desktop" : "web", uploadedAt: new Date().toISOString(), events, droppedRanges });
       await this.queue.acknowledge(receipt.ackThrough, sentThrough); this.failures = 0;
       this.schedule(this.queue.snapshot().events.length ? 1100 : 30_000);
     } catch (error) {
-      if (error instanceof HttpError && [400, 409, 413].includes(error.status)) await this.queue.block(`HTTP_${error.status}`);
+      if (error instanceof HttpError && error.status === 403 && error.code === "terminal_not_owned") {
+        const rawIds = (error.details as { terminalSessionIds?: unknown } | undefined)?.terminalSessionIds;
+        const ids = Array.isArray(rawIds) ? rawIds.filter((value): value is string => typeof value === "string" && value.length > 0) : [];
+        const removed = await this.queue.dropRejectedTerminals(ids, sentBatchSeqs);
+        this.schedule(removed > 0 ? 1100 : 60_000);
+      } else if (error instanceof HttpError && [400, 409, 413].includes(error.status)) await this.queue.block(`HTTP_${error.status}`);
       else if (error instanceof HttpError && [401, 403, 404].includes(error.status)) this.schedule(60_000);
       else this.schedule(Math.min(300_000, 1000 * 2 ** Math.min(8, ++this.failures)) + Math.random() * 1000);
     } finally { this.busy = false; }

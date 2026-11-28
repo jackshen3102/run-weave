@@ -16,6 +16,7 @@ struct HomeTerminalRow: View, Equatable {
   private let connectionScope: String?
   @StateObject private var state: StateProjection<HomeState.TerminalSnapshot>
   let projectName: String?
+  let inAttentionSection: Bool
   let attentionSlot: AttentionSlot?
   var branchStatus: HomeBranchStatus? = nil
   let showBranchUpdates: () -> Void
@@ -27,11 +28,12 @@ struct HomeTerminalRow: View, Equatable {
   @State private var forkFailure: String?
   private var terminal: HomeTerminal { state.value.terminal ?? initialTerminal }
 
-  init(session: AppSession, terminal: HomeTerminal, projectName: String?, attentionSlot: AttentionSlot? = nil,
+  init(session: AppSession, terminal: HomeTerminal, projectName: String?, inAttentionSection: Bool = false, attentionSlot: AttentionSlot? = nil,
     branchStatus: HomeBranchStatus? = nil,
     showBranchUpdates: @escaping () -> Void, rename: @escaping () -> Void,
     move: @escaping () -> Void, delete: @escaping () -> Void) {
     self.session = session; initialTerminal = terminal; self.projectName = projectName
+    self.inAttentionSection = inAttentionSection
     self.attentionSlot = attentionSlot
     self.branchStatus = branchStatus; self.showBranchUpdates = showBranchUpdates
     self.rename = rename; self.move = move; self.delete = delete
@@ -52,7 +54,8 @@ struct HomeTerminalRow: View, Equatable {
     // HomeView's actions target this stable record and its State bindings; they
     // read the latest terminal on invocation instead of capturing a row snapshot.
     lhs.session === rhs.session && lhs.record === rhs.record
-      && lhs.projectName == rhs.projectName && lhs.branchStatus == rhs.branchStatus
+      && lhs.projectName == rhs.projectName && lhs.inAttentionSection == rhs.inAttentionSection
+      && lhs.branchStatus == rhs.branchStatus
       && lhs.attentionSlot == rhs.attentionSlot
       && lhs.connectionScope == rhs.connectionScope
   }
@@ -98,7 +101,11 @@ struct HomeTerminalRow: View, Equatable {
             if let actionLabel = attentionSlot?.actionLabel {
               Text(actionLabel).font(.caption2).fontWeight(.semibold)
                 .foregroundColor(.orange)
-                .accessibilityIdentifier("home-attention-\(attentionSlot?.actionKind ?? "pending")-\(terminal.id)")
+                .accessibilityIdentifier(
+                  inAttentionSection
+                    ? "home-attention-\(attentionSlot?.actionKind ?? "pending")-\(terminal.id)"
+                    : "home-project-attention-\(attentionSlot?.actionKind ?? "pending")-\(terminal.id)"
+                )
             }
             if pinned {
               Image(systemName: "pin.fill").font(.caption).foregroundColor(.secondary)

@@ -36,7 +36,7 @@ const {
   readThreadId,
   toAgentHookStateEvent,
 } = require("./runweave-hook-payload.cjs");
-const { parseTmuxSocketPath, readTmuxPaneContext, readTmuxSessionEnv } = require("./runweave-hook-tmux.cjs");
+const { normalizeTmuxSocketPath, parseTmuxSocketPath, readTmuxPaneContext, readTmuxSessionEnv } = require("./runweave-hook-tmux.cjs");
 const {
   discoverAppServer,
   postAppServerEvent,
@@ -130,30 +130,58 @@ async function main() {
       return;
     }
     const expectedTmuxSession = process.env.RUNWEAVE_TMUX_SESSION_NAME;
-    const tmuxEnvRefresh = normalizedEvent === "interrupt" ? { refreshed: false } : readTmuxSessionEnv(spawnSync);
-    const tmuxPaneContext = normalizedEvent === "interrupt" ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID } : readTmuxPaneContext(spawnSync);
-    if (expectedTmuxSession && tmuxPaneContext.sessionName && tmuxPaneContext.sessionName !== expectedTmuxSession) {
-      const diagnostic = await postHookDiagnostic({
-        endpoint: deriveHookDiagnosticsEndpoint(process.env.RUNWEAVE_HOOK_ENDPOINT),
-        token: process.env.RUNWEAVE_HOOK_TOKEN,
-        body: {
-          terminalSessionId: process.env.RUNWEAVE_TERMINAL_SESSION_ID,
-          source: normalizeSource(args.source),
-          reason: "foreign_tmux_session",
-          expectedSession: expectedTmuxSession,
-          actualSession: tmuxPaneContext.sessionName,
-          observedAt: Date.now(),
-        },
-      });
+    const expectedTmuxSocket = normalizeTmuxSocketPath(process.env.RUNWEAVE_TMUX_SOCKET_PATH);
+    const actualTmuxSocket = normalizeTmuxSocketPath(parseTmuxSocketPath(process.env.TMUX));
+    const isForeignSocket = Boolean(
+      expectedTmuxSocket &&
+      actualTmuxSocket &&
+      actualTmuxSocket !== expectedTmuxSocket,
+    );
+    const tmuxEnvRefresh =
+      normalizedEvent === "interrupt" || isForeignSocket
+        ? { refreshed: false }
+        : readTmuxSessionEnv(spawnSync);
+    const tmuxPaneContext =
+      normalizedEvent === "interrupt"
+        ? { panelId: process.env.RUNWEAVE_TERMINAL_PANEL_ID }
+        : readTmuxPaneContext(spawnSync);
+    const isForeignSession = Boolean(
+      expectedTmuxSession &&
+      tmuxPaneContext.sessionName &&
+      tmuxPaneContext.sessionName !== expectedTmuxSession,
+    );
+    if (isForeignSocket || isForeignSession) {
+      const diagnostic = expectedTmuxSession
+        ? await postHookDiagnostic({
+            endpoint: deriveHookDiagnosticsEndpoint(process.env.RUNWEAVE_HOOK_ENDPOINT),
+            token: process.env.RUNWEAVE_HOOK_TOKEN,
+            body: {
+              terminalSessionId: process.env.RUNWEAVE_TERMINAL_SESSION_ID,
+              source: normalizeSource(args.source),
+              reason: "foreign_tmux_session",
+              expectedSession: expectedTmuxSession,
+              actualSession: tmuxPaneContext.sessionName || expectedTmuxSession,
+              ...(expectedTmuxSocket && actualTmuxSocket
+                ? {
+                    expectedSocket: expectedTmuxSocket,
+                    actualSocket: actualTmuxSocket,
+                  }
+                : {}),
+              observedAt: Date.now(),
+            },
+          })
+        : { ok: false, reason: "missing_expected_session" };
       appendDebugLog("hook bridge skipped foreign tmux session", {
         reason: "foreign_tmux_session",
+        foreignSocket: isForeignSocket,
+        foreignSession: isForeignSession,
         diagnostic,
       });
       return;
     }
     if (tmuxPaneContext.panelId) {
       process.env.RUNWEAVE_TERMINAL_PANEL_ID = tmuxPaneContext.panelId;
-    } else if (parseTmuxSocketPath(process.env.TMUX) && process.env.TMUX_PANE) {
+    } else if (actualTmuxSocket && process.env.TMUX_PANE) {
       delete process.env.RUNWEAVE_TERMINAL_PANEL_ID;
     }
     const commandName = args.commandName || tmuxPaneContext.commandName;

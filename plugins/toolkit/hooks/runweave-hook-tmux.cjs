@@ -1,4 +1,8 @@
-/* global module, process */
+/* global module, process, require */
+/* eslint-disable @typescript-eslint/no-require-imports */
+
+const fs = require("node:fs");
+const path = require("node:path");
 
 function parseTmuxSocketPath(value) {
   if (!value) {
@@ -6,6 +10,19 @@ function parseTmuxSocketPath(value) {
   }
   const socketPath = String(value).split(",")[0]?.trim();
   return socketPath || null;
+}
+
+function normalizeTmuxSocketPath(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const resolved = path.resolve(trimmed);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 function getCommandBasename(command) {
@@ -159,4 +176,4 @@ function readTmuxPaneContext(spawnSync) {
   };
 }
 
-module.exports = { getCommandBasename, parseTmuxSocketPath, readTmuxPaneContext, readTmuxSessionEnv };
+module.exports = { getCommandBasename, normalizeTmuxSocketPath, parseTmuxSocketPath, readTmuxPaneContext, readTmuxSessionEnv };
