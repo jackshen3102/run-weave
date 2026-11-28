@@ -1,0 +1,78 @@
+version: 1
+name: 质量巡检闭环交接与跨版本慢操作检测验收
+description: >
+  验证桌面直调发送诊断汇入、台账修复版本登记、上线后复验至人工确认关闭、已定位问题受管交接新终端、
+  跨版本客户端操作耗时退化检测及反事实归因门禁。每条用例使用独立隔离的 Backend、证据库与工作区资源，结束后完整清理。
+
+cases:
+  - id: QCL-001
+    name: 桌面快捷指令或即时回复发送自动汇入客户端阶段并与服务端关联
+    required: true
+    description: >
+      验证不经过浮动草稿框直调 sendTerminalInput 的桌面发送入口携带目标连接与终端上下文，
+      客户端阶段与服务端接收日志按同一 operationId 完整入库且不含输入正文。
+    preconditions:
+      - 本用例拥有通过 toolkit:runweave-dev-session 启动的隔离桌面实例、认证连接及一个无副作用测试终端。
+      - 已通过 toolkit:playwright-cli 附着该实例桌面页面，质量采集能力处于启用状态。
+    steps:
+      - 在真实页面通过快捷指令或即时回复向测试终端触发一次无副作用发送，确认终端正常收到输入且未手动点击诊断导出。
+      - 等待一个上传刷新周期后执行已认证的 rw quality events 查询；确认同一 operationId 同时存在 client 为 desktop 的客户端阶段记录（含非零 elapsedMs 与实际构建标识）和 client 为 backend 的服务端记录，且库内不含发送正文。
+
+  - id: QCL-002
+    name: mark-fixed 阶段原子登记修复版本并保留完整历史证据引用
+    required: true
+    description: >
+      验证无需持有每日巡检租约即可将未关闭问题标记为修复观察态，保留首次时间与全部历史证据，
+      相同幂等键重放不重复递增版本，且拒绝已关闭问题或并发冲突。
+    preconditions:
+      - 本用例拥有独立隔离的 Backend 与证据库，台账中已存在一条 open 状态的 located 问题及若干关联证据 ID，且当前无其他活动写入租约。
+    steps:
+      - 执行 rw quality ledger mark-fixed 为该问题登记修复版本号、到期复验时间和说明并回读台账；确认状态变为 observing、fixVersion 已更新、原 firstAt 与全部历史 evidenceIds 完整保留且 lease 仍为空。
+      - 使用完全相同的 runKey、commitKey 与请求内容重放提交，再使用旧 expectedRevision 提交不同内容；确认前者返回 replayed 为 true 且 revision 不变，后者返回 409 冲突；对已处于 closed 状态的测试条目提交 mark-fixed 时确认返回 409 拒绝。
+
+  - id: QCL-003
+    name: 修复版本产生真实健康使用后复验推进待确认并由人工确认关闭
+    required: true
+    description: >
+      验证登记了 fixVersion 的问题在新构建产生真实健康操作且无同因新异常后，
+      每日巡检将其推进至 awaiting_confirmation，随后仅人工 confirm_close 可将其关闭。
+    preconditions:
+      - 本用例拥有独立隔离的 Backend 与证据库，台账中存在一条已登记 fixVersion 且 nextReviewAt 已到期的 observing 问题。
+    steps:
+      - 在尚未导入新版本客户端操作前运行一次 daily.mjs prepare；确认 postFixSummary 显示新版本缺少实际使用覆盖，提交复验后状态保持 observing 而不提前进入 awaiting_confirmation。
+      - 导入构建版本高于 fixVersion 的完整健康客户端操作且无同 groupKey 新异常，再次执行 daily.mjs prepare 与 finish；确认该条目携带新增 verification 记录并进入 awaiting_confirmation，随后提交 confirm_close 确认状态变为 closed。
+
+  - id: QCL-004
+    name: 已定位问题通过受管文本附件安全交接到新终端且默认拦截未定位假设
+    required: true
+    description: >
+      验证仅 located 问题默认可拉起目标新终端并注入 0600 权限的不可信证据交接包，
+      Git 工作区保持干净，且同一 operationId 重放幂等不创建重复终端。
+    preconditions:
+      - 本用例拥有启用 tmux 与受管文本附件服务的隔离 Backend，已注册一个可用项目目录，台账中分别存在一条 located 问题和一条 hypothesis 问题。
+    steps:
+      - 对 hypothesis 问题默认执行 rw quality handoff；确认返回 409 拦截且未创建新终端或附件文件。
+      - 对 located 问题携带唯一 operationId 执行 rw quality handoff（保持默认不自动回车提交）；确认返回新 terminalSessionId 与受管附件路径，核对附件权限为 0600、不在项目 Git 目录内、包含不可信证据边界声明与关联证据时间线，再重放同一请求确认返回同一终端 ID。
+
+  - id: QCL-005
+    name: 跨版本 clean 客户端操作满足样本与双阈值时触发慢操作退化候选组
+    required: true
+    description: >
+      验证滚动版本耗时桶在 clean 构建累计达 20 次且 p90 相对与绝对退化均超阈值时生成 latency_regression 候选组，
+      而低样本、modified 构建与服务端零耗时日志不产生误报且不阻塞健康水位推进。
+    preconditions:
+      - 本用例拥有独立隔离的 Backend 与空证据库。
+    steps:
+      - 依次导入同一客户端动作在 clean 基线版本（20 次完整 confirmed 操作，耗时约 400ms）、clean 新版本（20 次完整 confirmed 操作，耗时约 900ms）、modified 版本（25 次慢操作）以及服务端日志投影记录，查询 rw quality latency；确认分位数统计准确且排除服务端零耗时记录。
+      - 执行 daily.mjs prepare 与 finish；确认仅 clean 新版本生成 latency_regression 候选组并附带基线对比摘要，modified 与低样本桶未误报，且完成后所有健康操作事件正常推进 analysisCursor。
+
+  - id: QCL-006
+    name: 反事实归因门禁阻止将脏构建或重启瞬态恢复误判为已定位代码缺陷
+    required: true
+    description: >
+      验证归因流程在构建存在未提交改动或属于服务重启瞬态恢复时保留反事实依据并维持 hypothesis，
+      不进入默认终端交接池。
+    preconditions:
+      - 本用例拥有独立归因环境与两组异常证据：一组为 sourceState 等于 modified 的客户端失败，另一组为服务重启期间短暂拒绝连接后立即恢复的事件链。
+    steps:
+      - 按更新后的 quality-workflow 规则执行归因并读取生成的台账条目；确认两组的 counterEvidence 分别记录脏构建与重启瞬态恢复依据，attribution 均为 hypothesis 而非 located。

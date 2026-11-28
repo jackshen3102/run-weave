@@ -139,7 +139,7 @@ export async function sendTerminalInput(
   terminalSessionId: string,
   payload: SendTerminalInputRequest,
   signal?: AbortSignal,
-  diagnostics = beginDiagnosticAction("terminal_send", payload.operationId),
+  diagnostics = beginDiagnosticAction("terminal_send", payload.operationId, { apiBase, terminalSessionId }),
 ): Promise<SendTerminalInputResponse> {
   diagnostics.stage("request_started");
   try {

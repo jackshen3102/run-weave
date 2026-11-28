@@ -9,9 +9,12 @@ rw quality events --instance stable --profile default --limit 200 --json
 rw quality events --instance stable --profile default --cursor <nextCursor> --limit 1000 --json
 rw quality context --instance stable --profile default --file /private/context.json --json
 rw quality coverage --instance stable --profile default --json
+rw quality latency --instance stable --profile default --json
 rw quality ledger get --instance stable --profile default --json
 rw quality ledger get --instance stable --profile default --issue-id <issueId> --json
 rw quality ledger commit --instance stable --profile default --file /private/request.json --json
+rw quality ledger mark-fixed --instance stable --profile default --issue-id <issueId> --fix-version 0.226.0 --expected-revision <revision> --summary "修复说明" --json
+rw quality handoff <issueId> --instance stable --profile default --project-id <projectId> --agent codex --operation-id <UUID> --json
 ```
 
 事件分页默认200、上限1000，按 Backend 接收序号读取。`hasMore` 为 true 时沿 `nextCursor`
@@ -34,9 +37,11 @@ rw quality ledger commit --instance stable --profile default --file /private/req
 未结问题与待处理页证据固定保留，不能在更新问题时抹去旧证据引用或首次时间。
 已关闭问题的原文可以按保留规则清理；复发重开仍保留原 issueId、旧引用及历史记录，旧引用不要求原文仍在。
 新追加引用必须指向当前可读证据，不存在或已清理的新引用返回409 `evidence_expired`。历史引用不代表原文仍可读取。
-analysis 提交拒绝 closed；完成复验先进入 awaiting_confirmation。用户明确确认具体问题及复验结果后，
+analysis 提交拒绝 closed；代码修复发布后可通过无需持有每日租约的 `mark_fixed` 阶段（`rw quality ledger mark-fixed`）原子登记 `fixVersion`、进入 `observing` 并设置 `nextReviewAt`，保留原 `firstAt` 与全部历史 `evidenceIds`；完成上线复验（核对 `>= fixVersion` 已有真实健康使用且无同因复发）先进入 awaiting_confirmation。用户明确确认具体问题及复验结果后，
 可提交独立 confirm_close 阶段，提供 confirmedIssueIds 和 summary 确认说明；服务端要求已有修复版本与复验记录，
 并拒绝占用中的其他写入者。每日 Agent 禁止提交此阶段，不能用自拟说明冒充用户确认。
+已确认 `attribution=located` 的问题可通过 `POST /api/quality-workflow/issues/:issueId/handoff`（`rw quality handoff`）将最多 48 KiB 不可信证据时间线写入 `0600` 受管文本附件并拉起指定项目/Worktree 的新终端（默认 `submitPrompt=false` 停在输入框待确认；`hypothesis` 默认返回 409 拦截，同一 `operationId` 1 小时幂等）。
+`GET /api/quality-workflow/latency-baselines`（`rw quality latency`）基于客户端（`desktop | web | ios`，排除服务端零耗时投影）完整 `confirmed` 操作滚动统计版本分位数；当 `clean` 构建样本数 ≥ 20 且较上一 `clean` 基线 `p90` 退化 ≥ 50% 同时 ≥ 300ms 时，`daily.mjs prepare` 自动生成 `latency_regression` 候选组且不阻塞健康水位推进。
 
 Backend 在自身 profile 的 `quality-workflow/evidence.sqlite` 持有独立 worker；证据、丢弃区间和
 连续 ack 同事务持久化后才回应。客户端相同序号不同内容返回409；未知字段400、未登录401、
