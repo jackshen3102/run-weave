@@ -145,7 +145,7 @@ export function useTerminalPreviewQueries(input: {
     input.mode === "changes" &&
     Boolean(input.selectedChangePath && input.selectedChangeKind) &&
     (selectedChangeKind === "branch"
-      ? Boolean(activeBaseOid)
+      ? Boolean(activeBaseOid && branchChanges.data?.files.some(file => file.path === selectedChangePath))
       : selectedChangeKind === "commit"
         ? Boolean(activeCommitOid)
         : true);
