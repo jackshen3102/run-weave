@@ -407,14 +407,8 @@ public final class NotificationCoordinator: ObservableObject {
       guard !Task.isCancelled, UIApplication.shared.applicationState != .background else { return }
       await disable(binding.connection, kind: binding.kind ?? .battery, reportFailure: false)
     }
-    if bindings.values.contains(where: { $0.enabled && !$0.pendingRevoke }),
-      UIApplication.shared.applicationState == .active {
-      let settings = await UNUserNotificationCenter.current().notificationSettings()
-      if settings.authorizationStatus == .notDetermined,
-        (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true,
-        environment != nil {
-        UIApplication.shared.registerForRemoteNotifications()
-      }
+    if bindings.values.contains(where: { $0.enabled && !$0.pendingRevoke }) {
+      await NotificationBadgeAuthorization.requestIfNeeded(canRegister: environment != nil)
     }
     if tokenConfirmed, let deviceToken, let environment {
       for binding in Array(bindings.values) where binding.enabled && !binding.pendingRevoke {
@@ -503,6 +497,8 @@ public final class NotificationCoordinator: ObservableObject {
     record(code, details)
   }
 
+  private struct BadgeSnapshot: Decodable { let revision: Int; let count: Int }
+
   func syncBadgeSoon() {
     guard UIApplication.shared.applicationState != .background else { return }
     Task { [weak self] in
@@ -510,8 +506,6 @@ public final class NotificationCoordinator: ObservableObject {
       await self?.refreshBadge()
     }
   }
-
-  private struct BadgeSnapshot: Decodable { let revision: Int; let count: Int }
 
   private func refreshBadge() async {
     let candidates = bindings.values.filter { $0.kind == .terminalUnread && $0.enabled && !$0.pendingRevoke }
@@ -523,13 +517,8 @@ public final class NotificationCoordinator: ObservableObject {
       }
       return
     }
-    let settings = await UNUserNotificationCenter.current().notificationSettings()
-    if settings.authorizationStatus == .denied {
-      reportBadgeIssue("系统通知未允许，桌面图标无法显示小红点；请在 iOS 设置中开启", code: "notifications.badge.denied")
-      return
-    }
-    if settings.authorizationStatus != .notDetermined, settings.badgeSetting != .enabled {
-      reportBadgeIssue("系统「标记」未开启，桌面图标不会显示小红点；请在 iOS「设置 → 通知 → Runweave」中开启「标记」", code: "notifications.badge.disabled")
+    if let issue = await NotificationBadgeAuthorization.currentIssue() {
+      reportBadgeIssue(issue.message, code: issue.code)
       return
     }
     let gateways = Set(candidates.compactMap { $0.subscription?.gatewayURL })
