@@ -315,9 +315,41 @@
     "file": "packages/runweave-cli/src/commands/quick-input.ts",
     "kind": "file-io",
     "expression": "readFile(requireStringOption(options, \"text-file\"))",
-    "count": 2,
+    "count": 1,
     "category": "external-protocol",
     "reason": "读取用户通过 --text-file 明确指定的快捷指令创建或正文更新输入，经已认证 Backend 处理幂等和版本冲突，不作为实例业务配置来源。"
+  },
+  {
+    "file": "packages/runweave-cli/src/commands/quick-input.ts",
+    "kind": "file-io",
+    "expression": "readFile(textFile)",
+    "count": 1,
+    "category": "external-protocol",
+    "reason": "读取用户通过 --text-file 明确指定的快捷命令更新正文，作为本次请求输入。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/quick-input-terminal.ts",
+    "kind": "environment",
+    "expression": "process.env.ZDOTDIR",
+    "count": 4,
+    "category": "test",
+    "reason": "将验证进程的 Zsh 启动目录限定到临时夹具目录，并恢复原环境值。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/quick-input-terminal.ts",
+    "kind": "file-io",
+    "expression": "readFile(argsLogPath)",
+    "count": 1,
+    "category": "test",
+    "reason": "读取临时验证目录内的参数日志，核对替身进程收到的启动参数。"
+  },
+  {
+    "file": "scripts/verify/scheduled-tasks/quick-input-terminal.ts",
+    "kind": "file-io",
+    "expression": "writeFile(fakeCodexPath)",
+    "count": 1,
+    "category": "test",
+    "reason": "在临时验证目录生成替身脚本，记录测试参数并模拟交互进程。"
   },
   {
     "file": "packages/runweave-cli/src/commands/experience-inbox.ts",
