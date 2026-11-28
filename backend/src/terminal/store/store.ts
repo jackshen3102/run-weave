@@ -319,6 +319,7 @@ export interface TerminalSessionStore {
   updatePanelLastThread(
     params: UpdateTerminalPanelLastThreadParams,
   ): Promise<void>;
+  clearPanelConversation(panelId: string): Promise<void>;
   updatePanelTerminalState(
     params: UpdateTerminalPanelTerminalStateParams,
   ): Promise<void>;
@@ -348,6 +349,7 @@ export interface TerminalSessionStore {
   updateSessionLastThread(
     params: UpdateTerminalSessionLastThreadParams,
   ): Promise<void>;
+  clearSessionConversation(terminalSessionId: string): Promise<void>;
   updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
   ): Promise<void>;

@@ -34,6 +34,7 @@ export interface TerminalSessionManagerObserver {
   onSessionExited?: (sessionId: string) => void;
   onSessionDeleted?: (sessionId: string) => Promise<void>;
   onPanelProgramStatusChanged?: (session: TerminalSessionRecord, panel?: TerminalPanelRecord) => void;
+  onConversationChanged?: (session: TerminalSessionRecord, panel?: TerminalPanelRecord) => void;
   onBell?: (input: {
     terminalSessionId: string;
     projectId: string;

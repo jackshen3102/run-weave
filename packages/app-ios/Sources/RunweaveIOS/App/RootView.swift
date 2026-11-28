@@ -33,7 +33,12 @@ public struct RootView: View {
       .background {
         NavigationLink(isActive: Binding(
           get: { session.showingScheduledTasks || session.showingEnergyMonitor || session.showingDevelopmentResources || session.terminal != nil },
-          set: { if !$0 { session.closeTerminal(); session.showingScheduledTasks = false; session.showingEnergyMonitor = false; session.showingDevelopmentResources = false } }
+          set: { if !$0 {
+            let closedTerminal = session.terminal != nil
+            session.closeTerminal()
+            session.showingScheduledTasks = false; session.showingEnergyMonitor = false; session.showingDevelopmentResources = false
+            if closedTerminal { session.scheduleReload() }
+          } }
         )) {
           if session.showingDevelopmentResources {
             DevelopmentResourcesView(session: session).id(session.generation)

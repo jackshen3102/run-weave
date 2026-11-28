@@ -265,6 +265,71 @@ export class TerminalManagerPanelOperations extends TerminalManagerSessionRuntim
     return panel;
   }
 
+  notifyConversationChanged(
+    session: import("./records").TerminalSessionRecord,
+    panel?: TerminalPanelRecord,
+  ): void {
+    this.observer.onConversationChanged?.(session, panel);
+  }
+
+  async clearConversation(
+    terminalSessionId: string,
+    panelId: string | null = null,
+  ): Promise<boolean> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return false;
+    }
+    if (!panelId) {
+      const cleared = await this.clearSessionConversation(terminalSessionId);
+      if (cleared) {
+        this.notifyConversationChanged(session);
+      }
+      return cleared;
+    }
+    const panel = this.panels.get(panelId);
+    if (!panel || panel.terminalSessionId !== terminalSessionId) {
+      return false;
+    }
+    const panelHasConversation = Boolean(
+      panel.threadId ||
+      panel.threadProvider ||
+      panel.preview ||
+      panel.lastThreadId ||
+      panel.lastThreadProvider ||
+      panel.lastThreadStatus ||
+      panel.lastThreadUpdatedAt ||
+      panel.latestReply,
+    );
+    let panelCleared = false;
+    if (panelHasConversation) {
+      invalidateTerminalInput(session);
+      delete panel.threadId;
+      delete panel.threadProvider;
+      delete panel.preview;
+      delete panel.lastThreadId;
+      delete panel.lastThreadProvider;
+      delete panel.lastThreadStatus;
+      delete panel.lastThreadUpdatedAt;
+      delete panel.latestReply;
+      await this.sessionStore.clearPanelConversation(panelId);
+      this.notifyPanelMutation(panel);
+      panelCleared = true;
+    }
+    const runningPanelCount = this.listPanels(terminalSessionId).filter(
+      (candidate) => candidate.status === "running",
+    ).length;
+    const sessionCleared =
+      runningPanelCount <= 1
+        ? await this.clearSessionConversation(terminalSessionId)
+        : false;
+    if (panelCleared || sessionCleared) {
+      this.notifyConversationChanged(session, panel);
+      return true;
+    }
+    return false;
+  }
+
   async updatePanelTerminalState(
     panelId: string,
     terminalState: TerminalState,

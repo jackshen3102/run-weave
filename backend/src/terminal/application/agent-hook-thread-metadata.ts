@@ -13,6 +13,50 @@ function getLastThreadStatusForHookEvent(
   return hookEvent === "UserPromptSubmit" ? "running" : "idle";
 }
 
+function readConversationIdentity(
+  owner:
+    | {
+        threadId?: string;
+        threadProvider?: TerminalAgentKind;
+        lastThreadId?: string;
+        lastThreadProvider?: TerminalAgentKind;
+      }
+    | null
+    | undefined,
+): { id: string | null; provider: TerminalAgentKind | null } {
+  if (!owner) {
+    return { id: null, provider: null };
+  }
+  if (owner.threadId) {
+    return { id: owner.threadId, provider: owner.threadProvider ?? "codex" };
+  }
+  if (owner.lastThreadId) {
+    return {
+      id: owner.lastThreadId,
+      provider: owner.lastThreadProvider ?? "codex",
+    };
+  }
+  return { id: null, provider: null };
+}
+
+function notifyIfConversationChanged(
+  terminalSessionManager: TerminalSessionManager,
+  session: NonNullable<ReturnType<TerminalSessionManager["getSession"]>>,
+  panel: ReturnType<TerminalSessionManager["getPanel"]> | null,
+  before: { id: string | null; provider: TerminalAgentKind | null },
+): void {
+  const updatedPanel = panel
+    ? (terminalSessionManager.getPanel?.(panel.id) ?? panel)
+    : null;
+  const after = readConversationIdentity(updatedPanel ?? session);
+  if (before.id !== after.id || before.provider !== after.provider) {
+    terminalSessionManager.notifyConversationChanged?.(
+      session,
+      updatedPanel ?? undefined,
+    );
+  }
+}
+
 export async function syncAgentThreadMetadata(options: {
   terminalSessionManager: TerminalSessionManager;
   session: ReturnType<TerminalSessionManager["getSession"]>;
@@ -27,6 +71,7 @@ export async function syncAgentThreadMetadata(options: {
     return session;
   }
 
+  const beforeIdentity = readConversationIdentity(options.panel ?? session);
   const lastThreadUpdatedAt = new Date();
   const lastThreadStatus = getLastThreadStatusForHookEvent(options.hookEvent);
   await options.terminalSessionManager.updateSessionLastThread(
@@ -96,10 +141,22 @@ export async function syncAgentThreadMetadata(options: {
         );
       }
     }
+    notifyIfConversationChanged(
+      options.terminalSessionManager,
+      nextSession,
+      options.panel,
+      beforeIdentity,
+    );
     return nextSession;
   }
 
   if (options.hookEvent !== "Stop") {
+    notifyIfConversationChanged(
+      options.terminalSessionManager,
+      session,
+      options.panel,
+      beforeIdentity,
+    );
     return session;
   }
 
@@ -130,6 +187,12 @@ export async function syncAgentThreadMetadata(options: {
       null,
     );
   }
+  notifyIfConversationChanged(
+    options.terminalSessionManager,
+    nextSession,
+    options.panel,
+    beforeIdentity,
+  );
   return nextSession;
 }
 
