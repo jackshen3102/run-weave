@@ -157,7 +157,7 @@ struct HomeTerminalRow: View, Equatable {
         .tint(.orange).disabled(!session.canEditTerminal(terminal.id))
     }
     .contextMenu {
-      Button { handoff = true } label: { Label("交接到新终端…", systemImage: "arrowshape.turn.up.right") }
+      Button { handoff = true } label: { Label("换 Agent / 交接…", systemImage: "arrow.left.arrow.right") }
         .disabled(!session.canEditTerminal(terminal.id))
       Button {
         Task {

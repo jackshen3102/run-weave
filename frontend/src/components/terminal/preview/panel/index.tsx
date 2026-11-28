@@ -424,6 +424,7 @@ export function TerminalPreviewPanel({
               title={activeSession?.alias ?? "当前会话"}
               sessionId={activeSession?.terminalSessionId ?? null}
               panelId={activePanelId}
+              currentThreadId={activeSession && !activeSession.panelSplitEnabled ? (activeSession.threadId ?? activeSession.lastThreadId ?? null) : null}
               onOpenFile={openPreviewFile}
             />
           ) : null

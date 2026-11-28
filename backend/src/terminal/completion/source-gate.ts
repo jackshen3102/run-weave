@@ -69,7 +69,7 @@ function tokenizeShellCommand(command: string): string[] {
       quote = character;
       continue;
     }
-    if (/\s/.test(character)) {
+    if (/\s/.test(character) || character === ";") {
       if (current) {
         tokens.push(current);
         current = "";

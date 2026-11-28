@@ -8,6 +8,7 @@ import type {
 import type { TerminalTextAttachmentDelivery } from "../attachments/text-attachment-delivery";
 import { readCodexContext } from "../runtime/codex-context";
 import { getAgentForCommand } from "../state/terminal-state-service";
+import { TMUX_AGENT_PREPARE_EXIT_OPTION } from "../tmux/service";
 import type { TerminalSessionCreationOptions } from "./create-session";
 import { sendInputToSession } from "./input-dispatcher";
 import { buildPaneTarget } from "./panel-common";
@@ -45,25 +46,34 @@ export async function deliverHandoff(
     )
       throw new Error("目标终端或启动操作已变化");
   };
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 45_000;
   while (true) {
     validate();
     const state = (panel ?? session).terminalState;
     const codex = panel && agent === "codex" ? readCodexContext(panel) : null;
     const live = pane && (await options.tmuxService!.readPaneMetadata(pane));
-    const cli = getAgentForCommand(live?.paneCommand ?? null);
+    const cli =
+      getAgentForCommand(live?.paneCommand ?? null) ??
+      getAgentForCommand(live?.activeCommand ?? null);
     const registered = agent === "pi" && !!panel?.pi;
     if (generation && codex?.managed && codex.context && codex.context.operationId !== generation)
       throw new Error("目标 Codex 启动代次已变化");
+    if (generation && pane) {
+      const exitOption = await options.tmuxService!.readPaneOption(
+        pane,
+        TMUX_AGENT_PREPARE_EXIT_OPTION,
+      );
+      if (exitOption?.startsWith(`exit:${generation}:`)) {
+        throw new Error("目标 CLI 启动后提前退出");
+      }
+    }
     if (
       codex?.managed
         ? codex.context?.inputReady && !codex.context.closed && codex.context.primaryThreadId === codex.context.displayedThreadId
         : registered ||
           (state?.state === "agent_idle" &&
             state.agent === agent &&
-            (!pane ||
-              cli === agent ||
-              getAgentForCommand(live?.activeCommand ?? null) === agent))
+            (!pane || cli === agent))
     )
       break;
     if (
@@ -73,15 +83,24 @@ export async function deliverHandoff(
       (agent === "claude" || agent === "codex")
     ) {
       const screen = await options.tmuxService!.capturePaneSnapshot(pane);
-      if ((agent === "claude" ? /^\s*❯/mu : /^\s*›/mu).test(screen)) break;
+      const isTrustPrompt =
+        agent === "claude" &&
+        /Yes, I trust this folder|Quick safety check:/u.test(screen);
+      if (
+        !isTrustPrompt &&
+        (agent === "claude" ? /^\s*❯/mu : /^\s*›/mu).test(screen)
+      )
+        break;
     }
     if (Date.now() >= deadline) throw new Error("等待目标 CLI 输入就绪超时");
     await delay(250);
   }
   validate();
   const threadId = panel
-    ? (readCodexContext(panel).context?.displayedThreadId ?? panel.threadId)
-    : session.threadId;
+    ? (readCodexContext(panel).context?.displayedThreadId ??
+        panel.threadId ??
+        panel.lastThreadId)
+    : (session.threadId ?? session.lastThreadId);
   if (document === null) {
     await sendInputToSession(
       manager,

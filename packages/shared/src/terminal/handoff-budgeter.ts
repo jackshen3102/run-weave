@@ -1,4 +1,8 @@
-import { HANDOFF_BUDGET_BYTES } from "./context-handoff.js";
+import {
+  HANDOFF_BUDGET_BYTES,
+  type HandoffContextScope,
+  type HandoffPlanFileCandidate,
+} from "./context-handoff.js";
 import type { ConversationTurn } from "./conversation.js";
 export class HandoffBudgetError extends Error {
   constructor(
@@ -13,6 +17,9 @@ const encoder = new TextEncoder();
 
 const size = (text: string) => encoder.encode(text).length;
 
+const MIDDLE_OMITTED =
+  "\n\n[...middle omitted to stay within handoff budget...]\n\n";
+
 function excerpt(text: string, bytes: number, tail = false): string {
   const encoded = encoder.encode(text);
   if (encoded.length <= bytes) return text;
@@ -25,6 +32,20 @@ function excerpt(text: string, bytes: number, tail = false): string {
   let end = bytes;
   while (end > 0 && (encoded[end]! & 0xc0) === 0x80) end--;
   return decoder.decode(encoded.subarray(0, end));
+}
+
+function excerptHeadAndTail(text: string, bytes: number): string {
+  if (size(text) <= bytes) return text;
+  const markerBytes = size(MIDDLE_OMITTED);
+  if (bytes < markerBytes + 16) return excerpt(text, bytes, true);
+  const contentBudget = bytes - markerBytes;
+  const headBytes = Math.floor(contentBudget / 2);
+  const tailBytes = contentBudget - headBytes;
+  return (
+    excerpt(text, headBytes, false) +
+    MIDDLE_OMITTED +
+    excerpt(text, tailBytes, true)
+  );
 }
 
 export function budgetHandoff(
@@ -76,13 +97,13 @@ export function budgetHandoff(
       )
       .join("");
     if (used + size(block) + size(marker(i)) > HANDOFF_BUDGET_BYTES) {
-      // Even an oversized last answer has a useful ending. Keep the excerpt distinct from complete turns.
+      // Even an oversized last answer (such as an unpersisted plan) should keep both its opening and conclusion.
       const last = messages.at(-1);
       if (i === visible.length - 1 && last) {
-        const title = `\n\n### Turn #${i + 1} · ${last.role} (partial; latest message ending)\n`;
+        const title = `\n\n### Turn #${i + 1} · ${last.role} (partial; head and tail preserved)\n`;
         const room = HANDOFF_BUDGET_BYTES - used - size(title + marker(i));
         if (room >= 4) {
-          recent.push(title + excerpt(last.text, room, true));
+          recent.push(title + excerptHeadAndTail(last.text, room));
           start = i;
           includedMessages++;
           partialRecent = true;
@@ -118,4 +139,133 @@ export function budgetHandoff(
       budgetBytes: HANDOFF_BUDGET_BYTES,
     },
   };
+}
+
+export function applyPlanFilesToHandoffDocument(
+  document: string,
+  options: {
+    contextScope: HandoffContextScope;
+    planFiles: readonly Pick<
+      HandoffPlanFileCandidate,
+      "relativePath" | "absolutePath"
+    >[];
+  },
+): string {
+  if (!options.planFiles.length) return document;
+  const lines = options.planFiles.map(
+    (file) => `- \`${file.relativePath}\` (${file.absolutePath})`,
+  );
+  const planSection =
+    options.contextScope === "plan_focused"
+      ? `\n\n## Primary Plan Files (Read & Execute Directly)\nRead these plan files in full from the current working directory and treat them as the primary execution specification:\n${lines.join("\n")}`
+      : `\n\n## Referenced Plan Files\nPlan files detected in the current working directory:\n${lines.join("\n")}`;
+
+  const taskMarker = "\n\n## Original Task ";
+  const taskIndex = document.indexOf(taskMarker);
+  if (taskIndex < 0) {
+    const combined = `${document}${planSection}`;
+    return size(combined) <= HANDOFF_BUDGET_BYTES
+      ? combined
+      : excerpt(combined, HANDOFF_BUDGET_BYTES, false);
+  }
+
+  const header = document.slice(0, taskIndex);
+  const body = document.slice(taskIndex);
+  const turnPattern = /\n\n### Turn #\d+ · [^\n]+\n/g;
+  const turnMatches = Array.from(body.matchAll(turnPattern));
+  const omittedIndex = body.indexOf("\n\n## Omitted History Marker\n");
+  const firstTailIndex = [
+    omittedIndex >= 0 ? omittedIndex : Infinity,
+    turnMatches[0]?.index ?? Infinity,
+  ].reduce((min, value) => Math.min(min, value), Infinity);
+  const originalTaskSection =
+    firstTailIndex === Infinity ? body : body.slice(0, firstTailIndex);
+
+  const turns = turnMatches.map((match, index) => {
+    const start = match.index!;
+    const end =
+      index + 1 < turnMatches.length ? turnMatches[index + 1]!.index! : body.length;
+    return body.slice(start, end);
+  });
+
+  if (options.contextScope === "plan_focused") {
+    const prefix = header + planSection;
+    const omittedNote =
+      "\n\n## Omitted History Marker\nIntermediate discussion turns omitted in plan-focused mode. Read the primary plan files above; for additional discussion details use rw session-search search --query '<keyword>'.\n";
+    const latestTurn = turns.at(-1) ?? "";
+    const full = prefix + originalTaskSection + (latestTurn ? omittedNote + latestTurn : "");
+    if (size(full) <= HANDOFF_BUDGET_BYTES) return full;
+
+    const minReserve = size(prefix) + size(omittedNote);
+    const taskRoom = Math.max(0, HANDOFF_BUDGET_BYTES - minReserve);
+    if (size(originalTaskSection) >= taskRoom) {
+      const suffix = "\n[Original task truncated at a UTF-8 boundary]";
+      const room = Math.max(0, HANDOFF_BUDGET_BYTES - size(prefix) - size(suffix));
+      return prefix + (room > 0 ? excerpt(originalTaskSection, room, false) + suffix : "");
+    }
+
+    const latestRoom =
+      HANDOFF_BUDGET_BYTES - size(prefix + originalTaskSection + omittedNote);
+    if (!latestTurn || latestRoom < 32) {
+      return prefix + originalTaskSection;
+    }
+    const headingEnd = latestTurn.indexOf("\n", 2);
+    if (headingEnd < 0) {
+      return prefix + originalTaskSection + omittedNote + excerptHeadAndTail(latestTurn, latestRoom);
+    }
+    const turnHeading = latestTurn.slice(0, headingEnd + 1);
+    const turnContent = latestTurn.slice(headingEnd + 1);
+    const contentRoom = latestRoom - size(turnHeading);
+    if (contentRoom < 8) return prefix + originalTaskSection;
+    return (
+      prefix +
+      originalTaskSection +
+      omittedNote +
+      turnHeading +
+      excerptHeadAndTail(turnContent, contentRoom)
+    );
+  }
+
+  const combined = header + planSection + body;
+  if (size(combined) <= HANDOFF_BUDGET_BYTES) return combined;
+
+  const prefix = header + planSection + originalTaskSection;
+  const omittedSection =
+    omittedIndex >= 0
+      ? body.slice(
+          omittedIndex,
+          turnMatches[0]?.index !== undefined && turnMatches[0].index > omittedIndex
+            ? turnMatches[0].index
+            : body.length,
+        )
+      : "\n\n## Omitted History Marker\nEarlier turns trimmed to fit referenced plan files within the 48 KiB handoff budget.\n";
+
+  const kept: string[] = [];
+  let used = size(prefix + omittedSection);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const block = turns[i]!;
+    if (used + size(block) <= HANDOFF_BUDGET_BYTES) {
+      kept.push(block);
+      used += size(block);
+    } else {
+      if (i === turns.length - 1) {
+        const room = HANDOFF_BUDGET_BYTES - used;
+        const headingEnd = block.indexOf("\n", 2);
+        if (headingEnd > 0) {
+          const turnHeading = block.slice(0, headingEnd + 1);
+          const contentRoom = room - size(turnHeading);
+          if (contentRoom >= 8) {
+            kept.push(
+              turnHeading + excerptHeadAndTail(block.slice(headingEnd + 1), contentRoom),
+            );
+          }
+        }
+      }
+      break;
+    }
+  }
+  const trimmed = prefix + omittedSection + kept.reverse().join("");
+  return size(trimmed) <= HANDOFF_BUDGET_BYTES
+    ? trimmed
+    : excerpt(trimmed, HANDOFF_BUDGET_BYTES, false);
 }

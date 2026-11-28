@@ -2,6 +2,14 @@ import type { TerminalAgentKind } from "./runtime/state";
 
 export const HANDOFF_BUDGET_BYTES = 49_152;
 export const HANDOFF_PROMPT_BYTES = 32_768;
+export const HANDOFF_MAX_PLAN_FILES = 5;
+export const HANDOFF_PLACEMENTS = ["new_terminal", "in_place"] as const;
+export type HandoffPlacement = (typeof HANDOFF_PLACEMENTS)[number];
+export const HANDOFF_CONTEXT_SCOPES = [
+  "full_conversation",
+  "plan_focused",
+] as const;
+export type HandoffContextScope = (typeof HANDOFF_CONTEXT_SCOPES)[number];
 export const HANDOFF_TARGET_AGENTS = [
   "codex",
   "claude",
@@ -10,6 +18,13 @@ export const HANDOFF_TARGET_AGENTS = [
   "agy",
 ] as const;
 export type HandoffTargetAgent = (typeof HANDOFF_TARGET_AGENTS)[number];
+
+export interface HandoffPlanFileCandidate {
+  relativePath: string;
+  absolutePath: string;
+  sizeBytes: number;
+  source: "mentioned" | "recent_plan";
+}
 
 export interface HandoffCoverage {
   totalMessages: number;
@@ -37,6 +52,9 @@ export interface TerminalContextHandoffPreview extends HandoffCoverage {
   sourceProjectId: string;
   targetProjects: { projectId: string; name: string }[];
   canNativeCodexFork: boolean;
+  canInPlaceHandoff: boolean;
+  inPlaceUnavailableReason: string | null;
+  detectedPlanFiles: HandoffPlanFileCandidate[];
 }
 
 export interface CreateTerminalContextHandoffRequest {
@@ -47,6 +65,9 @@ export interface CreateTerminalContextHandoffRequest {
   targetAgent: HandoffTargetAgent;
   targetProjectId: string;
   mode: "native_fork" | "portable_handoff";
+  placement?: HandoffPlacement;
+  contextScope?: HandoffContextScope;
+  planFilePaths?: string[];
   prompt: string;
   submitPrompt: boolean;
 }
@@ -57,6 +78,7 @@ export interface CreateTerminalContextHandoffResponse {
   projectId: string;
   targetAgent: HandoffTargetAgent;
   mode: CreateTerminalContextHandoffRequest["mode"];
+  placement: HandoffPlacement;
   handoffFilePath: string | null;
   status: "starting" | "delivered";
 }
