@@ -46,7 +46,7 @@ export interface HandoffProjection {
 export interface TerminalContextHandoffPreview extends HandoffCoverage {
   sourceTerminalId: string;
   sourcePanelId: string;
-  sourceProvider: Exclude<TerminalAgentKind, "agy">;
+  sourceProvider: TerminalAgentKind;
   sourceThreadId: string;
   sourceRevision: string;
   sourceProjectId: string;

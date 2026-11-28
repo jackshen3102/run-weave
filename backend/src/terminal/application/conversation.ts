@@ -81,7 +81,11 @@ export async function readTerminalConversation(
       partial: response.partial, turns: response.turns, ...(response.handoff && { handoff: response.handoff }) };
   } catch (error) {
     if (error instanceof TerminalConversationError) throw error;
-    if (error instanceof AppServerConversationError && error.status === 409) changed();
+    if (error instanceof AppServerConversationError && error.status === 409) {
+      if (error.code === "HANDOFF_PROJECTION_UNAVAILABLE" && error.message)
+        throw new TerminalConversationError(409, error.code, error.message);
+      changed();
+    }
     if (error instanceof AppServerConversationError && error.status === 413)
       throw new TerminalConversationError(413, "CONVERSATION_TOO_LARGE", "会话记录超过读取上限");
     throw new TerminalConversationError(503, "CONVERSATION_UNAVAILABLE", "会话读取暂不可用，请手动重试");

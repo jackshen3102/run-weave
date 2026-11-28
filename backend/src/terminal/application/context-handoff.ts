@@ -132,11 +132,7 @@ export class TerminalContextHandoffService {
     )
       throw changed();
     const target = conversation.target;
-    if (
-      !target ||
-      target.provider === "agy" ||
-      conversation.availability !== "available"
-    )
+    if (!target || conversation.availability !== "available")
       throw new TerminalPanelError(409, "当前面板没有可读取的来源会话");
     const { document, coverage, revision } = handoffSnapshot(
       conversation,
