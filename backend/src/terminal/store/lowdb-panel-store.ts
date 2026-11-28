@@ -188,6 +188,27 @@ export class LowDbPanelStore extends LowDbScrollbackStore {
     });
   }
 
+  async clearPanelConversation(panelId: string): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const panel = database.data.panels.find(
+        (candidate) => candidate.id === panelId,
+      );
+      if (!panel) {
+        return;
+      }
+      delete panel.threadId;
+      delete panel.threadProvider;
+      delete panel.preview;
+      delete panel.lastThreadId;
+      delete panel.lastThreadProvider;
+      delete panel.lastThreadStatus;
+      delete panel.lastThreadUpdatedAt;
+      delete panel.latestReply;
+      await database.write();
+    });
+  }
+
   async updatePanelTerminalState(
     params: UpdateTerminalPanelTerminalStateParams,
   ): Promise<void> {

@@ -353,6 +353,27 @@ export class LowDbTerminalSessionStore
     });
   }
 
+  async clearSessionConversation(terminalSessionId: string): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const database = this.getDatabase();
+      const session = database.data.sessions.find(
+        (candidate) => candidate.id === terminalSessionId,
+      );
+      if (!session) {
+        return;
+      }
+      delete session.threadId;
+      delete session.threadProvider;
+      delete session.preview;
+      delete session.lastThreadId;
+      delete session.lastThreadProvider;
+      delete session.lastThreadStatus;
+      delete session.lastThreadUpdatedAt;
+      delete session.latestReply;
+      await database.write();
+    });
+  }
+
   async updateSessionRuntimeMetadata(
     params: UpdateTerminalSessionRuntimeMetadataParams,
   ): Promise<void> {

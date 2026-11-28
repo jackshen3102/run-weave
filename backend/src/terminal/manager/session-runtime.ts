@@ -396,6 +396,37 @@ export class TerminalManagerSessionRuntime extends TerminalManagerAgentActivityR
     return session;
   }
 
+  async clearSessionConversation(terminalSessionId: string): Promise<boolean> {
+    const session = this.sessions.get(terminalSessionId);
+    if (!session) {
+      return false;
+    }
+    const hasConversation = Boolean(
+      session.threadId ||
+      session.threadProvider ||
+      session.preview ||
+      session.lastThreadId ||
+      session.lastThreadProvider ||
+      session.lastThreadStatus ||
+      session.lastThreadUpdatedAt ||
+      session.latestReply,
+    );
+    if (!hasConversation) {
+      return false;
+    }
+    invalidateTerminalInput(session);
+    delete session.threadId;
+    delete session.threadProvider;
+    delete session.preview;
+    delete session.lastThreadId;
+    delete session.lastThreadProvider;
+    delete session.lastThreadStatus;
+    delete session.lastThreadUpdatedAt;
+    delete session.latestReply;
+    await this.sessionStore.clearSessionConversation(terminalSessionId);
+    return true;
+  }
+
   async updateRuntimeMetadata(
     terminalSessionId: string,
     metadata: TerminalRuntimeMetadata,

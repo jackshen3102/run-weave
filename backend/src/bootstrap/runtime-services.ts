@@ -185,6 +185,7 @@ async function assembleRuntimeServices(
           );
         }
       },
+      onConversationChanged: (session, panel) => publishCodexPanelStatus(terminalSessionManager, terminalEventService, session, panel),
       onCompletionAcknowledged: (session) => terminalEventService.record({
         kind: "completion_acknowledged", terminalSessionId: session.id, projectId: session.projectId,
         payload: { completionRevision: session.completionRevision, acknowledgedCompletionRevision: session.acknowledgedCompletionRevision },

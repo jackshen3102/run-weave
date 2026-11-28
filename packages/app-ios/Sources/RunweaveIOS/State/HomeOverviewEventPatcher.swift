@@ -22,12 +22,37 @@ enum HomeOverviewEventPatcher {
     }
   }
 
-  static func patchConversationPreviews(_ response: HomeConversationPreviewsResponse, into value: inout HomeOverview) {
+  @discardableResult
+  static func patchConversationPreviews(
+    _ response: HomeConversationPreviewsResponse, into value: inout HomeOverview,
+    requestedKeys: [String: String]? = nil
+  ) -> Bool {
+    var needsOverviewReload = false
+    let returnedByID = Dictionary(
+      response.sessions.map { ($0.terminalSessionId, $0) },
+      uniquingKeysWith: { _, latest in latest })
     for item in response.sessions {
-      guard let index = value.sessions.firstIndex(where: { $0.id == item.terminalSessionId }),
-        value.sessions[index].conversationKey == item.conversationKey else { continue }
-      value.sessions[index].conversationPreview = item.conversationPreview
+      guard let index = value.sessions.firstIndex(where: { $0.id == item.terminalSessionId }) else { continue }
+      if value.sessions[index].conversationKey == item.conversationKey {
+        value.sessions[index].conversationPreview = item.conversationPreview
+      } else if let expected = requestedKeys?[item.terminalSessionId],
+        value.sessions[index].conversationKey == expected {
+        // Overview still holds the pre-request key while Backend moved to a new conversation.
+        value.sessions[index].conversationKey = item.conversationKey
+        value.sessions[index].conversationPreview = item.conversationPreview
+        needsOverviewReload = true
+      }
     }
+    if let requestedKeys {
+      for (id, expected) in requestedKeys where returnedByID[id] == nil {
+        guard let index = value.sessions.firstIndex(where: { $0.id == id }),
+          value.sessions[index].conversationKey == expected else { continue }
+        value.sessions[index].conversationKey = nil
+        value.sessions[index].conversationPreview = nil
+        needsOverviewReload = true
+      }
+    }
+    return needsOverviewReload
   }
 
   static func patch(_ batch: [TerminalEvent], into overview: inout HomeOverview) {

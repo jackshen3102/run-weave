@@ -560,7 +560,7 @@ final class AppSession: ObservableObject {
     }
   }
 
-  private func scheduleReload() {
+  func scheduleReload() {
     overviewReloadRequested = true
     // Events arriving during a read request one follow-up, rather than cancelling
     // the only response that can replace the previous thread's reply subtitle.
