@@ -1,16 +1,17 @@
-import { deviceStorage } from "../../../features/device-storage";
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useMemoizedFn } from "ahooks";
 import { useShallow } from "zustand/react/shallow";
-import type { TerminalProjectContextListItem } from "@runweave/shared/terminal/project-context";
-import { ChevronLeft, ChevronRight, Pin, Trash2 } from "lucide-react";
+import type {
+  TerminalProjectContextListItem,
+  WorktreeGovernanceItem,
+} from "@runweave/shared/terminal/project-context";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
+} from "lucide-react";
 import { removeRecentTerminalProjectContext } from "../../../features/terminal/input/recent-selection";
 import { useTerminalPreviewStore } from "../../../features/terminal/preview/store";
 import { terminalQueryKeys } from "../../../features/terminal/queries/keys";
@@ -27,63 +28,25 @@ import { useTerminalAggregateStatus } from "../../../features/terminal/status/us
 import { useTerminalWorkspaceStore } from "../../../features/terminal/state/workspace-store";
 import {
   deleteTerminalWorktree,
+  getWorktreeGovernance,
   updateTerminalProjectContext,
 } from "../../../services/terminal/index";
 import { HttpError } from "../../../services/http";
+import {
+  MAX_RAIL_WIDTH_PX,
+  MIN_RAIL_WIDTH_PX,
+  useWorktreeRailLayout,
+} from "./use-worktree-rail-layout";
 import { WorktreeCreateDialog } from "./worktree-create-dialog";
 import { WorktreeDeleteDialog } from "./worktree-delete-dialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "../../ui/context-menu";
-import { TerminalAggregateStatus } from "./aggregate-status";
-import { WorktreeBranchStatus } from "./worktree-branch-status";
+import { WorktreeGovernanceDialog } from "./worktree-governance-dialog";
 import { WorktreeCleanupNotice } from "./worktree-cleanup-notice";
+import { WorktreeRailRow } from "./worktree-rail-row";
 import type { TerminalBrowserProfilePreferences } from "@runweave/shared/terminal-browser-profile";
 
 interface TerminalWorktreeRailProps {
   parentProjectId: string | null;
   onSelectContext: (projectId: string) => void;
-}
-
-const DEFAULT_RAIL_WIDTH_PX = 236;
-const MIN_RAIL_WIDTH_PX = 180;
-const MAX_RAIL_WIDTH_PX = 420;
-const RAIL_KEYBOARD_RESIZE_STEP_PX = 16;
-
-function railCollapsedStorageKey(scope: string): string {
-  return `viewer.terminal.worktree-rail-collapsed.${scope}`;
-}
-
-function railWidthStorageKey(scope: string): string {
-  return `viewer.terminal.worktree-rail-width.${scope}`;
-}
-
-function clampRailWidth(width: number): number {
-  return Math.min(MAX_RAIL_WIDTH_PX, Math.max(MIN_RAIL_WIDTH_PX, width));
-}
-
-function readRailWidth(scope: string): number {
-  const storedWidth = Number.parseInt(
-    deviceStorage.getItem(railWidthStorageKey(scope)) ?? "",
-    10,
-  );
-  return Number.isFinite(storedWidth)
-    ? clampRailWidth(storedWidth)
-    : DEFAULT_RAIL_WIDTH_PX;
-}
-
-function getContextDetail(context: TerminalProjectContextListItem): string {
-  const branch = context.branch ?? "detached";
-  if (context.availability === "missing") {
-    return `${branch} · missing`;
-  }
-  if (context.availability === "path_unavailable") {
-    return `${branch} · unavailable`;
-  }
-  return branch;
 }
 
 export function TerminalWorktreeRail({
@@ -107,117 +70,51 @@ export function TerminalWorktreeRail({
     (state) => state.removeProjectPreview,
   );
   const { byContextProjectId } = useTerminalAggregateStatus();
-  const [collapsed, setCollapsed] = useState(
-    () => deviceStorage.getItem(railCollapsedStorageKey(scope)) === "true",
-  );
-  const [width, setWidth] = useState(() => readRailWidth(scope));
+  const {
+    collapsed,
+    setCollapsed,
+    width,
+    resizing,
+    startResize,
+    resizeWithKeyboard,
+    toggleCollapsed,
+  } = useWorktreeRailLayout(scope);
   const branchStatuses = useTerminalProjectContextBranchStatuses(
     parentProjectId, contexts, !collapsed && contexts.length > 0,
   );
-  const [resizing, setResizing] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [profilePreferences, setProfilePreferences] =
     useState<TerminalBrowserProfilePreferences | null>(null);
   const [pendingDeletion, setPendingDeletion] =
     useState<TerminalProjectContextListItem | null>(null);
-  const [createTarget, setCreateTarget] = useState<string | null>(null);
+  const [createTarget, setCreateTarget] = useState<{
+    key: string;
+    recycleSlotId?: string;
+  } | null>(null);
+  const [governanceOpen, setGovernanceOpen] = useState(false);
+  const [cleanableExpanded, setCleanableExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [cleanupNotice, setCleanupNotice] = useState<string | null>(null);
+  const governanceQuery = useQuery({
+    queryKey: parentProjectId
+      ? terminalQueryKeys.worktreeGovernance(scope, parentProjectId)
+      : ["disabled-worktree-governance"],
+    queryFn: () =>
+      getWorktreeGovernance(apiBase, token, parentProjectId!, false),
+    enabled: Boolean(parentProjectId && !collapsed && contexts.length > 1),
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const governanceById = new Map<string, WorktreeGovernanceItem>(
+    (governanceQuery.data?.items ?? []).map((item) => [item.projectId, item]),
+  );
   useEffect(() => {
     setCleanupNotice(null);
+    setGovernanceOpen(false);
+    setCleanableExpanded(false);
   }, [scope, parentProjectId]);
-  const resizeStateRef = useRef<{
-    railLeft: number;
-    width: number;
-    scope: string;
-    previousCursor: string;
-    previousUserSelect: string;
-  } | null>(null);
-
-  const handleResizePointerMove = useMemoizedFn((event: PointerEvent) => {
-    const resizeState = resizeStateRef.current;
-    if (!resizeState) {
-      return;
-    }
-    const nextWidth = clampRailWidth(
-      Math.round(event.clientX - resizeState.railLeft),
-    );
-    resizeState.width = nextWidth;
-    setWidth(nextWidth);
-  });
-
-  const stopResize = useMemoizedFn(() => {
-    const resizeState = resizeStateRef.current;
-    resizeStateRef.current = null;
-    window.removeEventListener("pointermove", handleResizePointerMove);
-    window.removeEventListener("pointerup", stopResize);
-    window.removeEventListener("pointercancel", stopResize);
-    setResizing(false);
-    if (!resizeState) {
-      return;
-    }
-    document.body.style.cursor = resizeState.previousCursor;
-    document.body.style.userSelect = resizeState.previousUserSelect;
-    deviceStorage.setItem(
-      railWidthStorageKey(resizeState.scope),
-      String(resizeState.width),
-    );
-  });
-
-  const startResize = useMemoizedFn(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      const rail = event.currentTarget.closest("aside");
-      if (!rail) {
-        return;
-      }
-      resizeStateRef.current = {
-        railLeft: rail.getBoundingClientRect().left,
-        width,
-        scope,
-        previousCursor: document.body.style.cursor,
-        previousUserSelect: document.body.style.userSelect,
-      };
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      setResizing(true);
-      window.addEventListener("pointermove", handleResizePointerMove);
-      window.addEventListener("pointerup", stopResize);
-      window.addEventListener("pointercancel", stopResize);
-    },
-  );
-
-  const resizeWithKeyboard = useMemoizedFn(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const nextWidth =
-        event.key === "Home"
-          ? MIN_RAIL_WIDTH_PX
-          : event.key === "End"
-            ? MAX_RAIL_WIDTH_PX
-            : event.key === "ArrowLeft"
-              ? clampRailWidth(width - RAIL_KEYBOARD_RESIZE_STEP_PX)
-              : event.key === "ArrowRight"
-                ? clampRailWidth(width + RAIL_KEYBOARD_RESIZE_STEP_PX)
-                : null;
-      if (nextWidth === null) {
-        return;
-      }
-      event.preventDefault();
-      setWidth(nextWidth);
-      deviceStorage.setItem(railWidthStorageKey(scope), String(nextWidth));
-    },
-  );
-
-  useEffect(() => {
-    stopResize();
-    setCollapsed(
-      deviceStorage.getItem(railCollapsedStorageKey(scope)) === "true",
-    );
-    setWidth(readRailWidth(scope));
-  }, [scope, stopResize]);
-
-  useEffect(() => stopResize, [stopResize]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,14 +136,6 @@ export function TerminalWorktreeRail({
     };
   }, []);
 
-  const toggleCollapsed = useMemoizedFn(() => {
-    setCollapsed((current) => {
-      const next = !current;
-      deviceStorage.setItem(railCollapsedStorageKey(scope), String(next));
-      return next;
-    });
-  });
-
   const togglePinned = useMemoizedFn(
     async (projectId: string, pinned: boolean): Promise<void> => {
       if (!parentProjectId || pendingProjectId) {
@@ -261,9 +150,17 @@ export function TerminalWorktreeRail({
           projectId,
           pinned,
         );
-        await queryClient.invalidateQueries({
-          queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId),
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: terminalQueryKeys.worktreeGovernance(
+              scope,
+              parentProjectId,
+            ),
+          }),
+        ]);
         setRequestError(null);
       } catch (error) {
         setRequestError(String(error));
@@ -352,6 +249,64 @@ export function TerminalWorktreeRail({
     }
   });
 
+  const foldableBuckets = new Set([
+    "idle_hot_slot",
+    "cleanable_merged",
+    "cleanable_stale",
+  ]);
+  const visibleContexts: TerminalProjectContextListItem[] = [];
+  const foldedCleanableContexts: TerminalProjectContextListItem[] = [];
+  for (const context of contexts) {
+    const gov = governanceById.get(context.projectId);
+    const shouldFold =
+      !context.isPrimary &&
+      !context.pinned &&
+      context.projectId !== activeProjectId &&
+      gov !== undefined &&
+      foldableBuckets.has(gov.bucket);
+    if (shouldFold) {
+      foldedCleanableContexts.push(context);
+    } else {
+      visibleContexts.push(context);
+    }
+  }
+  const governanceBadgeCount =
+    (governanceQuery.data?.items.filter((item) => item.canSafeDelete).length ??
+      0) + (governanceQuery.data?.prunable.length ?? 0);
+
+  const openRecycleDialog = useMemoizedFn((projectId: string) => {
+    if (!parentProjectId) return;
+    setCreateTarget({
+      key: JSON.stringify([scope, parentProjectId]),
+      recycleSlotId: projectId,
+    });
+  });
+
+  const renderContextRow = (context: TerminalProjectContextListItem) => (
+    <WorktreeRailRow
+      key={context.projectId}
+      context={context}
+      active={context.projectId === activeProjectId}
+      status={byContextProjectId[context.projectId] ?? 0}
+      governance={governanceById.get(context.projectId)}
+      branchStatus={branchStatuses.data?.find(
+        (entry) =>
+          entry.projectId === context.projectId &&
+          entry.path === context.path &&
+          entry.head === context.head,
+      )}
+      branchStatusFailed={branchStatuses.isError}
+      profilePreferences={profilePreferences}
+      pinPending={pendingProjectId === context.projectId}
+      onSelect={onSelectContext}
+      onTogglePinned={(projectId, pinned) => {
+        void togglePinned(projectId, pinned);
+      }}
+      onRecycle={openRecycleDialog}
+      onDelete={requestDeletion}
+    />
+  );
+
   return (
     <>
       {(
@@ -376,19 +331,39 @@ export function TerminalWorktreeRail({
                 Worktrees&nbsp; {contexts.length}
               </span>
             ) : null}
-            <button
-              type="button"
-              aria-label={collapsed ? "Expand Worktrees" : "Collapse Worktrees"}
-              title={collapsed ? "Expand Worktrees" : "Collapse Worktrees"}
-              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-slate-900 hover:text-slate-200"
-              onClick={toggleCollapsed}
-            >
-              {collapsed ? (
-                <ChevronRight className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronLeft className="h-3.5 w-3.5" />
-              )}
-            </button>
+            <div className="flex items-center gap-0.5">
+              {!collapsed && parentProjectId && contexts.length > 1 ? (
+                <button
+                  type="button"
+                  data-testid="terminal-worktree-governance-trigger"
+                  aria-label="整理 Worktree"
+                  title="整理 Worktree（批量清理与复用）"
+                  className="flex h-6 items-center gap-1 rounded px-1.5 text-[10px] text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+                  onClick={() => setGovernanceOpen(true)}
+                >
+                  <SlidersHorizontal className="h-3 w-3" />
+                  整理
+                  {governanceBadgeCount > 0 ? (
+                    <span className="rounded-full bg-emerald-500/20 px-1 text-[9px] text-emerald-300">
+                      {governanceBadgeCount}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                aria-label={collapsed ? "Expand Worktrees" : "Collapse Worktrees"}
+                title={collapsed ? "Expand Worktrees" : "Collapse Worktrees"}
+                className="flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                onClick={toggleCollapsed}
+              >
+                {collapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
           </div>
           {cleanupNotice && !collapsed ? (
             <WorktreeCleanupNotice
@@ -398,136 +373,46 @@ export function TerminalWorktreeRail({
           ) : null}
           {!collapsed ? (
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3">
-              {contexts.map((context) => {
-                const active = context.projectId === activeProjectId;
-                const unavailable = context.availability !== "available";
-                const status = byContextProjectId[context.projectId] ?? 0;
-                const browserPreference =
-                  profilePreferences?.worktrees[context.projectId];
-                const browserProfileId =
-                  browserPreference?.preferredProfileId ??
-                  profilePreferences?.defaultProfileId;
-                const browserSummary = browserProfileId
-                  ? `${browserProfileId.replace("profile-", "P")} · ${
-                      browserPreference?.preferredProfileId ? "bound" : "global"
-                    }`
-                  : null;
-                const row = (
-                  <div
-                    data-testid="terminal-worktree-row"
-                    data-project-id={context.projectId}
-                    data-active={active ? "true" : "false"}
-                    className={[
-                      "group flex min-h-12 items-center gap-2 rounded-md border px-2 py-1.5",
-                      active
-                        ? "border-sky-900/70 bg-slate-900 text-slate-50"
-                        : "border-transparent text-slate-300 hover:bg-slate-900/70",
-                    ].join(" ")}
+              {visibleContexts.map(renderContextRow)}
+              {foldedCleanableContexts.length > 0 ? (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    data-testid="terminal-worktree-cleanable-fold"
+                    className="flex w-full items-center justify-between rounded-md border border-slate-800 bg-slate-900/50 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                    onClick={() => setCleanableExpanded((prev) => !prev)}
                   >
-                    <button
-                      type="button"
-                      aria-label={`${context.name}, ${context.branch ?? "detached"}`}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() => onSelectContext(context.projectId)}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <TerminalAggregateStatus
-                          label={context.name}
-                          status={status}
-                          className="flex w-full"
-                          labelClassName="min-w-0 flex-1 truncate text-xs font-semibold"
-                        />
-                        <span className="flex items-center justify-between gap-2">
-                          <span
-                            title={getContextDetail(context)}
-                            className={[
-                              "min-w-0 truncate text-[10px]",
-                              unavailable ? "text-amber-400" : "text-slate-500",
-                            ].join(" ")}
-                          >
-                            {getContextDetail(context)}
-                          </span>
-                          {!unavailable ? (
-                            <WorktreeBranchStatus
-                              status={branchStatuses.data?.find((status) =>
-                                status.projectId === context.projectId
-                                && status.path === context.path && status.head === context.head)}
-                              failed={branchStatuses.isError}
-                            />
-                          ) : null}
-                        </span>
-                        {browserSummary ? (
-                          <span
-                            data-testid="terminal-worktree-browser-profile"
-                            className="block truncate text-[9px] text-slate-600"
-                          >
-                            {browserSummary}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                    {context.isPrimary ? (
-                      <span
-                        aria-label="Permanently pinned"
-                        title="Permanently pinned"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center text-sky-400"
-                      >
-                        <Pin className="h-3.5 w-3.5 fill-current" />
-                      </span>
+                    <span>可清理 / 空闲槽位 ({foldedCleanableContexts.length})</span>
+                    {cleanableExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
                     ) : (
-                      <button
-                        type="button"
-                        aria-label={
-                          context.pinned ? "Unpin Worktree" : "Pin Worktree"
-                        }
-                        title={
-                          context.pinned ? "Unpin Worktree" : "Pin Worktree"
-                        }
-                        disabled={pendingProjectId === context.projectId}
-                        className={[
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40",
-                          context.pinned ? "text-sky-400" : "text-slate-600",
-                        ].join(" ")}
-                        onClick={() => {
-                          void togglePinned(context.projectId, !context.pinned);
-                        }}
-                      >
-                        <Pin
-                          className={[
-                            "h-3.5 w-3.5",
-                            context.pinned ? "fill-current" : "",
-                          ].join(" ")}
-                        />
-                      </button>
+                      <ChevronRight className="h-3.5 w-3.5" />
                     )}
-                  </div>
-                );
-                if (context.isPrimary) {
-                  return <Fragment key={context.projectId}>{row}</Fragment>;
-                }
-                return (
-                  <ContextMenu key={context.projectId}>
-                    <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-                    <ContextMenuContent className="w-36">
-                      <ContextMenuItem
-                        data-testid="terminal-worktree-delete-menu-item"
-                        className="gap-2 text-rose-400 focus:text-rose-400"
-                        onSelect={() => requestDeletion(context)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        删除
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                );
-              })}
+                  </button>
+                  {cleanableExpanded ? (
+                    <div className="mt-1 space-y-1">
+                      {foldedCleanableContexts.map(renderContextRow)}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
-          {parentProjectId && <button type="button" aria-label="新建 Worktree" title="新建 Worktree"
-            className="border-t border-slate-800 p-2 text-xs text-sky-400 hover:bg-slate-900"
-            onClick={() => setCreateTarget(JSON.stringify([scope, parentProjectId]))}>
-            {collapsed ? "＋" : "＋ 新建 Worktree"}
-          </button>}
+          {parentProjectId && (
+            <button
+              type="button"
+              aria-label="新建 Worktree"
+              title="新建或复用 Worktree"
+              className="border-t border-slate-800 p-2 text-xs text-sky-400 hover:bg-slate-900"
+              onClick={() =>
+                setCreateTarget({
+                  key: JSON.stringify([scope, parentProjectId]),
+                })
+              }
+            >
+              {collapsed ? "＋" : "＋ 新建 Worktree"}
+            </button>
+          )}
           {!collapsed ? (
             <div
               role="separator"
@@ -545,20 +430,108 @@ export function TerminalWorktreeRail({
           ) : null}
         </aside>
       )}
-      {parentProjectId && createTarget === JSON.stringify([scope, parentProjectId]) && (
-        <WorktreeCreateDialog key={createTarget} apiBase={apiBase} token={token} parent={parentProjectId}
-          close={() => setCreateTarget(null)} created={result => {
+      {parentProjectId &&
+        createTarget &&
+        createTarget.key === JSON.stringify([scope, parentProjectId]) && (
+          <WorktreeCreateDialog
+            key={`${createTarget.key}:${createTarget.recycleSlotId ?? ""}`}
+            apiBase={apiBase}
+            token={token}
+            parent={parentProjectId}
+            initialRecycleSlotId={createTarget.recycleSlotId}
+            close={() => setCreateTarget(null)}
+            created={(result) => {
+              void Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: terminalQueryKeys.projectContexts(
+                    scope,
+                    parentProjectId,
+                  ),
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: terminalQueryKeys.worktreeGovernance(
+                    scope,
+                    parentProjectId,
+                  ),
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: terminalQueryKeys.sessions(scope),
+                }),
+              ])
+                .then(() => {
+                  selectProjectContext(
+                    parentProjectId,
+                    result.projectId,
+                    result.terminalSessionId,
+                  );
+                  setCollapsed(false);
+                  setRequestError(
+                    result.setupStatus === "revision_mismatch_skipped"
+                      ? "检出的初始化命令与批准版本不符，已跳过。"
+                      : null,
+                  );
+                })
+                .catch((error) => setRequestError(String(error)));
+              setCreateTarget(null);
+            }}
+          />
+        )}
+      {parentProjectId && governanceOpen ? (
+        <WorktreeGovernanceDialog
+          apiBase={apiBase}
+          token={token}
+          parentProjectId={parentProjectId}
+          onClose={() => setGovernanceOpen(false)}
+          onRecycleItem={(childProjectId) => {
+            setGovernanceOpen(false);
+            setCreateTarget({
+              key: JSON.stringify([scope, parentProjectId]),
+              recycleSlotId: childProjectId,
+            });
+          }}
+          onCompleted={(response) => {
+            const deletedIds = new Set(
+              response.results
+                .filter((entry) => entry.status === "deleted")
+                .map((entry) => entry.childProjectId),
+            );
+            for (const id of deletedIds) {
+              removeProjectPreview(id);
+              removeRecentTerminalProjectContext(scope, parentProjectId, id);
+              queryClient.removeQueries({
+                queryKey: terminalQueryKeys.preview(scope, id),
+              });
+            }
+            if (activeProjectId && deletedIds.has(activeProjectId)) {
+              const parentSession = sessions.find(
+                (session) => session.projectId === parentProjectId,
+              );
+              selectProjectContext(
+                parentProjectId,
+                parentProjectId,
+                parentSession?.terminalSessionId ?? null,
+              );
+            }
             void Promise.all([
-              queryClient.invalidateQueries({ queryKey: terminalQueryKeys.projectContexts(scope, parentProjectId) }),
-              queryClient.invalidateQueries({ queryKey: terminalQueryKeys.sessions(scope) }),
-            ]).then(() => {
-              selectProjectContext(parentProjectId, result.context.projectId, result.terminalSessionId);
-              setCollapsed(false);
-              setRequestError(result.setupStatus === "revision_mismatch_skipped" ? "检出的初始化命令与批准版本不符，已跳过。" : null);
-            }).catch(error => setRequestError(String(error)));
-            setCreateTarget(null);
-          }} />
-      )}
+              queryClient.invalidateQueries({
+                queryKey: terminalQueryKeys.projectContexts(
+                  scope,
+                  parentProjectId,
+                ),
+              }),
+              queryClient.invalidateQueries({
+                queryKey: terminalQueryKeys.worktreeGovernance(
+                  scope,
+                  parentProjectId,
+                ),
+              }),
+              queryClient.invalidateQueries({
+                queryKey: terminalQueryKeys.sessions(scope),
+              }),
+            ]);
+          }}
+        />
+      ) : null}
       <WorktreeDeleteDialog
         pendingDeletion={pendingDeletion}
         sessionCount={sessions.filter((session) => session.projectId === pendingDeletion?.projectId).length}

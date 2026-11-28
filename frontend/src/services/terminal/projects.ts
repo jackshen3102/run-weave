@@ -4,11 +4,18 @@ import type {
   UpdateTerminalProjectRequest,
 } from "@runweave/shared/terminal/project";
 import type {
+  BatchCleanupWorktreesRequest,
+  BatchCleanupWorktreesResponse,
+  CreateWorktreeContextRequest,
+  CreateWorktreeContextResponse,
+  RecycleWorktreeRequest,
+  RecycleWorktreeResponse,
   TerminalProjectContextBranchStatusRequest,
   TerminalProjectContextBranchStatusResponse,
   TerminalProjectContextListItem,
   TerminalWorktreeDeletionResult,
-  CreateWorktreeContextRequest, CreateWorktreeContextResponse, WorktreeCreatePreviewResponse,
+  WorktreeCreatePreviewResponse,
+  WorktreeGovernanceResponse,
 } from "@runweave/shared/terminal/project-context";
 import { requestJson, requestText, requestVoid } from "../http";
 
@@ -178,4 +185,59 @@ export function createWorktreeContext(apiBase: string, token: string, parent: st
   return requestJson<CreateWorktreeContextResponse>(apiBase, `/api/terminal/project/${encodeURIComponent(parent)}/contexts`, {
     method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
   });
+}
+
+export function getWorktreeGovernance(
+  apiBase: string,
+  token: string,
+  parent: string,
+  includeDiskUsage = false,
+) {
+  const query = includeDiskUsage ? "?includeDiskUsage=true" : "";
+  return requestJson<WorktreeGovernanceResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parent)}/worktree-governance${query}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
+export function batchCleanupWorktrees(
+  apiBase: string,
+  token: string,
+  parent: string,
+  request: BatchCleanupWorktreesRequest,
+) {
+  return requestJson<BatchCleanupWorktreesResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parent)}/worktree-cleanup-batch`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+  );
+}
+
+export function recycleWorktreeContext(
+  apiBase: string,
+  token: string,
+  parent: string,
+  childProjectId: string,
+  request: RecycleWorktreeRequest,
+) {
+  return requestJson<RecycleWorktreeResponse>(
+    apiBase,
+    `/api/terminal/project/${encodeURIComponent(parent)}/contexts/${encodeURIComponent(childProjectId)}/recycle`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    },
+  );
 }

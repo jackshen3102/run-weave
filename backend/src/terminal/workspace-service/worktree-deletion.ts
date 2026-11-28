@@ -1,3 +1,7 @@
+import {
+  checkMergedIntoBase,
+  resolveBaseRef,
+} from "./worktree-governance";
 import { WorktreeProvisioner } from "./worktree-provisioner";
 import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -193,7 +197,18 @@ export class TerminalWorktreeDeletionService {
   async delete(
     parentProjectId: string,
     childProjectId: string,
-  ): Promise<TerminalWorktreeDeletionResult> {
+    deleteOptions?: {
+      force?: boolean;
+      rejectIfPinned?: boolean;
+      rejectIfUnmerged?: boolean;
+      deleteMergedBranch?: boolean;
+    },
+  ): Promise<TerminalWorktreeDeletionResult & { branchDeleted?: boolean }> {
+    const force = deleteOptions?.force === true;
+    // Pinned Worktrees are always protected from deletion; users must unpin first.
+    const rejectIfPinned = true;
+    const rejectIfUnmerged = deleteOptions?.rejectIfUnmerged === true && !force;
+    const deleteMergedBranch = deleteOptions?.deleteMergedBranch === true;
     if (this.deletingProjectIds.has(childProjectId)) {
       throw new TerminalWorktreeDeletionError(
         "Worktree deletion is already in progress",
@@ -208,6 +223,7 @@ export class TerminalWorktreeDeletionService {
       const initialTarget = await this.resolveSafeTarget(
         parentProjectId,
         childProjectId,
+        { force, rejectIfPinned, rejectIfUnmerged },
       );
       releaseParent = await WorktreeProvisioner.acquireParent(initialTarget.parentPath);
       releaseOwnerGuard = await this.options.ownerHooks?.beforeDelete?.(
@@ -217,6 +233,7 @@ export class TerminalWorktreeDeletionService {
       const target = await this.resolveSafeTarget(
         parentProjectId,
         childProjectId,
+        { force, rejectIfPinned, rejectIfUnmerged },
       );
       if (target.parentPath !== initialTarget.parentPath || target.worktreePath !== initialTarget.worktreePath) {
         throw new TerminalWorktreeDeletionError("Worktree identity changed while waiting for deletion", 409, "identity_changed");
@@ -232,6 +249,7 @@ export class TerminalWorktreeDeletionService {
       const finalTarget = await this.resolveSafeTarget(
         parentProjectId,
         childProjectId,
+        { force, rejectIfPinned, rejectIfUnmerged },
       );
       if (finalTarget.worktreePath !== target.worktreePath) {
         throw new TerminalWorktreeDeletionError(
@@ -252,6 +270,7 @@ export class TerminalWorktreeDeletionService {
         await runGit(finalTarget.parentPath, [
           "worktree",
           "remove",
+          ...(force ? ["--force"] : []),
           "--",
           finalTarget.worktreePath,
         ]);
@@ -261,6 +280,22 @@ export class TerminalWorktreeDeletionService {
           409,
           "git_remove_failed",
         );
+      }
+
+      let branchDeleted = false;
+      if (deleteMergedBranch && finalTarget.branch) {
+        try {
+          // Always lowercase -d so unmerged local branches are never force-deleted.
+          await runGit(finalTarget.parentPath, [
+            "branch",
+            "-d",
+            "--",
+            finalTarget.branch,
+          ]);
+          branchDeleted = true;
+        } catch {
+          branchDeleted = false;
+        }
       }
 
       await this.options.terminalSessionManager.removeProjectContextMetadata(
@@ -296,7 +331,7 @@ export class TerminalWorktreeDeletionService {
           },
         );
       }
-      return { cleanupWarnings };
+      return { cleanupWarnings, branchDeleted };
     } finally {
       try { await releaseOwnerGuard?.(); } finally {
         releaseParent?.();
@@ -350,6 +385,11 @@ export class TerminalWorktreeDeletionService {
   private async resolveSafeTarget(
     parentProjectId: string,
     childProjectId: string,
+    options?: {
+      force?: boolean;
+      rejectIfPinned?: boolean;
+      rejectIfUnmerged?: boolean;
+    },
   ): Promise<ResolvedWorktreeTarget> {
     const parsed = parseTerminalChildProjectId(childProjectId);
     if (!parsed || parsed.parentProjectId !== parentProjectId) {
@@ -388,6 +428,13 @@ export class TerminalWorktreeDeletionService {
         "The primary Project workspace cannot be deleted as a Worktree",
         400,
         "primary_context",
+      );
+    }
+    if (options?.rejectIfPinned !== false && context.pinned) {
+      throw new TerminalWorktreeDeletionError(
+        "Pinned Worktree is protected and cannot be deleted; unpin it first",
+        409,
+        "worktree_pinned",
       );
     }
     if (context.availability !== "available" || !context.path) {
@@ -454,6 +501,7 @@ export class TerminalWorktreeDeletionService {
       );
     }
     if (
+      !options?.force &&
       (
         await runGit(worktreePath, [
           "status",
@@ -469,7 +517,7 @@ export class TerminalWorktreeDeletionService {
         "worktree_dirty",
       );
     }
-    if (!registered.branch) {
+    if (!options?.force && !registered.branch) {
       const containingRefs = await runGit(parentPath, [
         "for-each-ref",
         "--format=%(refname)",
@@ -483,6 +531,22 @@ export class TerminalWorktreeDeletionService {
           "Detached Worktree commit has no branch or tag reference",
           409,
           "detached_head_unreferenced",
+        );
+      }
+    }
+
+    if (options?.rejectIfUnmerged && !options?.force) {
+      const base = await resolveBaseRef(parentPath, parent.mainBranch);
+      const merged = await checkMergedIntoBase(
+        parentPath,
+        registered.head,
+        base.baseCommit,
+      );
+      if (merged !== true) {
+        throw new TerminalWorktreeDeletionError(
+          "Worktree has unmerged commits and cannot be safely batch-deleted",
+          409,
+          "worktree_unmerged",
         );
       }
     }

@@ -1,6 +1,9 @@
 import { toProjectContextPayload } from "../../../terminal/application/payloads";
+import { runWorktreeBatchCleanup } from "../../../terminal/workspace-service/worktree-batch-cleanup";
 import { WorktreeCreationService } from "../../../terminal/workspace-service/worktree-creation";
+import { WorktreeGovernanceService } from "../../../terminal/workspace-service/worktree-governance";
 import { WorktreeProvisionError } from "../../../terminal/workspace-service/worktree-provisioner";
+import { WorktreeRecycleService } from "../../../terminal/workspace-service/worktree-recycle";
 import type { PtyService } from "../../../terminal/runtime/pty-service";
 import type { Router } from "express";
 import type {
@@ -58,7 +61,19 @@ export function registerTerminalProjectContextRoutes(
     ownerHooks: options?.ownerHooks,
   });
 
-  const creation = new WorktreeCreationService(terminalSessionManager, options ?? {});
+  const governance = new WorktreeGovernanceService(
+    terminalSessionManager,
+    options?.terminalStateService,
+  );
+  const creation = new WorktreeCreationService(
+    terminalSessionManager,
+    options ?? {},
+    governance,
+  );
+  const recycleService = new WorktreeRecycleService(
+    terminalSessionManager,
+    options ?? {},
+  );
   const creationSchema = z.object({
     operationId: z.string().uuid(), name: z.string().transform(value => value.normalize("NFC")).pipe(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u)),
     branch: z.string().min(1).max(255).optional(), baseRef: z.string().max(512).optional(),
@@ -69,13 +84,97 @@ export function registerTerminalProjectContextRoutes(
     message: "baseRef is required when creating a new branch",
     path: ["baseRef"],
   });
+  const batchCleanupSchema = z.object({
+    operationId: z.string().uuid(),
+    childProjectIds: z.array(z.string().min(1).max(2_000)).max(100),
+    forceConfirmedProjectIds: z.array(z.string().min(1).max(2_000)).max(100).optional(),
+    deleteMergedLocalBranches: z.boolean().optional(),
+    pruneMetadata: z.boolean().optional(),
+  }).strict();
+  const recycleSchema = z.object({
+    operationId: z.string().uuid(),
+    newBranch: z.string().trim().min(1).max(255),
+    baseRef: z.string().trim().min(1).max(512),
+    fetchBase: z.boolean().optional(),
+    deletePreviousBranch: z.boolean().optional(),
+    closeIdleTerminals: z.boolean().optional(),
+    runSetup: z.boolean().optional(),
+    approvedSetupRevision: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
+    launchAgent: z.enum(["none", "codex", "claude", "pi", "traex", "agy"]).optional(),
+  }).strict();
   const creationError = (res: import("express").Response, error: unknown) => {
     if (error instanceof WorktreeProvisionError) res.status(error.statusCode).json({ message: error.message });
     else {
       terminalProjectContextLogger.error("terminal.worktree.create.failed", { error });
-      res.status(500).json({ message: "Worktree creation unavailable" });
+      res.status(500).json({ message: "Worktree operation unavailable" });
     }
   };
+  router.get("/project/:parentProjectId/worktree-governance", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const parsed = z
+      .object({ includeDiskUsage: z.enum(["true", "false"]).optional() })
+      .strict()
+      .safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Invalid worktree governance query" });
+      return;
+    }
+    try {
+      res.json(
+        await governance.inspect(req.params.parentProjectId, {
+          includeDiskUsage: parsed.data.includeDiskUsage === "true",
+        }),
+      );
+    } catch (error) {
+      creationError(res, error);
+    }
+  });
+  router.post("/project/:parentProjectId/worktree-cleanup-batch", async (req, res) => {
+    const parsed = batchCleanupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        message: "Invalid Worktree batch cleanup request",
+        errors: parsed.error.flatten(),
+      });
+      return;
+    }
+    try {
+      res.json(
+        await runWorktreeBatchCleanup(
+          terminalSessionManager,
+          deletionService,
+          req.params.parentProjectId,
+          parsed.data,
+        ),
+      );
+    } catch (error) {
+      creationError(res, error);
+    }
+  });
+  router.post(
+    "/project/:parentProjectId/contexts/:childProjectId/recycle",
+    async (req, res) => {
+      const parsed = recycleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          message: "Invalid Worktree recycle request",
+          errors: parsed.error.flatten(),
+        });
+        return;
+      }
+      try {
+        res.status(200).json(
+          await recycleService.recycle(
+            req.params.parentProjectId,
+            req.params.childProjectId,
+            parsed.data,
+          ),
+        );
+      } catch (error) {
+        creationError(res, error);
+      }
+    },
+  );
   router.get("/project/:parentProjectId/worktree-create-preview", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try { res.json(await creation.preview(req.params.parentProjectId)); }

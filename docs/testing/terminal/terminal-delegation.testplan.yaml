@@ -1,0 +1,157 @@
+version: 1
+name: 以 AGY 为主力的终端内跨 CLI 委派与父子谱系验收
+description: >
+  对应 docs/plans/2026-11-28-agy-terminal-delegation-and-lineage.md 的待实现验收合同，不表示能力已上线或已通过验收。
+  验证 AGY 会话级极简委派 MCP 与 rw CLI 通用入口、优先复用 Worktree 槽位、落盘下游任务单与三段式客观证据回执、
+  Pending Inbox 可控回传、Attention 父子冒泡、防套娃与并发护栏、人工接管隔离，以及桌面与原生 iOS 父子谱系展示。
+  每条用例使用自有隔离 Backend、临时仓库与测试终端，不操作用户工作终端；浏览器操作使用 $toolkit:playwright-cli，原生 iOS 使用 $toolkit:agent-device。
+
+cases:
+  - id: DELEG-001
+    name: AGY 会话级极简 MCP 仅在托管终端生效且返回防轮询契约
+    required: true
+    description: >
+      验证 Runweave 启动托管 AGY 终端时通过临时 --settings 注入仅含 3 个工具的极简委派 MCP，不修改用户全局 settings.json，
+      且异步委派返回体包含明确的防轮询 nextAction 指引。
+    preconditions:
+      - 隔离 Backend 与临时测试项目已就绪，已记录本机全局 ~/.gemini/antigravity-cli/settings.json 的初始内容哈希。
+    steps:
+      - 在隔离测试项目中通过 Runweave 启动一个托管 AGY 终端，核对生成的临时 settings 文件权限为 0600 且仅注册 delegate_task、delegate_status、delegate_cancel 三个工具。
+      - 在该 AGY 终端内检查可用委派工具并触发一次异步 delegate_task 调用；确认返回结果包含 delegationId、childTerminalSessionId、workspaceOutcome 以及明确禁止 sleep/轮询的 nextAction 文本。
+      - 核对全局 ~/.gemini/antigravity-cli/settings.json 哈希与启动前完全一致，未写入任何全局配置。
+
+  - id: DELEG-002
+    name: AGY 委派异构 Codex 执行并回传三段式客观证据回执
+    required: true
+    description: >
+      验证父 AGY 终端异步委派 Codex 子终端执行改代码与校验任务时，下游收到 0600 结构化任务单，
+      子终端完成后 Backend 组装包含客观 Git 事实、统一动作骨架与真实退出码以及末轮摘要的三段式回执并自动唤醒空闲父 AGY。
+    preconditions:
+      - 隔离 Backend 运行一个空闲且已有活跃对话身份的 AGY 主终端（无未发送草稿），同时配置可用的 Codex CLI 与临时 Git 仓库。
+    steps:
+      - 从父 AGY 终端发起异步委派（targetAgent=codex、workspace=isolated、附带一条必跑验证命令），确认 Backend 生成 0600 下游任务单并拉起可见的 Codex tmux 子终端。
+      - 等待 Codex 子终端完成文件修改与验证命令并回到 agent_idle；检查归档报告与投递给父 AGY 的回执内容。
+      - 确认回执以 [runweave-delegation-result:<delegationId>] 开头且不超过 16 KiB，同时包含客观 Git 事实（branch、headCommit、git diff --stat）、来自统一动作骨架的 editedFiles 与验证命令真实退出码，以及末轮结论摘要与 artifactPath；确认父 AGY 被自动唤醒接收该回执。
+
+  - id: DELEG-003
+    name: Pending Inbox 在父终端忙碌或有草稿时排队不作废并在安全空闲后投递
+    required: true
+    description: >
+      验证子任务完成瞬间若父 AGY 正在忙碌、存在未发送人工草稿或用户中途聊了其他话题，回执不作废为 manual_only，
+      而是进入 pendingInbox 并在顶栏展示待送入胶囊，待父终端回到空闲且草稿清空后安全送入。
+    preconditions:
+      - 隔离 Dev Session 存在一个已发起异步子任务的 AGY 父终端，并可通过 $toolkit:playwright-cli 操作桌面端父终端界面。
+    steps:
+      - 在子任务完成前让父 AGY 终端处于输入草稿未发送（或正在回答用户另一条问题）状态；等待子任务运行结束。
+      - 确认子任务 deliveryStatus 保持 pending 且记录正确的 deliveryDeferredReason，父终端未发草稿完整保留未受破坏；使用 $toolkit:playwright-cli 核对父终端顶栏显示「1 个子任务已完成」待送入胶囊且可预览报告。
+      - 清空人工草稿并让父 AGY 回到 agent_idle（或在顶栏点击「立即送入」）；确认回执成功注入父终端，deliveryStatus 变为 delivered 且顶栏待送入计数归零。
+
+  - id: DELEG-004
+    name: 父会话切换或 Backend 重启后待投递回执严格降级为只读归档
+    required: true
+    description: >
+      验证父终端执行 /clear 更换会话身份，或隔离 Backend 重启后，重启前尚未送达的 pending 回执全部降级为 manual_only，
+      绝不盲目注入新会话或恢复后的未知现场。
+    preconditions:
+      - 隔离 Backend 存在两条处于 deliveryStatus=pending（暂存在 pendingInbox）的已完成委派记录，分属两个独立的 AGY 父终端；允许仅重启本例隔离 Backend。
+    steps:
+      - 在第一个父 AGY 终端执行 /clear 开启全新 conversationId 后等待空闲；确认原待投递回执转为 manual_only，新会话未收到旧任务回执，但通过 delegate show 仍可读完整报告。
+      - 记录第二个父终端的待投递 delegationId 后重启本例隔离 Backend 并重新取得 fresh endpoint；核对重启后该回执状态已收敛为 manual_only 且父终端未收到自动注入，报告仍可只读查阅。
+
+  - id: DELEG-005
+    name: 隔离委派优先复用已有干净 Worktree（含 Pinned 常驻槽位）并保持置顶保护
+    required: true
+    description: >
+      验证 workspace=isolated（默认 recycle_or_create）优先复用干净已合并且无运行中 Agent 的已有 Worktree（包括 Pinned 槽位，且复用后不清除 Pinned 状态），
+      无可用槽位时才新建 .worktree/del-*，且下游任务单显式提示不含主目录未提交改动。
+    preconditions:
+      - 隔离临时 Git 仓库包含一个已合入 main、工作区干净且已置顶（pinned=true）的子 Worktree 槽位 wt-pinned-slot（目录内放置测试缓存标记文件 .cache-marker），同时主目录存在一个未提交的临时文件。
+    steps:
+      - 发起第一次 workspace=isolated 委派；确认 workspaceOutcome 为 recycled_worktree、复用了 wt-pinned-slot 且复用后仍保持 pinned=true、目录内的 .cache-marker 完整保留、uncommittedChangesExcluded 为 true，下游任务单明确提示不含主目录未提交改动。
+      - 在 wt-pinned-slot 正在运行第一个子任务期间发起第二次 workspace=isolated 委派；确认不切第一个子任务的分支，而是自动新建 .worktree/del-* 目录（workspaceOutcome 为 created_worktree）且不干扰 wt-pinned-slot。
+
+  - id: DELEG-006
+    name: 同工作区双终端并行协作守则、独立改动归因与 CLI 同步 --wait 收敛
+    required: true
+    description: >
+      验证 workspace=same 允许父子（或两个子终端）在同一个 Worktree 的当前分支上并发运行，下游任务单注入同目录并发守则、
+      上游回执通过子终端独立 actions.editedFiles 精确区分其自身改动，且 CLI --prompt-file --wait 命中 idle 或 blocked 即时返回。
+    preconditions:
+      - 隔离 Backend 与已构建的 rw CLI 可用，父 AGY 终端所在 Worktree 已有未提交文件 parent-edit.txt，本地准备一份含代码块、单双引号与反引号的多行 Markdown 任务文件。
+    steps:
+      - 使用 rw terminal delegate start --prompt-file --workspace same --wait --json 发起一个修改 child-edit.txt 的短任务；确认未新建 Worktree 且未切换当前分支，下游任务单包含禁止 git checkout/reset 破坏他人改动的并发守则，特殊字符无转义损坏。
+      - 子任务完成后确认命令立刻返回 settled 状态与客观回执 JSON，其中 actions.editedFiles 精确仅列 child-edit.txt 而不把 parent-edit.txt 混为子任务自身编辑。
+      - 再发起一个会触发结构化等待/阻塞的子任务并附带 --wait；确认命中 blocked 时命令立即返回阻塞详情而不等到超时，且子终端保持存活等待处理。
+
+  - id: DELEG-007
+    name: 子终端权限审批与提问冒泡至 Attention 标注父子关系且绝不自动放行
+    required: true
+    description: >
+      验证委派子终端触发 Codex 结构化提问、Claude 权限确认或 OSC 7501 阻塞态时，Attention 置顶展示来源父终端标签并可一键直达子终端审批，
+      审批完成后子终端继续执行并正常交卷，期间绝无自动提权或绕过审批。
+    preconditions:
+      - 隔离 Dev Session 存在由父 AGY 委派的可见子终端，可触发一次真实的权限确认或结构化提问阻塞。
+    steps:
+      - 触发子终端进入 needs_action 阻塞态，读取 Attention 快照并使用 $toolkit:playwright-cli 查看桌面 Attention 面板；确认该条 Slot 置顶为 needs_action 且携带 delegation.parentSessionLabel 等父子标注，未被系统自动批准。
+      - 点击该 Attention 卡片确认直达对应子终端面板；人工完成审批或回答后，确认子终端脱离阻塞继续跑完任务并按正常流程投递回执给父 AGY。
+
+  - id: DELEG-008
+    name: 单层深度拦截、活跃并发上限与权限天花板护栏生效
+    required: true
+    description: >
+      验证被委派的子终端禁止再次发起二级委派，同一父终端活跃子任务数受上限保护，越界权限请求被后端显式拒绝。
+    preconditions:
+      - 隔离 Backend 存在一个活跃父 AGY 终端及由其委派创建的子终端（子终端进程环境继承 RUNWEAVE_DELEGATION_DEPTH=1）。
+    steps:
+      - 在子终端内调用 rw terminal delegate start（或直接以子终端 ID 调用创建接口）；确认返回 403（code=delegation_depth_exceeded）且未创建孙终端。
+      - 从父 AGY 终端连续发起 3 个保持活跃的子任务，再发起第 4 个；确认前 3 个成功、第 4 个返回 409 并说明达到活跃子任务上限。
+      - 构造超过目标 CLI 允许权限上限的委派请求；确认后端拒绝并返回 400 或 403，未启动子终端。
+
+  - id: DELEG-009
+    name: 人工切入子终端敲键盘立即切换 human_takeover 并停止自动回传
+    required: true
+    description: >
+      验证用户直接向委派子终端发送普通键盘输入后，委派状态同步转为 human_takeover，子终端内 Agent 不被强杀，
+      但后续完成不再自动注入父终端以避免人机冲突。
+    preconditions:
+      - 隔离 Backend 存在正在运行的委派子终端，且原定 callbackMode 为 async_inbox。
+    steps:
+      - 通过普通终端输入路径向该子终端发送一条人工键盘输入；查询委派记录确认 status 立即变为 human_takeover、deliveryStatus 变为 manual_only，且子终端进程继续运行未被中断。
+      - 等待子终端完成当前操作回到 idle；核对父 AGY 终端未收到自动注入回执，但通过 delegate show 仍可读取该子终端记录。
+
+  - id: DELEG-010
+    name: 桌面端父 Tab 轻折叠子终端谱系并在关闭父终端时级联确认
+    required: true
+    description: >
+      验证桌面端将委派子终端折叠收纳在父终端 Tab 角标下不撑爆主 Tab 栏，展开可切入子终端围观，
+      关闭仍有活跃子任务的父终端时弹窗确认级联停止或保留为独立终端。
+    preconditions:
+      - 隔离 Dev Session 桌面端存在一个父 AGY 终端，其下挂有 2 个活跃委派子终端（其中一个运行中、一个处于待确认阻塞态）。
+    steps:
+      - 使用 $toolkit:playwright-cli 检查顶部终端 Tab 栏；确认 2 个子终端未作为平级主 Tab 铺开，父 Tab 上显示折叠角标（计数 2）及反映最高优先级阻塞态的黄色状态点。
+      - 点击父 Tab 角标展开子任务列表并点击其中一项；确认切入对应子终端实时画面并可正常返回父终端。
+      - 尝试关闭父终端；确认弹出确认对话框要求选择「同时停止 2 个子任务」或「保留为独立终端」，取消则原状不变，选择「同时停止」后父终端与 2 个子终端均被清理且无孤儿进程残留。
+
+  - id: DELEG-011
+    name: 取消委派、幂等 requestId 去重与自动回执防污染门禁
+    required: true
+    description: >
+      验证 delegate cancel 准确中止指定子任务、相同 requestId 重放不重复建终端、异参冲突返回 409，
+      且投递到父终端的自动回执不会被后续独立 Review 需求提取误认作用户新增要求。
+    preconditions:
+      - 隔离 Backend 存在活跃父 AGY 终端，并已具备独立 Code Review 需求提取能力。
+    steps:
+      - 使用固定 requestId 连续提交两次完全相同的创建请求；确认仅创建一个子终端并返回相同 delegationId；复用该 requestId 更改 prompt 再次提交，确认返回 409。
+      - 对活跃子任务调用 delegate cancel；确认状态收敛为 cancelled、子终端收到停止信号且不会向父终端投递完成回执。
+      - 在父 AGY 终端收到一条真实的 [runweave-delegation-result:*] 回执后，触发一次独立 Code Review 需求冻结检查；确认生成的 requirements.json 不包含该自动回执文本。
+
+  - id: DELEG-012
+    name: 原生 iOS 展示父子终端归组与子任务 Attention 冒泡直达
+    required: true
+    description: >
+      验证原生 iOS 首页将委派子终端归组显示在父终端下，且子终端触发 needs_action 时 Attention 卡片标注来源父任务并可一键直达处理。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，存在包含 1 个处于 needs_action 委派子终端的父 AGY 终端。
+    steps:
+      - 使用 $toolkit:agent-device 打开 iOS 首页；确认子终端归组缩进在父 AGY 终端下方并显示子任务标签与阻塞态徽标。
+      - 在 iOS 顶部 Attention 区域核对出现带来源父终端标注的待处理卡片，点击后确认直接进入该子终端页面而非误进父终端。

@@ -19,6 +19,7 @@ import {
   setupRevision,
 } from "./setup-approvals";
 import { startWorktreeTerminal } from "./setup-terminal";
+import type { WorktreeGovernanceService } from "./worktree-governance";
 import {
   WorktreeProvisioner,
   WorktreeProvisionError,
@@ -34,6 +35,7 @@ export class WorktreeCreationService {
   constructor(
     private readonly manager: TerminalSessionManager,
     private readonly options: TerminalSessionCreationOptions,
+    private readonly governance?: WorktreeGovernanceService,
   ) {}
 
   private parent(id: string) {
@@ -68,21 +70,25 @@ export class WorktreeCreationService {
   async preview(id: string): Promise<WorktreeCreatePreviewResponse> {
     const parent = this.parent(id);
     const { repositoryId } = await this.identity(parent.path);
-    const [setup, remote, current, branches, contexts] = await Promise.all([
-      this.setup(parent.path),
-      worktreeGit(parent.path, [
-        "symbolic-ref",
-        "--short",
-        "refs/remotes/origin/HEAD",
-      ]).catch(() => ""),
-      worktreeGit(parent.path, ["branch", "--show-current"]),
-      worktreeGit(parent.path, [
-        "for-each-ref",
-        "--format=%(refname:strip=2)",
-        "refs/heads",
-      ]),
-      this.manager.refreshProjectContexts(id),
-    ]);
+    const [setup, remote, current, branches, contexts, supplements] =
+      await Promise.all([
+        this.setup(parent.path),
+        worktreeGit(parent.path, [
+          "symbolic-ref",
+          "--short",
+          "refs/remotes/origin/HEAD",
+        ]).catch(() => ""),
+        worktreeGit(parent.path, ["branch", "--show-current"]),
+        worktreeGit(parent.path, [
+          "for-each-ref",
+          "--format=%(refname:strip=2)",
+          "refs/heads",
+        ]),
+        this.manager.refreshProjectContexts(id),
+        this.governance
+          ?.buildCreatePreviewSupplements(id)
+          .catch(() => undefined),
+      ]);
     const revision = setup && setupRevision(repositoryId, setup);
     return {
       parentProjectId: id,
@@ -100,6 +106,7 @@ export class WorktreeCreationService {
               approved: await isSetupApproved(repositoryId, revision),
             }
           : null,
+      ...(supplements ?? {}),
     };
   }
 

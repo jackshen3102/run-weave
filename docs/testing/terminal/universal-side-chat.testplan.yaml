@@ -1,0 +1,158 @@
+version: 1
+name: 通用独立旁聊与统一上下文投影验收
+description: >
+  对应 docs/plans/2026-11-28-universal-side-chat-and-inject-back.md 的待实现验收合同，不表示能力已上线或已通过验收。
+  验证跨 CLI（AGY / Claude Code / Codex / Pi）统一的动作骨架上下文投影、48 KiB 分区预算裁剪、双轨只读沙箱执行器（含 AGY 常驻与降级恢复）、
+  手动增量同步以及结论「带回主终端」闭环，同时保证既有 Codex 原生 thread/fork 路径零退化。
+  每条用例使用自有隔离 Backend、临时项目与测试会话，不操作用户工作终端；浏览器操作使用 $toolkit:playwright-cli，原生 iOS 使用 $toolkit:agent-device。
+
+cases:
+  - id: USC-001
+    name: 统一动作骨架投影跨 CLI 输出一致且不膨胀默认读取
+    required: true
+    description: >
+      验证 App Server 的 ConversationReader 在显式传 includeActions=1 时，对 AGY、Claude Code 与 Codex 原生日志统一产出结构化动作骨架
+      （editedFiles、readFiles、commands 含退出码与失败摘要），同时剔除 thinking 与正常读文件正文；默认不传 includeActions 时零额外字段。
+    preconditions:
+      - 隔离 App Server 可读取三份受控原生会话 fixture（分别对应 AGY、Claude Code、Codex），每份均包含一轮“读取文件、编辑文件、执行一次退出码非 0 的命令，以及隐藏 thinking 与大段正常读文件输出”。
+    steps:
+      - 分别不带 includeActions 调用三份会话的读取接口；确认返回的每个 ConversationTurn 均不含 actions 字段，且可见问答正文完整。
+      - 分别携带 includeActions=1 调用三份会话的读取接口；确认返回统一结构的 actions，均准确列出 editedFiles、readFiles（去重、仅路径无正文）与 commands（包含命令文本、非 0 退出码及不超过 512 字节的 failedExcerpt）。
+      - 核对三份响应体均不包含 thinking 内容、大段 read_file 文件正文或退出码为 0 的冗长命令输出。
+
+  - id: USC-002
+    name: 48 KiB 分区预算裁剪保底首条目标、进行中快照与单轮动作上限
+    required: true
+    description: >
+      验证 SideChatContextBuilder 面对超长多轮历史、大段动作列表及进行中轮次时，严格遵守 48 KiB 总预算、6 KiB 进行中轮次上限与 1.5 KiB 单轮动作上限，
+      按优先级保留高价值信息并输出省略标记。
+    preconditions:
+      - 隔离测试环境准备了一份净问答超过 80 KiB 的多轮会话（含明确首条目标、30 轮历史、单轮超 40 个读/改文件与命令动作、超长末轮回复，以及一条处于 inProgress=true 的活跃轮次）。
+    steps:
+      - 调用 SideChatContextBuilder 生成初始旁聊上下文包；检查总字节数与各分区占用。
+      - 确认总字节数严格不超过 49,152 UTF-8 字节；固定头部包含只读边界与沙箱查代码指引；首条用户目标保留；进行中轮次快照独立存在且不超过 6 KiB。
+      - 核对动作密集轮次的 Action Digest 不超过 1.5 KiB，优先保留 editedFiles 与失败命令、按需裁剪 readFiles 并记录省略计数；超长末轮同时保留开头与结尾，被裁历史包含准确的省略轮次区间标记。
+
+  - id: USC-003
+    name: AGY 终端通过顶栏入口开启通用旁聊、精准回答现场细节且零污染主会话
+    required: true
+    description: >
+      验证在主力 AGY 终端点击顶栏「旁聊」入口后，创建独立的 portable_snapshot 旁聊，能依托动作骨架与只读沙箱读文件准确回答改动与报错细节，
+      同时主终端与原 AGY 会话文件零副作用。
+    preconditions:
+      - 隔离 Dev Session 与候选 Backend 运行一个 AGY 终端，已完成至少一轮包含“编辑临时文件并跑过一次失败命令”的真实对话；已记录主会话 conversationId、completionRevision、终端缓冲与工作区 git status。
+    steps:
+      - 使用 $toolkit:playwright-cli 在桌面终端顶栏点击「旁聊」按钮；确认在右侧展开旁聊界面且未切走原终端 Tab，旁聊会话使用独立的新 providerThreadId（与主 AGY conversationId 不同）。
+      - 向旁聊提问“主会话刚才改了哪个文件、失败命令报了什么错，并解释修改后的关键函数实现”；确认旁聊基于动作骨架与只读查看工作区文件给出准确回答。
+      - 核对主终端未收到任何输入或中断、主终端 completionRevision 未递增、原 AGY transcript 未写入旁聊问答，且工作区 git status 与旁聊前完全一致。
+
+  - id: USC-004
+    name: 主终端运行中开启旁聊可感知进行中进展且不打断主任务
+    required: true
+    description: >
+      验证主 AGY 终端处于 agent_running 执行长轮次期间，用户仍可随时打开旁聊获取当前进行中轮次的动作快照并正常提问，主任务继续不受干扰。
+    preconditions:
+      - 隔离测试环境存在一个正在执行多步操作的 AGY 终端（处于 agent_running），且本轮已有部分动作写入 transcript；记录主终端进程 PID 与当前轮次标识。
+    steps:
+      - 在主终端仍为 agent_running 时调用旁聊 capabilities 与创建接口，并提问主会话当前这一轮正在处理的目标和已执行的动作。
+      - 确认旁聊成功创建并返回符合当前 inProgress 快照的回答，且快照中 sourceStatus 为 running。
+      - 确认主终端进程 PID 不变、未被发送中断信号或额外输入，并最终自行完成原定任务。
+
+  - id: USC-005
+    name: AGY 旁聊执行器强制落实只读沙箱与 Hook 环境变量隔离
+    required: true
+    description: >
+      验证 AgySandboxExecutor 剥离 Runweave/tmux 环境变量并启用只读沙箱与禁外部 hooks 配置；越权修改或触发副作用的请求被实际拒绝，
+      不会误触发主终端 Stop Hook 或完成通知。
+    preconditions:
+      - 隔离测试环境拥有指向临时项目目录的活跃 AGY 通用旁聊，且已记录项目内目标文件哈希、主终端 completionRevision 与 Hook 接收计数。
+    steps:
+      - 向旁聊发送明确指令要求修改项目内的临时文件并运行一条写入新文件的 shell 命令；等待旁聊结束本轮。
+      - 核对临时文件内容哈希不变、目录中未出现新文件，确认越权写操作被只读沙箱与边界配置实际拒绝。
+      - 核对整个旁聊执行与结束期间，Runweave Hook Bridge 未收到来自旁聊子进程的 UserPromptSubmit 或 Stop 事件，主终端状态与 completionRevision 均无变化。
+
+  - id: USC-006
+    name: 跨 CLI 异构执行与独立快模型选择不改变主终端配置
+    required: true
+    description: >
+      验证旁聊支持跨 Provider 与独立快模型执行（如 Codex 终端选 AGY 快模型、AGY 终端选 Codex 只读执行器），不改动主终端模型设置，
+      且 Codex 同源同执行器默认仍优先走 native_fork。
+    preconditions:
+      - 隔离 Backend 同时配置可用的 Codex 与 AGY CLI，并分别准备一个已完成至少一轮对话的 Codex 终端和一个 AGY 终端；记录两者的当前模型设置。
+    steps:
+      - 对 Codex 终端请求 capabilities，确认 recommendedExecutor 为 codex + native_fork；以默认选项创建旁聊并确认 executorMode 为 native_fork。
+      - 结束上述旁聊后，对同一 Codex 终端显式指定 executorProvider=agy 与轻量快模型创建旁聊；确认切换为 portable_snapshot 并正常完成两轮问答，主 Codex 终端的模型配置未改变。
+      - 对 AGY 终端显式指定 executorProvider=codex 创建旁聊；确认命中 CodexSandboxExecutor（新只读线程、非主线程 fork）并正常完成问答，主 AGY 终端模型与状态未受影响。
+
+  - id: USC-007
+    name: 手动增量同步主会话新增轮次并仅在下一次提问时受控注入
+    required: true
+    description: >
+      验证主会话推进新轮次后旁聊展示新增轮次提示，触发增量同步不单独消耗模型请求，而将不超过 16 KiB 的增量摘要附着于下一次提问并推进同步游标。
+    preconditions:
+      - 隔离测试环境存在一对活跃的 AGY 主终端与已建立的通用旁聊（已记录初始 syncedCompletedTurnCount）。
+    steps:
+      - 在主 AGY 终端完成两轮包含唯一新标记和新文件改动的新对话，随后拉取旁聊快照；确认 sourceNewTurnsAvailable 等于 2 且旁聊未自动发起模型调用。
+      - 调用 POST /api/side-chats/:id/sync-context（携带有效 operationId 与 expectedVersion）；确认返回 addedCompletedTurns=2、syncedCompletedTurnCount 递增，且底层执行器此时未发起新 turn。
+      - 向旁聊提问这两轮新增的唯一标记与新改动文件；确认下一次提问自动带上不超过 16 KiB 的增量上下文并给出准确回答，再拉取快照确认 sourceNewTurnsAvailable 归零。
+
+  - id: USC-008
+    name: 旁聊结论填入主终端草稿在忙碌与空闲状态下均安全不误发
+    required: true
+    description: >
+      验证桌面端点击旁聊回复的「填入主终端草稿」后，格式化引用文本进入主终端输入框草稿区且不立即发送，主终端忙碌或空闲均无误发或打断。
+    preconditions:
+      - 隔离 Dev Session 桌面端已打开一个含已完成助手回复的通用旁聊，且可控制主终端分别处于 agent_running 与 agent_idle 状态。
+    steps:
+      - 在主终端处于 agent_running 时，使用 $toolkit:playwright-cli 点击旁聊回复上的「填入主终端草稿」；确认主终端输入框出现该回复的引用正文，终端 PTY 未收到发送回车，主任务继续执行。
+      - 待主终端进入 agent_idle 并清空草稿后再次点击「填入主终端草稿」；确认文本再次安全填入输入框等待用户编辑确认，未自动提交。
+
+  - id: USC-009
+    name: 旁聊结论空闲直发严格校验空闲态、无草稿、身份一致与幂等性
+    required: true
+    description: >
+      验证 POST /api/side-chats/:id/inject（mode="send_when_idle"）在主终端忙碌、存在人工草稿或会话身份变化时拒绝写入并返回 409，
+      仅在全部安全条件满足时投递且同 operationId 幂等。
+    preconditions:
+      - 隔离 Backend 存在活跃通用旁聊与一条已完成的助手消息（含普通短消息与一条超阈值长消息用于测试受管附件路径）。
+    steps:
+      - 分别在主终端处于 agent_running、以及主终端处于 agent_idle 但输入框存在未发送人工草稿两种状态下调用 POST /api/side-chats/:id/inject；确认两次均返回 409，主终端未收到任何写入字节且人工草稿完整保留。
+      - 清空人工草稿并确认主终端处于 agent_idle 与原会话身份一致后，携带固定 operationId 提交 inject；确认返回成功且主终端收到格式化文本（超长消息走 0600 受管文本附件）。
+      - 使用相同 operationId 重复提交同一 inject 请求；确认幂等返回原结果且主终端未收到第二次重复输入。
+
+  - id: USC-010
+    name: AGY 旁聊子进程空闲回收后通过独立会话 ID 无缝续问
+    required: true
+    description: >
+      验证 AgySandboxExecutor 在空闲超时关闭常驻子进程释放资源后，用户再次提问时可通过已保存的旁聊 providerThreadId 执行 --resume 续接对话，
+      且不触碰主终端会话。
+    preconditions:
+      - 隔离 Backend 为 AgySandboxExecutor 配置可观测的短空闲回收阈值（如测试配置 5 秒），已存在一条完成首轮问答并记录了独立 providerThreadId 的 AGY 旁聊。
+    steps:
+      - 等待超过空闲回收阈值并核对常驻旁聊子进程已退出释放，确认旁聊状态仍为 active 且历史消息可读。
+      - 在同一旁聊中提交第二轮依赖首轮内容的追问；确认执行器使用旁聊独立的 providerThreadId 通过 --resume 拉起新只读沙箱进程并准确回答，主终端原 conversationId 未被读写。
+
+  - id: USC-011
+    name: Backend 重启后通用旁聊只读恢复且兼容旧版 SQLite 记录
+    required: true
+    description: >
+      验证仅重启隔离 Backend 后，portable_snapshot 旁聊与不含新增字段的旧版 side-chats.sqlite 记录均可正常读取，未确认轮次收敛为 unknown 不自动重放，
+      新提问可正常续接。
+    preconditions:
+      - 隔离 Backend 的 side-chats.sqlite（user_version=1）中同时存在一条已完成首轮的 AGY 通用旁聊和一条缺省新字段的旧格式 Codex 旁聊记录；主终端保持存活且允许仅重启本例 Backend。
+    steps:
+      - 记录两条旁聊的 chatID、消息与版本后重启本例 Backend，重新取得 fresh endpoint。
+      - 分别读取两条旁聊快照；确认均能正常解码返回既有消息，无 schema 升级错误或数据丢失，且未发生任何自动重放。
+      - 向恢复后的 AGY 通用旁聊提交新一轮提问；确认正常续接独立 providerThreadId 并返回成功答案。
+
+  - id: USC-012
+    name: 原生 iOS 支持非 Codex 终端通用旁聊、增量同步与填入输入框
+    required: true
+    description: >
+      验证原生 iOS 在 AGY 终端可打开通用旁聊、查看执行模型与主会话新增轮次同步入口，并将旁聊回复一键填入主终端输入框而不自动发送。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，存在已完成至少一轮对话的 AGY 终端。
+    steps:
+      - 使用 $toolkit:agent-device 进入该 AGY 终端页并打开旁聊；确认正常进入旁聊会话并显示当前执行模型信息，可提交问题并收到完整最终回复。
+      - 在主终端追加一轮对话后回到旁聊；确认出现新增轮次同步提示，点击同步后追问新内容可命中。
+      - 在旁聊回复上点击「填入输入框」；确认返回主终端时输入框已带入该回复文本且未自动发送。

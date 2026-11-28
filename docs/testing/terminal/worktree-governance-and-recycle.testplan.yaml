@@ -1,0 +1,156 @@
+version: 1
+name: Worktree 激进回收与默认槽位复用验收
+description: >
+  对应 docs/plans/2026-11-28-worktree-lifecycle-cleanup-and-recycle.md 的待实现验收合同，不表示能力已上线或已通过验收。
+  验证 Pinned 置顶 Worktree 的绝对保护边界、「＋ 新建 Worktree」默认优先复用干净空闲槽位、后台自动安全回收（保留热槽位 + 超额即删 + 自动 prune）、
+  安全红线与 TOCTOU 防护、顽固脏目录显式二次确认强清、受控 worktree.cleanup 瘦身脚本，以及桌面与原生 iOS 入口闭环。
+  每条用例使用自有隔离 Backend 与临时 Git 仓库，不操作用户真实仓库 Worktree；浏览器操作使用 $toolkit:playwright-cli，原生 iOS 使用 $toolkit:agent-device。
+
+cases:
+  - id: WTGOV-001
+    name: 置顶 Worktree 永不折叠且永不自动删除，但干净空闲时可作为常驻槽位被复用
+    required: true
+    description: >
+      验证已置顶（pinned=true）的子 Worktree 即使已合入主分支且长期无活动，绝不被折叠、绝不进入后台自动回收或批量默认勾选；
+      同时当其干净且无运行中 Agent 时，允许出现在复用槽位中被原地切新分支复用，且复用后继续保持 pinned=true 保护。
+    preconditions:
+      - 隔离临时 Git 仓库存在一个已合入 origin/main、工作区干净、无运行中 Agent 且已超过宽限期的子 Worktree wt-pinned，并已设置为 pinned=true；后台自动回收配置为 autoReclaimEnabled=true、maxIdleWorktrees=0。
+    steps:
+      - 触发一次完整的 Worktree 治理扫描与后台自动回收巡检；确认 wt-pinned 的 bucket 为 pinned、canSafeDelete 为 false、canRecycle 为 true，目录与本地分支均未被删除。
+      - 调用 GET /worktree-create-preview；确认 recyclableSlots 包含 wt-pinned（pinned=true）；对其执行原地 Recycle 切到新分支后，确认切换成功且 wt-pinned 仍保持 pinned=true。
+      - 取消 wt-pinned 的置顶状态并切回已合并干净态后重新巡检；确认其立即转为普通未 Pin 候选并遵循自动回收规则。
+
+  - id: WTGOV-002
+    name: 新建 Worktree 弹窗支持默认复用干净槽位、同分支并行开终端与显式新建目录
+    required: true
+    description: >
+      验证桌面「＋ 新建 Worktree」优先复用已有目录：存在干净空闲槽位（含 Pinned 常驻槽位）时默认选中原地切新分支复用并保留依赖缓存；
+      当已有 Worktree 正在运行或有改动时支持不切分支直接同目录新开第二个并行终端，同时也允许显式新建独立目录。
+    preconditions:
+      - 隔离 Dev Session 临时 Git 仓库包含一个已合入 main 且干净的槽位 wt-slot-1（目录内预置 node_modules/.keep-cache）以及一个正在运行 Agent 的活跃 Worktree wt-busy，且当前未 Pin 数量已达软上限。
+    steps:
+      - 使用 $toolkit:playwright-cli 在桌面 Worktree Rail 点击「＋ 新建 Worktree」；确认弹窗展示复用提示并默认选中「原地切新分支复用 wt-slot-1」，无需重跑 setup。
+      - 输入新分支名 feat/recycle-from-dialog 并确认提交；确认未创建新 .worktree 目录、wt-slot-1 切换至 feat/recycle-from-dialog、node_modules/.keep-cache 完好保留，且自动打开该 Worktree 的新终端。
+      - 再次打开「＋ 新建 Worktree」选择「在已有 Worktree wt-busy 同分支并行开新终端」提交；确认未新建目录、wt-busy 原分支与运行中终端均未被切换或打断，成功在 wt-busy 下打开第二个并行终端。
+      - 再次打开弹窗显式选择「新建独立目录」输入新名称提交；确认正常创建新子目录而不干扰已有槽位。
+
+  - id: WTGOV-003
+    name: 超额已合并未 Pin Worktree 后台自动安全回收并精准保留热槽位
+    required: true
+    description: >
+      验证当存在多个已合入主分支、干净、无运行中 Agent 且已过宽限期的未 Pin Worktree 时，后台自动回收器按最近活跃排序精准保留 maxIdleWorktrees 个热槽位，
+      自动删除其余超额目录并执行安全 git branch -d，同时持久化回收审计记录。
+    preconditions:
+      - 隔离临时 Git 仓库存在 3 个已合入 origin/main、工作区干净、无运行中 Agent、未 Pin 且超过宽限期的子 Worktree（wt-old-1、wt-old-2、wt-recent），治理策略配置为 autoReclaimEnabled=true、maxIdleWorktrees=1、deleteMergedLocalBranches=true。
+    steps:
+      - 触发后台自动回收巡检；确认最近活跃的 wt-recent 被保留且 bucket 为 idle_hot_slot，wt-old-1 与 wt-old-2 目录被安全移除。
+      - 核对 wt-old-1 与 wt-old-2 对应的已合并本地分支已被安全删除，工作区 git worktree list 不再包含这两项。
+      - 读取回收审计记录接口；确认记录了两条 trigger=auto_periodic 的回收条目，包含目录名、分支名、时间戳与估算释放体积。
+
+  - id: WTGOV-004
+    name: 后台自动回收严守安全红线：脏目录、未合并提交、运行中 Agent 与浅克隆零误删
+    required: true
+    description: >
+      验证后台自动回收器面对任一不满足安全红线的未 Pin Worktree 时坚决不删除，并返回明确保护原因。
+    preconditions:
+      - 隔离临时 Git 仓库（autoReclaimEnabled=true、maxIdleWorktrees=0）包含 4 个未 Pin 子 Worktree：wt-dirty（已合并但有未跟踪文件）、wt-unmerged（干净但有未合入 main 的本地提交）、wt-running（已合并干净但绑定 agent_running 终端）、以及一个无共同祖先/无法解析主分支的受控上下文。
+    steps:
+      - 触发后台自动回收巡检并读取治理快照；确认上述 4 个 Worktree 全部未被自动删除，目录、文件、终端进程与本地分支完整保留。
+      - 核对每个保护项的 blockReason 与状态字段准确反映脏工作区、未合并提交、运行中 Agent 或 mergedIntoBase=null，绝不把无法解析合并态误判为 true。
+
+  - id: WTGOV-005
+    name: PR Watch 检测到 PR 合并后按置顶与容量策略触发自动回收或热槽位流转
+    required: true
+    description: >
+      验证关联 PR 变为 MERGED 且经过宽限期后，未 Pin 干净 Worktree 按容量策略自动回收或转为热槽位，已 Pin 的仅展示提示而不自动删。
+    preconditions:
+      - 隔离 Backend 运行一个未 Pin 干净子 Worktree 终端（策略 maxIdleWorktrees=0、mergedGraceMinutes=0）与一个已 Pin 干净子 Worktree 终端，均可接收受控 PR 状态变为 MERGED 的巡检事件。
+    steps:
+      - 令两个子 Worktree 关联的 PR 状态更新为 MERGED 并触发评估；确认未 Pin 的干净子 Worktree 被自动回收并生成 trigger=auto_pr_merged 审计条目。
+      - 核对已 Pin 的子 Worktree 未被自动删除，保留原有目录与终端状态。
+
+  - id: WTGOV-006
+    name: 已合入主分支的 detached HEAD 可识别回收，悬空 prunable 元数据自动清理
+    required: true
+    description: >
+      验证未 Pin 的 detached HEAD Worktree 在其 HEAD 已被 origin/main 包含且干净时进入可回收范围（未合入的 detached HEAD 受保护），
+      外部目录已删除产生的 prunable 元数据由 git worktree prune 自动清理且不触碰外部文件系统。
+    preconditions:
+      - 隔离临时 Git 仓库存在：一个 HEAD 已合入 origin/main 且干净的未 Pin detached Worktree、一个 HEAD 含未合入提交的 detached Worktree，以及一条指向已不存在临时目录的 git worktree prunable 记录。
+    steps:
+      - 运行治理扫描与自动回收（maxIdleWorktrees=0、autoPruneMetadata=true）；确认已合入主分支的 detached Worktree 被正确识别并安全移除，未合入提交的 detached Worktree 完整保留。
+      - 检查 git worktree list --porcelain；确认失效的 prunable 元数据已被清零，且未对仓库外任意现有目录执行删除。
+
+  - id: WTGOV-007
+    name: 整理面板批量安全清理执行互斥锁内 TOCTOU 二次校验
+    required: true
+    description: >
+      验证打开「整理 Worktree」面板后至点击批量清理前，若其中一个原干净目录突然被写入未提交文件，
+      Backend 在父项目互斥锁内二次核对时拦截该脏项保住新文件，同时继续安全删除其余干净项。
+    preconditions:
+      - 隔离 Dev Session 临时 Git 仓库存在两个未 Pin 已合并干净子 Worktree（wt-clean-a 与 wt-clean-b）。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开「整理 Worktree」弹窗；确认两项均默认勾选为安全可清理项，并异步回填估算磁盘占用。
+      - 在点击提交前向 wt-clean-b 写入一个未跟踪文件 new-note.txt；随后在弹窗点击批量安全清理。
+      - 确认响应中 wt-clean-a 返回 status=deleted 且目录移除，wt-clean-b 返回 status=failed 且明确提示工作区存在未提交改动，wt-clean-b/new-note.txt 完整保留。
+
+  - id: WTGOV-008
+    name: 顽固脏废弃目录仅允许人工核对脏文件清单并二次确认后受控强制移除
+    required: true
+    description: >
+      验证未 Pin 的脏工作区目录不会被默认勾选或后台强删；在整理面板展示脏文件清单并经用户显式勾选确认后，
+      仅对 forceConfirmedProjectIds 内的未 Pin 无运行中 Agent 目录执行强制移除，且不强删未合并本地分支。
+    preconditions:
+      - 隔离临时 Git 仓库存在一个未 Pin、无运行中 Agent、但包含未跟踪临时文件 tmp-build.log 与未合并本地提交分支 feat/dirty-exp 的子 Worktree wt-dirty-exp。
+    steps:
+      - 调用 GET /worktree-governance；确认 wt-dirty-exp 的 bucket 为 dirty_abandoned、canSafeDelete 为 false、canForceDeleteWithConfirm 为 true，且 dirtyPreviewFiles 包含 tmp-build.log。
+      - 在不传 forceConfirmedProjectIds 时调用批量清理；确认 wt-dirty-exp 被拒绝删除。
+      - 显式携带 forceConfirmedProjectIds=[wt-dirty-exp] 再次调用批量清理（同时传 deleteMergedLocalBranches=true）；确认目录被强制移除，但未合并分支 feat/dirty-exp 因使用小写 git branch -d 而安全保留。
+
+  - id: WTGOV-009
+    name: 桌面 Worktree Rail 分层展示：Pinned 永不折叠且可清理项自动收口
+    required: true
+    description: >
+      验证桌面端 Worktree Rail 始终将主目录与 Pinned 项置顶展开，活跃未 Pin 正常展示，
+      多余的可清理/闲置项折叠进末尾「可清理 (N)」胶囊，Pin/Unpin 切换后实时归位。
+    preconditions:
+      - 隔离 Dev Session 临时 Git 仓库存在 1 个 Pinned Worktree、1 个活跃未合并未 Pin Worktree，以及 2 个处于宽限期内的可清理未 Pin Worktree。
+    steps:
+      - 使用 $toolkit:playwright-cli 打开桌面终端工作台检查 Worktree Rail；确认主目录与 Pinned 项直接可见且带有保护标识，活跃未 Pin 项可见，2 个可清理项默认折叠在「可清理 (2)」胶囊中不占用主行。
+      - 展开「可清理 (2)」并将其中 1 项设为 Pin；确认该项立即移入常驻展开区，胶囊计数更新为「可清理 (1)」。
+
+  - id: WTGOV-010
+    name: 原地重置复用校验分支冲突并安全处理旧已合并分支
+    required: true
+    description: >
+      验证对干净未 Pin Worktree 执行 Recycle 时，能原地切至最新基线新分支并安全清理已合并旧分支；
+      若目标新分支已被其他 Worktree 检出，则返回 409 且原槽位零破坏。
+    preconditions:
+      - 隔离临时 Git 仓库存在一个已合并干净未 Pin 槽位 wt-slot（位于分支 feat/old-merged）及另一个正在使用分支 feat/occupied 的 Worktree。
+    steps:
+      - 向 wt-slot 发起 Recycle 请求目标分支设为 feat/occupied；确认返回 409 明确提示分支已被占用，wt-slot 原分支与目录未发生任何改动。
+      - 将目标分支改为 feat/fresh-task（deletePreviousBranch=true）重新发起 Recycle；确认 wt-slot 切至新分支且 HEAD 对齐最新 baseRef，旧已合并分支 feat/old-merged 被安全删除。
+
+  - id: WTGOV-011
+    name: 受控 worktree.cleanup 瘦身脚本遵守 SHA-256 修订门禁并在不删代码下释放缓存
+    required: true
+    description: >
+      验证 runweave.json 中的 worktree.cleanup 未获当前 SHA-256 修订批准或存在运行中 Agent 时拒绝执行；
+      批准后对未合并久置目录运行瘦身，仅清理构建缓存而完整保留未提交源码修改。
+    preconditions:
+      - 隔离临时 Git 仓库的 runweave.json 声明了 worktree.cleanup（清理 dist-cache 目录），存在一个未合并、未 Pin 的子 Worktree wt-heavy，内部同时包含未提交源码修改 src-edit.txt 与体积较大的 dist-cache/artifact.bin。
+    steps:
+      - 在未提交匹配 approvedCleanupRevision 时调用 POST /contexts/:childProjectId/cleanup；确认请求被拒绝且 dist-cache/artifact.bin 未被删除。
+      - 提交匹配的 approvedCleanupRevision 执行瘦身；确认 dist-cache 被清理释放空间，同时未提交源码文件 src-edit.txt 完整无损；随后修改 runweave.json 中的 cleanup 命令再次用旧 revision 调用，确认被拒绝要求重新确认。
+
+  - id: WTGOV-012
+    name: 原生 iOS 支持默认推荐复用空闲槽位与工作区清理操作
+    required: true
+    description: >
+      验证原生 iOS 在「新建终端 → 新建 Worktree」中存在空闲干净未 Pin 槽位时优先推荐复用，
+      且工作区列表清晰标注 Pinned 保护与已合并可清理状态并可执行安全清理。
+    preconditions:
+      - iOS 模拟器运行候选 Debug App 并登录隔离测试 Backend，隔离仓库包含 1 个已合并干净未 Pin 槽位与 1 个已 Pin Worktree。
+    steps:
+      - 使用 $toolkit:agent-device 打开项目「＋ → 新建 Worktree」；确认默认推荐复用空闲未 Pin 槽位，输入分支名提交后成功复用并进入新终端。
+      - 打开工作区列表检查状态标识；确认已 Pin 项展示保护标识且不提供误触自动清理，已合并未 Pin 项可触发安全删除或原地复用。

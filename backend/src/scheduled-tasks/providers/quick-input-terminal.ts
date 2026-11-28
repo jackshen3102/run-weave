@@ -171,13 +171,8 @@ export class QuickInputTerminalScheduledTaskProvider
             ...codexScheduledArgs(request),
             "-c",
             'tui.resume_cwd="current"',
-            ...(!resolvedWorkingDirectory.includes(".") &&
-            !resolvedWorkingDirectory.includes("=")
-              ? [
-                  "-c",
-                  `projects.${resolvedWorkingDirectory}.trust_level="trusted"`,
-                ]
-              : []),
+            "-c",
+            `projects={${JSON.stringify(resolvedWorkingDirectory)}={trust_level="trusted"}}`,
           ],
         },
         {
