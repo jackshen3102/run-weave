@@ -15,7 +15,7 @@ type SessionSource = {
   logsDir: Stats;
 };
 
-/** Native files only: <configured agy brain>/<conversation UUID>/.system_generated/logs/transcript.jsonl. */
+/** Native files only: <configured agy brain>/<conversation UUID>/.system_generated/logs/transcript_full.jsonl (fallback transcript.jsonl). */
 export class AgySessionReader {
   private readonly brainRoot: string;
 
@@ -119,8 +119,25 @@ export class AgySessionReader {
       const logsDir = await lstat(logsPath);
       if (!logsDir.isDirectory() || logsDir.isSymbolicLink()) throw unsafeSource();
 
-      const file = path.join(logsPath, "transcript.jsonl");
-      const stat = await lstat(file);
+      const located = await this.locateTranscriptFile(logsPath);
+      if (!located) return null;
+      return { ...located, sessionDir, root, logsDir };
+    } catch (error) {
+      if (missing(error)) return null;
+      throw error;
+    }
+  }
+
+  private async locateTranscriptFile(logsPath: string): Promise<{ file: string; stat: Stats } | null> {
+    for (const filename of ["transcript_full.jsonl", "transcript.jsonl"]) {
+      const file = path.join(logsPath, filename);
+      let stat: Stats;
+      try {
+        stat = await lstat(file);
+      } catch (error) {
+        if (missing(error)) continue;
+        throw error;
+      }
       if (
         !stat.isFile() ||
         stat.isSymbolicLink() ||
@@ -130,11 +147,9 @@ export class AgySessionReader {
       ) {
         throw unsafeSource();
       }
-      return { file, sessionDir, stat, root, logsDir };
-    } catch (error) {
-      if (missing(error)) return null;
-      throw error;
+      return { file, stat };
     }
+    return null;
   }
 }
 

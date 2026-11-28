@@ -13,14 +13,22 @@ import { TerminalMarkdownPreview } from "../preview/renderers/markdown";
 import { TerminalPreviewFileLink, type TerminalPreviewFileLinkIntent } from "../preview/panel/file-link";
 import { Button } from "../../ui/button";
 
-export function TerminalConversationPanel({ sessionId, panelId, projectId, title, onOpenFile }: {
+export function TerminalConversationPanel({ sessionId, panelId, projectId, title, currentThreadId, onOpenFile }: {
   sessionId: string; panelId: string | null; projectId: string; title: string;
+  currentThreadId?: string | null;
   onOpenFile: (path: string, target?: Pick<TerminalFileReference, "line" | "column">) => void;
 }) {
   const pending = useConversationLocation(state => state.pending);
   const { scope } = useTerminalRuntime();
   const location = pending?.scope === scope && pending.target.terminalSessionId === sessionId && pending.target.panelId === panelId ? pending : null;
-  const { data, loading, error, unchanged, load } = useConversation(sessionId, panelId, location?.target.threadId);
+  const { data, loading, error, unchanged, targetChanged, load, reopen } = useConversation(sessionId, panelId, location?.target.threadId);
+  const staleThreadNotice = Boolean(
+    !targetChanged &&
+    currentThreadId &&
+    data?.target?.threadId &&
+    data.target.provider !== "claude" &&
+    data.target.threadId !== currentThreadId,
+  );
   const [highlight, setHighlight] = useState<string | null>(null);
   const [locationError, setLocationError] = useState("");
   const [fileLink, setFileLink] = useState<TerminalPreviewFileLinkIntent | null>(null);
@@ -69,12 +77,25 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
   return <section className="flex h-full min-h-0 flex-col bg-slate-950" aria-label="会话阅读">
     <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-5 py-3">
       <span className="flex items-center gap-2 text-sm font-medium text-emerald-200"><BookOpen className="h-4 w-4" />会话阅读</span>
-      <Button variant="ghost" size="sm" disabled={loading} onClick={() => { capture(); void load(); }}>
-        <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />{loading ? "读取中" : "刷新"}
+      <Button variant="ghost" size="sm" disabled={loading} onClick={() => {
+        if (targetChanged) { void reopen(); return; }
+        capture(); void load();
+      }}>
+        <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+        {loading ? "读取中" : targetChanged ? "读取当前会话" : "刷新"}
       </Button>
     </div>
     {locationError ? <p role="status" className="px-5 py-2 text-xs text-amber-200">{locationError}</p> : null}
-    {error ? <div role="alert" className="shrink-0 border-b border-rose-900 px-5 py-2 text-xs text-rose-200">{error}</div> : null}
+    {staleThreadNotice ? <div role="status" className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-900/70 bg-amber-950/30 px-5 py-2 text-xs text-amber-200">
+      <span>当前终端已切换到新会话，正文仍为上一会话快照</span>
+      <Button variant="ghost" size="sm" disabled={loading} className="h-6 px-2 text-xs text-amber-100 hover:bg-amber-900/50"
+        onClick={() => void reopen()}>读取最新会话</Button>
+    </div> : null}
+    {error ? <div role="alert" className="flex shrink-0 items-center justify-between gap-2 border-b border-rose-900 px-5 py-2 text-xs text-rose-200">
+      <span>{error}</span>
+      {targetChanged ? <Button variant="ghost" size="sm" disabled={loading} className="h-6 shrink-0 px-2 text-xs text-rose-100 hover:bg-rose-900/50"
+        onClick={() => void reopen()}>读取当前会话</Button> : null}
+    </div> : null}
     <div ref={scroll} onScroll={capture} data-testid="conversation-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none]">
       <div className="mx-auto max-w-4xl px-5 py-7">
         <p className="text-xs text-emerald-300">{data?.target?.provider ?? "Agent"}</p>
@@ -94,7 +115,10 @@ export function TerminalConversationPanel({ sessionId, panelId, projectId, title
               onOpenFileReference={openFileReference} onOpenWebLink={openWebLink} />
           </article>)}
         </div>)}
-        {!data?.turns.length ? <p className="py-12 text-center text-sm text-slate-400">{loading ? "正在读取会话…" : error && !data ? "点击刷新重试" : empty}</p> : null}
+        {!data?.turns.length ? <div className="py-12 text-center text-sm text-slate-400">
+          <p>{loading ? "正在读取会话…" : targetChanged ? "当前终端已切换到新会话" : error && !data ? "点击刷新重试" : empty}</p>
+          {targetChanged && !loading ? <Button variant="outline" size="sm" className="mt-3" onClick={() => void reopen()}>读取当前会话</Button> : null}
+        </div> : null}
       </div>
     </div>
     {fileLink && fileLink.scope === scope && fileLink.projectId === projectId && fileLink.terminalSessionId === sessionId ? <TerminalPreviewFileLink

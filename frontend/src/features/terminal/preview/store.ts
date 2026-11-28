@@ -155,8 +155,33 @@ const createTerminalPreviewStore: StateCreator<TerminalPreviewStore> = (
     activeTool: "preview",
   },
   conversationTarget: null,
-  setConversationTarget: (conversationTarget) => set({ conversationTarget }),
-  openConversation: (target) => set((state) => ({ ...revealSidecarTab(state, "conversation"), conversationTarget: target, ui: { ...state.ui, open: true, activeTool: "conversation" } })),
+  conversationOpenRevision: 0,
+  setConversationTarget: (target) => set((state) => {
+    if (!target) return { conversationTarget: null };
+    const current = state.conversationTarget;
+    if (
+      current &&
+      current.scope === target.scope &&
+      current.sessionId === target.sessionId &&
+      current.panelId === target.panelId
+    ) {
+      return state;
+    }
+    const openRevision = state.conversationOpenRevision + 1;
+    return {
+      conversationOpenRevision: openRevision,
+      conversationTarget: { ...target, openRevision },
+    };
+  }),
+  openConversation: (target) => set((state) => {
+    const openRevision = state.conversationOpenRevision + 1;
+    return {
+      ...revealSidecarTab(state, "conversation"),
+      conversationOpenRevision: openRevision,
+      conversationTarget: { ...target, openRevision },
+      ui: { ...state.ui, open: true, activeTool: "conversation" },
+    };
+  }),
   codeReviewTarget: null,
   openCodeReview: (target) => set((state) => ({ ...revealSidecarTab(state, "code-review"), codeReviewTarget: target, ui: { ...state.ui, open: true, activeTool: "code-review" } })),
   projects: {},

@@ -4,15 +4,17 @@ import { useTerminalPreviewStore, type TerminalSidecarTool } from "../../../feat
 import { useTerminalRuntime } from "../../../features/terminal/queries/provider";
 import { TerminalConversationPanel } from "./panel";
 
-export function TerminalConversationSidecar({ projectId, title, sessionId, panelId, onOpenFile }: {
+export function TerminalConversationSidecar({ projectId, title, sessionId, panelId, currentThreadId, onOpenFile }: {
   projectId: string; title: string; sessionId: string | null; panelId: string | null;
+  currentThreadId?: string | null;
   onOpenFile: (path: string, target?: Pick<TerminalFileReference, "line" | "column">) => void;
 }) {
   const target = useTerminalPreviewStore((state) => state.conversationTarget);
   const { scope } = useTerminalRuntime();
   return target && target.scope === scope && target.sessionId === sessionId && target.panelId === panelId
-    ? <TerminalConversationPanel key={JSON.stringify([scope, target.sessionId, target.panelId])} sessionId={target.sessionId} panelId={target.panelId}
-    projectId={projectId} title={title} onOpenFile={onOpenFile} />
+    ? <TerminalConversationPanel key={JSON.stringify([scope, target.sessionId, target.panelId, target.openRevision])}
+        sessionId={target.sessionId} panelId={target.panelId}
+        projectId={projectId} title={title} currentThreadId={currentThreadId} onOpenFile={onOpenFile} />
     : <section className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-400" aria-label="会话阅读">请选择终端以阅读会话</section>;
 }
 
